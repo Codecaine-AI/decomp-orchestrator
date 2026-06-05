@@ -1,0 +1,182 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2508",
+  "pr": {
+    "number": 2508,
+    "title": "lb: implement lb_80019628; improve four lbbgflash functions",
+    "url": "https://github.com/doldecomp/melee/pull/2508",
+    "state": "MERGED",
+    "author": "itsgrimetime",
+    "created_at": "2026-05-16T21:39:38Z",
+    "merged_at": "2026-05-16T22:27:08Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Implemented a first C body for `lb_80019628`, moving it from asm-only to 82.58% fuzzy, and made MWCC-oriented matching tweaks in `lbbgflash.c`. The main reusable value is compiler-control tactics: scoped exact-type locals, source-order arithmetic changes, and a narrow `volatile` pointer to preserve inline assert code; no function reached 100% match in this PR.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "library",
+      "tooling-verification",
+      "compiler-scheduling",
+      "types-structs"
+    ],
+    "systems": [
+      "lb",
+      "lb_0192",
+      "lbbgflash",
+      "pad sampling",
+      "OS alarm",
+      "HSD JObj rotation"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/lb/lb_0192.c",
+      "role": "Added the C implementation of `lb_80019628`, a pad-sampling-rate and periodic-alarm maintenance routine called from `lb_80019894`."
+    },
+    {
+      "path": "src/melee/lb/lbbgflash.c",
+      "role": "Adjusted `fn_8001FC08`, `lbBgFlash_80020E38`, and `fn_8002113C` for closer MWCC output; PR body also claims a `fn_80020AEC` improvement, but the available diff slice does not show that hunk."
+    }
+  ],
+  "what_changed": [
+    {
+      "symbol": "lb_80019628",
+      "file": "src/melee/lb/lb_0192.c",
+      "details": "Added a C body that snapshots `lb_804329F0.x38`, updates `x0[0].x0`, resets `x0[0].x8` if it is out of range, chooses a period from `x0[0].x0`, `x0[1].x0`, `OS_TIMER_CLOCK`, and a 1/60-second cap, then updates `PADSetSamplingRate` and reschedules `lb_804329F0.alarm` through `OSSetPeriodicAlarm(..., (OSAlarmHandler) fn_800195FC)`.",
+      "why_it_matters": "Replaced the asm-only fallback with an 82.58% fuzzy source implementation for pad sampling/alarm timing logic."
+    },
+    {
+      "symbol": "fn_8001FC08",
+      "file": "src/melee/lb/lbbgflash.c",
+      "details": "Rewrote each RGBA saturation block to introduce branch-local `u8 target` and `f32* cur` temporaries before comparing and storing channel values.",
+      "why_it_matters": "PR body says this keeps the byte target and `x10[i]` pointer in the desired registers across rising/falling logic, improving fuzzy match from about 89.6% to 91.77%."
+    },
+    {
+      "symbol": "lbBgFlash_80020E38",
+      "file": "src/melee/lb/lbbgflash.c",
+      "details": "Changed squared-component local order from `dz2`, `dx2`, `dy2` to `dx2`, `dy2`, `dz2`, and changed the zero-vector sum from `dz2 + dy2 + dx2` to `dx2 + dy2 + dz2`.",
+      "why_it_matters": "Algebraically equivalent source order better matched the original PPC floating-point pipeline scheduling; bot reported 98.46% to 98.52% fuzzy."
+    },
+    {
+      "symbol": "fn_8002113C",
+      "file": "src/melee/lb/lbbgflash.c",
+      "details": "Introduced `Quaternion* volatile rot_ptr = &rot;` and routed `Fake_HSD_JObjGetRotation`, `HSD_MkRotationMtx`, `HSD_QuatLib_8037EB28`, and `FakeHSD_JObjSetRotation` through it in the non-`JOBJ_USE_QUATERNION` path.",
+      "why_it_matters": "The volatile pointer prevents MWCC from proving `&rot` non-null and eliding inline-substituted asserts in `Fake_HSD_JObjGetRotation`; bot reported 93.17% to 94.72% fuzzy."
+    },
+    {
+      "symbol": "fn_80020AEC",
+      "file": "src/melee/lb/lbbgflash.c",
+      "details": "PR body claims a ternary parent assignment was expanded to explicit `if/else` to match a `bne / b / li` branch schedule.",
+      "why_it_matters": "Evidence is weak in the provided slice: the diff file does not show a `fn_80020AEC` hunk and the bot report lists a `.sdata` improvement instead."
+    }
+  ],
+  "smart_moves": [
+    "Used early returns in `lb_80019628` when `lb_804329F0.x38` or the computed period is unchanged, avoiding unnecessary alarm and sampling-rate churn while matching control flow.",
+    "Kept timer math type-sensitive: casts through `(f64) (u32) OS_TIMER_CLOCK`, a `0.016666668f * (f32) (u32) OS_TIMER_CLOCK` 60 FPS cap, and `(u64) period / (OS_TIMER_CLOCK / 1000)` for the rate calculation.",
+    "Capped the computed pad sampling rate at 11 before calling `PADSetSamplingRate`, preserving the PR body’s described millisecond cap behavior.",
+    "Introduced tiny branch-local `u8 target` and `f32* cur` locals in `fn_8001FC08` to influence MWCC register allocation without changing RGBA saturation semantics.",
+    "Matched commutative floating-point code by reordering local declarations and sum operands, acknowledging that MWCC/PPC instruction scheduling depends on source order.",
+    "Used a narrowly scoped `Quaternion* volatile` workaround to keep inline assert calls alive instead of globally weakening optimization."
+  ],
+  "decomp_lessons": [
+    "For MWCC matching, semantically equivalent direct field accesses may not allocate registers like the original; scoped pointer and exact-width locals can be enough to move codegen.",
+    "Commutative arithmetic is not free in decomp work: reorder declarations and operands to match observed `lfs`, `fmuls`, and `fadds` scheduling.",
+    "`volatile` can be a targeted matching tool when the compiler is optimizing away assert paths because it can prove a stack address is non-null.",
+    "When implementing timer/state-machine routines, preserve signed/unsigned comparison shapes (`u64`, `s64`, `OSTime`) and cast order; these affect both correctness and emitted code.",
+    "Keep verification tied to the whole DOL and sibling-function stability; this PR reports `python configure.py && ninja` green with `build/GALE01/main.dol: OK` and unchanged sibling functions.",
+    "Bot fuzzy percentages are useful progress evidence, but PR body and bot output can disagree; record discrepancies instead of assuming all claimed functions are confirmed by the diff."
+  ],
+  "naming_conventions": [
+    "Address-based library symbols remain in use: `lb_80019628`, `fn_800195FC`, `lb_80019880`, `lb_80019894`, `fn_8001FC08`, `lbBgFlash_80020E38`, `fn_8002113C`, `fn_80020AEC`.",
+    "Struct fields are still offset-style for unknown lb state: `lb_804329F0.x38`, `x40`, `x48`, `x4`, `x0[0].x0`, `x0[0].x8`, `x0[1].x0`.",
+    "Color/flash data uses mixed known and offset-style names: `data->x8.r`, `data->x8.g`, `data->x8.b`, `data->x8.a`, `data->x10[i]`, `data->x20[i]`.",
+    "HSD rotation helpers retain explicit fake-wrapper names where assert behavior matters: `Fake_HSD_JObjGetRotation` and `FakeHSD_JObjSetRotation`.",
+    "Nintendo/HSD API names are preserved verbatim: `OSAlarm`, `OSTime`, `OS_TIMER_CLOCK`, `PADSetSamplingRate`, `OSCancelAlarm`, `OSCreateAlarm`, `OSSetPeriodicAlarm`, `OSAlarmHandler`, `HSD_JObj`, `JOBJ_USE_QUATERNION`, `Quaternion`, `Vec3`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use branch-local `u8 target` plus `f32* cur` in repeated channel clamp code to keep the byte target and current-value pointer live in the desired registers (`r5`/`r4` per PR body).",
+    "Use source-order local declarations like `dx2`, `dy2`, `dz2` and sum operands in the original order to tune PPC floating-point scheduling.",
+    "Route stack addresses through `Quaternion* volatile` to block MWCC non-null proof and preserve inline assert code at `jobj.h:699/700`.",
+    "For HSD/JObj rotation paths, maintain the same helper sequence: get rotation, build matrix, concatenate, convert back, set rotation.",
+    "For OS alarm routines, keep explicit alarm pointer locals and explicit `(OSAlarmHandler)` casts when rescheduling periodic alarms.",
+    "PR body suggests replacing a ternary with explicit `if/else` can change branch order to match `bne / b / li`, but this specific `fn_80020AEC` claim is not visible in the provided diff."
+  ],
+  "review_feedback": [
+    {
+      "source": "decomp.dev bot",
+      "feedback": "Reported five improvements in unmatched items for GALE01: `lb_80019628` +495 bytes 0.00% to 82.58%, `fn_8001FC08` +15 bytes 89.68% to 91.77%, `fn_8002113C` +11 bytes 93.17% to 94.72%, `lbbgflash` `.sdata` +6 bytes 50.00% to 65.71%, and `lbBgFlash_80020E38` 98.46% to 98.52%."
+    },
+    {
+      "source": "PR body",
+      "feedback": "Author reported no 100% matches, but five improvements toward original output; verification was `python configure.py && ninja` green with `build/GALE01/main.dol: OK` and all sibling functions in both translation units unchanged."
+    },
+    {
+      "source": "review metadata",
+      "feedback": "No human review comments or review records were present in the slice; PR was merged shortly after creation."
+    },
+    {
+      "source": "evidence caveat",
+      "feedback": "The PR body mentions a `fn_80020AEC` fuzzy improvement, but the available diff excerpt/full slice does not show a `fn_80020AEC` code change and the bot comment lists `.sdata` instead."
+    }
+  ],
+  "searchable_terms": [
+    "PR2508",
+    "lb_80019628",
+    "lb_80019894",
+    "lb_0192.c",
+    "lbbgflash.c",
+    "fn_800195FC",
+    "lbSnap_8001D2BC",
+    "lb_804329F0",
+    "x38",
+    "x40",
+    "x48",
+    "x0[0].x0",
+    "x0[0].x8",
+    "x0[1].x0",
+    "PADSetSamplingRate",
+    "OSAlarm",
+    "OSTime",
+    "OS_TIMER_CLOCK",
+    "OSCancelAlarm",
+    "OSCreateAlarm",
+    "OSSetPeriodicAlarm",
+    "OSAlarmHandler",
+    "fn_8001FC08",
+    "RGBA saturation",
+    "u8 target",
+    "f32* cur",
+    "lbBgFlash_80020E38",
+    "dx2 dy2 dz2",
+    "lfs fmuls fadds",
+    "fn_8002113C",
+    "Quaternion* volatile",
+    "rot_ptr",
+    "Fake_HSD_JObjGetRotation",
+    "FakeHSD_JObjSetRotation",
+    "HSD_MkRotationMtx",
+    "HSD_QuatLib_8037EB28",
+    "HSD_JObjGetRotation",
+    "HSD_MtxQuat",
+    "JOBJ_USE_QUATERNION",
+    "PSMTXRotAxisRad",
+    "PSMTXConcat",
+    "jobj.h:699",
+    "jobj.h:700",
+    "fn_80020AEC",
+    "MWCC",
+    "decomp.dev",
+    "fuzzy match",
+    "GALE01 main.dol OK"
+  ],
+  "follow_up_queries": [
+    "Search for callers of `lb_80019628` and `lb_80019894` to validate the `lb_804329F0.x38/x40/x48` pad-sampling state machine.",
+    "Compare the original asm for `lb_80019628` around `OS_TIMER_CLOCK`, the 1/60 cap, and `PADSetSamplingRate` to see what remains blocking a full match.",
+    "Try the `u8 target` plus `f32* cur` scoped-local pattern in other RGBA or channel-saturation routines with repeated offset-array stores.",
+    "Look for other `Fake_HSD_JObjGetRotation` or inline HSD assert sites where a narrow `volatile` pointer may preserve original assert calls.",
+    "Verify the `fn_80020AEC` claim against commit history or upstream diff, since the PR body mentions an if/else parent scheduling tweak not shown in this slice."
+  ],
+  "confidence": 0.86
+}

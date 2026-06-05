@@ -1,0 +1,137 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2304",
+  "pr": {
+    "number": 2304,
+    "title": "Small fixes to THPDec",
+    "url": "https://github.com/doldecomp/melee/pull/2304",
+    "state": "CLOSED",
+    "author": "PsiLupan",
+    "created_at": "2026-03-15T23:32:32Z",
+    "merged_at": null
+  },
+  "agent_status": "agent_completed",
+  "summary": "Closed, unmerged THP decoder cleanup/matching PR touching only THPDec.c and thp.h. It refined THP struct layouts, named a Huffman-table count field, passed THPFileInfo explicitly through the 512x448 iMCU row path, and restored more low-level THPInit behavior. decomp.dev reported a small net matched-code gain (+0.03%, +984 bytes) and one new match, but also one broken 100% match, so this should be treated as a useful evidence slice rather than a landed change.",
+  "change_classification": {
+    "primary_type": "decomp-matching fix",
+    "categories": [
+      "decomp-matching",
+      "fix",
+      "headers",
+      "struct-layout",
+      "external-sdk"
+    ],
+    "systems": [
+      "Dolphin THP decoder",
+      "external/dolphin",
+      "video THP"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "extern/dolphin/include/dolphin/thp/thp.h",
+      "role": "Adjusted THP struct layouts and prototypes, including THPHuffmanTab, THPComponent, THPFileInfo, __THPDecompressiMCURow512x448, and THPInit."
+    },
+    {
+      "path": "extern/dolphin/src/dolphin/thp/THPDec.c",
+      "role": "Applied matching-oriented implementation changes in THP Huffman parsing, 512x448 MCU-row decompression, and THPInit."
+    }
+  ],
+  "what_changed": [
+    "Changed THPHuffmanTab layout from u32 pad2[2] to u32 pad2 plus u16 num_Vij, and updated __THPReadHuffmanTableSpecification to assign info->huffmanTabs[tab_index].num_Vij instead of writing through pad2[1].",
+    "Added a leading unknown u8 field named _ to THPComponent.",
+    "Changed THPFileInfo pad2 from a u32 array sized by (0x83d - 0x756) / 4 to an exact byte array u8 pad2[0x83d - 0x756], preserving a byte-precise odd-sized gap.",
+    "Changed __THPDecompressiMCURow512x448 from taking no arguments to taking THPFileInfo*, updated the header prototype, and passed __THPInfo from __THPDecompressYUV.",
+    "Reworked __THPDecompressiMCURow512x448 internals to use the explicit info parameter for MCUsPerRow, Huffman decode calls, component access, quantTabs, RST handling, currMCU/nMCU/cnt updates, and predDC reset instead of repeatedly using global __THPInfo.",
+    "Changed THPInit prototype and implementation return type from BOOL to void, removed setting __THPInitFlag and returning TRUE, and ended with return.",
+    "Added low-level THPInit setup: PPCMfhid2 check, DCInvalidateRange on 0xE0000000 size 0x4000, LCEnable, and OSInitFastCast call.",
+    "Adjusted __THPLCWork672 buffer spacing in THPInit from +0x2A00/+0xA80 to +0x2800/+0xA00 before the third buffer.",
+    "Made minor formatting-only edits in THPVideoDecode and Huffman decode blocks, including brace placement and line wrapping."
+  ],
+  "smart_moves": [
+    "Promoting pad2[1] to a named num_Vij field documents an inferred Huffman-table member and makes the access in __THPReadHuffmanTableSpecification clearer while improving that function's reported match from 99.01% to 99.91%.",
+    "Using byte-granular padding for THPFileInfo avoids losing layout precision around the 0x83d - 0x756 gap, which is especially important for SDK structs with non-word-aligned fields.",
+    "Passing THPFileInfo* into __THPDecompressiMCURow512x448 makes the 512x448 path consistent with other THP helpers that already take an info pointer and can influence register allocation/global-load patterns for matching.",
+    "Restoring hardware-facing initialization calls in THPInit, including LCEnable and OSInitFastCast, moves the decomp closer to SDK behavior rather than only stubbing success.",
+    "The PR kept the changes localized to one THP source file and one THP header, making the matching effects easy to inspect in the decomp.dev report."
+  ],
+  "decomp_lessons": [
+    "When a padding slot is repeatedly accessed with a known meaning, replace it with a named field rather than continuing to index through anonymous padding.",
+    "For struct gaps with odd byte counts or externally fixed offsets, prefer u8 padding arrays over rounded u32 padding arrays.",
+    "Header prototypes must track matching experiments exactly; here __THPDecompressiMCURow512x448 and THPInit were updated in both thp.h and THPDec.c.",
+    "SDK init functions may require low-level cache, locked-cache, HID, and fast-cast setup to match; a simple BOOL-returning stub can hide important codegen.",
+    "decomp.dev match reports can reveal mixed outcomes: this PR gained a new __THPHuffDecodeDCTCompY match and improved THPInit, but broke __THPPrepBitStream from 100.00% to 99.96%.",
+    "Because this PR was closed without merging and had no human review text, do not assume the exact patch was accepted; use it as a set of candidate tactics to verify against later landed changes."
+  ],
+  "naming_conventions": [
+    "Preserved Dolphin SDK-style internal names with double underscores, such as __THPReadHuffmanTableSpecification, __THPDecompressiMCURow512x448, and __THPHuffDecodeDCTCompY.",
+    "Used num_Vij as the explicit name for the Huffman-table value count associated with Vij.",
+    "Used a single underscore field name, _, for an unknown leading byte in THPComponent.",
+    "Kept address-derived placeholder naming for THPDec_8032FD40_Data and generic fields val0, val1, _pad, and val2 where stronger names were not evidenced.",
+    "Kept resolution-specialized function naming in __THPDecompressiMCURow512x448, __THPDecompressiMCURow640x480, and __THPDecompressiMCURowNxN."
+  ],
+  "assembly_or_matching_tactics": [
+    "Struct-layout tactic: replace anonymous padding access with a typed field, demonstrated by pad2[1] to num_Vij in THPHuffmanTab.",
+    "Struct-layout tactic: use exact u8 padding for THPFileInfo to maintain byte offsets that a u32 array cannot represent cleanly.",
+    "Codegen tactic: pass THPFileInfo* explicitly into __THPDecompressiMCURow512x448 and use info-> fields throughout instead of global __THPInfo.",
+    "SDK-behavior tactic: restore LC/cache/fast-cast initialization in THPInit with PPCMfhid2, DCInvalidateRange, LCEnable, and OSInitFastCast.",
+    "Constant-tuning tactic: adjust THPInit LC work buffer offsets for __THPLCWork672 from 0x2A00/0xA80 to 0x2800/0xA00.",
+    "Bot evidence: GALE01 report showed matched code 58.01% (+0.03%, +984 bytes), __THPHuffDecodeDCTCompY newly reaching 100.00%, and THPInit improving from 10.60% to 32.12%."
+  ],
+  "review_feedback": [
+    "No human PR body, reviews, or review comments were captured.",
+    "decomp-dev[bot] reported 1 new match: main/dolphin/thp/THPDec __THPHuffDecodeDCTCompY, +1 byte, 99.99% to 100.00%.",
+    "decomp-dev[bot] reported 1 broken match: main/dolphin/thp/THPDec __THPPrepBitStream, -1 byte, 100.00% to 99.96%.",
+    "decomp-dev[bot] reported 6 improvements in unmatched items, including THPInit +111 bytes, 10.60% to 32.12%, and __THPReadHuffmanTableSpecification +4 bytes, 99.01% to 99.91%.",
+    "decomp-dev[bot] reported 1 regression in an unmatched item: __THPReadScaneHeader, 42.59% to 42.57%.",
+    "The PR was closed without merge roughly eight minutes after creation; no captured comment explains the closure reason."
+  ],
+  "searchable_terms": [
+    "PR2304",
+    "Small fixes to THPDec",
+    "PsiLupan",
+    "THPDec",
+    "THPDec.c",
+    "thp.h",
+    "extern/dolphin/src/dolphin/thp/THPDec.c",
+    "extern/dolphin/include/dolphin/thp/thp.h",
+    "THPHuffmanTab",
+    "num_Vij",
+    "Vij",
+    "THPComponent",
+    "THPFileInfo",
+    "THPDec_8032FD40_Data",
+    "THPVideoDecode",
+    "THPInit",
+    "__THPInfo",
+    "__THPReadHuffmanTableSpecification",
+    "__THPDecompressYUV",
+    "__THPDecompressiMCURow512x448",
+    "__THPDecompressiMCURow640x480",
+    "__THPDecompressiMCURowNxN",
+    "__THPHuffDecodeDCTCompY",
+    "__THPHuffDecodeDCTCompU",
+    "__THPHuffDecodeDCTCompV",
+    "__THPPrepBitStream",
+    "__THPReadScaneHeader",
+    "__THPInverseDCTNoYPos",
+    "__THPInverseDCTY8",
+    "__THPMCUBuffer",
+    "__THPLCWork512",
+    "__THPLCWork672",
+    "PPCMfhid2",
+    "DCInvalidateRange",
+    "LCEnable",
+    "OSInitFastCast",
+    "GALE01",
+    "decomp-dev bot"
+  ],
+  "follow_up_queries": [
+    "Did a later merged PR reintroduce the THPHuffmanTab num_Vij layout or THPFileInfo byte padding from PR 2304?",
+    "Why did __THPPrepBitStream lose its 100% match after these THPDec changes?",
+    "Confirm THPInit return type, LCEnable behavior, OSInitFastCast call, and __THPLCWork672 offsets against Dolphin SDK or retail assembly.",
+    "Check whether the leading THPComponent u8 _ field is retained in later headers or replaced with a better name.",
+    "Compare later THPDec matching history for __THPDecompressiMCURow512x448 to see whether the explicit THPFileInfo* parameter was kept."
+  ],
+  "confidence": 0.82
+}

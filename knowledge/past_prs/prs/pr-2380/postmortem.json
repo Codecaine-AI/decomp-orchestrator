@@ -1,0 +1,188 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2380",
+  "pr": {
+    "number": 2380,
+    "title": "Link mngallery",
+    "url": "https://github.com/doldecomp/melee/pull/2380",
+    "state": "MERGED",
+    "author": "jellejurre",
+    "created_at": "2026-04-02T23:42:44Z",
+    "merged_at": "2026-04-03T06:25:22Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Linked `melee/mn/mngallery.c` by switching it to a matching object, tightening its local structs/data ownership, and updating GALE01 splits/symbols. The PR also corrected the `0x804A0B90` BSS allocation to belong to `mnsnap`, not `mngallery`, while preserving several matching-sensitive userdata/access patterns.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "linking",
+      "headers",
+      "types-structs",
+      "symbols-splits",
+      "data-ownership-cleanup"
+    ],
+    "systems": [
+      "menu-gallery",
+      "mn",
+      "mngallery",
+      "mnsnap",
+      "gm_1B03",
+      "config/GALE01"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/mn/mngallery.c",
+      "role": "Main linked/matching implementation rewrite; adds typed file-local userdata, static model descriptors, local helpers, literal resources, and matching-sensitive GObj userdata access."
+    },
+    {
+      "path": "configure.py",
+      "role": "Changes `Object(NonMatching, \"melee/mn/mngallery.c\")` to `Object(Matching, \"melee/mn/mngallery.c\")`."
+    },
+    {
+      "path": "config/GALE01/symbols.txt",
+      "role": "Converts many `mnGallery_*` data/rodata/sdata2 symbols to local compiler labels, fixes BSS ownership for `mnSnap_804A0B90`, and records local data labels."
+    },
+    {
+      "path": "config/GALE01/splits.txt",
+      "role": "Adjusts adjacent `mnsnap.c`/`mngallery.c` section boundaries after linking, especially BSS and mngallery data/sdata sizes."
+    },
+    {
+      "path": "src/melee/gm/gm_1B03.c",
+      "role": "Uses `mnsnap.h` and allocates `mnSnap_804A0B90`/`mnSnap_804A0B90_t` instead of the misnamed gallery allocation."
+    },
+    {
+      "path": "src/melee/mn/mngallery.h",
+      "role": "Removes prototypes for functions made static and drops the incorrect `mnGallery_804A0B90` extern."
+    },
+    {
+      "path": "src/melee/mn/mnsnap.h",
+      "role": "Adds the `mnSnap_804A0B90` extern now that the BSS object is attributed to mnsnap."
+    },
+    {
+      "path": "src/melee/mn/types.h",
+      "role": "Renames `struct mnGallery_804A0B90_t` to `struct mnSnap_804A0B90_t` while preserving the `0x96000` size assertion."
+    }
+  ],
+  "what_changed": [
+    "`mngallery.c` became a matching object in `configure.py`, moving the file out of `NonMatching`.",
+    "GALE01 splits were adjusted so `mnsnap.c` BSS now extends to `0x804A0BA0`, while `mngallery.c` BSS starts at `0x804A0BA0`; mngallery data end changed from `0x803F06D0` to `0x803F06CC`, and sdata end from `0x804D50A0` to `0x804D509D`.",
+    "Symbols for mngallery constants/string pools were localized from address-named globals such as `mnGallery_803B8538`, `mnGallery_803F0570`, and `mnGallery_804DC358` into local labels like `@157`, `@182`, and `@144`.",
+    "The BSS object at `0x804A0B90` was renamed from `mnGallery_804A0B90` to `mnSnap_804A0B90`, with matching header/type updates and the allocation in `gm_801B0FF8` updated accordingly.",
+    "`mngallery.c` replaced many anonymous local struct casts with file-local structs: `mnGallery_804D6C88_userdata` with `STATIC_ASSERT(... == 0x24)` and `mnGallery_child_userdata` with `STATIC_ASSERT(... == 8)`.",
+    "`mngallery.c` introduced `StaticModelDesc mnGallery_804A0BA0` and `mnGallery_804A0BB0`, replacing raw `void**` array indexing for gallery/cursor model resources.",
+    "Archive resource names are now explicit strings in `lbArchive_LoadSections`, including `MenMainConGa_Top_joint`, `MenMainConGa_Top_animjoint`, `MenMainCursorGa_Top_joint`, and related mat/shape animation names.",
+    "MTHP movie names are now explicit literals: `MvOmake15.mth` and `MvHowTo.mth`.",
+    "Several helper functions were made `static` and removed from `mngallery.h`, including `mnGallery_80258BC4`, `mnGallery_80258D50`, `mnGallery_80258DBC`, and `mnGallery_80259604`.",
+    "The implementation renamed the menu state byte from `unk14` to `state` where the struct was understood enough to do so.",
+    "The decomp.dev report recorded 7 new matches, including mngallery `.data`, `.bss`, `.rodata`, `.sdata2`, and `fn_802590C4`; linked code increased by 4268 bytes."
+  ],
+  "smart_moves": [
+    "Correcting `mnGallery_804A0B90` to `mnSnap_804A0B90` fixed cross-file data ownership instead of forcing the gallery file to own adjacent BSS that belonged to `mnsnap`.",
+    "The file-local userdata structs plus `STATIC_ASSERT`s gave future decomp work a stable layout while still leaving unknown fields as `unk*` where semantics were not proven.",
+    "Moving internal helpers out of the public header reduced false API surface once those functions were only used inside `mngallery.c`.",
+    "Replacing raw archive-section pointer arithmetic with `StaticModelDesc` fields made the model/animation resource pattern reusable and less error-prone.",
+    "The PR used local compiler-label symbols for constants/string pools after linking, avoiding unnecessary global `mnGallery_*` symbols for data that the original object treated as local.",
+    "Matching-sensitive code was isolated into helpers such as `fn_802590C4_inline` and `fn_80258ED0_helper`, allowing cleanup while keeping codegen quirks localized.",
+    "The author left explicit `@todo` comments where the cleaner `GET_804D6C88` macro or direct access changed stack/codegen, documenting why seemingly redundant direct `HSD_GObjGetUserData` calls remained."
+  ],
+  "decomp_lessons": [
+    "When linking an object, update `configure.py`, symbols, splits, and neighboring-file data ownership together; matching the C file can reveal that a symbol at a boundary belongs to the previous object.",
+    "Do not keep address-prefixed globals for local constants once the linker/symbol map can represent them as local `@NNN` labels.",
+    "Use typed file-local userdata structs with size asserts to replace repeated anonymous casts, but keep field names conservative until behavior is understood.",
+    "GObj userdata access can be codegen-sensitive: a macro cast that is semantically equivalent may still perturb stack/register allocation compared with direct `HSD_GObjGetUserData` or direct `user_data` access.",
+    "For resource arrays that are really joint/anim/matanim/shapeanim groups, a descriptor type such as `StaticModelDesc` is clearer than raw `void**` indexing and can still match.",
+    "Header cleanup is part of matching work: once functions become `static`, remove their public prototypes to avoid exporting non-API internals.",
+    "The PR author explicitly noted that `mnGallery_804D6C88` still needed understanding; future work should treat the added struct as a provisional layout, not a fully named data model."
+  ],
+  "naming_conventions": [
+    "File-local userdata macro pattern: `GET_804D6C88(gobj)` casts `HSD_GObjGetUserData(gobj)` to `struct mnGallery_804D6C88_userdata*`, modeled after `GET_FIGHTER` per review discussion.",
+    "Child cursor userdata uses `GET_mnGallery_child_userdata(gobj)` and `struct mnGallery_child_userdata` with fields `parent_gobj` and `index`.",
+    "Known state field was renamed from `unk14` to `state`; unclear fields remained `unk0`, `unk1`, `unk2`, and `unk15`.",
+    "The array/type at `0x804A0B90` now uses the owning module prefix: `mnSnap_804A0B90` and `struct mnSnap_804A0B90_t`, not `mnGallery_*`.",
+    "Static model descriptors are named by address in the mngallery namespace, `mnGallery_804A0BA0` and `mnGallery_804A0BB0`, with descriptor fields `joint`, `animjoint`, `matanim_joint`, and `shapeanim_joint`.",
+    "Internal functions that no longer need external linkage are declared `static` and removed from `mngallery.h`."
+  ],
+  "assembly_or_matching_tactics": [
+    "`fn_802590C4` dropped old optimization pragmas by splitting the deletion/cleanup loop into `inline void fn_802590C4_inline(HSD_GObj* gobj)`, which helped reach a 100% match for that function per decomp.dev.",
+    "Direct `HSD_GObjGetUserData(gobj)` is intentionally used in `fn_802590C4`/`fn_802590C4_inline`; comments say `GET_804D6C88` breaks these cases.",
+    "`fn_80258ED0_helper` directly reads `mnGallery_804D6C88->user_data` because the cleaner macro was noted to blow the stack in that context.",
+    "A volatile pointer cast is used for `data->gobj8` during `HSD_GObjPLink_80390228` cleanup, with an in-code `@todo hacky` note, indicating a deliberate load/store-shape tactic.",
+    "`#pragma dont_inline` is retained around `mnGallery_80258D50` and `mnGallery_80259604`, suggesting those calls needed preserved boundaries for matching.",
+    "`PAD_STACK` values were adjusted rather than removed, showing stack-shape preservation during cleanup.",
+    "The small `float_order_helper` sets `sobj->x10 = 96.0f` and `sobj->x14 = 72.0f`; the name implies constant/order control, though the PR text does not explain the exact matching reason.",
+    "Several extern float/vector/string symbols were replaced by literals or compound initializers, helping data become local labels while keeping generated references matching."
+  ],
+  "review_feedback": [
+    "Author initial note: the PR was described as \"90% done\" and still messy around a `mnGallery_t`-style joint/anim/matanim/shapeanim struct and the unknown `mnGallery_804D6C88` struct.",
+    "Reviewer `jurrejelle` asked \"what's this?\" on the direct `HSD_GObjGetUserData` line in the new `fn_802590C4_inline`.",
+    "Author reply: the notable issue was needing to use `HSD_GObjGetUserData` directly instead of the helper method that had been defined.",
+    "Reviewer `BR-` clarified that `HSD_GObjGetUserData` is the inline behind patterns like `GET_FIGHTER`, returning userdata through `void*`; `GET_804D6C88` was a file-local macro that calls the inline and casts to `mnGallery_804D6C88_userdata*`.",
+    "Review history shows one approval shortly before merge; no requested-changes review is present in the slice."
+  ],
+  "searchable_terms": [
+    "PR2380",
+    "Link mngallery",
+    "mngallery",
+    "mngallery.c",
+    "mngallery.h",
+    "mnsnap",
+    "mnsnap.h",
+    "gm_1B03.c",
+    "gm_801B0FF8",
+    "configure.py",
+    "Object(Matching, \"melee/mn/mngallery.c\")",
+    "Object(NonMatching, \"melee/mn/mngallery.c\")",
+    "config/GALE01/splits.txt",
+    "config/GALE01/symbols.txt",
+    "mnGallery_804D6C88",
+    "mnGallery_804D6C88_userdata",
+    "GET_804D6C88",
+    "HSD_GObjGetUserData",
+    "GET_FIGHTER",
+    "mnGallery_child_userdata",
+    "GET_mnGallery_child_userdata",
+    "StaticModelDesc",
+    "mnGallery_804A0BA0",
+    "mnGallery_804A0BB0",
+    "mnGallery_804A0B90",
+    "mnSnap_804A0B90",
+    "mnSnap_804A0B90_t",
+    "fn_80258ED0",
+    "fn_80258ED0_helper",
+    "fn_802590C4",
+    "fn_802590C4_inline",
+    "mnGallery_80258940",
+    "mnGallery_8025896C",
+    "mnGallery_80258A08",
+    "mnGallery_80258BC4",
+    "mnGallery_80258D50",
+    "mnGallery_80258DBC",
+    "mnGallery_802591BC",
+    "mnGallery_80259604",
+    "mnGallery_8025963C",
+    "mnGallery_80259868",
+    "MvOmake15.mth",
+    "MvHowTo.mth",
+    "MenMainConGa_Top_joint",
+    "MenMainCursorGa_Top_joint",
+    "HSD_ASSERTREPORT",
+    "HSD_MemAlloc",
+    "GObj_InitUserData",
+    "HSD_GObjPLink_80390228",
+    "PAD_STACK",
+    "dont_inline",
+    "sdata2 local labels",
+    "rodata local labels",
+    "bss boundary"
+  ],
+  "follow_up_queries": [
+    "Can `mnGallery_804D6C88_userdata` fields be semantically renamed beyond `state`, `gobj4`, `gobj8`, `sobj`, `text`, `frame`, and `gobjs`?",
+    "Can the `GET_804D6C88` macro be made stack/codegen-neutral enough to replace the direct `HSD_GObjGetUserData` and `user_data` reads?",
+    "Is there a common descriptor typedef for the joint/animjoint/matanim/shapeanim group hinted by the author's initial `mnGallery_t` comment, or should `StaticModelDesc` remain the convention here?",
+    "Audit neighboring `mnsnap`/`mngallery` BSS boundaries for other misattributed address-named globals around `0x804A0B90` through `0x804A0BC0`.",
+    "Investigate whether the `volatile` cast in `fn_80258ED0_helper` can be replaced by a cleaner matching-safe pattern."
+  ],
+  "confidence": 0.91
+}

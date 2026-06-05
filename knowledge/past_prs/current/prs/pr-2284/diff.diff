@@ -1,0 +1,1480 @@
+diff --git a/src/melee/ft/chara/ftNess/ftNs_SpecialHi.c b/src/melee/ft/chara/ftNess/ftNs_SpecialHi.c
+index f68e582b8a..46b4c4a91a 100644
+--- a/src/melee/ft/chara/ftNess/ftNs_SpecialHi.c
++++ b/src/melee/ft/chara/ftNess/ftNs_SpecialHi.c
+@@ -165,7 +165,7 @@ void ftNs_SpecialHiStopGFX(HSD_GObj* gobj) // Removes GFX
+ }
+ #pragma pop
+ 
+-inline bool check_distance(Vec3* pos, Vec2* pair)
++inline bool check_distance(Vec3* pos, Vec3* pair)
+ {
+     if ((ABS(pos->x - pair->x) < 8.333333015441895f) &&
+         (ABS(pos->y - pair->y) < 12.333333015441895f))
+@@ -180,14 +180,14 @@ inline bool check_distance(Vec3* pos, Vec2* pair)
+ /// based on auto-decomp // https://decomp.me/scratch/hwphL // Proper match
+ bool ftNs_SpecialHi_ItemPKThunder_CheckNessCollide(HSD_GObj* gobj)
+ {
+-    u8 unused0[8];
++    u8 unused0[4];
+ 
+-    Vec2 pair;
++    Vec3 pair;
+     Vec3 pos;
+ 
+-    u8 unused1[12];
++    u8 unused1[8];
+ 
+-    Vec2 pair2;
++    Vec3 pair2;
+     Vec3 pos2;
+ 
+     u8 unused2[36];
+diff --git a/src/melee/it/itCharItems.h b/src/melee/it/itCharItems.h
+index daa9ffca3a..dca9bc2ba5 100644
+--- a/src/melee/it/itCharItems.h
++++ b/src/melee/it/itCharItems.h
+@@ -31,9 +31,15 @@ typedef struct itClimbersIce_ItemVars {
+ } itClimbersIce_ItemVars;
+ 
+ typedef struct itNessbat_ItemVars {
+-    /* +0 ip+DD4 */ s32 x0;
++    /* +0 ip+DD4 */ HSD_GObj* x0;
+ } itNessbat_ItemVars;
+ 
++typedef struct itNesspkthundertrail_ItemVars {
++    /* +0 ip+DD4 */ Item_GObj* x0;
++    /* +4 ip+DD8 */ s32 x4;
++    /* +8 ip+DDC */ s32 x8;
++} itNesspkthundertrail_ItemVars;
++
+ typedef struct {
+     /* x0 ip+DD4 */ f32 x0;
+     /* x4 ip+DD8 */ HSD_GObj* x4;
+diff --git a/src/melee/it/itPKFlash.h b/src/melee/it/itPKFlash.h
+index d1b6d325db..4779638a68 100644
+--- a/src/melee/it/itPKFlash.h
++++ b/src/melee/it/itPKFlash.h
+@@ -15,7 +15,7 @@ typedef struct itPKFlush_ItemVars {
+ 
+ typedef struct itPKFlushExplode_ItemVars {
+     float xDD4;
+-    s32 xDD8;
++    float xDD8;
+     HSD_GObj* xDDC;
+ } itPKFlushExplode_ItemVars;
+ 
+diff --git a/src/melee/it/itPKThunder.h b/src/melee/it/itPKThunder.h
+index cb60cbd812..f75681bbd8 100644
+--- a/src/melee/it/itPKThunder.h
++++ b/src/melee/it/itPKThunder.h
+@@ -17,44 +17,14 @@ typedef struct itPKThunderAttributes {
+ 
+ typedef struct itPKThunder_ItemVars {
+     HSD_GObj* xDD4[6];
+-    Vec3 xDEC;
+-    Vec3 xDFC;
+-    Vec3 xE08;
+-    Vec3 xE14;
+-    Vec3 xE20;
+-    Vec3 xE2C;
+-    Vec3 xE38;
+-    Vec3 xE44;
+-    Vec3 xE50;
+-    Vec3 xE5C;
+-    Vec3 xE68;
+-    Vec3 xE74;
+-    Vec3 xE80;
+-    Vec3 xE8C;
+-    Vec3 xE98;
+-    Vec3 xEA0;
+-    float xEAC; // PK Thunder release angles?
+-    float xEB0;
+-    float xEB4;
+-    float xEB8;
+-    float xEBC;
+-    float xEC0;
+-    float xEC4;
+-    float xEC8;
+-    float xECC;
+-    float xED0;
+-    float xED4;
+-    float xED8;
+-    float xEDC;
+-    float xEE0;
+-    float xEE4;
+-    float xEE8;
+-    s32 xEEC;
++    Vec3 positions[16];
++    f32 angles[16];
++    f32 xEEC;
+     s32 xEF0;
+     HSD_GObj* xEF4;
+-    HSD_GObj* xEF8;
+-    HSD_GObj* xEFC;
+-    HSD_GObj* xF00;
++    s32 xEF8;
++    s32 xEFC;
++    s32 xF00;
+     HSD_GObj* xF04;
+     HSD_GObj* xF08;
+ } itPKThunder_ItemVars;
+diff --git a/src/melee/it/items/itnessbat.c b/src/melee/it/items/itnessbat.c
+index 17ff12cd5c..b4e5af1fda 100644
+--- a/src/melee/it/items/itnessbat.c
++++ b/src/melee/it/items/itnessbat.c
+@@ -3,13 +3,115 @@
+ #include <placeholder.h>
+ #include <platform.h>
+ 
++#include "ft/chara/ftNess/ftNs_AttackS4.h"
++#include "ft/ft_0BF0.h"
++#include "ft/ftlib.h"
+ #include "it/inlines.h"
+ #include "it/it_26B1.h"
++#include "it/it_2725.h"
+ #include "it/item.h"
+ 
+-/// #it_802AD478
++#include <baselib/jobj.h>
+ 
+-/// #it_802AD590
++static inline void itNessbat_ClearOwnerRef(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    if (gobj != NULL && ip != NULL) {
++        HSD_GObj* x0 = ip->xDD4_itemVar.nessbat.x0;
++        if (x0 != NULL && ip->owner == x0) {
++            ftNs_AttackS4_ItemNessBatSetNULL(x0);
++        }
++        ip->xDD4_itemVar.nessbat.x0 = NULL;
++        ip->owner = NULL;
++    }
++}
++
++static inline bool itNessbat_RemoveItem(Item_GObj* gobj)
++{
++    if (gobj != NULL) {
++        Item* ip = GET_ITEM(gobj);
++        ip->xDD4_itemVar.nessbat.x0 = NULL;
++        ip->owner = NULL;
++        return true;
++    }
++    return false;
++}
++
++HSD_GObj* it_802AD478(Item_GObj* gobj, Vec3* pos, Fighter_Part part,
++                      f32 facing_dir)
++{
++    SpawnItem spawn;
++    Item_GObj* bat;
++    PAD_STACK(4);
++
++    if (gobj != NULL) {
++        spawn.kind = It_Kind_Ness_Bat;
++        spawn.prev_pos = *pos;
++        spawn.prev_pos.z = 0.0f;
++        spawn.pos = spawn.prev_pos;
++        spawn.facing_dir = facing_dir;
++        spawn.x3C_damage = 0;
++        spawn.vel.x = spawn.vel.y = spawn.vel.z = 0.0f;
++        spawn.x0_parent_gobj = gobj;
++        spawn.x4_parent_gobj2 = spawn.x0_parent_gobj;
++        spawn.x44_flag.b0 = false;
++        spawn.x40 = 0;
++
++        bat = Item_80268B18(&spawn);
++        if (bat != NULL) {
++            Item* ip = GET_ITEM(bat);
++            ip->xDB8_itcmd_var3 = 0;
++            ip->xDB4_itcmd_var2 = 0;
++            ip->xDB0_itcmd_var1 = 0;
++            ip->xDAC_itcmd_var0 = 0;
++            ip->xDCC_flag.b3 = false;
++            ip->xDD4_itemVar.nessbat.x0 = gobj;
++            it_80275158(bat, 1200.0f);
++            Item_8026AB54(bat, gobj, part);
++        }
++    } else {
++        bat = NULL;
++    }
++    return bat;
++}
++
++Item_GObj* it_802AD590(Fighter_GObj* gobj, Fighter_Part part)
++{
++    SpawnItem spawn;
++    Item_GObj* bat;
++    Vec3 pos;
++    PAD_STACK(4);
++
++    if (gobj != NULL) {
++        spawn.kind = It_Kind_Ness_Bat;
++        ftLib_80086644(gobj, &pos);
++        spawn.prev_pos = pos;
++        spawn.prev_pos.z = 0.0f;
++        spawn.pos = spawn.prev_pos;
++        spawn.facing_dir = ftLib_800865C0(gobj);
++        spawn.x3C_damage = 0;
++        spawn.vel.x = spawn.vel.y = spawn.vel.z = 0.0f;
++        spawn.x0_parent_gobj = gobj;
++        spawn.x4_parent_gobj2 = spawn.x0_parent_gobj;
++        spawn.x44_flag.b0 = false;
++        spawn.x40 = 0;
++
++        bat = Item_80268B18(&spawn);
++        if (bat != NULL) {
++            Item* ip = GET_ITEM(bat);
++            ip->xDB8_itcmd_var3 = 1;
++            ip->xDB4_itcmd_var2 = 1;
++            ip->xDB0_itcmd_var1 = 1;
++            ip->xDAC_itcmd_var0 = 1;
++            ip->xDCC_flag.b3 = false;
++            ip->xDD4_itemVar.nessbat.x0 = gobj;
++            Item_8026AB54(bat, gobj, part);
++        }
++    } else {
++        bat = NULL;
++    }
++    return bat;
++}
+ 
+ void it_802AD6B8(Item_GObj* gobj)
+ {
+@@ -34,7 +136,36 @@ void it_2725_Logic58_PickedUp(Item_GObj* gobj)
+     Item_802694CC(gobj);
+ }
+ 
+-/// #itNessbat_UnkMotion0_Anim
++bool itNessbat_UnkMotion0_Anim(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    HSD_JObj* jobj = GET_JOBJ(gobj);
++    HSD_JObj* child = HSD_JObjGetChild(jobj);
++    PAD_STACK(24);
++
++    if (ip->xDAC_itcmd_var0 == 0) {
++        HSD_JObjClearFlagsAll(child, 0x10);
++    } else {
++        HSD_JObjSetFlagsAll(child, 0x10);
++    }
++
++    if (ip->xDD4_itemVar.nessbat.x0 != NULL) {
++        if (ftNs_AttackS4_CheckNessBatRemove(ip->xDD4_itemVar.nessbat.x0) ==
++            true)
++        {
++            itNessbat_ClearOwnerRef(gobj);
++            if (itNessbat_RemoveItem(gobj)) {
++                return true;
++            }
++        }
++    } else {
++        itNessbat_ClearOwnerRef(gobj);
++        if (itNessbat_RemoveItem(gobj)) {
++            return true;
++        }
++    }
++    return false;
++}
+ 
+ void itNessbat_UnkMotion0_Phys(Item_GObj* gobj) {}
+ 
+@@ -43,7 +174,28 @@ bool itNessbat_UnkMotion0_Coll(Item_GObj* gobj)
+     return false;
+ }
+ 
+-/// #itNessbat_UnkMotion1_Anim
++static inline void copy_jobj_scale(HSD_JObj* dst, HSD_JObj* src, Vec3* scale)
++{
++    scale->x = scale->y = scale->z = HSD_JObjGetScaleY(src);
++    HSD_JObjSetScale(dst, scale);
++}
++
++bool itNessbat_UnkMotion1_Anim(Item_GObj* gobj)
++{
++    if (gobj != NULL) {
++        Item* ip = GET_ITEM(gobj);
++        if (ip != NULL) {
++            if (ip->xDD4_itemVar.nessbat.x0 != NULL) {
++                if (ftCo_800BF228(ip->xDD4_itemVar.nessbat.x0) == true) {
++                    Vec3 scale;
++                    HSD_GObj* owner = ip->xDD4_itemVar.nessbat.x0;
++                    copy_jobj_scale(GET_JOBJ(gobj), GET_JOBJ(owner), &scale);
++                }
++            }
++        }
++    }
++    return false;
++}
+ 
+ void itNessbat_UnkMotion1_Phys(Item_GObj* gobj) {}
+ 
+diff --git a/src/melee/it/items/itnessbat.h b/src/melee/it/items/itnessbat.h
+index 7ac58bc667..45439af5be 100644
+--- a/src/melee/it/items/itnessbat.h
++++ b/src/melee/it/items/itnessbat.h
+@@ -6,7 +6,7 @@
+ 
+ #include "it/items/types.h"
+ 
+-/* 2AD478 */ HSD_GObj* it_802AD478(Item_GObj*, Vec3*, s32, float);
++/* 2AD478 */ HSD_GObj* it_802AD478(Item_GObj*, Vec3*, Fighter_Part, f32);
+ /* 2AD590 */ Item_GObj* it_802AD590(Fighter_GObj*, Fighter_Part);
+ /* 2AD6B8 */ void it_802AD6B8(Item_GObj*);
+ /* 2AD6F0 */ void it_2725_Logic58_PickedUp(Item_GObj*);
+diff --git a/src/melee/it/items/itnesspkfire.c b/src/melee/it/items/itnesspkfire.c
+index b49eac9cd1..ed10dc19e8 100644
+--- a/src/melee/it/items/itnesspkfire.c
++++ b/src/melee/it/items/itnesspkfire.c
+@@ -3,8 +3,8 @@
+ #include <placeholder.h>
+ #include <platform.h>
+ 
++#include "db/db.h"
+ #include "it/forward.h"
+-
+ #include "it/inlines.h"
+ #include "it/it_266F.h"
+ #include "it/it_26B1.h"
+@@ -14,8 +14,36 @@
+ #include "it/types.h"
+ 
+ #include <baselib/gobj.h>
++#include <baselib/jobj.h>
++
++void it_802AA054(Item_GObj* gobj, Vec3* pos, Vec3* vel, f32 facing_dir,
++                 f32 angle)
++{
++    SpawnItem spawn;
++    PAD_STACK(8);
++
++    spawn.kind = It_Kind_Ness_PKFire;
++    spawn.prev_pos = *pos;
++    spawn.prev_pos.z = 0.0f;
++    it_8026BB68(gobj, &spawn.pos);
++    spawn.vel = *vel;
++    spawn.facing_dir = facing_dir;
++    spawn.x3C_damage = 0;
++    spawn.x0_parent_gobj = gobj;
++    spawn.x4_parent_gobj2 = spawn.x0_parent_gobj;
++    spawn.x44_flag.b0 = true;
++    spawn.x40 = 0;
+ 
+-/// #it_802AA054
++    {
++        Item_GObj* fire = Item_80268B18(&spawn);
++        if (fire != NULL) {
++            HSD_JObj* jobj = GET_JOBJ(fire);
++            db_80225DD8(fire, gobj);
++            it_802AA1D8(fire);
++            HSD_JObjSetRotationZ(jobj, angle);
++        }
++    }
++}
+ 
+ void it_802AA1D8(Item_GObj* item_gobj)
+ {
+@@ -78,7 +106,13 @@ bool itNessPKFire_Logic23_Reflected(Item_GObj* gobj)
+     return it_80273030(gobj);
+ }
+ 
+-/// #it_2725_Logic23_ShieldBounced
++bool it_2725_Logic23_ShieldBounced(Item_GObj* gobj)
++{
++    HSD_JObj* jobj = GET_JOBJ(gobj);
++    f32 rot_z = HSD_JObjGetRotationZ(jobj);
++    HSD_JObjSetRotationZ(jobj, -rot_z);
++    return itColl_BounceOffShield(gobj);
++}
+ 
+ void it_802AA474(Item_GObj* gobj, Item_GObj* ref_gobj)
+ {
+diff --git a/src/melee/it/items/itnesspkflush.c b/src/melee/it/items/itnesspkflush.c
+index 89246e0cec..674521d01b 100644
+--- a/src/melee/it/items/itnesspkflush.c
++++ b/src/melee/it/items/itnesspkflush.c
+@@ -1,18 +1,41 @@
+ #include "itnesspkflush.h"
+ 
+-#include "math.h"
++#include <placeholder.h>
++#include <platform.h>
++
++#include "db/db.h"
++#include "ft/chara/ftKirby/ftKb_Init.h"
++#include "ft/chara/ftNess/ftNs_SpecialN.h"
++#include "ft/ftlib.h"
+ 
+ #include "it/forward.h"
+ 
+ #include "it/inlines.h"
+ #include "it/it_266F.h"
+ #include "it/it_26B1.h"
++#include "it/it_2725.h"
++#include "it/item.h"
++#include "it/items/itnesspkflushexplode.h"
++#include "MSL/trigf.h"
+ 
++#include <math.h>
+ #include <baselib/jobj.h>
+ 
+ /* 2AB29C */ static bool itNesspkflush_UnkMotion1_Coll(Item_GObj* gobj);
+ /* 2AB2A4 */ static bool itNesspkflush_UnkMotion2_Coll(Item_GObj* gobj);
+ 
++static inline void itNesspkflush_SetScale(HSD_JObj* jobj, Item* ip,
++                                          itFlashAttributes* attr)
++{
++    Vec3 scale;
++    scale.x = scale.y = scale.z = (ip->xDD4_itemVar.pkflush.xDD8_PKFlash *
++                                   ((attr->xC_FLASH_GRAPHIC_SIZE_GROWTH_MUL -
++                                     attr->x8_FLASH_GRAPHIC_SIZE_INIT_MUL) /
++                                    attr->x4_FLASH_HITBOX_SIZE_MUL)) +
++                                  attr->x8_FLASH_GRAPHIC_SIZE_INIT_MUL;
++    HSD_JObjSetScale(jobj, &scale);
++}
++
+ Fighter_GObj* it_802AA7E4(Item_GObj* gobj)
+ {
+     return GET_ITEM(gobj)->owner;
+@@ -49,9 +72,65 @@ bool it_802AA810(Item_GObj* gobj, CollData* cd)
+     return ret;
+ }
+ 
+-/// #it_802AA8C0
++HSD_GObj* it_802AA8C0(Item_GObj* gobj, Vec3* pos, ItemKind kind,
++                      f32 facing_dir)
++{
++    SpawnItem spawn;
++    Item_GObj* flash;
++    PAD_STACK(4);
+ 
+-/// #it_2725_Logic102_Destroyed
++    spawn.kind = kind;
++    spawn.prev_pos = *pos;
++    spawn.prev_pos.z = 0.0f;
++    it_8026BB68(gobj, &spawn.pos);
++    spawn.facing_dir = facing_dir;
++    spawn.x3C_damage = 0;
++    spawn.vel.x = spawn.vel.y = spawn.vel.z = 0.0f;
++    spawn.x0_parent_gobj = gobj;
++    spawn.x4_parent_gobj2 = spawn.x0_parent_gobj;
++    spawn.x44_flag.b0 = true;
++    spawn.x40 = 0;
++
++    flash = Item_80268B18(&spawn);
++    if (flash != NULL) {
++        Item* ip = GET_ITEM(flash);
++        itFlashAttributes* attr = ip->xC4_article_data->x4_specialAttributes;
++        ip->xDB8_itcmd_var3 = 0;
++        ip->xDB4_itcmd_var2 = 0;
++        ip->xDB0_itcmd_var1 = 0;
++        ip->xDAC_itcmd_var0 = 0;
++        it_80275158(flash, attr->x0_FLASH_LIFETIMER);
++        ip->xDD4_itemVar.pkflush.xDD8_PKFlash = 0.0f;
++        ip->xDD4_itemVar.pkflush.xDDC_PKFlash = 0;
++        ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner = gobj;
++        ip->xDD4_itemVar.pkflush.xDE4_PKFlash = 0;
++        it_802AAA80(flash);
++    }
++    return flash;
++}
++
++void it_2725_Logic102_Destroyed(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    it_802725D4(gobj);
++
++    if (ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner != NULL) {
++        if (ip->owner == ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner) {
++            switch (ip->kind) {
++            case It_Kind_Ness_PKFlush:
++                ftNs_SpecialN_SetNULL(
++                    ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner);
++                break;
++            case It_Kind_Kirby_NessPKFlush:
++                ftKb_SpecialNNs_800FECBC(
++                    ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner);
++                break;
++            }
++        }
++        ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner = NULL;
++    }
++    ip->xDC8_word.flags.x13 = 0;
++}
+ 
+ void it_802AAA50(Item_GObj* gobj)
+ {
+@@ -67,15 +146,169 @@ void it_802AAA50(Item_GObj* gobj)
+     }
+ }
+ 
+-/// #it_802AAA80
++void it_802AAA80(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    itFlashAttributes* attr = ip->xC4_article_data->x4_specialAttributes;
++    f32 angle;
++    PAD_STACK(8);
+ 
+-/// #itNesspkflush_UnkMotion0_Anim
++    it_8026B3A8(gobj);
++    ip->xDC8_word.flags.x13 = 0;
++    it_80272940(gobj);
++    Item_80268E5C(gobj, 0, ITEM_ANIM_UPDATE);
++    it_80275158(gobj, attr->x0_FLASH_LIFETIMER);
++    ip->xDD4_itemVar.pkflush.xDD8_PKFlash = 0.0f;
++    ip->xDD4_itemVar.pkflush.xDDC_PKFlash = 0;
++    angle =
++        (0.017453292f * attr->x10_FLASH_UNK1 * ip->facing_dir) + (f32) M_PI_2;
++    ip->x40_vel.x = -attr->x14_FLASH_PEAK_RISE_HEIGHT * cosf(angle);
++    ip->x40_vel.y = attr->x14_FLASH_PEAK_RISE_HEIGHT * sinf(angle);
++    ip->x40_vel.z = 0.0f;
++    db_80225DD8(gobj, ip->owner);
++}
++
++bool itNesspkflush_UnkMotion0_Anim(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    itFlashAttributes* attr = ip->xC4_article_data->x4_specialAttributes;
++    HSD_JObj* jobj = GET_JOBJ(gobj);
++    bool holding;
++
++    if (it_80272C6C(gobj) == false) {
++        Item_80268E5C(gobj, 0, ITEM_ANIM_UPDATE);
++    }
+ 
+-/// #itNesspkflush_UnkMotion1_Anim
++    if (ip->xDD4_itemVar.pkflush.xDDC_PKFlash == 0) {
++        ip->xDD4_itemVar.pkflush.xDD8_PKFlash += 1.0f;
++        if (ip->xDD4_itemVar.pkflush.xDD8_PKFlash >=
++            attr->x4_FLASH_HITBOX_SIZE_MUL)
++        {
++            ip->xDD4_itemVar.pkflush.xDD8_PKFlash =
++                attr->x4_FLASH_HITBOX_SIZE_MUL;
++        }
++
++        if (ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner != NULL &&
++            ip->owner == ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner)
++        {
++            switch (ip->kind) {
++            case It_Kind_Ness_PKFlush:
++                holding = ftNs_SpecialN_CheckSpecialNHold(
++                    ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner);
++                break;
++            case It_Kind_Kirby_NessPKFlush:
++                holding = ftKb_SpecialNNs_800FEC78(
++                    ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner);
++                break;
++            }
++            if (holding != true) {
++                Item_80268E5C(gobj, 1, ITEM_ANIM_UPDATE);
++                ip->xD44_lifeTimer = attr->x28_FLASH_EXPLOSION_DELAY;
++                ip->xDAC_itcmd_var0 = 0;
++            }
++        }
++    }
+ 
+-/// #itNesspkflush_UnkMotion2_Anim
++    if (it_80273130(gobj) == true) {
++        Item_80268E5C(gobj, 1, ITEM_ANIM_UPDATE);
++        ip->xD44_lifeTimer = attr->x28_FLASH_EXPLOSION_DELAY;
++        ip->xDAC_itcmd_var0 = 0;
++    }
+ 
+-/// #itNesspkflush_UnkMotion0_Phys
++    itNesspkflush_SetScale(jobj, ip, attr);
++    return false;
++}
++
++bool itNesspkflush_UnkMotion1_Anim(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    HSD_JObj* jobj = GET_JOBJ(gobj);
++    itFlashAttributes* attr = ip->xC4_article_data->x4_specialAttributes;
++
++    ip->xDAC_itcmd_var0++;
++
++    if (ip->xDD4_itemVar.pkflush.xDDC_PKFlash == 0) {
++        if (ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner != NULL) {
++            Item_GObj* owner = ip->owner;
++            if ((owner == ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner) &&
++                (ip->xDAC_itcmd_var0 >=
++                 ((s32) attr->x28_FLASH_EXPLOSION_DELAY) - 2))
++            {
++                switch (ip->kind) {
++                case It_Kind_Ness_PKFlush:
++                    it_802AF940(owner, gobj, &ip->pos,
++                                It_Kind_Ness_PKFlush_Explode, ip->facing_dir,
++                                ip->xDD4_itemVar.pkflush.xDD8_PKFlash);
++                    break;
++                case It_Kind_Kirby_NessPKFlush:
++                    it_802AF940(owner, gobj, &ip->pos,
++                                It_Kind_Kirby_NessPKFlush_Explode,
++                                ip->facing_dir,
++                                ip->xDD4_itemVar.pkflush.xDD8_PKFlash);
++                    break;
++                }
++                return true;
++            }
++        }
++    }
++
++    itNesspkflush_SetScale(jobj, ip, attr);
++    return it_80273130(gobj);
++}
++
++bool itNesspkflush_UnkMotion2_Anim(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    HSD_JObj* jobj = GET_JOBJ(gobj);
++    itFlashAttributes* attr = ip->xC4_article_data->x4_specialAttributes;
++    itNesspkflush_SetScale(jobj, ip, attr);
++    return it_80273130(gobj);
++}
++
++void itNesspkflush_UnkMotion0_Phys(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    itFlashAttributes* attr = ip->xC4_article_data->x4_specialAttributes;
++    PAD_STACK(8);
++
++    if (ip->xDD4_itemVar.pkflush.xDDC_PKFlash == 0) {
++        if (ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner != NULL &&
++            ip->owner == ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner)
++        {
++            bool holding;
++            switch (ip->kind) {
++            case It_Kind_Ness_PKFlush:
++                holding = ftNs_SpecialN_CheckSpecialNHold(
++                    ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner);
++                break;
++            case It_Kind_Kirby_NessPKFlush:
++                holding = ftKb_SpecialNNs_800FEC78(
++                    ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner);
++                break;
++            }
++            if (holding == true) {
++                f32 stick_y;
++                f32 stick_x;
++                ftLib_800865D8(ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner,
++                               &stick_x, &stick_y);
++                if (ABS(stick_x) > 0.2f) {
++                    ip->x40_vel.x += stick_x * attr->x18_FLASH_CONTROL;
++                    if (ABS(ip->x40_vel.x) > attr->x20_FLASH_UNK2) {
++                        ip->x40_vel.x = (ip->x40_vel.x > 0.0f)
++                                            ? attr->x20_FLASH_UNK2
++                                            : -attr->x20_FLASH_UNK2;
++                    }
++                }
++            }
++        }
++    }
++
++    ip->x40_vel.y -= attr->x1C_FLASH_GRAVITY;
++    if (ip->x40_vel.y < -attr->x24_FLASH_UNK3) {
++        ip->x40_vel.y = -attr->x24_FLASH_UNK3;
++    }
++    ip->x40_vel.z = 0.0f;
++}
+ 
+ void itNesspkflush_UnkMotion1_Phys(Item_GObj* gobj)
+ {
+@@ -89,7 +322,22 @@ void itNesspkflush_UnkMotion2_Phys(Item_GObj* gobj)
+     itResetVelocity(ip);
+ }
+ 
+-/// #itNesspkflush_UnkMotion0_Coll
++bool itNesspkflush_UnkMotion0_Coll(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    itFlashAttributes* attr = ip->xC4_article_data->x4_specialAttributes;
++    HSD_JObj* jobj = GET_JOBJ(gobj);
++
++    if (it_802AA810(gobj, &ip->x378_itemColl) != 0) {
++        Item_80268E5C(gobj, 2, ITEM_ANIM_UPDATE);
++        ip->xD44_lifeTimer = attr->x28_FLASH_EXPLOSION_DELAY;
++        Item_8026B074(ip);
++        Item_8026AE84(ip, 0x86, 0x7F, 0x40);
++    }
++
++    itNesspkflush_SetScale(jobj, ip, attr);
++    return false;
++}
+ 
+ bool itNesspkflush_UnkMotion1_Coll(Item_GObj* gobj)
+ {
+diff --git a/src/melee/it/items/itnesspkflush.h b/src/melee/it/items/itnesspkflush.h
+index 8fb2f0a89a..f9291ec3b4 100644
+--- a/src/melee/it/items/itnesspkflush.h
++++ b/src/melee/it/items/itnesspkflush.h
+@@ -13,10 +13,10 @@
+ /* 2AA7E4 */ Fighter_GObj* it_802AA7E4(Item_GObj*);
+ /* 2AA7F0 */ bool it_802AA7F0(Item_GObj*);
+ /* 2AA810 */ bool it_802AA810(Item_GObj*, CollData*);
+-/* 2AA8C0 */ HSD_GObj* it_802AA8C0(Item_GObj*, Vec3*, enum_t, float);
++/* 2AA8C0 */ HSD_GObj* it_802AA8C0(Item_GObj*, Vec3*, ItemKind, f32);
+ /* 2AA9CC */ void it_2725_Logic102_Destroyed(Item_GObj*);
+ /* 2AAA50 */ void it_802AAA50(Item_GObj*);
+-/* 2AAA80 */ UNK_RET it_802AAA80(UNK_PARAMS);
++/* 2AAA80 */ void it_802AAA80(Item_GObj*);
+ /* 2AAB70 */ bool itNesspkflush_UnkMotion0_Anim(Item_GObj* gobj);
+ /* 2AAD48 */ bool itNesspkflush_UnkMotion1_Anim(Item_GObj* gobj);
+ /* 2AAEE4 */ bool itNesspkflush_UnkMotion2_Anim(Item_GObj* gobj);
+diff --git a/src/melee/it/items/itnesspkflushexplode.c b/src/melee/it/items/itnesspkflushexplode.c
+index 85f74bd9cb..c9e2b13e48 100644
+--- a/src/melee/it/items/itnesspkflushexplode.c
++++ b/src/melee/it/items/itnesspkflushexplode.c
+@@ -3,15 +3,53 @@
+ #include <placeholder.h>
+ #include <platform.h>
+ 
++#include "cm/camera.h"
++#include "db/db.h"
++
+ #include "it/forward.h"
+ 
+ #include "it/inlines.h"
+ #include "it/it_26B1.h"
+ #include "it/it_2725.h"
++#include "it/itcoll.h"
++#include "it/item.h"
++
++#include <baselib/jobj.h>
+ 
+ /* 2AFD44 */ static bool itNesspkflushexplode_UnkMotion0_Coll(Item_GObj* gobj);
+ 
+-/// #it_802AF940
++Item_GObj* it_802AF940(Item_GObj* owner, Item_GObj* flash, Vec3* pos,
++                       ItemKind kind, f32 facing_dir, f32 charge)
++{
++    SpawnItem spawn;
++    Item_GObj* explode;
++    PAD_STACK(4);
++
++    spawn.kind = kind;
++    spawn.prev_pos = *pos;
++    spawn.prev_pos.z = 0.0f;
++    spawn.pos = spawn.prev_pos;
++    spawn.facing_dir = facing_dir;
++    spawn.x3C_damage = 0;
++    spawn.vel.x = spawn.vel.y = spawn.vel.z = 0.0f;
++    spawn.x0_parent_gobj = owner;
++    spawn.x4_parent_gobj2 = flash;
++    spawn.x44_flag.b0 = true;
++    spawn.x40 = 0;
++
++    explode = Item_80268B18(&spawn);
++    if (explode != NULL) {
++        Item* ip = GET_ITEM(explode);
++        ip->xDB8_itcmd_var3 = 0;
++        ip->xDB4_itcmd_var2 = 0;
++        ip->xDB0_itcmd_var1 = 0;
++        ip->xDAC_itcmd_var0 = 0;
++        ip->xDD4_itemVar.pkflushexplode.xDD4 = charge;
++        ip->xDD4_itemVar.pkflushexplode.xDDC = owner;
++        it_802AFA70(explode);
++    }
++    return explode;
++}
+ 
+ void it_2725_Logic103_Destroyed(Item_GObj* item_gobj)
+ {
+@@ -24,9 +62,73 @@ void it_2725_Logic103_Destroyed(Item_GObj* item_gobj)
+     }
+ }
+ 
+-/// #it_802AFA70
++void it_802AFA70(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    itFlashExplAttributes* attr = ip->xC4_article_data->x4_specialAttributes;
++    f32 ratio;
++    PAD_STACK(8);
++
++    it_8026B3A8(gobj);
++    ip->xDC8_word.flags.x13 = 0;
++    it_80272940(gobj);
++    Item_80268E5C(gobj, 0, ITEM_ANIM_UPDATE);
++    it_80275158(gobj, 1024.0f);
++    ip->xDD4_itemVar.pkflushexplode.xDD8 = 0.0f;
++    Item_802694CC(gobj);
++    itNesspkflushexplode_UnkMotion0_Anim(gobj);
+ 
+-/// #itNesspkflushexplode_UnkMotion0_Anim
++    ratio = ip->xDD4_itemVar.pkflushexplode.xDD4 /
++            attr->x0_FLASH_EXPL_HITBOX_SIZE_MUL;
++    if (ratio > 0.84999996f) {
++        Camera_80030E44(3, &ip->pos);
++        it_80273598(gobj, 0xE, 0x14);
++    } else if (ratio > 0.65f) {
++        Camera_80030E44(2, &ip->pos);
++        it_80273598(gobj, 0xD, 0xF);
++    } else if (ratio > 0.45f) {
++        it_80273598(gobj, 0xC, 0xA);
++    } else {
++        it_80273598(gobj, 0xB, 5);
++    }
++    db_80225DD8(gobj, ip->owner);
++}
++
++bool itNesspkflushexplode_UnkMotion0_Anim(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    itFlashExplAttributes* attr = ip->xC4_article_data->x4_specialAttributes;
++    HSD_JObj* jobj = GET_JOBJ(gobj);
++    Vec3 scale;
++    scale.x = scale.y = scale.z = (ip->xDD4_itemVar.pkflushexplode.xDD4 *
++                                   ((attr->x8_FLASH_EXPL_GRAPHIC_SIZE_GROWTH -
++                                     attr->x4_FLASH_EXPL_GRAPHIC_SIZE_INIT) /
++                                    attr->x0_FLASH_EXPL_HITBOX_SIZE_MUL)) +
++                                  attr->x4_FLASH_EXPL_GRAPHIC_SIZE_INIT;
++    HSD_JObjSetScale(jobj, &scale);
++
++    if (ip->xDB4_itcmd_var2 == 0 &&
++        ip->x5D4_hitboxes[0].hit.state != HitCapsule_Disabled)
++    {
++        it_80272460(&ip->x5D4_hitboxes[0].hit,
++                    (ip->xDD4_itemVar.pkflushexplode.xDD4 *
++                     attr->x10_FLASH_EXPL_DAMAGE_MUL) +
++                        attr->xC_FLASH_EXPL_BASE_DAMAGE,
++                    gobj);
++        ip->xDB4_itcmd_var2 = 1;
++    }
++
++    if (ip->xDD4_itemVar.pkflushexplode.xDD8 == 0.0f) {
++        ip->xDD4_itemVar.pkflushexplode.xDD8 = ip->x5D4_hitboxes[0].hit.scale;
++    }
++    ip->x5D4_hitboxes[0].hit.scale =
++        ip->xDD4_itemVar.pkflushexplode.xDD8 * scale.x;
++
++    if (it_80272C6C(gobj) == false) {
++        return true;
++    }
++    return false;
++}
+ 
+ void itNesspkflushexplode_UnkMotion0_Phys(Item_GObj* gobj)
+ {
+diff --git a/src/melee/it/items/itnesspkflushexplode.h b/src/melee/it/items/itnesspkflushexplode.h
+index 5b3b9ce30d..251194e72e 100644
+--- a/src/melee/it/items/itnesspkflushexplode.h
++++ b/src/melee/it/items/itnesspkflushexplode.h
+@@ -7,9 +7,10 @@
+ 
+ #include "it/items/types.h"
+ 
+-/* 2AF940 */ UNK_RET it_802AF940(UNK_PARAMS);
++/* 2AF940 */ Item_GObj* it_802AF940(Item_GObj*, Item_GObj*, Vec3*, ItemKind,
++                                    f32, f32);
+ /* 2AFA2C */ void it_2725_Logic103_Destroyed(Item_GObj*);
+-/* 2AFA70 */ UNK_RET it_802AFA70(UNK_PARAMS);
++/* 2AFA70 */ void it_802AFA70(Item_GObj*);
+ /* 2AFBA4 */ bool itNesspkflushexplode_UnkMotion0_Anim(Item_GObj* gobj);
+ /* 2AFD2C */ void itNesspkflushexplode_UnkMotion0_Phys(Item_GObj*);
+ /* 2AFD4C */ bool itNessPKFlushExplode_Logic103_Clanked(Item_GObj*);
+diff --git a/src/melee/it/items/itnesspkthunderball.c b/src/melee/it/items/itnesspkthunderball.c
+index d65f7a2b18..f757f53ab4 100644
+--- a/src/melee/it/items/itnesspkthunderball.c
++++ b/src/melee/it/items/itnesspkthunderball.c
+@@ -1,12 +1,22 @@
+ #include "itnesspkthunderball.h"
+ 
++#include <placeholder.h>
++
++#include "db/db.h"
++#include "dolphin/pad.h"
++#include "ft/chara/ftNess/ftNs_SpecialHi.h"
++#include "ft/ftlib.h"
++#include "gr/stage.h"
+ #include "it/inlines.h"
+ #include "it/it_266F.h"
+ #include "it/it_26B1.h"
+ #include "it/it_2725.h"
++#include "it/item.h"
++#include "it/items/itnesspkthundertrail.h"
+ #include "lb/lbvector.h"
+ #include "MSL/math.h"
+ 
++#include <string.h>
+ #include <trigf.h>
+ 
+ /* 2AC000 */ static bool itNesspkthunderball_UnkMotion0_Coll(Item_GObj* gobj);
+@@ -21,34 +31,20 @@ static inline void normalizeAngle(f32* angle)
+     }
+ }
+ 
+-void it_802AB3F0(Item_GObj* gobj, void* out, s32 idx)
++void it_802AB3F0(Item_GObj* gobj, Vec3* out, s32 idx)
+ {
+-    Item* ip;
+-
+     if (gobj != NULL) {
+-        ip = gobj->user_data;
++        Item* ip = GET_ITEM(gobj);
+         if (ip != NULL) {
+-            if (out == NULL) {
+-                return;
++            if (out != NULL) {
++                *out = ip->xDD4_itemVar.pkthunder.positions[idx * 2];
+             }
+-            ip = (Item*) ((u8*) ip + idx * 0x18);
+-            *(Vec3*) out = ip->xDD4_itemVar.pkthunder.xDEC;
+-            return;
++        } else if (out != NULL) {
++            out->x = out->y = out->z = 0.0f;
+         }
+-        if (out == NULL) {
+-            return;
+-        }
+-        ((Vec3*) out)->z = 0.0F;
+-        ((Vec3*) out)->y = 0.0F;
+-        ((Vec3*) out)->x = 0.0F;
+-        return;
+-    }
+-    if (out == NULL) {
+-        return;
++    } else if (out != NULL) {
++        out->x = out->y = out->z = 0.0f;
+     }
+-    ((Vec3*) out)->z = 0.0F;
+-    ((Vec3*) out)->y = 0.0F;
+-    ((Vec3*) out)->x = 0.0F;
+ }
+ 
+ void it_802AB468(Item_GObj* gobj, f32* out, s32 unused)
+@@ -111,17 +107,262 @@ HSD_GObj* it_802AB568(Item_GObj* gobj)
+     return NULL;
+ }
+ 
+-/// #it_802AB58C
++HSD_GObj* it_802AB58C(Item_GObj* owner, Vec3* pos, f32 facing_dir)
++{
++    Item_GObj* ball;
++    int i;
++    SpawnItem spawn;
++
++    spawn.kind = It_Kind_Ness_PKThunder;
++    spawn.prev_pos = *pos;
++    spawn.prev_pos.z = 0.0f;
++    it_8026BB68(owner, &spawn.pos);
++    spawn.facing_dir = facing_dir;
++    spawn.x3C_damage = 0;
++    spawn.vel.x = spawn.vel.y = spawn.vel.z = 0.0f;
++    spawn.x0_parent_gobj = owner;
++    spawn.x4_parent_gobj2 = spawn.x0_parent_gobj;
++    spawn.x44_flag.b0 = true;
++    spawn.x40 = Item_8026AE60();
++
++    ball = Item_80268B18(&spawn);
++    if (ball != NULL) {
++        Item* ip = GET_ITEM(ball);
++        itPKThunderAttributes* attr =
++            ip->xC4_article_data->x4_specialAttributes;
++
++        ip->xDB8_itcmd_var3 = 0;
++        ip->xDB4_itcmd_var2 = 0;
++        ip->xDB0_itcmd_var1 = 0;
++        ip->xDAC_itcmd_var0 = 0;
++        it_80275158(ball, attr->x0_PKTHUNDER_LIFETIME);
++        ip->xDD4_itemVar.pkthunder.xEF4 = NULL;
++        for (i = 0; i < 16; i++) {
++            ip->xDD4_itemVar.pkthunder.positions[i] = *pos;
++        }
++        for (i = 0; i < 16; i++) {
++            ip->xDD4_itemVar.pkthunder.angles[i] =
++                deg_to_rad * attr->x8_PKTHUNDER_SPAWN_ANGLE;
++        }
++        for (i = 0; i < 6; i++) {
++            ip->xDD4_itemVar.pkthunder.xDD4[i] = NULL;
++        }
++        ip->xDD4_itemVar.pkthunder.xEFC = 0;
++        ip->xDD4_itemVar.pkthunder.xEF8 = 0;
++        ip->xDD4_itemVar.pkthunder.xF00 = 0;
++        ip->xDD4_itemVar.pkthunder.xF04 = owner;
++        ip->xDD4_itemVar.pkthunder.xF08 = NULL;
++        it_802ABA4C(ball);
++        ip->xDCC_flag.b3 = false;
++        if (Stage_80225194() == 0x54) {
++            Item_80267454(ball);
++        }
++    }
++    return ball;
++}
++
++void it_802AB90C(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    s32 i;
++
++    it_802725D4(gobj);
+ 
+-/// #it_802AB90C
++    if (ip->xDD4_itemVar.pkthunder.xF04 != NULL) {
++        if (ip->xDD4_itemVar.pkthunder.xF00 == NULL &&
++            ip->xDD4_itemVar.pkthunder.xF04 == ip->owner)
++        {
++            ftNs_SpecialHi_ItemPKThunderRemove(
++                ip->xDD4_itemVar.pkthunder.xF04);
++        }
++        ip->xDD4_itemVar.pkthunder.xF04 = NULL;
++    }
+ 
+-/// #it_802AB9C0
++    for (i = 0; i < 6; i++) {
++        if (ip->xDD4_itemVar.pkthunder.xDD4[i] != NULL) {
++            it_802AC58C(ip->xDD4_itemVar.pkthunder.xDD4[i]);
++            ip->xDD4_itemVar.pkthunder.xDD4[i] = NULL;
++        }
++    }
++    ip->xDC8_word.flags.x13 = 0;
++}
+ 
+-/// #it_802ABA4C
++void it_802AB9C0(Item_GObj* gobj)
++{
++    if (gobj != NULL) {
++        Item* ip = GET_ITEM(gobj);
++        if (ip != NULL && ip->xDD4_itemVar.pkthunder.xF00 == NULL) {
++            s32 i;
++            ip->owner = NULL;
++            ip->xDC8_word.flags.x13 = 0;
++            for (i = 0; i < 6; i++) {
++                if (ip->xDD4_itemVar.pkthunder.xDD4[i] != NULL) {
++                    it_802AC5D8(ip->xDD4_itemVar.pkthunder.xDD4[i]);
++                }
++            }
++        }
++    }
++}
+ 
+-/// #itNesspkthunderball_UnkMotion0_Anim
++void it_802ABA4C(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    itPKThunderAttributes* attr = ip->xC4_article_data->x4_specialAttributes;
++    int i;
++
++    it_8026B3A8(gobj);
++    ip->xDC8_word.flags.x13 = 0;
++    it_80272940(gobj);
++    Item_80268E5C(gobj, 0, ITEM_ANIM_UPDATE);
++    it_80275158(gobj, attr->x0_PKTHUNDER_LIFETIME);
++    for (i = 0; i < 16; i++) {
++        ip->xDD4_itemVar.pkthunder.angles[i] =
++            deg_to_rad * attr->x8_PKTHUNDER_SPAWN_ANGLE;
++    }
++    {
++        f32 speed = attr->x4_PKTHUNDER_SPEED;
++        ip->xDD4_itemVar.pkthunder.xEEC = speed;
++        ip->x40_vel.y = speed;
++    }
++    ip->x40_vel.z = 0.0f;
++    ip->x40_vel.x = 0.0f;
++    db_80225DD8(gobj, ip->xDD4_itemVar.pkthunder.xF04);
++}
+ 
+-/// #itNesspkthunderball_UnkMotion0_Phys
++bool itNesspkthunderball_UnkMotion0_Anim(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    PAD_STACK(32);
++
++    switch (ip->xDD4_itemVar.pkthunder.xEF8) {
++    case 0:
++    case 2:
++    case 4:
++    case 6:
++    case 8:
++    case 10:
++        if (ip->xDD4_itemVar.pkthunder.xEFC <= 5) {
++            if (ip->owner == ip->xDD4_itemVar.pkthunder.xF04) {
++                f32 dir = ip->facing_dir;
++                ip->xDD4_itemVar.pkthunder
++                    .xDD4[ip->xDD4_itemVar.pkthunder.xEFC] =
++                    it_802AC43C(ip->xDD4_itemVar.pkthunder.xF04, gobj,
++                                &ip->pos, ip->xDD4_itemVar.pkthunder.xEFC,
++                                ip->xAC4_ignoreItemID, dir);
++            } else {
++                f32 dir = ip->facing_dir;
++                ip->xDD4_itemVar.pkthunder
++                    .xDD4[ip->xDD4_itemVar.pkthunder.xEFC] = it_802AC43C(
++                    NULL, gobj, &ip->pos, ip->xDD4_itemVar.pkthunder.xEFC,
++                    ip->xAC4_ignoreItemID, dir);
++            }
++            ip->xDD4_itemVar.pkthunder.xEFC += 1;
++        }
++        break;
++    }
++
++    ip->xDD4_itemVar.pkthunder.xEF8 += 1;
++
++    if ((ip->xDD4_itemVar.pkthunder.xF00 == 0) &&
++        (ip->xDD4_itemVar.pkthunder.xF04 != NULL))
++    {
++        if (ip->owner == ip->xDD4_itemVar.pkthunder.xF04) {
++            if (ftNs_SpecialHi_CheckSpecialHiHold(
++                    ip->xDD4_itemVar.pkthunder.xF04) != true)
++            {
++                return true;
++            }
++        } else {
++            it_802AB90C(gobj);
++            return true;
++        }
++    }
++    return it_80273130(gobj);
++}
++
++static inline void itNesspkthunderball_ShiftAngles(Item* ip)
++{
++    int i;
++    for (i = 14; i >= 0; i--) {
++        ip->xDD4_itemVar.pkthunder.angles[i + 1] =
++            ip->xDD4_itemVar.pkthunder.angles[i];
++    }
++}
++
++static inline void itNesspkthunderball_ShiftPositions(Item* ip)
++{
++    int i;
++    for (i = 14; i >= 0; i--) {
++        ip->xDD4_itemVar.pkthunder.positions[i + 1] =
++            ip->xDD4_itemVar.pkthunder.positions[i];
++    }
++}
++
++void itNesspkthunderball_UnkMotion0_Phys(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    itPKThunderAttributes* attr = ip->xC4_article_data->x4_specialAttributes;
++    Vec3 stick;
++    f32 angle;
++    Vec3 cross;
++    PAD_STACK(4);
++
++    if (ip->xDD4_itemVar.pkthunder.xF00 == 0 &&
++        ip->xDD4_itemVar.pkthunder.xF04 != NULL &&
++        ip->owner == ip->xDD4_itemVar.pkthunder.xF04 &&
++        ftNs_SpecialHi_CheckSpecialHiHold(ip->xDD4_itemVar.pkthunder.xF04) ==
++            true)
++    {
++        itNesspkthunderball_ShiftAngles(ip);
++
++        ftLib_800865D8(ip->xDD4_itemVar.pkthunder.xF04, &stick.x, &stick.y);
++        stick.z = 0.0f;
++
++        if (ABS(stick.x) > attr->xC_PKTHUNDER_STICK_THRESHOLD ||
++            ABS(stick.y) > attr->xC_PKTHUNDER_STICK_THRESHOLD)
++        {
++            angle = lbVector_Angle(&ip->x40_vel, &stick);
++            lbVector_CrossprodNormalized(&ip->x40_vel, &stick, &cross);
++
++            if (angle >= deg_to_rad * 45.0f) {
++                if (cross.z > 0.0f) {
++                    ip->xDD4_itemVar.pkthunder.angles[0] +=
++                        deg_to_rad * attr->x10_PKTHUNDER_TURN_RADIUS;
++                } else if (cross.z < 0.0f) {
++                    ip->xDD4_itemVar.pkthunder.angles[0] -=
++                        deg_to_rad * attr->x10_PKTHUNDER_TURN_RADIUS;
++                }
++            }
++            if (angle < deg_to_rad * 45.0f) {
++                if (cross.z > 0.0f) {
++                    ip->xDD4_itemVar.pkthunder.angles[0] +=
++                        angle / (45.0f / attr->x10_PKTHUNDER_TURN_RADIUS);
++                } else if (cross.z < 0.0f) {
++                    ip->xDD4_itemVar.pkthunder.angles[0] -=
++                        angle / (45.0f / attr->x10_PKTHUNDER_TURN_RADIUS);
++                }
++            }
++
++            while (ip->xDD4_itemVar.pkthunder.angles[0] < -M_TAU) {
++                ip->xDD4_itemVar.pkthunder.angles[0] += M_TAU;
++            }
++            while (ip->xDD4_itemVar.pkthunder.angles[0] > M_TAU) {
++                ip->xDD4_itemVar.pkthunder.angles[0] -= M_TAU;
++            }
++
++            ip->x40_vel.x = ip->xDD4_itemVar.pkthunder.xEEC *
++                            cosf(ip->xDD4_itemVar.pkthunder.angles[0]);
++            ip->x40_vel.y = ip->xDD4_itemVar.pkthunder.xEEC *
++                            sinf(ip->xDD4_itemVar.pkthunder.angles[0]);
++            ip->x40_vel.z = 0.0f;
++        }
++    } else {
++        itNesspkthunderball_ShiftAngles(ip);
++    }
++
++    itNesspkthunderball_ShiftPositions(ip);
++    ip->xDD4_itemVar.pkthunder.positions[0] = ip->pos;
++}
+ 
+ bool itNesspkthunderball_UnkMotion0_Coll(Item_GObj* gobj)
+ {
+@@ -147,7 +388,48 @@ bool it_802AC074(Item_GObj* gobj)
+     return true;
+ }
+ 
+-/// #it_802AC098
++bool it_802AC098(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    int i;
++    PAD_STACK(8);
++
++    if (ip->xDD4_itemVar.pkthunder.xF04 != NULL) {
++        if (ip->owner == ip->xDD4_itemVar.pkthunder.xF04) {
++            ftNs_SpecialHi_ItemPKThunderCheckOwn(
++                ip->xDD4_itemVar.pkthunder.xF04, gobj);
++        }
++        ip->xDD4_itemVar.pkthunder.xF04 = NULL;
++    }
++
++    ip->xDD4_itemVar.pkthunder.xF00 = 1;
++    ip->xDD4_itemVar.pkthunder.angles[0] += M_PI;
++    normalizeAngle(&ip->xDD4_itemVar.pkthunder.angles[0]);
++
++    for (i = 0; i < 6; i++) {
++        if (ip->xDD4_itemVar.pkthunder.xDD4[i] != NULL) {
++            it_802AC58C(ip->xDD4_itemVar.pkthunder.xDD4[i]);
++            ip->xDD4_itemVar.pkthunder.xDD4[i] = NULL;
++        }
++    }
++
++    ip->xDD4_itemVar.pkthunder.xEF8 = 0;
++    ip->xDD4_itemVar.pkthunder.xEFC = 0;
++
++    for (i = 1; i < 16; ++i) {
++        ip->xDD4_itemVar.pkthunder.positions[i] =
++            ip->xDD4_itemVar.pkthunder.positions[0];
++        ip->xDD4_itemVar.pkthunder.angles[i] =
++            ip->xDD4_itemVar.pkthunder.angles[0];
++    }
++
++    ip->x40_vel.x = ip->xDD4_itemVar.pkthunder.xEEC *
++                    cosf(ip->xDD4_itemVar.pkthunder.angles[0]);
++    ip->x40_vel.y = ip->xDD4_itemVar.pkthunder.xEEC *
++                    sinf(ip->xDD4_itemVar.pkthunder.angles[0]);
++    ip->x40_vel.z = 0.0f;
++    return false;
++}
+ 
+ bool it_802AC338(Item_GObj* gobj)
+ {
+@@ -161,8 +443,9 @@ bool it_802AC35C(Item_GObj* gobj)
+     PAD_STACK(16);
+     lbVector_Mirror(&ip->x40_vel, &ip->xC58);
+     ip->x40_vel.z = 0.0f;
+-    ip->xDD4_itemVar.pkthunder.xEAC = atan2f(ip->x40_vel.y, ip->x40_vel.x);
+-    normalizeAngle(&ip->xDD4_itemVar.pkthunder.xEAC);
++    ip->xDD4_itemVar.pkthunder.angles[0] =
++        atan2f(ip->x40_vel.y, ip->x40_vel.x);
++    normalizeAngle(&ip->xDD4_itemVar.pkthunder.angles[0]);
+     return false;
+ }
+ 
+diff --git a/src/melee/it/items/itnesspkthunderball.h b/src/melee/it/items/itnesspkthunderball.h
+index 44f72f9620..702629c539 100644
+--- a/src/melee/it/items/itnesspkthunderball.h
++++ b/src/melee/it/items/itnesspkthunderball.h
+@@ -9,7 +9,7 @@
+ 
+ #include <dolphin/mtx.h>
+ 
+-/* 2AB3F0 */ void it_802AB3F0(Item_GObj*, void*, s32);
++/* 2AB3F0 */ void it_802AB3F0(Item_GObj*, Vec3*, s32);
+ /* 2AB468 */ void it_802AB468(Item_GObj*, f32*, s32);
+ /* 2AB4B8 */ bool it_802AB4B8(Item_GObj*, CollData*);
+ /* 2AB568 */ HSD_GObj* it_802AB568(Item_GObj*);
+@@ -17,7 +17,7 @@
+                                    float facing_dir);
+ /* 2AB90C */ void it_802AB90C(Item_GObj*);
+ /* 2AB9C0 */ void it_802AB9C0(Item_GObj*);
+-/* 2ABA4C */ UNK_RET it_802ABA4C(UNK_PARAMS);
++/* 2ABA4C */ void it_802ABA4C(Item_GObj*);
+ /* 2ABBB0 */ bool itNesspkthunderball_UnkMotion0_Anim(Item_GObj* gobj);
+ /* 2ABCDC */ void itNesspkthunderball_UnkMotion0_Phys(Item_GObj* gobj);
+ /* 2AC050 */ bool itNessPKThunderball_Logic26_DmgDealt(Item_GObj*);
+diff --git a/src/melee/it/items/itnesspkthundertrail.c b/src/melee/it/items/itnesspkthundertrail.c
+index 4d6d08f212..772901a54c 100644
+--- a/src/melee/it/items/itnesspkthundertrail.c
++++ b/src/melee/it/items/itnesspkthundertrail.c
+@@ -3,31 +3,73 @@
+ #include <placeholder.h>
+ #include <platform.h>
+ 
++#include "db/db.h"
+ #include "it/inlines.h"
++#include "it/it_26B1.h"
+ #include "it/it_2725.h"
+ #include "it/item.h"
++#include "it/items/itnesspkthunderball.h"
++#include "MSL/trigf.h"
+ 
+-/// #it_802AC43C
++#include <math.h>
++#include <baselib/jobj.h>
+ 
+-void it_802AC58C(Item_GObj* gobj)
++Item_GObj* it_802AC43C(Fighter_GObj* gobj, Item_GObj* ball, Vec3* pos,
++                       s32 trail_idx, s32 arg4, f32 facing_dir)
+ {
+-    register Item* ip;
+-    register u8 byte;
+-    register int zero;
++    SpawnItem spawn;
++    Item_GObj* trail;
++    PAD_STACK(8);
++
++    if (trail_idx < 0 || trail_idx > 5) {
++        return NULL;
++    }
++
++    spawn.kind = it_803F6C18[trail_idx];
++    spawn.prev_pos = *pos;
++    spawn.prev_pos.z = 0.0f;
++    spawn.pos = spawn.prev_pos;
++    spawn.facing_dir = facing_dir;
++    spawn.x3C_damage = 0;
++    spawn.vel.x = spawn.vel.y = spawn.vel.z = 0.0f;
++    spawn.x0_parent_gobj = gobj;
++    spawn.x4_parent_gobj2 = ball;
++    spawn.x44_flag.b0 = true;
++    spawn.x40 = arg4;
++
++    trail = Item_80268B18(&spawn);
++    if (trail != NULL) {
++        Item* ip = GET_ITEM(trail);
++        ip->xDB8_itcmd_var3 = 0;
++        ip->xDB4_itcmd_var2 = 0;
++        ip->xDB0_itcmd_var1 = 0;
++        ip->xDAC_itcmd_var0 = 0;
++        ip->xDD4_itemVar.nesspkthundertrail.x0 = ball;
++        ip->xDD4_itemVar.nesspkthundertrail.x4 = trail_idx;
++        ip->xDD4_itemVar.nesspkthundertrail.x8 = 0;
++        it_8026B3A8(trail);
++        ip->xDC8_word.flags.x13 = 0;
++        it_80272940(trail);
++        ip->x40_vel.z = 0.0f;
++        ip->x40_vel.x = 0.0f;
++        ip->x40_vel.y = 0.0f;
++        ip->xDCC_flag.b3 = false;
++        if (gobj != NULL) {
++            db_80225DD8(trail, gobj);
++        }
++        it_802AC604(trail);
++    }
++    return trail;
++}
+ 
++void it_802AC58C(Item_GObj* gobj)
++{
+     if (gobj != NULL) {
+-        ip = gobj->user_data;
++        Item* ip = GET_ITEM(gobj);
+         it_802725D4(gobj);
+-        zero = 0;
+-        ((int*) ip)[0xDD4 / 4] = zero;
+-        ((int*) ip)[0x518 / 4] = zero;
+-        byte = ((u8*) ip)[0xDCA];
+-#ifdef MWERKS_GEKKO
+-        asm { rlwimi byte, zero, 4, 27, 27 }
+-#else
+-        NOT_IMPLEMENTED;
+-#endif
+-        ((u8*) ip)[0xDCA] = byte;
++        ip->xDD4_itemVar.nesspkthundertrail.x0 = NULL;
++        ip->owner = NULL;
++        ip->xDC8_word.flags.x13 = 0;
+     }
+ }
+ 
+@@ -47,9 +89,54 @@ void it_802AC604(Item_GObj* gobj)
+     Item_80268E5C((HSD_GObj*) gobj, 0, ITEM_ANIM_UPDATE);
+ }
+ 
+-/// #itNesspkthundertrail_UnkMotion0_Anim
++bool itNesspkthundertrail_UnkMotion0_Anim(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    HSD_JObj* jobj = GET_JOBJ(gobj);
++    HSD_JObj* child = HSD_JObjGetChild(jobj);
++
++    if (ip->xDD4_itemVar.nesspkthundertrail.x8 & 1) {
++        HSD_JObjSetFlagsAll(child, 0x10);
++    } else {
++        HSD_JObjClearFlagsAll(child, 0x10);
++    }
++    ip->xDD4_itemVar.nesspkthundertrail.x8++;
+ 
+-/// #itNesspkthundertrail_UnkMotion0_Phys
++    if (ip->xDD4_itemVar.nesspkthundertrail.x0 == NULL) {
++        return true;
++    }
++    return false;
++}
++
++void itNesspkthundertrail_UnkMotion0_Phys(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    HSD_JObj* jobj = GET_JOBJ(gobj);
++
++    if (ip->xDD4_itemVar.nesspkthundertrail.x0 != NULL) {
++        f32 radius;
++        f32 angle;
++        Vec3 next_pos;
++
++        it_802AB3F0(ip->xDD4_itemVar.nesspkthundertrail.x0, &ip->pos,
++                    ip->xDD4_itemVar.nesspkthundertrail.x4);
++        it_802AB468(ip->xDD4_itemVar.nesspkthundertrail.x0, &radius,
++                    ip->xDD4_itemVar.nesspkthundertrail.x4);
++        HSD_JObjSetScaleZ(jobj, 2.0f * radius / 4);
++
++        it_802AB3F0(ip->xDD4_itemVar.nesspkthundertrail.x0, &next_pos,
++                    ip->xDD4_itemVar.nesspkthundertrail.x4 + 1);
++
++        if (ip->facing_dir == 1.0f) {
++            angle = atan2f(ip->pos.y - next_pos.y, ip->pos.x - next_pos.x);
++        } else {
++            angle =
++                M_PI + atan2f(ip->pos.y - next_pos.y, ip->pos.x - next_pos.x);
++        }
++
++        HSD_JObjSetRotationX(jobj, angle * -ip->facing_dir);
++    }
++}
+ 
+ bool itNesspkthundertrail_UnkMotion0_Coll(Item_GObj* gobj)
+ {
+diff --git a/src/melee/it/items/itnesspkthundertrail.h b/src/melee/it/items/itnesspkthundertrail.h
+index 5ece8a7d1f..bac422602d 100644
+--- a/src/melee/it/items/itnesspkthundertrail.h
++++ b/src/melee/it/items/itnesspkthundertrail.h
+@@ -1,11 +1,14 @@
+ #ifndef GALE01_2AC43C
+ #define GALE01_2AC43C
+ 
++#include "ft/forward.h"
+ #include "it/forward.h"
+ 
+ #include "it/items/types.h"
+ 
+-/* 2AC43C */ UNK_RET it_802AC43C(UNK_PARAMS);
++/* 2AC43C */ Item_GObj* it_802AC43C(Fighter_GObj*, Item_GObj*, Vec3*, s32,
++                                    s32, f32);
++/* 3F6C18 */ extern ItemKind it_803F6C18[];
+ /* 2AC58C */ void it_802AC58C(Item_GObj* gobj);
+ /* 2AC5D8 */ void it_802AC5D8(Item_GObj* gobj);
+ /* 2AC604 */ void it_802AC604(Item_GObj* gobj);
+diff --git a/src/melee/it/types.h b/src/melee/it/types.h
+index 8202a849ab..dad1db3c35 100644
+--- a/src/melee/it/types.h
++++ b/src/melee/it/types.h
+@@ -613,6 +613,7 @@ struct Item {
+         itPKFlush_ItemVars pkflush;
+         itPKFlushExplode_ItemVars pkflushexplode;
+         itPKThunder_ItemVars pkthunder;
++        itNesspkthundertrail_ItemVars nesspkthundertrail;
+         itPokemon_ItemVars pokemon;
+         itRShell_ItemVars rshell;
+         itSamusBomb_ItemVars samusbomb;

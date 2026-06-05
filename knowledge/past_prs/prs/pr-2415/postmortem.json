@@ -1,0 +1,114 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2415",
+  "pr": {
+    "number": 2415,
+    "title": "ftdrawcommon work",
+    "url": "https://github.com/doldecomp/melee/pull/2415",
+    "state": "MERGED",
+    "author": "lukechampine",
+    "created_at": "2026-04-14T20:03:22Z",
+    "merged_at": "2026-04-14T21:37:35Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Made `src/melee/ft/ftdrawcommon.c` a matching object: `configure.py` flips it from `NonMatching` to `Matching`, while the C diff reshapes fighter draw code around an inline copy of `ftDrawCommon_8008051C` and stack-local adjustments in `ftDrawCommon_800805C8` and `ftDrawCommon_80080C28`. The symbol map was also corrected for local constants and one `ftDrawCommon_804D8370` size. The PR body says `ftDrawCommon_800805C8` was a huge function that was close to a register-swap issue and hard for the permuter; there were no review comments in the slice.",
+  "change_classification": {
+    "primary_type": "decompilation_matching",
+    "categories": [
+      "code-change",
+      "matching",
+      "build-config",
+      "symbol-map-maintenance"
+    ],
+    "systems": [
+      "fighter",
+      "ftdrawcommon",
+      "fighter-draw-rendering",
+      "matrix-camera",
+      "config-GALE01"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/ftdrawcommon.c",
+    "configure.py",
+    "config/GALE01/symbols.txt"
+  ],
+  "what_changed": [
+    "`src/melee/ft/ftdrawcommon.c`: added `static inline MtxPtr ftDrawCommon_8008051C_inline(...)`, which zeroes two `Vec3` temporaries, calls `ftLib_80087074`, reads `HSD_CObjGetCurrent()->view_mtx`, initializes a matrix with `PSMTXIdentity`, writes translation components through `mtx_thing_2`, and returns the `PSMTXConcat` output matrix or `NULL`.",
+    "`ftDrawCommon_800805C8`: replaced the call to `ftDrawCommon_8008051C(gobj, sp78)` with `ftDrawCommon_8008051C_inline(gobj, &sp54, &v, sp18, sp78)`, hoisted `Mtx sp78` out of the block, added `Mtx sp18`, `Vec3 sp54`, `Vec3 v`, `_pad[12]`, and changed `PAD_STACK(0x18)` to `PAD_STACK(12)`.",
+    "`ftDrawCommon_80080C28`: added scratch `Mtx sp18`, `Vec3 sp54`, and `Vec3 v`, removed the explicit `phi_r28 = NULL`, and changed the matrix acquisition to the new inline helper.",
+    "`configure.py`: changed `Object(NonMatching, \"melee/ft/ftdrawcommon.c\")` to `Object(Matching, \"melee/ft/ftdrawcommon.c\")`.",
+    "`config/GALE01/symbols.txt`: converted several address-named string/float/double symbols to local `@NNN` labels, including `ftDrawCommon_803C0EB0 -> @463`, `ftDrawCommon_804D3A94 -> @461`, `ftDrawCommon_804D3A9C -> @462`, `it_803F67A8 -> @239`, `it_804D5350 -> @237`, `it_804D5358 -> @238`, and many `it_804DCCxx` sdata2 constants.",
+    "`config/GALE01/symbols.txt`: corrected `ftDrawCommon_804D8370` from size `0x8` to size `0x4`."
+  ],
+  "smart_moves": [
+    "Kept the real out-of-line `ftDrawCommon_8008051C` symbol intact while adding an inline variant for call sites that needed different codegen.",
+    "Used caller-owned scratch `Mtx` and `Vec3` locals in the inline helper, giving the large draw functions control over stack layout and register allocation.",
+    "Targeted declaration order, explicit padding, and `PAD_STACK` size instead of trying to brute-force a huge `ftDrawCommon_800805C8` permutation; this matches the PR body's note that the permuter struggled with the large function.",
+    "Removed a redundant `phi_r28 = NULL` in `ftDrawCommon_80080C28`, which likely avoided an unwanted store when matching the emitted code.",
+    "Paired the source-code matching work with symbol-map cleanup and the `configure.py` object-status flip, so the object could be treated as matching by the build."
+  ],
+  "decomp_lessons": [
+    "When a large function is down to a small register-allocation mismatch, look for callee inlining and caller stack-frame effects before running broad permutations.",
+    "A `static inline` clone that takes explicit scratch temporaries can be a useful matching tool when the original function symbol still needs to exist separately.",
+    "Stack-slot-shaped names such as `sp78`, `sp54`, `sp18`, plus explicit `_pad` and `PAD_STACK`, are legitimate decomp tactics when type information is still weak and frame layout matters.",
+    "Do not leave anonymous compiler constants as misleading global address names; local `@NNN` symbols with correct scope, alignment, and size make the linker map more accurate.",
+    "Only flip an object from `NonMatching` to `Matching` after source and symbol data have been reconciled; this PR demonstrates that code changes and symbol-map maintenance can be part of the same match."
+  ],
+  "naming_conventions": [
+    "Real functions keep the module/address form `ftDrawCommon_800xxxxx`.",
+    "The helper uses an `_inline` suffix, `ftDrawCommon_8008051C_inline`, to indicate it is not a separate original symbol.",
+    "Unknown or stack-derived locals continue to use stack-slot names such as `spAC`, `spA8`, `sp78`, `sp54`, and `sp18`.",
+    "Compiler-generated local data in `symbols.txt` is represented with `@NNN` labels and `scope:local` rather than fabricated global names like `it_804DCCB0` when evidence says it is local."
+  ],
+  "assembly_or_matching_tactics": [
+    "Inline a small matrix-building helper into the problematic draw paths instead of changing the standalone helper function.",
+    "Pass scratch matrices/vectors into the inline helper to force caller frame layout: `Mtx sp18`, `Mtx sp78` or `sp70`, `Vec3 sp54`, and `Vec3 v`.",
+    "Hoist block-local declarations to function scope when stack allocation order matters for matching.",
+    "Use explicit padding (`u8 _pad[12]`) and adjusted `PAD_STACK(12)` to shape the stack frame.",
+    "Remove source-level initializations that would emit extra instructions not present in the target assembly.",
+    "Correct symbol sizes/scopes for local constants, including the `ftDrawCommon_804D8370` size change from `0x8` to `0x4`."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the slice; no reviewer-specific feedback could be extracted."
+  ],
+  "searchable_terms": [
+    "ftdrawcommon",
+    "ftDrawCommon_800805C8",
+    "ftDrawCommon_8008051C",
+    "ftDrawCommon_8008051C_inline",
+    "ftDrawCommon_80080C28",
+    "regswap",
+    "permuter",
+    "Object(Matching, \"melee/ft/ftdrawcommon.c\")",
+    "Object(NonMatching, \"melee/ft/ftdrawcommon.c\")",
+    "Mtx",
+    "MtxPtr",
+    "Vec3",
+    "PAD_STACK",
+    "PSMTXIdentity",
+    "PSMTXConcat",
+    "HSD_CObjGetCurrent",
+    "view_mtx",
+    "HSD_JObjDispAll",
+    "HSD_GObj_80390EB8",
+    "ftLib_80087074",
+    "ftParts_800750C8",
+    "ftDrawCommon_804D8370",
+    "ftDrawCommon_803C0EB0",
+    "ftDrawCommon_804D3A94",
+    "ftDrawCommon_804D3A9C",
+    "it_804DCCB0",
+    "symbols.txt local @NNN"
+  ],
+  "follow_up_queries": [
+    "ftDrawCommon_800805C8 regswap permuter",
+    "ftDrawCommon_8008051C_inline stack layout",
+    "Object(NonMatching, \"melee/ft/ftdrawcommon.c\")",
+    "Object(Matching, \"melee/ft/ftdrawcommon.c\")",
+    "symbols.txt ftDrawCommon_804D8370 size 0x4",
+    "static inline helper caller-owned Mtx Vec3 matching",
+    "PAD_STACK _pad Vec3 Mtx decomp matching tactic"
+  ],
+  "confidence": 0.9
+}

@@ -1,0 +1,145 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2395",
+  "pr": {
+    "number": 2395,
+    "title": "Jj/lbrefract",
+    "url": "https://github.com/doldecomp/melee/pull/2395",
+    "state": "MERGED",
+    "author": "jurrejelle",
+    "created_at": "2026-04-08T18:54:46Z",
+    "merged_at": "2026-04-08T23:51:14Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Decompiled/refactored much of lbRefract by replacing opaque state and M2C-style accesses with typed HSD/GX code, adding refraction texture generation/init, DObj/PObj class hooks, GX indirect-texture render setup, and callback-based texture read/write helpers. It also fixed THPDec_80331340's prototype/call sites to pass width. The bot reported +1848 matched code bytes and 9 new matches, with a lbrefract .sdata regression.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-typing",
+      "GX-rendering",
+      "HSD-class-hooks",
+      "prototype-fix"
+    ],
+    "systems": [
+      "library",
+      "lb/lbrefract",
+      "lb/lbmthp",
+      "GX",
+      "HSD/baselib",
+      "THP video"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/lbrefract.c (+535/-51): major lbrefract decomp; typed globals/data layout; refraction buffer generation/init; DObj/PObj hooks; GX indirect TEV setup; texture callbacks",
+    "src/melee/lb/lbrefract.h (+1/-1): changed lbRefract_80022998 third parameter from s8 to s32",
+    "src/melee/lb/lbmthp.c (+3/-3): passed width to THPDec_80331340 in fn_8001EF5C and lbMthp8001FAA0",
+    "src/melee/lb/lbmthp.h (+1/-1): updated THPDec_80331340 prototype from four to five parameters"
+  ],
+  "what_changed": [
+    "Changed THPDec_80331340 from four args to five args in lbmthp.h; call sites now pass data->width or lbl_804335B8.x6C.",
+    "Added HSD/GX/lbArchive/OSCache-related includes and typed callback-helper prototypes in lbrefract.c, replacing UNK_RET/UNK_PARAMS for fn_80021F70, fn_80021FF8, and fn_8002206C.",
+    "Introduced lbRefract_DataLayout for lbl_803BB0B0 and lbl_804336D0_t for runtime state, with named fields such as refractionUserCount, image_ptr, and texture_mtx plus a size assert for the 0x40 state struct.",
+    "Implemented lbRefract_80021CE8, which generates refraction lookup texture data from archive-loaded parameters, writes through the callback table, and flushes the generated buffer.",
+    "Completed lbRefract_8002219C callback setup for numeric texture formats 3, 4, and 6, using s32 width/height and exact aligned row-stride calculations.",
+    "Added lbRefract_800222A4 initialization: load symbols, allocate the 0x140x0xF0 source texture, allocate per-entry TObj/image descriptor storage, generate 0x20x0x20 maps, and load TObj descriptors.",
+    "Rewrote lbRefract_8002247C to build texture_mtx from HSD_CObj projection_param fields for perspective, frustum, and ortho projection types; updated lbRefract_80022560 to copy into the typed image_ptr field.",
+    "Added HSD DObj/PObj class init functions fn_80022650 and fn_80022940, lbRefract_PObjLoad display-list patching for flag 0x2000, and lbRefract_80022998 GX indirect texture/TEV setup.",
+    "Updated refraction reference counting to use lbl_804336D0.refractionUserCount and replaced the old OSReport/__assert path with HSD_ASSERTREPORT at the same error site."
+  ],
+  "smart_moves": [
+    "Typing lbl_804336D0 as a struct made later code readable and removed fragile int-array indexing while preserving size with STATIC_ASSERT.",
+    "Using real HSD_CObj projection fields replaced raw M2C_FIELD offset reads and helped lbRefract_8002247C reach a full match.",
+    "Keeping unknown helpers address-named but giving them precise signatures allowed callback-table behavior to be expressed without over-naming.",
+    "The texture callback split isolated format-specific tiled memory writes/reads while letting lbRefract_8002219C share stride and buffer-size setup.",
+    "The floating-point generator preserved decomp-sensitive details: __frsqrte Newton iterations, volatile f32 storage, explicit casts, and PAD_STACK.",
+    "The PObj loader derives display-list stride from GX vertex descriptors and flushes patched display data, matching the low-level GPU/cache behavior.",
+    "The THPDec_80331340 prototype fix was small but cross-file: updating the header and both call sites produced a new fn_8001EF5C match and improved lbMthp8001FAA0."
+  ],
+  "decomp_lessons": [
+    "When HSD/baselib structs are known, prefer typed field access over M2C_FIELD offsets; it can improve both readability and matching.",
+    "Data-layout structs with offset comments and static size checks are useful for migrating labels into semantic code, but data sections can still regress and must be checked separately.",
+    "Header prototypes are part of matching work: one missing argument can block matches in unrelated call sites.",
+    "Use numeric formats or existing GX constants only when proven; this PR kept format dispatch on 3, 4, and 6 while adding GX headers for surrounding code.",
+    "Exact tiled texture address math and row alignment masks are important for GX texture-buffer helpers.",
+    "For math-heavy original code, reproduce the compiler's rsqrt/float-temp pattern rather than replacing it with cleaner library calls.",
+    "Display-list walkers need exact GXAttr/GXAttrType/component-size accounting and may require the original loop unrolling to approach a match."
+  ],
+  "naming_conventions": [
+    "Public refraction functions kept the lbRefract_800xxxxx address-name style until semantic names are known.",
+    "Static unknown helpers remained fn_800xxxxx, but their prototypes were made concrete.",
+    "The runtime state struct used a label-derived name, lbl_804336D0_t, with understood fields named and unresolved fields left as unk_8 and unk_C.",
+    "The data-layout struct used a subsystem name, lbRefract_DataLayout, while preserving the original label lbl_803BB0B0.",
+    "Class library strings are explicit literals: refract_class_library, refract_dobj, and refract_pobj.",
+    "The public header changed lbRefract_80022998's third argument to s32, matching ABI-width use instead of the prior s8."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used PAD_STACK(20) in lbRefract_80021CE8 to shape stack/codegen.",
+    "Used __frsqrte with repeated Newton refinement and a volatile f32 temp to match original sqrt-like behavior.",
+    "Preserved tiled texture offsets such as col >> 2, row masks, and 0xFFFFFFE0/0xFFFFFFC0 row-stride alignment.",
+    "Used exact GX state calls for indirect refraction: GXSetTexCoordGen2, GXLoadTexMtxImm, GXSetIndTexOrder, GXSetIndTexMtx, GXSetTevIndirect, and related TEV/Z/blend state.",
+    "Derived light projection matrices through MTXLightPerspective, MTXLightFrustum, and MTXLightOrtho with the observed 0.5F and -0.5F arguments.",
+    "In lbRefract_PObjLoad, used an 8-way unrolled display-list copy and DCFlushRange after patching.",
+    "Kept cache operations explicit: DCFlushRange for generated/patched refraction buffers and DCStoreRange in the THP decode path."
+  ],
+  "review_feedback": [
+    "No human review comments or reviews were present in the slice.",
+    "PR body only said: Tracking PR as usual.",
+    "decomp-dev bot reported matched code 62.46% (+0.05%, +1848 bytes) and matched data 38.04% (-0.00%, -8 bytes).",
+    "Bot listed 9 new matches: lbRefract_80022998, fn_8002206C, fn_80021FF8, fn_80022650, fn_80022940, fn_80021F70, lbRefract_8002219C, lbRefract_8002247C, and fn_8001EF5C.",
+    "Bot also reported one broken match: main/melee/lb/lbrefract .sdata fell from 100.00% to 28.57%.",
+    "Partial improvements remained for lbRefract_80021CE8 at 98.12%, lbRefract_PObjLoad at 70.48%, and lbRefract_800222A4 at 84.44%."
+  ],
+  "searchable_terms": [
+    "pr-2395",
+    "Jj/lbrefract",
+    "jj/lbrefact",
+    "jurrejelle",
+    "lbrefract",
+    "lbRefract_80021CE8",
+    "lbRefract_8002219C",
+    "lbRefract_800222A4",
+    "lbRefract_8002247C",
+    "lbRefract_80022560",
+    "lbRefract_DObjDispReset",
+    "fn_80022650",
+    "lbRefract_PObjLoad",
+    "fn_80022940",
+    "lbRefract_80022998",
+    "fn_80021F70",
+    "fn_80021FF8",
+    "fn_8002206C",
+    "lbl_803BB0B0",
+    "lbl_804336D0",
+    "lbl_804D63E8",
+    "refractionUserCount",
+    "texture_mtx",
+    "HSD_DObjInfo",
+    "HSD_PObjInfo",
+    "HSD_TObjLoadDesc",
+    "GXSetTevIndirect",
+    "GXSetTexCoordGen2",
+    "GX_ITF_8",
+    "GX_TF_RGB565",
+    "GX_TF_RGBA8",
+    "lbArchive_LoadSymbols",
+    "MTXLightPerspective",
+    "MTXLightFrustum",
+    "MTXLightOrtho",
+    "HSD_ASSERTREPORT",
+    "THPDec_80331340",
+    "fn_8001EF5C",
+    "lbMthp8001FAA0"
+  ],
+  "follow_up_queries": [
+    "Finish matching lbRefract_80021CE8, lbRefract_800222A4, and lbRefract_PObjLoad.",
+    "Investigate the bot-reported lbrefract .sdata regression and whether the new data-layout/global typing affected section ordering.",
+    "Resolve unknown names and types for lbl_804D63E8, unk_8, unk_C, fn_80021F70, fn_80021FF8, and fn_8002206C.",
+    "Replace numeric texture formats 3/4/6, flag 0x2000, and render-mode bits 0x20000000/0x08000000 with proven constants when evidence is available.",
+    "Check the HSD_ImageDesc storage typing around unk_8; the allocation size is count * 0x18 but the field is typed as HSD_ImageDesc** in this slice.",
+    "Trace the archive asset/symbol loaded through lbl_803BB0B0.filename and lbl_803BB0B0.symbol to name the refraction parameter table.",
+    "Name the fifth THPDec_80331340 argument once the decoder-side signature is better understood."
+  ],
+  "confidence": 0.88
+}

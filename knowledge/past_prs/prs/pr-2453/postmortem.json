@@ -1,0 +1,153 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2453",
+  "pr": {
+    "number": 2453,
+    "title": "Jj/toy",
+    "url": "https://github.com/doldecomp/melee/pull/2453",
+    "state": "MERGED",
+    "author": "jurrejelle",
+    "created_at": "2026-05-01T15:49:40Z",
+    "merged_at": "2026-05-08T22:14:11Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Advanced matching in the toy/trophy module, mainly src/melee/ty/toy.c, with small type-width fixes in gm_1601.c and a toy.h prototype cleanup. The decomp.dev GALE01 report recorded +528 matched bytes and four new 100% toy matches: un_80308354, un_803102D0, un_8030813C, and un_80309338. The same bot report also flagged remaining costs: un_80308250 broke from 100% to 98.57%, un_803075E8 regressed, and .sdata/.sdata2 percentages fell.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "assertion-macro-cleanup",
+      "type-width-adjustment",
+      "data-symbol-adjustment"
+    ],
+    "systems": [
+      "toy/trophy",
+      "game-mode",
+      "melee-core",
+      "HSD/baselib"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ty/toy.c",
+      "role": "Main matching work: implemented un_803067BC, rewrote several toy/trophy helpers, normalized HSD assertions, adjusted LObj animation/list handling, and changed float/string/data references."
+    },
+    {
+      "path": "src/melee/ty/toy.h",
+      "role": "Header sync: changed un_8030813C arg0 from s16 to s32 and removed no-longer-used extern declarations for un_80308354 assert strings."
+    },
+    {
+      "path": "src/melee/gm/gm_1601.c",
+      "role": "Small matching/type-width cleanup: changed local var_r3 from s16 to s32 in gm_801604DC and gm_80160564."
+    }
+  ],
+  "what_changed": [
+    "Replaced the target stub for un_803067BC with C that copies s16 entries from un_804D6E64 into un_804D6EDC, using gmMainLib_8015CC90() for the count and separate forward/reverse-copy paths based on arg1.",
+    "Converted multiple toy.c OSReport + __assert pairs to HSD_ASSERTREPORT and added baselib/debug.h. Affected sites include un_80306D70, un_80307018, un_803075E8, un_8030813C, and un_80308354.",
+    "Improved un_80306EEC by using un_804DDCD8 for the 0.0f animation request, checking (*anims)->position_anim instead of next, and replacing direct prev->next assignment plus fake dead assert with HSD_LObjSetNext(prev, lobj).",
+    "Changed un_8030813C from s16 arg0 to s32 arg0 in both toy.c and toy.h, adjusted the model-table scan setup, and asserted with HSD_ASSERTREPORT when the toy model is not found.",
+    "Reworked un_80308354 to load target from un_804D6EDC[idx], scan the TrophyData table at un_804D6EC4 for a matching id, and use goto-shaped control flow plus HSD_ASSERTREPORT for the missing-model path. Bot reported this function improved from 68.06% to 100.00%.",
+    "Reworked un_80309338 distance/sqrt code by treating un_803B88D4 and constants un_804DDCD8, un_804DDD88, and un_804DDD90 as extern data and by spelling out the __frsqrte Newton iterations. Bot reported this reached 100.00%.",
+    "Reworked un_803102D0 to call lbArchive_LoadSymbols with string addresses derived from un_803FDD18 offsets instead of named str_TyDataf_dat/str_tyModelFileTbl/str_tyModelFileUsTbl labels. Bot reported this reached 100.00%.",
+    "Adjusted gm_801604DC and gm_80160564 locals from s16 to s32, likely to avoid unwanted halfword sign-extension/codegen differences."
+  ],
+  "smart_moves": [
+    "Synchronized implementation and header when widening un_8030813C arg0 to s32, reducing the chance of caller/callee type drift during future matching.",
+    "Used real HSD helpers/macros where the original likely did: HSD_LObjSetNext replaced a direct field write and removed an explicit fake-match dead assert block, and HSD_ASSERTREPORT replaced several open-coded OSReport/__assert sequences.",
+    "Matched hard float code in un_80309338 by using external sdata2 constants and preserving the __frsqrte refinement structure rather than relying on decimal literals like 0.0, 0.5, and 3.0.",
+    "For un_803102D0, matched string-address codegen by indexing into the shared un_803FDD18 string blob, a useful tactic when named string labels produce different relocations or data ordering.",
+    "For un_803067BC, got an unmatched function to 82.64% by modeling the original pointer arithmetic and eight-entry unrolled reverse-copy loop before chasing a perfect match.",
+    "Cleaned toy.h by removing function-specific externs that became unnecessary after the assert rewrite, keeping local implementation details out of the public header."
+  ],
+  "decomp_lessons": [
+    "Small s16 versus s32 choices matter: both gm_1601.c locals and the un_8030813C prototype changed only in width, but these choices affect sign-extension and caller codegen.",
+    "Assert/report reconstruction affects both code and data sections. HSD_ASSERTREPORT can be the right abstraction, but exact format strings and variadic arguments still need verification; the bot report showed un_803075E8 and data-section regressions after this PR.",
+    "Prefer HSD API helpers over open-coded struct writes when the helper encodes original side effects or inline assert behavior, as shown by HSD_LObjSetNext in un_80306EEC.",
+    "When matching math routines using __frsqrte, preserve volatile temporaries, operation order, and external constants; literal constants may not match the original sdata2 references.",
+    "String tables may need to be addressed through a shared base symbol plus offsets rather than through individually named string labels, as in un_803102D0 with un_803FDD18.",
+    "A callee match can break a nearby caller: decomp.dev reported un_8030813C reached 100%, but un_80308250 fell from 100% to 98.57%, so future work should check caller effects after prototype/code-shape changes."
+  ],
+  "naming_conventions": [
+    "Unresolved functions and data keep address-based names such as un_8030813C, un_804D6EDC, and un_803FDD18 until better domain names are proven.",
+    "toy.h keeps address comments on prototypes, e.g. /* 30813C */ for un_8030813C.",
+    "Ty-domain structs/types use Ty prefixes where known, including TyLightEntry, TyLightSymbol, and TyViewData; broader domain structs in this slice include ToyData and TrophyData.",
+    "Partially understood struct fields use x-offset names such as xFC_idx and xCC_name, while confirmed HSD fields such as position_anim should be used when known.",
+    "The corrected public signature for un_8030813C in this PR is char* un_8030813C(s32 arg0, enum_t unused)."
+  ],
+  "assembly_or_matching_tactics": [
+    "Widen locals from s16 to s32 in gm_801604DC/gm_80160564 to shape integer codegen and avoid extra halfword operations.",
+    "Use s16 pointer arithmetic with char* byte offsets for un_804D6E64/un_804D6EDC copies in un_803067BC.",
+    "Use an eight-at-a-time unrolled reverse-copy loop controlled by count >> 3 and a remainder loop controlled by count & 7 in un_803067BC.",
+    "Use a deliberate empty no-op condition in un_8030813C, written as if ((arg0 && arg0) && arg0) {}, to influence code shape; reuse cautiously because it is a matching artifact.",
+    "Use register s32 target and explicit goto labels in un_80308354 to reproduce branch/return layout.",
+    "Declare un_803B88D4, un_804DDCD8, un_804DDD88, and un_804DDD90 as externs in the local C file so code references the same data symbols as the target.",
+    "Spell out __frsqrte Newton iterations with external constants in un_80309338 instead of compiler-friendly helper math.",
+    "Reference archive symbol names through un_803FDD18 + offsets in un_803102D0 to match string-pool addressing."
+  ],
+  "review_feedback": [
+    "No human review comments or reviews were present in the slice; the PR body was empty.",
+    "decomp-dev bot GALE01 report: matched code became 66.44% (+0.01%, +528 bytes). New 100% matches were un_80308354, un_803102D0, un_8030813C, and un_80309338.",
+    "decomp-dev bot also reported un_803067BC improved from 0.00% to 82.64% and un_80306EEC improved from 96.39% to 96.40%.",
+    "decomp-dev bot flagged regressions: un_80308250 broke from 100.00% to 98.57%, un_803075E8 dropped from 96.35% to 85.60%, and .sdata/.sdata2 percentages decreased."
+  ],
+  "searchable_terms": [
+    "pr-2453",
+    "Jj/toy",
+    "jurrejelle",
+    "src/melee/ty/toy.c",
+    "src/melee/ty/toy.h",
+    "src/melee/gm/gm_1601.c",
+    "toy",
+    "trophy",
+    "GALE01",
+    "decomp-dev",
+    "un_803067BC",
+    "un_80306D70",
+    "un_80306EEC",
+    "un_80307018",
+    "un_803075E8",
+    "un_8030813C",
+    "un_80308250",
+    "un_80308354",
+    "un_80309338",
+    "un_803102D0",
+    "gm_801604DC",
+    "gm_80160564",
+    "HSD_ASSERTREPORT",
+    "OSReport",
+    "__assert",
+    "HSD_LObjSetNext",
+    "HSD_LObjReqAnimAll",
+    "position_anim",
+    "HSD_ArchiveGetPublicAddress",
+    "lbArchive_LoadSymbols",
+    "lbLang_IsSettingUS",
+    "gmMainLib_8015CC90",
+    "un_804D6E64",
+    "un_804D6EDC",
+    "un_804D6EC4",
+    "un_804DDCD8",
+    "un_804DDD88",
+    "un_804DDD90",
+    "un_803FDD18",
+    "TyLightEntry",
+    "TyLightSymbol",
+    "ToyData",
+    "TrophyData",
+    "TyViewData",
+    "s16",
+    "s32",
+    "__frsqrte",
+    "FAKE MATCH"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching un_80308250; this PR's callee/prototype changes broke its 100% match to 98.57%.",
+    "Find later PRs touching un_803075E8 or toy.c assert strings; this PR's HSD_ASSERTREPORT rewrite coincided with an 85.60% regression there.",
+    "Search for later work that finishes un_803067BC beyond the 82.64% match introduced here.",
+    "Check whether .sdata and .sdata2 regressions from this PR were later recovered, especially around un_804DDCD8/un_804DDD88/un_804DDD90 and toy assert strings.",
+    "Search for PRs that name or refine ToyData, TrophyData, TyLightEntry, TyLightSymbol, and the model-file table structure used by un_8030813C/un_80308354.",
+    "Compare other lbArchive_LoadSymbols matches that use shared string blob offsets like un_803FDD18 + offset instead of individual str_* labels."
+  ],
+  "confidence": 0.86
+}

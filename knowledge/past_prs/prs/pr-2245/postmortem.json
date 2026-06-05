@@ -1,0 +1,160 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2245",
+  "pr": {
+    "number": 2245,
+    "title": "Match more functions and data in `ftCo_Damage`",
+    "url": "https://github.com/doldecomp/melee/pull/2245",
+    "state": "MERGED",
+    "author": "mchen91",
+    "created_at": "2026-03-09T02:49:52Z",
+    "merged_at": "2026-03-09T17:09:17Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched additional code and data in `src/melee/ft/chara/ftCommon/ftCo_Damage.c`. The PR body named `ftCo_DamageFly_Anim`, `ftCo_DamageFlyRoll_Anim`, `ftCo_DamageFly_Phys`, `ftCo_8008E5A4`, and `ftCo_8008E9D0`; the decomp.dev bot reported 6 new matches, including `.sdata2`, for +1892 matched code bytes and +64 matched data bytes. The diff is mainly codegen-oriented restructuring: local ordering, stack padding, `GET_FIGHTER` use, helper extraction, `dont_inline`, and `.sdata2` symbol renames.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "codegen-tuning",
+      "data-matching",
+      "sdata2-symbol-matching",
+      "fighter-action-callbacks"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "damage",
+      "GALE01 config",
+      "symbols"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/chara/ftCommon/ftCo_Damage.c",
+      "role": "Reworked ftCommon damage functions, locals, helpers, stack padding, and call shapes to complete several matches."
+    },
+    {
+      "path": "config/GALE01/symbols.txt",
+      "role": "Renamed several `.sdata2` constants from address labels to compiler-style `@NNN` symbols, contributing to matched data."
+    }
+  ],
+  "what_changed": [
+    "Matched the listed `ftCo_Damage` functions: `ftCo_DamageFly_Anim`, `ftCo_DamageFlyRoll_Anim`, `ftCo_DamageFly_Phys`, `ftCo_8008E5A4`, and `ftCo_8008E9D0`.",
+    "The bot report also credited a full `.sdata2` match and improvements to still-unmatched `ftCo_8008EC90` and `ftCo_8008EB58`.",
+    "`ftCo_8008E5A4` was reshaped around knockback/stick vector math: direct `fp->input.lstick` reads, combined `Vec3` declarations, earlier `f3`/`f30` computation, `PSVECCrossProduct` sign handling, and a separate `scale` variable before applying `cosf`/`sinf`.",
+    "`inlineF0` now obtains the fighter with `GET_FIGHTER(gobj)` and removes an extra scope around `motion_id` checks.",
+    "`ftCo_8008E9D0` now computes `scaled_kb = ftCo_ScaleBy154(fp->dmg.kb_applied)` and calls `ftCo_8008DA4C(gobj, fp->dmg.x1860_element, ftCo_8008D8E8(scaled_kb))` instead of the previous argument pattern.",
+    "`ftCo_8008EC90` was adjusted to call `ftCo_8008E9D0(gobj)` directly in one branch instead of gating it through `inlineB0(gobj)`.",
+    "Several functions switched from `gobj->user_data` to `GET_FIGHTER(gobj)`, including `ftCo_8008F744`, `inlineC0`, `ftCo_Damage_Anim`, `ftCo_DamageFly_Anim`, `doFlyRoll`, `ftCo_DamageFly_Phys`, `ftCo_DamageFlyRoll_Anim`, and `ftCo_DamageFlyRoll_Phys`.",
+    "`ftCo_Damage_SetMv8FromKbThreshold` was wrapped in `#pragma push`, `#pragma dont_inline on`, and `#pragma pop`.",
+    "`inlineD0` was restructured to guard on `fp->mv.co.damage.x8 != 0`, decrement internally, spawn effect `1032` with `&trajectory`, and reset the threshold only when the countdown reaches zero.",
+    "`ftCo_DamageFlyRoll_Anim` now uses `PAD_STACK(8)` and calls `inlineD0(gobj)` unconditionally, relying on the guard inside `inlineD0`.",
+    "A new shared helper `inlineE0` contains the air-physics choice between `ft_80084DB0` and `ft_80084EEC` based on `fp->x221C_b6`; both `ftCo_DamageFly_Phys` and `ftCo_DamageFlyRoll_Phys` call it.",
+    "`config/GALE01/symbols.txt` changed `.sdata2` names such as `lbl_804D84D0`, `lbl_804D84E0`, `lbl_804D84E8`, `lbl_804D84EC`, `lbl_804D84F0`, `lbl_804D84F8`, and `lbl_804DA718` to `@216`, `@220`, `@320`, `@321`, `@460`, `@521`, and `@637`."
+  ],
+  "smart_moves": [
+    "Moved the `mv.co.damage.x8` nonzero check into `inlineD0`, allowing callers like `ftCo_DamageFlyRoll_Anim` to call the helper unconditionally while preserving behavior and matching code shape.",
+    "Factored the repeated `x221C_b6` airborne physics branch into `inlineE0`, reducing duplicated branch structure in `ftCo_DamageFly_Phys` and `ftCo_DamageFlyRoll_Phys`.",
+    "Used `#pragma dont_inline` around `ftCo_Damage_SetMv8FromKbThreshold`, a targeted way to preserve a call boundary when the compiler would otherwise alter layout.",
+    "Used `PAD_STACK(8)` and a local dummy stack array only where needed, while removing other dummy arrays that no longer matched the desired stack frame.",
+    "Converted generic `.sdata2` address labels to compiler-style `@NNN` names, matching how local constants are represented in the symbols file.",
+    "Preserved exact floating-point operation ordering in `ftCo_8008E5A4` by reshaping temporaries rather than changing the underlying knockback angle logic."
+  ],
+  "decomp_lessons": [
+    "For close fighter-action matches, small changes to local declaration order, temporary lifetimes, and block structure can matter as much as control-flow changes.",
+    "`GET_FIGHTER(gobj)` versus direct `gobj->user_data` access can affect generated code and should be tried when matching ftCommon functions.",
+    "Centralizing a repeated branch in a helper can be a matching tactic, not just a readability refactor, when two callbacks need the same call/branch shape.",
+    "Use `#pragma dont_inline` selectively when a small helper must remain a separate function for matching.",
+    "Move guards into inline/helper functions when the assembly suggests callers invoke the helper unconditionally.",
+    "For `.sdata2` progress, audit symbol names as well as C code; replacing `lbl_804D...` labels with `@NNN` compiler-style constants can unlock data matches.",
+    "Stack-shaping should be minimal and localized: this PR both removed obsolete dummy arrays and added `PAD_STACK(8)` or `u8 _[12]` where the new match required them."
+  ],
+  "naming_conventions": [
+    "Compiler-generated `.sdata2` constants may be named with `@NNN`, such as `@216`, `@220`, `@320`, `@321`, `@460`, `@521`, and `@637`, instead of address labels like `lbl_804D84D0`.",
+    "Unidentified ftCommon functions kept the project convention of `ftCo_` plus address-like suffixes, such as `ftCo_8008E5A4`, `ftCo_8008E9D0`, and `ftCo_8008EC90`.",
+    "Named action callbacks follow the `ftCo_Damage*_{Anim,IASA,Phys}` style, shown by `ftCo_DamageFly_Anim`, `ftCo_DamageFly_Phys`, and `ftCo_DamageFlyRoll_Anim`.",
+    "Small local helpers in this area still used placeholder names like `inlineD0`, `inlineE0`, and `inlineF0` when no semantic name was established.",
+    "`GET_FIGHTER(gobj)` is the preferred-looking accessor pattern in the matched ftCommon snippets."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replace direct `gobj->user_data` reads with `GET_FIGHTER(gobj)` when the target assembly suggests a different access pattern.",
+    "Use `PAD_STACK(8)` or explicit dummy stack arrays only in functions where the stack frame needs shaping, as seen in `ftCo_DamageFlyRoll_Anim` and `inlineD0`.",
+    "Wrap small helpers with `#pragma dont_inline on` to force a separate call boundary, as done for `ftCo_Damage_SetMv8FromKbThreshold`.",
+    "Tune float temporary order and reuse carefully: `ftCo_8008E5A4` reuses `kb_mag`, introduces `scale`, and changes when input fields are loaded.",
+    "Pass the actual local address directly to calls when needed for stack/codegen shape, as `inlineD0` changed from a copied `param` to `&trajectory` in `efAsync_Spawn`.",
+    "Factor repeated branches into a static helper to alter call structure, as with `inlineE0` for `ft_80084DB0` versus `ft_80084EEC`.",
+    "Update `.sdata2` entries in `config/GALE01/symbols.txt` to the compiler-generated `@NNN` labels when decomp.dev reports data-match gaps."
+  ],
+  "review_feedback": [
+    {
+      "source": "decomp-dev[bot]",
+      "feedback": "Reported matched code 55.55% (+0.05%, +1892 bytes) and matched data 34.71% (+0.01%, +64 bytes)."
+    },
+    {
+      "source": "decomp-dev[bot]",
+      "feedback": "Reported 6 new matches: `ftCo_DamageFly_Anim`, `ftCo_DamageFlyRoll_Anim`, `ftCo_8008E5A4`, `ftCo_8008E9D0`, `.sdata2`, and `ftCo_DamageFly_Phys`."
+    },
+    {
+      "source": "decomp-dev[bot]",
+      "feedback": "Reported improvements in unmatched items `ftCo_8008EC90` (+61 bytes) and `ftCo_8008EB58` (+11 bytes)."
+    },
+    {
+      "source": "slice",
+      "feedback": "No human review comments or reviews were present in the provided PR slice."
+    }
+  ],
+  "searchable_terms": [
+    "pr-2245",
+    "mchen91",
+    "ftCo_Damage",
+    "ftCommon",
+    "damage",
+    "ftCo_DamageFly_Anim",
+    "ftCo_DamageFlyRoll_Anim",
+    "ftCo_DamageFly_Phys",
+    "ftCo_DamageFlyRoll_Phys",
+    "ftCo_8008E5A4",
+    "ftCo_8008E9D0",
+    "ftCo_8008EC90",
+    "ftCo_8008EB58",
+    "ftCo_Damage_SetMv8FromKbThreshold",
+    "inlineD0",
+    "inlineE0",
+    "inlineF0",
+    "GET_FIGHTER",
+    "PAD_STACK",
+    "dont_inline",
+    "PSVECCrossProduct",
+    "ftCo_ScaleBy154",
+    "ftCo_8008DA4C",
+    "ftCo_8008D8E8",
+    "x1860_element",
+    "x221C_b6",
+    "x8c_kb_vel",
+    "xF0_ground_kb_vel",
+    "efAsync_Spawn",
+    "FtPart_TopN",
+    "FtPart_XRotN",
+    "GA_Air",
+    "sdata2",
+    "symbols.txt",
+    "GALE01",
+    "@216",
+    "@220",
+    "@320",
+    "@321",
+    "@460",
+    "@521",
+    "@637"
+  ],
+  "follow_up_queries": [
+    "ftCo_Damage.c GET_FIGHTER PAD_STACK dont_inline inlineD0",
+    "ftCo_8008E9D0 ftCo_ScaleBy154 x1860_element ftCo_8008DA4C",
+    "DamageFly_Phys DamageFlyRoll_Phys inlineE0 x221C_b6 ft_80084DB0 ft_80084EEC",
+    "ftCo_Damage_SetMv8FromKbThreshold pragma dont_inline",
+    "sdata2 @216 @220 @320 @321 @460 @521 @637 ftCo_Damage",
+    "ftCo_8008E5A4 PSVECCrossProduct lstick knockback angle"
+  ],
+  "confidence": 0.89
+}

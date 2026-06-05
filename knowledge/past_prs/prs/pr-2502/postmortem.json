@@ -1,0 +1,106 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2502",
+  "pr": {
+    "number": 2502,
+    "title": "gr: fix Zebes Route param store",
+    "url": "https://github.com/doldecomp/melee/pull/2502",
+    "state": "MERGED",
+    "author": "itsgrimetime",
+    "created_at": "2026-05-15T17:42:23Z",
+    "merged_at": "2026-05-15T17:49:40Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Fixed the Zebes Route stage parameter global by modeling `grZe_Route_804D6A60` as an 8-byte parameter store containing a params pointer plus padding, instead of as the params pointer itself. The PR also named the currently understood route params, `camera_timer` and `zako_spawn_chance`, and brought `grzebesroute` data sections including `.sbss` to 100% while leaving known function/TU fuzzy percentages unchanged.",
+  "change_classification": {
+    "primary_type": "stage data-layout matching fix",
+    "categories": [
+      "decomp-matching",
+      "data-layout",
+      "fix",
+      "naming",
+      "sbss"
+    ],
+    "systems": [
+      "stage",
+      "ground",
+      "Zebes Route"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/gr/grzebesroute.c",
+      "reason": "Only changed file; adds Zebes Route params/store structs and updates all uses of `grZe_Route_804D6A60`."
+    }
+  ],
+  "what_changed": [
+    "Added `grZebesRoute_Params` with two named integer fields: `camera_timer` and `zako_spawn_chance`.",
+    "Added `grZebesRoute_ParamStore`, an 8-byte wrapper containing `grZebesRoute_Params* params` plus `u32 pad`.",
+    "Changed `grZe_Route_804D6A60` from a static anonymous pointer with fields `x0` and `x4` into a concrete `grZebesRoute_ParamStore` global.",
+    "Changed `grZebesRoute_8020B164` to store `Ground_801C49F8()` into `grZe_Route_804D6A60.params` rather than assigning the global itself.",
+    "Changed `grZebesRoute_8020B1F4` to use `grZe_Route_804D6A60.params->zako_spawn_chance` for the Zako generator random bound.",
+    "Changed `grZebesRoute_8020B3C0` to initialize `gp->gv.zebes2.xC4` from `grZe_Route_804D6A60.params->camera_timer`.",
+    "The PR body reports `grzebesroute` data sections are now 100%; match notes say TU fuzzy remains 99.98663% and `grZebesRoute_8020B548` remains 99.96923%."
+  ],
+  "smart_moves": [
+    "Separated the pointed-to stage params from the global storage wrapper, which reflects the apparent `.sbss` layout better than treating `grZe_Route_804D6A60` as the pointer itself.",
+    "Used an explicit `u32 pad` field to account for the 8-byte store without inventing semantics for the second word.",
+    "Named params from observed usage: the first field feeds `gp->gv.zebes2.xC4` as a timer-like value, and the second is passed to `HSD_Randi` around Zako spawning logic.",
+    "Targeted data-section correctness without perturbing unrelated fuzzy-matching function work."
+  ],
+  "decomp_lessons": [
+    "If an `.sbss` symbol looks like a pointer but data matching is off by a word, test whether the real object is a small store struct containing a pointer plus padding or metadata.",
+    "For stage parameter globals, keep the storage object and the pointed-to parameter block as distinct types when assignments come from helpers such as `Ground_801C49F8()`.",
+    "Use callsite behavior to replace anonymous `x0`/`x4` fields with semantic names, but leave unknown words as `pad` when evidence is weak.",
+    "A PR can legitimately improve data-section matching to 100% even when known TU/function fuzzy mismatches remain unresolved; document both outcomes."
+  ],
+  "naming_conventions": [
+    "Stage-local structs follow the existing `grZebesRoute_*` prefix, e.g. `grZebesRoute_Params` and `grZebesRoute_ParamStore` alongside `grZebesRoute_LightData`.",
+    "Understood parameter fields use descriptive snake_case: `camera_timer`, `zako_spawn_chance`.",
+    "The address-based global name `grZe_Route_804D6A60` was retained while its type was improved.",
+    "Unknown storage words should be named plainly as padding, e.g. `pad`, rather than given speculative gameplay names."
+  ],
+  "assembly_or_matching_tactics": [
+    "Verification commands from the PR body: `ninja build/GALE01/src/melee/gr/grzebesroute.o build/GALE01/report.json` and full `ninja`.",
+    "The decomp.dev bot reported GALE01 matched data at 39.36% with +8 bytes, and one new match for `main/melee/gr/grzebesroute` `.sbss`: +4 bytes, 50.00% to 100.00%.",
+    "The key matching tactic was correcting the global symbol size/layout in `.sbss` by replacing a pointer global with an 8-byte store struct.",
+    "Do not expect this change alone to fix `grZebesRoute_8020B548`; the PR explicitly notes that function remains 99.96923% fuzzy."
+  ],
+  "review_feedback": [
+    "No human review comments or reviews were present in the slice.",
+    "Automated decomp.dev feedback confirmed the `.sbss` improvement for `main/melee/gr/grzebesroute` from 50.00% to 100.00%."
+  ],
+  "searchable_terms": [
+    "pr-2502",
+    "gr: fix Zebes Route param store",
+    "grzebesroute",
+    "Zebes Route",
+    "src/melee/gr/grzebesroute.c",
+    "grZe_Route_804D6A60",
+    "grZebesRoute_Params",
+    "grZebesRoute_ParamStore",
+    "camera_timer",
+    "zako_spawn_chance",
+    "Ground_801C49F8",
+    "HSD_Randi",
+    "grZakoGenerator_801CAE04",
+    "grZebesRoute_8020B164",
+    "grZebesRoute_8020B1F4",
+    "grZebesRoute_8020B3C0",
+    "grZebesRoute_8020B548",
+    "gp->gv.zebes2.xC4",
+    "stage_info.unk8C",
+    ".sbss",
+    "data sections 100%",
+    "GALE01",
+    "param store"
+  ],
+  "follow_up_queries": [
+    "Search other stage files for globals assigned from `Ground_801C49F8()` that are modeled as raw pointers but may actually be small param-store structs.",
+    "Investigate whether the `u32 pad` in `grZebesRoute_ParamStore` has real semantics or is only layout padding.",
+    "Look for external stage parameter tables or sibling stages that confirm the names `camera_timer` and `zako_spawn_chance`.",
+    "Continue work on `grZebesRoute_8020B548`, which this PR leaves at 99.96923% fuzzy.",
+    "Consider whether `gp->gv.zebes2.xC4` can be renamed or typed using the new `camera_timer` evidence."
+  ],
+  "confidence": 0.94
+}

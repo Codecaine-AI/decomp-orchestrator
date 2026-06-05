@@ -1,0 +1,5243 @@
+diff --git a/src/melee/ft/chara/ftCommon/ftCo_Attack100.h b/src/melee/ft/chara/ftCommon/ftCo_Attack100.h
+index 5807806fe6..198bca844d 100644
+--- a/src/melee/ft/chara/ftCommon/ftCo_Attack100.h
++++ b/src/melee/ft/chara/ftCommon/ftCo_Attack100.h
+@@ -144,7 +144,7 @@
+ /* 0DA784 */ void ftCo_CatchCut_Phys(Fighter_GObj* gobj);
+ /* 0DA7E4 */ void ftCo_CatchCut_Coll(Fighter_GObj* gobj);
+ /* 0DA824 */ float ftCo_800DA824(Fighter*);
+-/* 0DA8E4 */ UNK_RET fn_800DA8E4(UNK_PARAMS);
++/* 0DA8E4 */ void fn_800DA8E4(Fighter_GObj* arg0, Fighter_GObj* arg1, s32 arg2);
+ /* 0DAA40 */ void fn_800DAA40(Fighter_GObj*, Fighter_GObj*);
+ /* 0DAC70 */ void ftCo_CapturePulledHi_Anim(Fighter_GObj* gobj);
+ /* 0DAC74 */ void ftCo_CapturePulledHi_IASA(Fighter_GObj* gobj);
+diff --git a/src/melee/ft/chara/ftKirby/ftKb_Init.c b/src/melee/ft/chara/ftKirby/ftKb_Init.c
+index 3d1fb54e5c..b3e535d824 100644
+--- a/src/melee/ft/chara/ftKirby/ftKb_Init.c
++++ b/src/melee/ft/chara/ftKirby/ftKb_Init.c
+@@ -37,6 +37,7 @@
+ #include "ft/ftcommon.h"
+ #include "ft/ftdata.h"
+ #include "ft/ftdynamics.h"
++#include "ft/ftmaterial.h"
+ #include "ft/ftparts.h"
+ #include "ft/ftwalkcommon.h"
+ #include "ft/inlines.h"
+@@ -71,6 +72,8 @@
+ #include "it/items/itseakneedleheld.h"
+ #include "lb/lb_00B0.h"
+ #include "lb/lbanim.h"
++#include "lb/lbarchive.h"
++#include "lb/lbdvd.h"
+ #include "lb/lbvector.h"
+ #include "mp/mpcoll.h"
+ #include "mp/mplib.h"
+@@ -83,6 +86,7 @@
+ #include <baselib/jobj.h>
+ #include <baselib/random.h>
+ #include <MSL/math.h>
++#include <baselib/id.h>
+ 
+ void ftAnim_80070458(Fighter* fp, CostumeTObjList*, u32 tobj_idx, float frame);
+ void fn_800F9260(HSD_GObj*);
+@@ -3269,9 +3273,69 @@ char* ftKb_Init_GetMotionFileString(enum_t arg0)
+     return ftKb_Init_803CA5A4[offset - 14];
+ }
+ 
+-/// #ftKb_SpecialN_800EEC34
++void ftKb_SpecialN_800EEC34(int arg0, int arg1, int arg2)
++{
++    int i;
++    int lo;
++
++    if (ftKb_Init_803CA9D0[arg0].filename != NULL) {
++        lbDvd_800178E8(2, ftKb_Init_803CA9D0[arg0].filename, 4, 4, 0, 1, 3, 1,
++                       0);
++    }
++    if (ftKb_Init_803CB3E8[arg0] != NULL) {
++        if (arg1 == 0xFF) {
++            lo = 0;
++        } else {
++            lo = arg1;
++            arg2 = arg1 + 1;
++        }
++        for (i = lo; i < arg2; i++) {
++            if (ftKb_Init_803CB3E8[arg0][i].dat_filename != NULL) {
++                lbDvd_800178E8(2, ftKb_Init_803CB3E8[arg0][i].dat_filename, 4,
++                               4, 0, 1, 3, 1, 0);
++            }
++        }
++    }
++    if (ftKb_Init_803CB46C[arg0] != -1) {
++        efAsync_LoadAsync(ftKb_Init_803CB46C[arg0]);
++    }
++}
+ 
+-/// #ftKb_SpecialN_800EED50
++void ftKb_SpecialN_800EED50(s32 arg0, s32 arg1)
++{
++    if (arg0 != -1 && arg0 != 4) {
++        ftKirby_CopyName* copy = &ftKb_Init_803CA9D0[arg0];
++        if (copy->filename != NULL) {
++            HSD_Archive** entry = &((HSD_Archive**) &ft_80459B88)[arg0];
++            if (*entry == NULL) {
++                lbArchive_80017040(NULL, copy->filename, entry, copy->name, 0);
++            }
++        }
++        {
++            Fighter_CostumeStrings* costumes = ftKb_Init_803CB3E8[arg0];
++            if (costumes != NULL) {
++                struct {
++                    HSD_Joint* joint;
++                    HSD_MatAnimJoint* matanim;
++                }* item = (void*) ftKb_Init_803C9FC8[arg0];
++                item = &item[arg1];
++                if (item->joint == NULL) {
++                    Fighter_CostumeStrings* cs = &costumes[arg1];
++                    if (cs->matanim_joint_name != NULL) {
++                        lbArchive_80017040(NULL, cs->dat_filename, item,
++                                           cs->joint_name, &item->matanim,
++                                           cs->matanim_joint_name, 0);
++                    } else {
++                        lbArchive_80017040(NULL, cs->dat_filename, item,
++                                           cs->joint_name, 0);
++                        item->matanim = NULL;
++                    }
++                }
++            }
++        }
++        efAsync_LoadSync(ftKb_Init_803CB46C[arg0]);
++    }
++}
+ 
+ void ftKb_Init_UnkMotionStates5(void)
+ {
+@@ -3343,7 +3407,110 @@ void ftKb_SpecialN_800EF040(Fighter_GObj* gobj, int arg1, KirbyHatStruct* hat)
+     }
+ }
+ 
+-/// #ftKb_SpecialN_800EF0E4
++extern char ftKb_Init_804D3DAC[2];
++
++void ftKb_SpecialN_800EF0E4(Fighter_GObj* gobj, int arg1, u8* arg2)
++{
++    Fighter* fp = GET_FIGHTER(gobj);
++    HSD_Joint* sp28;
++    s32 sp24;
++    HSD_Joint* root;
++    s32 total_dobjs;
++    s32 part_off;
++    s32 byte_off;
++    s32 group_count;
++    s32 dst_off;
++    HSD_JObj* jobj;
++    HSD_DObj* dobj;
++    HSD_DObj* tail;
++    HSD_DObj** dst;
++    HSD_MObj* mobj;
++
++    ftPartsPObjSetDefaultClass();
++    root = ((HSD_Joint**) ftKb_Init_803C9FC8[arg1])[fp->x619_costume_id * 2];
++    total_dobjs = 0;
++    part_off = total_dobjs << 4;
++    sp28 = root;
++    sp24 = 0;
++    while (sp28 != NULL) {
++        FighterBone* parts = fp->parts;
++        FighterBone* bone = (FighterBone*) ((u8*) parts + part_off);
++        while (!bone->flags_b1) {
++            bone = (FighterBone*) ((u8*) bone + 0x10);
++            part_off += 0x10;
++        }
++        HSD_IDInsertToTable(
++            NULL, (u32) sp28,
++            ((FighterBone*) ((u8*) parts + part_off))->joint);
++        part_off += 0x10;
++        ftAnim_GetNextJointInTree(&sp28, &sp24);
++    }
++    sp28 = root;
++    sp24 = 0;
++    byte_off = total_dobjs << 2;
++    part_off = 0;
++    while (sp28 != NULL) {
++        FighterBone* parts = fp->parts;
++        FighterBone* bone;
++        group_count = 0;
++        bone = (FighterBone*) ((u8*) parts + part_off);
++        while (!bone->flags_b1) {
++            bone = (FighterBone*) ((u8*) bone + 0x10);
++            arg2++;
++            part_off += 0x10;
++        }
++        jobj = ((FighterBone*) ((u8*) parts + part_off))->joint;
++        dobj = HSD_DObjLoadDesc(sp28->u.dobjdesc);
++        *arg2 = total_dobjs;
++        if (dobj != NULL) {
++            tail = HSD_JObjGetDObj(jobj);
++            HSD_DObjResolveRefsAll(dobj, sp28->u.dobjdesc);
++            if (tail == NULL) {
++                HSD_JObjAddDObj(jobj, dobj);
++            } else {
++                while (tail != NULL) {
++                    HSD_DObj* nxt = (tail != NULL) ? tail->next : NULL;
++                    if (nxt == NULL) {
++                        break;
++                    }
++                    tail = (tail != NULL) ? tail->next : NULL;
++                }
++                lb_8000CE30(tail, dobj);
++            }
++            dst_off = byte_off;
++            while (dobj != NULL) {
++                if (total_dobjs >= 0x20) {
++                    OSReport(ftKb_Init_assert_msg_0);
++                    __assert(ftKb_Init_assert_msg_1, 0x43E,
++                             ftKb_Init_804D3DAC);
++                }
++                dst = (HSD_DObj**) fp->fv.gw.x2244_chefVar2;
++                *(HSD_DObj**) ((u8*) dst + dst_off) = dobj;
++                mobj = dobj->mobj;
++                if (mobj != NULL) {
++                    hsdChangeClass(mobj, &ftMObj);
++                }
++                dobj = (dobj != NULL) ? dobj->next : NULL;
++                dst_off += 4;
++                byte_off += 4;
++                total_dobjs += 1;
++                group_count += 1;
++            }
++            if (group_count >= 0x80) {
++                OSReport(ftKb_Init_assert_msg_2);
++                __assert(ftKb_Init_assert_msg_1, 0x44C,
++                         ftKb_Init_804D3DAC);
++            }
++            ((FighterBone*) ((u8*) fp->parts + part_off))->flags_b6 = true;
++        }
++        arg2++;
++        part_off += 0x10;
++        ftAnim_GetNextJointInTree(&sp28, &sp24);
++    }
++    fp->fv.gw.x2240_chefVar1 = total_dobjs;
++    ftPartsPObjClearDefaultClass();
++    PAD_STACK(8);
++}
+ 
+ void ftKb_SpecialN_800EF35C(Fighter_GObj* gobj, int arg1, u8* arg2)
+ {
+@@ -3372,9 +3539,163 @@ void ftKb_SpecialN_800EF35C(Fighter_GObj* gobj, int arg1, u8* arg2)
+     PAD_STACK(8);
+ }
+ 
+-/// #ftKb_SpecialN_800EF438
++void ftKb_SpecialN_800EF438(Fighter_GObj* gobj, KirbyHatStruct* hat)
++{
++    HSD_Joint* sp24;
++    s32 sp20;
++    Fighter* fp = GET_FIGHTER(gobj);
++    ftDynamics* dyn = hat->hat_dynamics[2];
++    s32 total_dobjs;
++    s32 part_off;
++    s32 byte_off;
++    HSD_DObj* dobj;
++    HSD_DObj* tail;
++    HSD_JObj* jobj;
++    HSD_DObj** dst;
++    HSD_MObj* mobj;
++    s32 group_count;
++
++    if (dyn != NULL) {
++        ftPartsPObjSetDefaultClass();
++        sp24 = (HSD_Joint*) dyn;
++        total_dobjs = 0;
++        sp20 = 0;
++        part_off = total_dobjs << 4;
++        while (sp24 != NULL) {
++            FighterBone* bone;
++            FighterBone* parts = fp->parts;
++            bone = (FighterBone*) ((u8*) parts + part_off);
++            while (!bone->flags_b1) {
++                bone = (FighterBone*) ((u8*) bone + 0x10);
++                part_off += 0x10;
++            }
++            HSD_IDInsertToTable(
++                NULL, (u32) sp24,
++                ((FighterBone*) ((u8*) parts + part_off))->joint);
++            part_off += 0x10;
++            ftAnim_GetNextJointInTree(&sp24, &sp20);
++        }
++        sp24 = (HSD_Joint*) dyn;
++        sp20 = 0;
++        byte_off = total_dobjs << 2;
++        part_off = 0;
++        while (sp24 != NULL) {
++            FighterBone* bone;
++            FighterBone* parts = fp->parts;
++            group_count = 0;
++            bone = (FighterBone*) ((u8*) parts + part_off);
++            while (!bone->flags_b1) {
++                bone = (FighterBone*) ((u8*) bone + 0x10);
++                part_off += 0x10;
++            }
++            jobj = ((FighterBone*) ((u8*) parts + part_off))->joint;
++            dobj = HSD_DObjLoadDesc((HSD_DObjDesc*) sp24->u.dobjdesc);
++            if (dobj != NULL) {
++                FighterBone* parts2 = fp->parts;
++                s32 flag_off = part_off + 9;
++                tail = HSD_JObjGetDObj(jobj);
++                ((u8*) parts2)[flag_off] |= 1;
++                HSD_DObjResolveRefsAll(dobj, (HSD_DObjDesc*) sp24->u.dobjdesc);
++                if (tail == NULL) {
++                    HSD_JObjAddDObj(jobj, dobj);
++                } else {
++                    while (tail != NULL) {
++                        HSD_DObj* nxt = (tail != NULL) ? tail->next : NULL;
++                        if (nxt == NULL) {
++                            break;
++                        }
++                        tail = (tail != NULL) ? tail->next : NULL;
++                    }
++                    lb_8000CE30(tail, dobj);
++                }
++                while (dobj != NULL) {
++                    if (total_dobjs >= 0x20) {
++                        OSReport(ftKb_Init_assert_msg_0);
++                        __assert(ftKb_Init_assert_msg_1, 0x4B9,
++                                 ftKb_Init_804D3DAC);
++                    }
++                    dst = (HSD_DObj**) fp->fv.gw.x224C_greenhouseGObj;
++                    *(HSD_DObj**) ((u8*) dst + byte_off) = dobj;
++                    mobj = dobj->mobj;
++                    if (mobj != NULL) {
++                        hsdChangeClass(mobj, &ftMObj);
++                    }
++                    dobj = (dobj != NULL) ? dobj->next : NULL;
++                    byte_off += 4;
++                    total_dobjs += 1;
++                    group_count += 1;
++                }
++                if (group_count >= 0x80) {
++                    OSReport(ftKb_Init_assert_msg_2);
++                    __assert(ftKb_Init_assert_msg_1, 0x4C7,
++                             ftKb_Init_804D3DAC);
++                }
++            }
++            part_off += 0x10;
++            ftAnim_GetNextJointInTree(&sp24, &sp20);
++        }
++        fp->fv.gw.x2248_manholeGObj = (HSD_GObj*) total_dobjs;
++        ftPartsPObjClearDefaultClass();
++    } else {
++        *(s32*) fp->fv.gw.x224C_greenhouseGObj = 0;
++    }
++}
+ 
+-/// #ftKb_SpecialN_800EF69C
++void ftKb_SpecialN_800EF69C(Fighter_GObj* gobj, int arg1, KirbyHatStruct* hat)
++{
++    Fighter* fp = GET_FIGHTER(gobj);
++    if ((u32) fp->fv.gw.x2244_chefVar2 != 0U) {
++        u32 i = 0;
++        s32 off = 0;
++        while (i < ftPartsTable[fp->kind]->parts_num) {
++            FighterBone* bone = (FighterBone*) ((u8*) fp->parts + off);
++            HSD_DObj* dobj = (HSD_DObj*) bone->joint;
++            if (dobj != NULL && (bone->flags_b6 || bone->flags2_b7)) {
++                u8* b9p = &((u8*) bone)[9];
++                u8 b9 = *b9p;
++                if ((b9 >> 1) & 1) {
++                    if ((b9 >> 2) & 1) {
++                        dobj = *(HSD_DObj**) ((u8*) fp->x203C.data +
++                                              ((((u8*) bone)[0xD] * 2) &
++                                               0x1FC));
++                    } else {
++                        dobj = *(HSD_DObj**) ((u8*) fp->dobj_list.data +
++                                              ((((u8*) bone)[0xD] * 2) &
++                                               0x1FC));
++                    }
++                    HSD_DObjRemoveAll(dobj != NULL ? dobj->next : NULL);
++                    lb_8000CE30(dobj, NULL);
++                } else {
++                    HSD_DObjRemoveAll(HSD_JObjGetDObj((HSD_JObj*) dobj));
++                    lb_8000CE40((HSD_JObj*) dobj, NULL);
++                }
++                ((FighterBone*) ((u8*) fp->parts + off))->flags2_b7 = false;
++                ((FighterBone*) ((u8*) fp->parts + off))->flags_b6 =
++                    ((FighterBone*) ((u8*) fp->parts + off))->flags2_b7;
++            }
++            off += 0x10;
++            i += 1;
++        }
++        HSD_ObjFree(&fighter_x2040_alloc_data,
++                    (void*) fp->fv.gw.x2244_chefVar2);
++        HSD_ObjFree(&fighter_x2040_alloc_data, fp->fv.gw.x224C_greenhouseGObj);
++        fp->fv.gw.x2244_chefVar2 = 0;
++    }
++    {
++        ftDynamics* dyn = hat->hat_dynamics[1];
++        u32 mask = (u32) dyn;
++        if (dyn != NULL) {
++            Fighter* fp2 = GET_FIGHTER(gobj);
++            int i = Fighter_804D6540[fp2->kind]->x4 - 1;
++            for (; i >= 0; i--) {
++                if ((1 << i) & mask) {
++                    ftParts_800755E8(
++                        fp2, (u8*) &Fighter_804D6540[fp2->kind]->x0[i]);
++                }
++            }
++        }
++    }
++}
+ 
+ void ftKb_UnkIntBoolFunc0(Fighter* fp, int arg1, bool arg2)
+ {
+@@ -3989,7 +4310,32 @@ void ftKb_SpecialN_800F11AC(Fighter_GObj* gobj)
+     ftCo_UnloadDynamicBones(fp);
+ }
+ 
+-/// #ftKb_SpecialN_800F11F0
++#pragma push
++#pragma dont_inline on
++void ftKb_SpecialN_800F11F0(Fighter_GObj* gobj)
++{
++    u8 sp14[0x90];
++    Fighter* fp = fp = gobj->user_data;
++    KirbyHatStruct* temp_r28;
++    PAD_STACK(8);
++    if (fp->fv.kb.hat.x14.data != NULL) {
++        return;
++    }
++    temp_r28 = ft_80459B88.hats[15];
++    ftKb_SpecialN_800EF040(gobj, 0x10, temp_r28);
++    fp->fv.kb.hat.x14.data = HSD_ObjAlloc(&fighter_x2040_alloc_data);
++    fp->fv.kb.hat.x1C.data = HSD_ObjAlloc(&fighter_x2040_alloc_data);
++    ftKb_SpecialN_800EF0E4(gobj, 0x10, sp14);
++    ftKb_SpecialN_800EF35C(gobj, 0x10, sp14);
++    ftKb_SpecialN_800EF438(gobj, temp_r28);
++    ftParts_8007487C((FtPartsDesc*) temp_r28, &fp->fv.kb.hat.x24,
++                     fp->x619_costume_id, &fp->fv.kb.hat.x14,
++                     &fp->fv.kb.hat.x1C);
++    ftAnim_80070200(fp, (ftData_x8_x8*) &temp_r28->desc.vis_table,
++                    &fp->fv.kb.x44, &fp->fv.kb.hat.x14);
++    ftCo_8009DB50(fp);
++}
++#pragma pop
+ 
+ void ftKb_SpecialN_800F12C8(Fighter_GObj* gobj)
+ {
+@@ -4130,7 +4476,92 @@ void ftKb_SpecialAirN_Enter(Fighter_GObj* gobj)
+     }
+ }
+ 
+-/// #ftKb_SpecialN_800F16D0
++void ftKb_SpecialN_800F16D0(Fighter_GObj* gobj, FighterKind kind)
++{
++    struct ft_80459B88_t* g = &ft_80459B88;
++    KirbyHatStruct* hat;
++    if ((u32) kind > 0x1F) {
++        return;
++    }
++    switch (kind) {
++    case FTKIND_MARIO:
++        it_8026B3F8((Article*) g->x0->xC, 0x82);
++        break;
++    case FTKIND_LUIGI:
++        it_8026B3F8((Article*) g->hats[16]->hat_dynamics[0], 0x84);
++        break;
++    case FTKIND_POPO:
++        it_8026B3F8((Article*) g->hats[9]->hat_dynamics[0], 0x85);
++        break;
++    case FTKIND_PEACH:
++        hat = g->hats[8];
++        it_8026B3F8((Article*) hat->hat_dynamics[0], 0x86);
++        it_8026B3F8((Article*) hat->hat_dynamics[1], 0x87);
++        break;
++    case FTKIND_FOX:
++        it_8026B3F8((Article*) g->hats[0]->hat_dynamics[0], 0x88);
++        it_8026B3F8((Article*) g->hats[0]->hat_dynamics[1], 0x8a);
++        break;
++    case FTKIND_FALCO:
++        hat = g->hats[21];
++        it_8026B3F8((Article*) hat->hat_dynamics[3], 0x89);
++        it_8026B3F8((Article*) hat->hat_dynamics[4], 0x8b);
++        break;
++    case FTKIND_LINK:
++        hat = g->hats[5];
++        it_8026B3F8((Article*) hat->hat_dynamics[0], 0x8c);
++        it_8026B3F8((Article*) hat->hat_dynamics[1], 0x8e);
++        break;
++    case FTKIND_CLINK:
++        hat = g->hats[19];
++        it_8026B3F8((Article*) hat->hat_dynamics[0], 0x8d);
++        it_8026B3F8((Article*) hat->hat_dynamics[1], 0x8f);
++        break;
++    case FTKIND_MEWTWO:
++        it_8026B3F8((Article*) g->hats[15]->hat_dynamics[3], 0x90);
++        break;
++    case FTKIND_NESS:
++        hat = g->hats[7];
++        it_8026B3F8((Article*) hat->hat_dynamics[0], 0x91);
++        it_8026B3F8((Article*) hat->hat_dynamics[1], 0x92);
++        break;
++    case FTKIND_PIKACHU:
++        hat = g->hats[11];
++        it_8026B3F8((Article*) hat->hat_dynamics[0], 0x93);
++        it_8026B3F8((Article*) hat->hat_dynamics[1], 0x94);
++        break;
++    case FTKIND_PICHU:
++        hat = g->hats[22];
++        it_8026B3F8((Article*) hat->hat_dynamics[0], 0x95);
++        it_8026B3F8((Article*) hat->hat_dynamics[1], 0x96);
++        break;
++    case FTKIND_SAMUS:
++        it_8026B3F8((Article*) g->hats[12]->hat_dynamics[0], 0x97);
++        break;
++    case FTKIND_KOOPA:
++        it_8026B3F8((Article*) g->hats[4]->hat_dynamics[0], 0x9a);
++        break;
++    case FTKIND_GKOOPS:
++        it_8026B3F8((Article*) g->hats[30]->hat_dynamics[0], 0x9a);
++        break;
++    case FTKIND_SEAK:
++        hat = g->hats[6];
++        it_8026B3F8((Article*) hat->hat_dynamics[0], 0x98);
++        it_8026B3F8((Article*) hat->hat_dynamics[1], 0x99);
++        break;
++    case FTKIND_DRMARIO:
++        it_8026B3F8((Article*) g->hats[20]->hat_dynamics[0], 0x83);
++        break;
++    case FTKIND_GAMEWATCH:
++        hat = g->hats[23];
++        it_8026B3F8((Article*) hat->hat_dynamics[5], 0x9b);
++        it_8026B3F8((Article*) hat->hat_dynamics[6], 0x9c);
++        break;
++    case FTKIND_YOSHI:
++        it_8026B3F8((Article*) g->hats[13]->hat_dynamics[5], 0x9d);
++        break;
++    }
++}
+ 
+ void ftKb_SpecialN_800F190C(Fighter_GObj* gobj, FighterKind kind)
+ {
+diff --git a/src/melee/ft/chara/ftKirby/ftKb_Init.h b/src/melee/ft/chara/ftKirby/ftKb_Init.h
+index a62f1ce2a0..f0877792c9 100644
+--- a/src/melee/ft/chara/ftKirby/ftKb_Init.h
++++ b/src/melee/ft/chara/ftKirby/ftKb_Init.h
+@@ -46,7 +46,7 @@
+ /* 0EF040 */ void ftKb_SpecialN_800EF040(Fighter_GObj*, int, KirbyHatStruct*);
+ /* 0EF0E4 */ UNK_RET ftKb_SpecialN_800EF0E4(Fighter_GObj*, int, u8*);
+ /* 0EF35C */ void ftKb_SpecialN_800EF35C(Fighter_GObj*, int, u8*);
+-/* 0EF438 */ UNK_RET ftKb_SpecialN_800EF438(Fighter_GObj*, KirbyHatStruct*);
++/* 0EF438 */ void ftKb_SpecialN_800EF438(Fighter_GObj*, KirbyHatStruct*);
+ /* 0EF69C */ void ftKb_SpecialN_800EF69C(Fighter_GObj*, int, KirbyHatStruct*);
+ /* 0EF87C */ void ftKb_UnkIntBoolFunc0(Fighter*, int, bool);
+ /* 0EF9BC */ void ftKb_Init_UnkCallbackPairs0_0(Fighter_GObj* gobj);
+diff --git a/src/melee/ft/chara/ftKirby/ftKb_SpecialNYs.c b/src/melee/ft/chara/ftKirby/ftKb_SpecialNYs.c
+index 496cf85a1f..24c39c2531 100644
+--- a/src/melee/ft/chara/ftKirby/ftKb_SpecialNYs.c
++++ b/src/melee/ft/chara/ftKirby/ftKb_SpecialNYs.c
+@@ -32,6 +32,7 @@
+ #include "it/items/itkirbyyoshispecialn.h"
+ #include "it/items/itpeachtoad.h"
+ #include "it/items/itpeachtoadspore.h"
++#include "it/items/ityoshiegglay.h"
+ #include "lb/lb_00B0.h"
+ 
+ #include <common_structs.h>
+@@ -40,12 +41,21 @@
+ #include <baselib/random.h>
+ #include <MSL/math.h>
+ 
++extern f32 ftKb_Init_804D9558;
++extern f32 ftKb_Init_804D9570;
++extern f32 ftKb_Init_804D9574;
++extern f32 ftKb_Init_804D9590;
++extern f32 ftKb_Init_804D9594;
++extern f32 ftKb_Init_804D9598;
++extern f64 ftKb_Init_804D95A0;
++
+ /// Forward declarations for static functions
+ static void fn_801095DC(HSD_GObj*);
+ static void fn_80109680(HSD_GObj*);
+ static void fn_80109714(HSD_GObj*);
+ static void fn_801097B8(HSD_GObj*);
+ static void fn_8010C288(HSD_GObj* gobj);
++static void fn_8010AA64(HSD_GObj* gobj);
+ void fn_8010C44C(HSD_GObj* gobj);
+ void fn_8010CD88(HSD_GObj* gobj);
+ 
+@@ -134,10 +144,12 @@ float ftKb_SpecialNYs_80109380(void)
+     return cd->specialn_ys_unk3 / cd->specialn_ys_damage_multiplier;
+ }
+ 
++#pragma dont_inline on
+ ftDynamics* ftKb_SpecialNYs_801093A0(void)
+ {
+     return ft_80459B88.hats[FTKIND_SAMUS]->hat_dynamics[0];
+ }
++#pragma dont_inline reset
+ 
+ void ftKb_SpecialNYs_801093B4(Fighter_GObj* gobj)
+ {
+@@ -529,7 +541,59 @@ void ftKb_YsSpecialAirCapture1_Anim(Fighter_GObj* gobj)
+     }
+ }
+ 
+-/// #ftKb_YsSpecialNCapture2_0_Anim
++void ftKb_YsSpecialNCapture2_0_Anim(Fighter_GObj* gobj)
++{
++    Fighter* fp = GET_FIGHTER(gobj);
++    it_27CF_DatAttrs item_attrs;
++    FORCE_PAD_STACK(0x4C);
++    PAD_STACK(8);
++    HSD_JObjAnimAll(fp->fv.kb.hat.jobj);
++    if (fp->cmd_vars[1] != 0) {
++        if (fp->target_item_gobj != NULL) {
++            it_802F2E7C(fp->target_item_gobj, false);
++            fp->x1A64 = NULL;
++            fp->target_item_gobj = NULL;
++            fp->cmd_vars[1] = 0;
++        }
++    }
++    if (fp->cmd_vars[0] != 0) {
++        ftCommon_8007E2F4(fp, 0);
++        {
++            Fighter* fp2 = GET_FIGHTER(gobj);
++            lb_8000B1CC(fp2->parts[ftParts_GetBoneIndex(fp2, FtPart_TransN2)]
++                            .joint,
++                        NULL, &item_attrs.pos);
++        }
++        {
++            Fighter* fp2 = GET_FIGHTER(gobj);
++            ftKb_DatAttrs* da = fp2->dat_attrs;
++            item_attrs.vel.x =
++                -fp2->facing_dir * da->specialn_ys_initial_horizontal_momentum;
++            item_attrs.vel.y = da->specialn_ys_initial_vertical_momentum;
++            item_attrs.vel.z = ftKb_Init_804D9558;
++        }
++        item_attrs.float2 = GET_FIGHTER(gobj)->facing_dir;
++        {
++            ftKb_DatAttrs* da = GET_FIGHTER(gobj)->dat_attrs;
++            item_attrs.lifetime = da->specialn_ys_base_duration;
++        }
++        {
++            ftKb_DatAttrs* da = GET_FIGHTER(gobj)->dat_attrs;
++            item_attrs.x24 = da->specialn_ys_damage_multiplier;
++        }
++        {
++            ftKb_DatAttrs* ea = gFtDataList[FTKIND_KIRBY]->ext_attr;
++            item_attrs.float3 =
++                ea->specialn_ys_unk3 / ea->specialn_ys_damage_multiplier;
++        }
++        item_attrs.kind = 0x9D;
++        it_802F2F34(gobj, &item_attrs);
++        fp->cmd_vars[0] = 0;
++    }
++    if (!ftAnim_IsFramesRemaining(gobj)) {
++        ft_8008A2BC(gobj);
++    }
++}
+ 
+ void ftKb_YsSpecialNCapture2_1_Anim(Fighter_GObj* gobj)
+ {
+@@ -554,7 +618,59 @@ void ftKb_YsSpecialNCapture2_1_Anim(Fighter_GObj* gobj)
+     }
+ }
+ 
+-/// #ftKb_YsSpecialAirN2_1_Anim
++void ftKb_YsSpecialAirN2_1_Anim(Fighter_GObj* gobj)
++{
++    Fighter* fp = GET_FIGHTER(gobj);
++    it_27CF_DatAttrs item_attrs;
++    FORCE_PAD_STACK(0x4C);
++    PAD_STACK(8);
++    HSD_JObjAnimAll(fp->fv.kb.hat.jobj);
++    if (fp->cmd_vars[1] != 0) {
++        if (fp->target_item_gobj != NULL) {
++            it_802F2E7C(fp->target_item_gobj, false);
++            fp->x1A64 = NULL;
++            fp->target_item_gobj = NULL;
++            fp->cmd_vars[1] = 0;
++        }
++    }
++    if (fp->cmd_vars[0] != 0) {
++        ftCommon_8007E2F4(fp, 0);
++        {
++            Fighter* fp2 = GET_FIGHTER(gobj);
++            lb_8000B1CC(fp2->parts[ftParts_GetBoneIndex(fp2, FtPart_TransN2)]
++                            .joint,
++                        NULL, &item_attrs.pos);
++        }
++        {
++            Fighter* fp2 = GET_FIGHTER(gobj);
++            ftKb_DatAttrs* da = fp2->dat_attrs;
++            item_attrs.vel.x =
++                -fp2->facing_dir * da->specialn_ys_initial_horizontal_momentum;
++            item_attrs.vel.y = da->specialn_ys_initial_vertical_momentum;
++            item_attrs.vel.z = ftKb_Init_804D9558;
++        }
++        item_attrs.float2 = GET_FIGHTER(gobj)->facing_dir;
++        {
++            ftKb_DatAttrs* da = GET_FIGHTER(gobj)->dat_attrs;
++            item_attrs.lifetime = da->specialn_ys_base_duration;
++        }
++        {
++            ftKb_DatAttrs* da = GET_FIGHTER(gobj)->dat_attrs;
++            item_attrs.x24 = da->specialn_ys_damage_multiplier;
++        }
++        {
++            ftKb_DatAttrs* ea = gFtDataList[FTKIND_KIRBY]->ext_attr;
++            item_attrs.float3 =
++                ea->specialn_ys_unk3 / ea->specialn_ys_damage_multiplier;
++        }
++        item_attrs.kind = 0x9D;
++        it_802F2F34(gobj, &item_attrs);
++        fp->cmd_vars[0] = 0;
++    }
++    if (!ftAnim_IsFramesRemaining(gobj)) {
++        ftCo_Fall_Enter(gobj);
++    }
++}
+ 
+ void ftKb_YsSpecialAirN2_0_Anim(Fighter_GObj* gobj)
+ {
+@@ -766,7 +882,51 @@ static void fn_8010AA64(Fighter_GObj* gobj)
+     }
+ }
+ 
+-/// #ftKb_SpecialNYs_8010AC78
++void ftKb_SpecialNYs_8010AC78(Fighter_GObj* victim, Fighter_GObj* gobj)
++{
++    Fighter* fp = GET_FIGHTER(victim);
++    HSD_JObj* jobj = victim->hsd_obj;
++    ftHurtboxInit hurt;
++    Vec3 scale;
++    Fighter* fp2;
++
++    if (fp->ground_or_air == GA_Ground) {
++        ftCommon_8007D5D4(fp);
++    }
++    Fighter_ChangeMotionState(victim, 0x14C, Ft_MF_Unk06, 0.0f, 1.0f, 0.0f,
++                              gobj);
++    fp->take_dmg_cb = (HSD_GObjEvent) fn_8010B1D4;
++    ftCommon_8007E2F4(fp, 0x1FF);
++    fp->invisible = true;
++    scale.x = scale.y = scale.z = fp->co_attrs.xBC.size;
++    ftCommon_SetAccessory(fp, (HSD_Joint*) ftKb_SpecialNYs_801093A0());
++    HSD_JObjSetScale(fp->x20A0_accessory, &scale);
++    lb_8000C2F8(HSD_JObjGetChild(fp->x20A0_accessory),
++                fp->parts[ftParts_GetBoneIndex(fp, FtPart_TransN)].joint);
++    fp->mv.co.yoshiegg.scale = scale;
++    fp2 = GET_FIGHTER(victim);
++    ftColl_8007B0C0(victim, Intangible);
++    hurt.bone_idx = ftParts_GetBoneIndex(fp2, FtPart_TransN);
++    hurt.height = HurtHeight_Mid;
++    hurt.is_grabbable = false;
++    hurt.a_offset = fp2->co_attrs.xBC.x4;
++    hurt.b_offset = fp2->co_attrs.xBC.x10;
++    hurt.scale = fp2->co_attrs.xBC.x1C;
++    ftColl_HurtboxInit(fp2, fp2->hurt_capsules, &hurt);
++    ftKb_SpecialNYs_80109260(gobj, &fp->self_vel);
++    fp->facing_dir = ftKb_SpecialNYs_80109290(gobj);
++    fp->dmg.x182c_behavior = ftKb_SpecialNYs_8010929C(gobj);
++    fp->mv.ca.specialhi.vel.y = 0.0f;
++    fp->mv.co.yoshiegg.x0 = gobj;
++    fp->take_dmg_2_cb = (HSD_GObjEvent) fn_8010B16C;
++    ftCommon_8007EFC0(fp, 1);
++    fp->mv.co.walk.fast_anim_frame = ftKb_SpecialNYs_801092BC(gobj);
++    fp->mv.co.common.x14 = fp->mv.co.walk.fast_anim_frame;
++    fp->mv.co.common.x4.z = ftKb_SpecialNYs_801092AC(gobj);
++    ftCommon_InitGrab(fp, 0, ftKb_SpecialNYs_801092CC(gobj));
++    HSD_JObjGetScale(jobj, &fp->mv.co.yoshiegg.x18);
++    fp->accessory4_cb = fn_8010AA64;
++}
+ 
+ #pragma dont_inline on
+ void ftCo_KirbyYoshiEgg_Anim(Fighter_GObj* gobj)
+@@ -940,7 +1100,64 @@ void ftKb_SpecialNMs_8010B2FC(HSD_GObj* gobj)
+     }
+ }
+ 
+-/// #ftKb_SpecialNMs_8010B4A0
++void ftKb_SpecialNMs_8010B4A0(HSD_GObj* gobj)
++{
++    Vec3 scale;
++    PAD_STACK(4 * 6);
++    {
++        ftKb_DatAttrs* da;
++        struct ftKb_SpecialNMs_DatAttrs* ms_da;
++        Fighter* fp = GET_FIGHTER(gobj);
++        da = fp->dat_attrs;
++
++        if (fp->fv.kb.hat.kind == FTKIND_MARS) {
++            ms_da = &da->ms;
++        } else {
++            ms_da = &da->fe;
++        }
++
++        // InStateChange callback
++        fp->x21EC = fn_8010B2E8;
++
++        fp->self_vel.x = fp->self_vel.x / ms_da->air_horizontal_momentum_preservation;
++        if (fp->self_vel.y <= 0.0f) {
++            fp->self_vel.y = 0.0f;
++        }
++    }
++
++    {
++        ftKirby_MotionState msid;
++        {
++            Fighter* fp = GET_FIGHTER(gobj);
++            if (fp->fv.kb.hat.kind == FTKIND_MARS) {
++                msid = ftKb_MS_MsSpecialAirNStart;
++            } else {
++                msid = ftKb_MS_FeSpecialAirNStart;
++            }
++        }
++        Fighter_ChangeMotionState(gobj, msid, 0, 0, 1, 0, NULL);
++    }
++
++    ftAnim_8006EBA4(gobj);
++
++    {
++        Fighter* fp = GET_FIGHTER(gobj);
++        KirbyHatStruct* mars_hat = ft_80459B88.hats[FTKIND_MARS];
++        KirbyHatStruct* fe_hat = ft_80459B88.hats[FTKIND_EMBLEM];
++
++        if (fp->fv.kb.hat.kind == FTKIND_MARS) {
++            ftCommon_SetAccessory(fp, (HSD_Joint*) mars_hat->hat_dynamics[0]);
++        } else {
++            ftCommon_SetAccessory(fp, (HSD_Joint*) fe_hat->hat_dynamics[0]);
++        }
++
++        scale.x = scale.y = scale.z = ftCommon_GetModelScale(fp);
++        HSD_JObjSetScale(fp->x20A0_accessory, &scale);
++        lb_8000C2F8(
++            fp->x20A0_accessory,
++            fp->parts[ftParts_GetBoneIndex(fp, FtPart_RThumbNb)].joint);
++    }
++}
+ 
+ void ftKb_MsSpecialNStart_Anim(HSD_GObj* gobj)
+ {
+@@ -1282,9 +1499,6 @@ void ftKb_MsSpecialAirNEnd_Coll(Fighter_GObj* gobj)
+     }
+ }
+ 
+-extern f32 ftKb_Init_804D9570;
+-extern f32 ftKb_Init_804D9574;
+-
+ void ftKb_SpecialNPe_8010BF90(Fighter_GObj* gobj)
+ {
+     Fighter* fp = GET_FIGHTER(gobj);
+@@ -1313,17 +1527,18 @@ void ftKb_SpecialNPe_8010C06C(Fighter_GObj* gobj)
+     Fighter* fp = GET_FIGHTER(gobj);
+     s32 msid;
+     PAD_STACK(16);
+-    if (fp->cmd_vars[0] == 0) {
+-        msid = (fp->fv.kb.hat.kind == FTKIND_MARS) ? ftKb_MS_MsSpecialNEnd0
+-                                                   : ftKb_MS_FeSpecialNEnd0;
++    if (((Fighter*) gobj->user_data)->cmd_vars[0] == 0) {
++        msid = (((Fighter*) gobj->user_data)->fv.kb.hat.kind == FTKIND_MARS)
++                   ? ftKb_MS_MsSpecialNEnd0
++                   : ftKb_MS_FeSpecialNEnd0;
+     } else {
+-        msid = (fp->fv.kb.hat.kind == FTKIND_MARS)
++        msid = (((Fighter*) gobj->user_data)->fv.kb.hat.kind == FTKIND_MARS)
+                    ? ftKb_MS_MsSpecialNEnd0 + 1
+                    : ftKb_MS_FeSpecialNEnd0 + 1;
+     }
+     ftCommon_8007D7FC(fp);
+-    Fighter_ChangeMotionState(gobj, msid, 0x0C4C708E, fp->cur_anim_frame, 1.0F,
+-                              0.0F, NULL);
++    Fighter_ChangeMotionState(gobj, msid, 0x0C4C708E, fp->cur_anim_frame,
++                              ftKb_Init_804D9574, ftKb_Init_804D9570, NULL);
+     if (fp->x2219_b0 == true) {
+         fp->pre_hitlag_cb = efLib_PauseAll;
+         fp->post_hitlag_cb = efLib_ResumeAll;
+@@ -1741,7 +1956,72 @@ void fn_8010CD88(HSD_GObj* gobj)
+     ftKb_SpecialNGw_8010CD44(gobj);
+ }
+ 
+-/// fn_8010CE5C: not yet matching
++void fn_8010CE5C(Fighter_GObj* gobj)
++{
++    Vec3 vec0;
++    Vec3 vec1;
++
++    {
++        u8 _[4] = { 0 };
++        {
++            int sausageCount[6];
++            u8 _2[4] = { 0 };
++            {
++                Fighter* fp;
++                {
++                    u8 _3[8] = { 0 };
++                    Fighter* fp2 = GET_FIGHTER(gobj);
++                    ftKb_DatAttrs* da = fp2->dat_attrs;
++                    if (fp2->cmd_vars[0] != 0) {
++                        int var_r28;
++                        fp2->cmd_vars[0] = var_r28 = 0;
++
++                        if ((float) fp2->mv.kb.specialn_gw.maxSausage <
++                            da->specialn_gw_max_sausages_per_use)
++                        {
++                            fp2->mv.kb.specialn_gw.maxSausage++;
++
++                            vec1.x = ftKb_Init_804D9590;
++                            vec1.y = ftKb_Init_804D9594;
++                            vec1.z = ftKb_Init_804D9598;
++
++                            lb_8000B1CC(fp2->parts[ftParts_GetBoneIndex(
++                                                       fp2, FtPart_LThumbNb)]
++                                            .joint,
++                                        &vec1, &vec0);
++
++                            {
++                                int i;
++                                int* pSausage;
++                                fp = gobj->user_data;
++                                pSausage = sausageCount;
++                                for (i = 5, i -= 5; i < 5; i++) {
++                                    if (i != fp->fv.kb.xD4 &&
++                                        i != fp->fv.kb.xD8)
++                                    {
++                                        *pSausage++ = i;
++                                        var_r28++;
++                                    }
++                                }
++                                {
++                                    int temp_r5 =
++                                        sausageCount[HSD_Randi(var_r28)];
++                                    int var_r6;
++                                    fp->fv.kb.xD8 = fp->fv.kb.xD4;
++                                    var_r6 = temp_r5;
++                                    fp->fv.kb.xD4 = temp_r5;
++                                    it_802C837C(gobj, &vec0, 0x9B, var_r6,
++                                                fp2->facing_dir);
++                                }
++                            }
++                        }
++                        fp2->accessory4_cb = NULL;
++                    }
++                }
++            }
++        }
++    }
++}
+ 
+ void fn_8010CFB0(Fighter_GObj* gobj)
+ {
+diff --git a/src/melee/ft/fighter.h b/src/melee/ft/fighter.h
+index 41b35b9b6b..1482b7ff5c 100644
+--- a/src/melee/ft/fighter.h
++++ b/src/melee/ft/fighter.h
+@@ -13,11 +13,16 @@
+ #include <baselib/objalloc.h>
+ 
+ extern struct Fighter_804D64FC_t {
+-    u8** cmdscripts;
+-    u8 pad_x4[8];
+-    UNK_T* xC;
+-    u8 pad_x10[0x10];
+-    float* x20;
++    u8** cmdscripts;   ///< +00 per-character command script arrays
++    void** x4;         ///< +04 ground attack tables (per character)
++    void** x8;         ///< +08 air attack tables (per character)
++    UNK_T* xC;         ///< +0C ranged/projectile attack tables
++    void** x10;        ///< +10 smash attack tables (per character)
++    void** x14;        ///< +14 special action tables (per character)
++    void** x18;        ///< +18 weapon attack tables (per character)
++    void** x1C;        ///< +1C edge guard tables (per character)
++    float* x20;        ///< +20 distance thresholds (per character)
++    void* x24;         ///< +24 weapon reach bonus table
+ }* Fighter_804D64FC;
+ 
+ struct plAllocInfo;
+diff --git a/src/melee/ft/ft_0C31.h b/src/melee/ft/ft_0C31.h
+index dcc4372003..0f54d54f2b 100644
+--- a/src/melee/ft/ft_0C31.h
++++ b/src/melee/ft/ft_0C31.h
+@@ -57,6 +57,8 @@
+                                    lbColl_80008D30_arg1* arg3, f32 farg0);
+ /* 0C7C60 */ void ftCo_800C7C60(Fighter_GObj* gobj, int damage_amount);
+ /* 0C7CA0 */ bool ftCo_800C7CA0(Fighter_GObj* gobj);
++/* 0C7DC4 */ void fn_800C7DC4(HSD_GObj* gobj, s32 motion_state, Vec3* normal,
++                               Vec3* offset);
+ /* 0C7FC8 */ void ftCo_DownReflect_Anim(Fighter_GObj* gobj);
+ /* 0C8004 */ void ftCo_DownReflect_IASA(Fighter_GObj* gobj);
+ /* 0C8008 */ void ftCo_DownReflect_Phys(Fighter_GObj* gobj);
+diff --git a/src/melee/ft/ftcpuattack.c b/src/melee/ft/ftcpuattack.c
+index ed6154e681..c69b090eb3 100644
+--- a/src/melee/ft/ftcpuattack.c
++++ b/src/melee/ft/ftcpuattack.c
+@@ -22,6 +22,7 @@
+ #include <melee/mp/mpisland.h>
+ #include <melee/mp/mplib.h>
+ #include <melee/mp/types.h>
++#include "ft/ftlib.h"
+ 
+ /// #ftCo_800B4AB0
+ 
+@@ -714,7 +715,180 @@ bool ftCo_800B89CC(Fighter* fp)
+     return true;
+ }
+ 
+-/// #ftCo_800B8A9C
++bool ftCo_800B8A9C(Fighter* fp)
++{
++    struct Fighter_x1A88_t* cpu = &fp->x1A88;
++    Fighter* target;
++    Item* item;
++    float weapon_reach;
++    int result;
++    int var_r0;
++    Vec3 sp1C;
++    Vec3 sp28;
++    int sp34;
++    u32 sp38;
++
++    if (!cpu->xF9_b2) {
++        return false;
++    }
++    target = cpu->x44;
++    cpu->xEC = 0;
++    cpu->xC8 = 0;
++    if (target == NULL || fp->motion_id == ftCo_MS_Pass ||
++        ftCo_800A1C44(target) || ftCo_800B885C(fp) || ftCo_800A1CA8(fp))
++    {
++        cpu->xA4 = 0;
++        return false;
++    }
++    {
++        Fighter* target2 = cpu->x44;
++        if (target2->motion_id >= ftCo_MS_Catch &&
++            target2->motion_id <= ftCo_MS_EscapeAir)
++        {
++            if (cpu->xEC < 8U) {
++                cpu->xCC_array[cpu->xEC] = 0x28;
++                cpu->xEC++;
++            }
++            if (cpu->xEC < 8U) {
++                cpu->xCC_array[cpu->xEC] = 0x29;
++                cpu->xEC++;
++            }
++        } else if (target2->x34_scale.y > fp->x34_scale.y) {
++            if (cpu->xEC < 8U) {
++                cpu->xCC_array[cpu->xEC] = 0x28;
++                cpu->xEC++;
++            }
++            if (cpu->xEC < 8U) {
++                cpu->xCC_array[cpu->xEC] = 0x29;
++                cpu->xEC++;
++            }
++            if (fp->kind == FTKIND_KIRBY && cpu->xEC < 8U) {
++                cpu->xCC_array[cpu->xEC] = 0x11;
++                cpu->xEC++;
++            }
++        }
++    }
++    ftCo_800B77E8(fp);
++    if (fp->ground_or_air == GA_Air) {
++        if (ftCo_800B89CC(fp)) {
++            result = ftCo_800B4AB0(fp, target,
++                                   ((void**)Fighter_804D64FC->x8)[fp->kind]);
++            if (result != 0) {
++                cpu->xA4 = result;
++                return true;
++            }
++        }
++        goto done;
++    }
++    if (ftCo_800A3134(target) || ftCo_800A3200(target)) {
++        if (cpu->xC8 < 8U) {
++            cpu->xA8_array[cpu->xC8] = 0xa;
++            cpu->xC8++;
++        }
++        if (cpu->xC8 < 8U) {
++            cpu->xA8_array[cpu->xC8] = 0xe;
++            cpu->xC8++;
++        }
++        result = ftCo_800B4AB0(fp, target,
++                               ((void**)Fighter_804D64FC->x4)[fp->kind]);
++        if (result != 0) {
++            cpu->xA4 = result;
++            return true;
++        }
++        goto done;
++    }
++    if (fp->item_gobj != NULL && ftCo_800A59E4(GET_ITEM(fp->item_gobj))) {
++        item = GET_ITEM(fp->item_gobj);
++        if (!ftCo_800A59E4(item)) {
++            weapon_reach = 0.0f;
++        } else {
++            switch (item->kind) {
++            case It_Kind_Harisen:
++                weapon_reach = ((float*)Fighter_804D64FC->x24)[0];
++                break;
++            case It_Kind_LipStick:
++                weapon_reach = ((float*)Fighter_804D64FC->x24)[1];
++                break;
++            case It_Kind_StarRod:
++                weapon_reach = ((float*)Fighter_804D64FC->x24)[2];
++                break;
++            case It_Kind_Sword:
++                weapon_reach = ((float*)Fighter_804D64FC->x24)[3];
++                break;
++            case It_Kind_Bat:
++                weapon_reach = ((float*)Fighter_804D64FC->x24)[4];
++                break;
++            case It_Kind_Parasol:
++                weapon_reach = ((float*)Fighter_804D64FC->x24)[5];
++                break;
++            default:
++                weapon_reach = 0.0f;
++                break;
++            }
++        }
++        result = ftCo_800B52AC(fp, target,
++                               ((void**)Fighter_804D64FC->x18)[fp->kind],
++                               weapon_reach);
++        if (result != 0) {
++            cpu->xA4 = result;
++            return true;
++        }
++    }
++    if (cpu->level > 5 && ftCo_800B9F6C(target)) {
++        result = ftCo_800B4AB0(fp, target,
++                               ((void**)Fighter_804D64FC->x10)[fp->kind]);
++        if (result != 0) {
++            cpu->xA4 = result;
++            return true;
++        }
++    }
++    {
++        Fighter* target3 = cpu->x44;
++        if (fp->item_gobj != NULL) {
++            var_r0 = 0;
++        } else if (ftCo_800A3200(target3)) {
++            var_r0 = 0;
++        } else {
++            if (ftCo_800A0FB0(&sp1C, &sp34, &sp38, &sp28, -1, -1, -1,
++                              target3->cur_pos.x,
++                              5.0f + target3->cur_pos.y,
++                              target3->cur_pos.x,
++                              target3->cur_pos.y - 1000.0f,
++                              0.0f) != 0)
++            {
++                var_r0 = 0;
++            } else {
++                var_r0 = 1;
++            }
++        }
++    }
++    if (var_r0 != 0) {
++        result = ftCo_800B4AB0(fp, target,
++                               ((void**)Fighter_804D64FC->x1C)[fp->kind]);
++        if (result != 0) {
++            cpu->xA4 = result;
++            cpu->xF8_b7 = 1;
++            return true;
++        }
++    }
++    result = ftCo_800B4AB0(fp, target,
++                           ((void**)Fighter_804D64FC->x4)[fp->kind]);
++    if (result != 0) {
++        cpu->xA4 = result;
++        return true;
++    }
++    if (cpu->x50 != 0) {
++        result = ftCo_800B5AB0(fp,
++                               ((void**)Fighter_804D64FC->x14)[fp->kind]);
++        if (result != 0) {
++            cpu->xA4 = result;
++            return true;
++        }
++    }
++done:
++    cpu->xA4 = 0;
++    return false;
++}
+ 
+ void ftCo_800B9020(Fighter* fp)
+ {
+@@ -1484,7 +1658,123 @@ bool ftCo_800BB104(Fighter* fp, Fighter* arg1, Vec3* arg2, f32 arg3)
+     return false;
+ }
+ 
+-/// #ftCo_800BB220
++int ftCo_800BB220(Fighter* fp, Item* ip, Vec3* arg2, f32 arg3)
++{
++    Vec3 dst;
++    int i;
++    s32 count;
++    HitCapsule* hit;
++    HitCapsuleState state;
++    bool result;
++    struct Fighter_x1A88_t* temp_r31;
++
++    if (ip->owner == fp->gobj) {
++        return 0;
++    }
++    if (ftLib_80086960(ip->owner) &&
++        ftCo_IsAlly(fp, GET_FIGHTER(ip->owner)))
++    {
++        return 0;
++    }
++    if (ip->kind == It_Kind_Unk4 || ip->kind == It_Kind_Star) {
++        result = true;
++    } else {
++        result = ftCo_800A5980((Fighter*) ip);
++    }
++    if (result) {
++        return 0;
++    }
++
++    temp_r31 = &fp->x1A88;
++    if (fp->x1A88.level < 3) {
++        count = (s32) (20.0f * HSD_Randf()) + 10;
++    } else if (temp_r31->level < 6) {
++        count = (s32) (10.0f * HSD_Randf()) + 5;
++    } else if (temp_r31->level < 9) {
++        count = (s32) (5.0f * HSD_Randf()) + 3;
++    } else {
++        count = 1;
++    }
++
++    dst.x = fp->pos_delta.x * count + arg2->x;
++    dst.y = fp->pos_delta.y * count + arg2->y;
++    dst.z = fp->pos_delta.z * count + arg2->z;
++
++    if (fp->kind == FTKIND_NESS && temp_r31->level > 3) {
++        if (count < 21) {
++            Vec3 sp94;
++            Vec3 spAC;
++            Vec3 spB8;
++            for (i = 0; i < 4; i++) {
++                state = ip->x5D4_hitboxes[i].hit.state;
++                hit = &ip->x5D4_hitboxes[i].hit;
++                if (state != HitCapsule_Disabled &&
++                    state != HitCapsule_Enabled && !hit->x43_b2 &&
++                    hit->element != 0xB && !lbColl_8000ACFC(fp, hit))
++                {
++                    sp94.x = (hit->x4C.x - hit->x58.x) * count + hit->x4C.x;
++                    sp94.y = (hit->x4C.y - hit->x58.y) * count + hit->x4C.y;
++                    sp94.z = (hit->x4C.z - hit->x58.z) * count + hit->x4C.z;
++                    if (lbColl_80006094(&hit->x4C, &sp94, arg2, &dst, &spAC,
++                                        &spB8, hit->scale, arg3))
++                    {
++                        return 2;
++                    }
++                }
++            }
++            return 0;
++        } else {
++            Vec3 sp60;
++            Vec3 sp78;
++            Vec3 sp84;
++            for (i = 0; i < 4; i++) {
++                state = ip->x5D4_hitboxes[i].hit.state;
++                hit = &ip->x5D4_hitboxes[i].hit;
++                if (state != HitCapsule_Disabled &&
++                    state != HitCapsule_Enabled && !hit->x43_b2 &&
++                    hit->element != 0xB && !lbColl_8000ACFC(fp, hit))
++                {
++                    sp60.x = (hit->x4C.x - hit->x58.x) * count + hit->x4C.x;
++                    sp60.y = (hit->x4C.y - hit->x58.y) * count + hit->x4C.y;
++                    sp60.z = (hit->x4C.z - hit->x58.z) * count + hit->x4C.z;
++                    if (lbColl_80006094(&hit->x4C, &sp60, arg2, &dst, &sp78,
++                                        &sp84, hit->scale, arg3))
++                    {
++                        if (hit->x42_b0) {
++                            return 3;
++                        }
++                        return 2;
++                    }
++                }
++            }
++            return 0;
++        }
++    }
++
++    {
++        Vec3 sp2C;
++        Vec3 sp44;
++        Vec3 sp50;
++        for (i = 0; i < 4; i++) {
++            state = ip->x5D4_hitboxes[i].hit.state;
++            hit = &ip->x5D4_hitboxes[i].hit;
++            if (state != HitCapsule_Disabled && state != HitCapsule_Enabled &&
++                !hit->x43_b2 && hit->element != 0xB &&
++                !lbColl_8000ACFC(fp, hit))
++            {
++                sp2C.x = (hit->x4C.x - hit->x58.x) * count + hit->x4C.x;
++                sp2C.y = (hit->x4C.y - hit->x58.y) * count + hit->x4C.y;
++                sp2C.z = (hit->x4C.z - hit->x58.z) * count + hit->x4C.z;
++                if (lbColl_80006094(&hit->x4C, &sp2C, arg2, &dst, &sp44, &sp50,
++                                    hit->scale, arg3))
++                {
++                    return 2;
++                }
++            }
++        }
++    }
++    return 0;
++}
+ 
+ bool ftCo_800BB768(Fighter* fp, Fighter* arg1)
+ {
+diff --git a/src/melee/ft/ftcpuattack.h b/src/melee/ft/ftcpuattack.h
+index 5080f1bdaf..032e882574 100644
+--- a/src/melee/ft/ftcpuattack.h
++++ b/src/melee/ft/ftcpuattack.h
+@@ -8,9 +8,9 @@
+ 
+ struct ftCo_AttackEntry;
+ 
+-/* 0B4AB0 */ UNK_RET ftCo_800B4AB0(UNK_PARAMS);
+-/* 0B52AC */ UNK_RET ftCo_800B52AC(UNK_PARAMS);
+-/* 0B5AB0 */ UNK_RET ftCo_800B5AB0(UNK_PARAMS);
++/* 0B4AB0 */ int ftCo_800B4AB0(Fighter*, Fighter*, void*);
++/* 0B52AC */ int ftCo_800B52AC(Fighter*, Fighter*, void*, float);
++/* 0B5AB0 */ int ftCo_800B5AB0(Fighter*, void*);
+ /* 0B6208 */ int ftCo_800B6208(struct ftCo_AttackEntry*);
+ /* 0B630C */ bool ftCo_800B630C(Fighter*);
+ /* 0B63D8 */ void ftCo_800B63D8(Fighter*);
+diff --git a/src/melee/ft/types.h b/src/melee/ft/types.h
+index 50e8560130..d000dba269 100644
+--- a/src/melee/ft/types.h
++++ b/src/melee/ft/types.h
+@@ -1038,10 +1038,11 @@ struct Fighter_x1A88_t {
+     /*  +94 */ int x94;
+     /*  +98 */ Vec3 x98;
+     /*  +A4 */ int xA4;
+-    /*  +A8 */ u8 pad_xA8[0xC8 - 0xA8];
+-    /*  +C8 */ u8 xC8;
+-    /*  +C9 */ u8 pad_xC9[0xEC - 0xC9];
+-    /*  +EC */ u8 xEC;
++    /*  +A8 */ s32 xA8_array[8]; ///< defend move queue (up to 8 entries, count in xC8)
++    /*  +C8 */ u8 xC8;           ///< defend move queue count
++    /*  +C9 */ u8 pad_xC9[0xCC - 0xC9];
++    /*  +CC */ s32 xCC_array[8]; ///< attack move queue (up to 8 entries, count in xEC)
++    /*  +EC */ u8 xEC;           ///< attack move queue count
+     /*  +ED */ u8 pad_xED[0xF0 - 0xED];
+     /*  +F0 */ Fighter* xF0;
+     /*  +F4 */ Item* xF4;
+diff --git a/src/melee/gm/gm_1601.c b/src/melee/gm/gm_1601.c
+index 2227dbb24d..b96188119f 100644
+--- a/src/melee/gm/gm_1601.c
++++ b/src/melee/gm/gm_1601.c
+@@ -1950,7 +1950,40 @@ bool gm_80164840(u8 ckind)
+     return false;
+ }
+ 
+-/// #gm_80164910
++void gm_80164910(int arg0)
++{
++    u16* char_unlock_mask;
++    u8 internal_id;
++    s32 i;
++    u8 unlock_idx;
++    u8 notify_val;
++
++    char_unlock_mask = gmMainLib_8015ED8C();
++    internal_id = lbl_803B78A4[(u8) arg0];
++
++    for (i = 0; i < NUM_UNLOCKABLE_CHARACTERS; i++) {
++        if ((s32) internal_id == (s32) lbl_803B78C8[i].ckind) {
++            unlock_idx = lbl_803B78C8[i].idx;
++            goto found_char;
++        }
++    }
++    unlock_idx = NUM_UNLOCKABLE_CHARACTERS;
++
++found_char:
++    if (unlock_idx != NUM_UNLOCKABLE_CHARACTERS) {
++        for (i = 0; i < NUM_UNLOCKABLE_CHARACTERS; i++) {
++            if ((s32) unlock_idx == (s32) lbl_803B78C8[i].idx) {
++                notify_val = lbl_803B78C8[i].x2;
++                goto found_notify;
++            }
++        }
++        notify_val = 0x42;
++
++    found_notify:
++        gmMainLib_8015D818(notify_val);
++        *char_unlock_mask |= (1LL << (s32) unlock_idx);
++    }
++}
+ 
+ s32 gm_80164A0C(u8 arg0)
+ {
+diff --git a/src/melee/gm/gmcamera.c b/src/melee/gm/gmcamera.c
+index 50daea0f54..2f4b504fa9 100644
+--- a/src/melee/gm/gmcamera.c
++++ b/src/melee/gm/gmcamera.c
+@@ -8,9 +8,15 @@
+ 
+ #include "baselib/forward.h"
+ 
++#include "baselib/archive.h"
++#include "baselib/gobj.h"
++#include "baselib/gobjgxlink.h"
++#include "baselib/gobjobject.h"
++#include "baselib/gobjproc.h"
+ #include "baselib/jobj.h"
+ #include "baselib/sislib.h"
+ #include "cm/cmsnap.h"
++#include "gm/gm_1601.h"
+ #include "gm/gm_16AE.h"
+ #include "gm/gm_1A36.h"
+ #include "gm/gm_1A45.h"
+@@ -18,10 +24,12 @@
+ #include "gm/types.h"
+ #include "if/ifall.h"
+ #include "lb/lb_00F9.h"
++#include "lb/lbarchive.h"
+ #include "lb/lbaudio_ax.h"
+ #include "lb/lbcardnew.h"
+ #include "lb/lbsnap.h"
+ #include "mn/mnmain.h"
++#include "sc/types.h"
+ 
+ /// void* HSD_SisLib_803A5ACC(u8, int, float, float, float); /* extern */
+ /// void HSD_SisLib_803A6368(void*, u32);                    /* extern */
+@@ -45,6 +53,12 @@ typedef struct _SisLibUnkStruct {
+ /// @todo #HSD_SisLib_804D1124 is of type #SIS.
+ /// extern SisLibUnkStruct HSD_SisLib_804D1124;
+ 
++f32 gmCamera_803DA630[12] = {
++    0.6f, 0.6f, 40.0f,  416.0f,
++    0.6f, 0.6f, 340.0f, 416.0f,
++    0.6f, 0.6f, 40.0f,  44.0f,
++};
++
+ gmCameraUnkFuncTable gmCamera_803DA6B4[9] = {
+     { { 1, 0, 0 }, gmCamera_801A26C0, gmCamera_801A2798 },
+     { { 0, 0, 4 }, gmCamera_801A2800, gmCamera_801A28AC },
+@@ -306,7 +320,55 @@ void gmCamera_801A28AC(void)
+     }
+ }
+ 
+-/// #gmCamera_801A292C
++void gmCamera_801A292C(void)
++{
++    HSD_Text* text;
++    s32 i;
++    HSD_Text** texts = &gmCamera_80479BC8.gcus.x48[0];
++    gmCameraUnkStruct2* p;
++    s32 x44;
++
++    if (gmCamera_80479BC8.gcus.x48[0] != NULL) {
++        i = 0;
++        do {
++            HSD_SisLib_803A5CC4(gmCamera_80479BC8.gcus.x48[i]);
++            i++;
++            gmCamera_80479BC8.gcus.x48[i - 1] = NULL;
++        } while (i < 3);
++    }
++    i = 0;
++    p = (gmCameraUnkStruct2*) &gmCamera_80479BC8;
++    do {
++        p->x24 = lbSnap_8001D40C(i);
++        if ((s32) p->x24 == 0) {
++            p->x28 = lbSnap_8001D3B0(i);
++            p->x2C = lbSnap_8001D3CC(i);
++        }
++        i++;
++        p = (gmCameraUnkStruct2*) ((u8*) p + 0x10);
++    } while (i < 2);
++    text = HSD_SisLib_803A5ACC(3, (s32) gmCamera_80479BC8.gcus.x54,
++                               gmCamera_803DA630[10], gmCamera_803DA630[11],
++                               0.0f, 640.0f, 32.0f);
++    text->font_size.x = gmCamera_803DA630[8];
++    text->font_size.y = gmCamera_803DA630[9];
++    text->default_kerning = 1;
++    HSD_SisLib_803A6530(3, 3, 4);
++    gmCamera_801A2224((u8*) text, gmCamera_80479BC8.gcus.x20);
++    HSD_SisLib_803A660C(3, 3, 5);
++    HSD_SisLib_803A6368(text, 3);
++    texts[2] = text;
++    texts[0] = gmCamera_801A2334(0, gmCamera_803DA630[2], gmCamera_803DA630[3],
++                                 gmCamera_803DA630[0], gmCamera_803DA630[1]);
++    gmCamera_80479BC8.gcus.x48[1] =
++        gmCamera_801A2334(1, gmCamera_803DA630[6], gmCamera_803DA630[7],
++                          gmCamera_803DA630[4], gmCamera_803DA630[5]);
++    x44 = gmCamera_80479BC8.gcus.x30;
++    if (x44 >= (s32) gmCamera_80479BC8.gcus.x40) {
++        x44 = gmCamera_80479BC8.gcus.x40;
++    }
++    gmCamera_80479BC8.gcus.x44 = x44;
++}
+ 
+ void gmCamera_801A2AAC(void)
+ {
+@@ -349,9 +411,87 @@ void gmCamera_801A2BB0(void)
+     }
+ }
+ 
+-/// #gmCamera_801A2BF0
++void gmCamera_801A2BF0(void)
++{
++    HSD_JObj* jobj_a;
++    HSD_JObj* jobj_b;
++    f32 var_f1;
++    f32 var_f31;
++    gmCameraUnkStruct* gcus = &gmCamera_80479BC8.gcus;
++
++    lb_80011E24(gcus->x8, &jobj_a, 9, -1);
++    if ((s32) gcus->x44 == 1) {
++        var_f1 = 1.0f;
++    } else {
++        var_f1 = 2.0f;
++    }
++    HSD_JObjReqAnimAll(jobj_a, var_f1);
++    HSD_JObjAnimAll(jobj_a);
++    HSD_ForeachAnim(jobj_a, JOBJ_TYPE, TOBJ_MASK, HSD_AObjStopAnim,
++                    AOBJ_ARG_AOV, 0, 0);
++    gcus->x18 = 0;
++    lb_80011E24(gcus->x8, &jobj_b, 0xC, -1);
++    if ((s32) gcus->x18 != 0) {
++        var_f31 = 5.0f;
++    } else {
++        var_f31 = -5.0f;
++    }
++    HSD_JObjSetTranslateX(jobj_b, var_f31);
++}
++
++void gmCamera_801A2D44(void)
++{
++    HSD_JObj* jobj;
++    HSD_JObj* jobj_b;
++    f32 var_f31;
++    gmCameraUnkStruct* gcus = &gmCamera_80479BC8.gcus;
++    PAD_STACK(24);
+ 
+-/// #gmCamera_801A2D44
++    if ((lbSnap_8001D338(0) != 0) || (lbSnap_8001D338(1) != 0)) {
++        gmCamera_801A3048(2);
++        return;
++    }
++    if (HSD_PadCopyStatus[3].trigger & 0x1100) {
++        if ((s32) gcus->x18 == 0) {
++            lbAudioAx_80024030(1);
++            gmCamera_801A3048(7);
++            return;
++        }
++        lbAudioAx_80024030(0);
++        gmCamera_801A3048(0);
++        return;
++    }
++    if (HSD_PadCopyStatus[3].trigger & 0x200) {
++        lbAudioAx_80024030(0);
++        gmCamera_801A3048(0);
++        return;
++    }
++    if ((HSD_PadCopyStatus[3].trigger & 0x40001) &&
++        (s32) gcus->x18 != 0)
++    {
++        lbAudioAx_80024030(2);
++        gcus->x18 = 0;
++        lb_80011E24(gcus->x8, &jobj, 0xC, -1);
++        if ((s32) gcus->x18 != 0) {
++            var_f31 = 5.0f;
++        } else {
++            var_f31 = -5.0f;
++        }
++        HSD_JObjSetTranslateX(jobj, var_f31);
++    } else if ((HSD_PadCopyStatus[3].trigger & 0x80002) &&
++               (s32) gcus->x18 != 1)
++    {
++        lbAudioAx_80024030(2);
++        gcus->x18 = 1;
++        lb_80011E24(gcus->x8, &jobj_b, 0xC, -1);
++        if ((s32) gcus->x18 != 0) {
++            var_f31 = 5.0f;
++        } else {
++            var_f31 = -5.0f;
++        }
++        HSD_JObjSetTranslateX(jobj_b, var_f31);
++    }
++}
+ 
+ void gmCamera_801A2FBC(void)
+ {
+@@ -417,16 +557,96 @@ void fn_801A31D8(HSD_GObj* gobj)
+     HSD_JObjAnimAll(gobj->hsd_obj);
+ }
+ 
+-/// #gmCamera_801A31FC
+-
+-static void gmCamera_801A25C8_no_inline(void)
++void gmCamera_801A31FC(void)
+ {
+-    gmCamera_801A25C8();
++    HSD_GObj* gobj_a;
++    HSD_GObj* gobj_b;
++    HSD_JObj* jobj_b;
++    HSD_Joint** joint_a;
++    DynamicModelDesc* mdl_b;
++    gmCameraUnkStruct* gcus = &gmCamera_80479BC8.gcus;
++
++    cmSnap_800316B4();
++    gcus->x14 = 1;
++    gcus->xC = 0;
++    if (gmCamera_803DA6B4[gcus->xC].x4 != NULL) {
++        gmCamera_803DA6B4[gcus->xC].x4();
++    }
++    gcus->ifvscam = lbArchive_LoadArchive("IfVsCam");
++    joint_a = HSD_ArchiveGetPublicAddress(gcus->ifvscam, "IfCamera");
++    gobj_a = GObj_Create(0xE, 0x10, 0);
++    gcus->x4 = HSD_JObjLoadJoint(*joint_a);
++    HSD_GObjObject_80390A70(gobj_a, HSD_GObj_804D7849, gcus->x4);
++    GObj_SetupGXLink(gobj_a, HSD_GObj_JObjCallback, 0xB, 0);
++    mdl_b = HSD_ArchiveGetPublicAddress(gcus->ifvscam, "IfCamera_Top_model_set");
++    gobj_b = GObj_Create(0xE, 0x10, 0);
++    jobj_b = HSD_JObjLoadJoint(mdl_b->joint);
++    gcus->x8 = jobj_b;
++    HSD_GObjObject_80390A70(gobj_b, HSD_GObj_804D7849, jobj_b);
++    GObj_SetupGXLink(gobj_b, HSD_GObj_JObjCallback, 0xB, 0);
++    gm_8016895C(jobj_b, mdl_b, 0);
++    HSD_JObjReqAnimAll(jobj_b, 0.0f);
++    HSD_JObjAnimAll(jobj_b);
++    HSD_JObjSetFlagsAll(jobj_b, 0x10);
++    HSD_GObj_SetupProc(gobj_b, fn_801A31D8, 0);
++    gcus->x20 = 2;
++    HSD_SisLib_803A62A0(3, "SdVsCam", "SIS_VsCameraData");
++    gcus->x54 = HSD_SisLib_803A611C(3, NULL, 9, 0xD, 0, 0xE, 0, 0xB);
++    gcus->x48[0] = NULL;
++    gcus->x48[1] = NULL;
++    gcus->x48[2] = NULL;
+ }
+ 
+-static void gmCamera_801A253C_no_inline(s32* arg0, s32* arg1)
++void gmCamera_801A33BC(void)
+ {
+-    gmCamera_801A253C(arg0, arg1);
++    HSD_Text* text;
++    s32 sp10;
++    s32 spC;
++
++    gmCamera_801A25C8();
++    gmCamera_80479C20.slot_a = gmCamera_801A2334(0, gmCamera_803DA758[2],
++                                                 gmCamera_803DA758[3],
++                                                 gmCamera_803DA758[0],
++                                                 gmCamera_803DA758[1]);
++    gmCamera_80479C20.slot_b = gmCamera_801A2334(1, gmCamera_803DA758[6],
++                                                 gmCamera_803DA758[7],
++                                                 gmCamera_803DA758[4],
++                                                 gmCamera_803DA758[5]);
++    gmCamera_801A253C(&sp10, &spC);
++    text = HSD_SisLib_803A5ACC(3, gmCamera_801A2640(),
++                               gmCamera_803DA758[10], gmCamera_803DA758[11],
++                               0.0f, 914.2857f, 64.0f);
++    gmCamera_80479C20.bottom_text = text;
++    text->default_alignment = 1;
++    text->default_kerning = 1;
++    text->default_fitting = 1;
++    {
++        f32 fy = gmCamera_803DA758[9];
++        f32 fx = gmCamera_803DA758[8];
++        text->font_size.x = fx;
++        text->font_size.y = fy;
++    }
++    HSD_SisLib_803A6368(text, 0x15);
++    if (sp10 == 2) {
++        goto label_13;
++    }
++    if (sp10 >= 2) {
++        goto label_14;
++    }
++    if (sp10 >= 0) {
++        goto label_11;
++    }
++    goto label_14;
++label_11:
++    HSD_SisLib_803A6530(3, 0x15, 0x11);
++    gmCamera_801A2224((u8*) spC, spC);
++    HSD_SisLib_803A660C(3, 0x15, 0x12);
++    return;
++label_13:
++    HSD_SisLib_803A6530(3, 0x15, 0x13);
++    return;
++label_14:
++    HSD_SisLib_803A6530(3, 0x15, 0x14);
+ }
+ 
+ void gmCamera_801A34FC_OnFrame(void)
+diff --git a/src/melee/gm/gmcamera.static.h b/src/melee/gm/gmcamera.static.h
+index 7db078e53d..313e01f67b 100644
+--- a/src/melee/gm/gmcamera.static.h
++++ b/src/melee/gm/gmcamera.static.h
+@@ -4,6 +4,10 @@
+ #include "gm/types.h"
+ 
+ static struct CameraVsData gmCamera_80479C20;
+-static f32 gmCamera_803DA758[12];
++static f32 gmCamera_803DA758[12] = {
++    0.7f, 0.7f,  168.0f, 160.0f,
++    0.7f, 0.7f,  168.0f, 192.0f,
++    0.7f, 0.7f,  0.0f,   256.0f,
++};
+ 
+ #endif
+diff --git a/src/melee/gr/grfourside.c b/src/melee/gr/grfourside.c
+index 6263604b5b..f3ed60bde4 100644
+--- a/src/melee/gr/grfourside.c
++++ b/src/melee/gr/grfourside.c
+@@ -7,6 +7,7 @@
+ 
+ #include "forward.h"
+ 
++#include "cm/camera.h"
+ #include "gr/granime.h"
+ #include "gr/grdisplay.h"
+ #include "gr/grlib.h"
+@@ -19,6 +20,8 @@
+ #include "lb/lb_00F9.h"
+ #include "mp/mplib.h"
+ 
++#include <MSL/trigf.h>
++
+ #include <dolphin/mtx.h>
+ #include <baselib/gobj.h>
+ #include <baselib/gobjgxlink.h>
+@@ -277,7 +280,6 @@ void grFourside_801F3274(Ground_GObj* gobj)
+     float temp_fVar1;
+     // Ground_801C2ED0(jobj,gp->map_id);
+     // grAnime_801C7FF8(gobj,0,7,0,0.0f,0.0f);
+-    PAD_STACK(24);
+     switch (gp->gv.foursideCrane.x0) {
+     case 0:
+         if (gp->gv.foursideCrane.x4 <= 0) {
+@@ -438,7 +440,106 @@ bool grFourside_801F388C(Ground_GObj* arg)
+     return false;
+ }
+ 
+-/// #grFourside_801F3894
++void grFourside_801F3894(Ground_GObj* arg0)
++{
++    Ground* gp = arg0->user_data;
++    HSD_JObj* jobj = arg0->hsd_obj;
++    u8 state = gp->gv.foursideUfo.x0;
++    u8 prev_building = gp->gv.foursideUfo.x1;
++    switch (state) {
++    case 0: {
++        s32 timer = gp->gv.foursideUfo.x4;
++        if (timer <= 0) {
++            s16 prob = 0;
++            if (gp->gv.foursideUfo.x8 != 0) {
++                prob = grFs_804D69D8->x46;
++            }
++            if ((s16) gp->gv.foursideUfo.x2 >= (s16) grFs_804D69D8->ufo_challenge) {
++                prob = grFs_804D69D8->x48;
++            }
++            if (prob != 0 && HSD_Randi(prob) == 0) {
++                s32 building;
++                gp->gv.foursideUfo.x2 = 0;
++                do {
++                    building = HSD_Randi(3);
++                } while (prev_building == building);
++                if (building == 2 || grFourside_801F3F10() == 0) {
++                    gp->gv.foursideUfo.x1 = building;
++                    grAnime_801C8138(arg0, gp->map_id, gp->gv.foursideUfo.x1 * 4);
++                    mpLib_80055E9C(4);
++                    mpLib_80057424(4);
++                    HSD_JObjClearFlagsAll(jobj, 0x10);
++                    mpJointListAdd(4);
++                    gp->gv.foursideUfo.xC = Camera_80029020();
++                    gp->gv.foursideUfo.x3 = 0;
++                    gp->gv.foursideUfo.x0 = 1;
++                }
++            } else {
++                gp->gv.foursideUfo.x4 = grFs_804D69D8->ufo_wait;
++                gp->gv.foursideUfo.x2 += 1;
++            }
++        } else {
++            gp->gv.foursideUfo.x4 = timer - 1;
++        }
++        break;
++    }
++    case 1: {
++        if (grAnime_801C83D0(arg0, 0, 7) != 0) {
++            s32 rand_add = grFs_804D69D8->ufo_stay_time_add;
++            s32 var_r6;
++            if (rand_add != 0) {
++                var_r6 = HSD_Randi(rand_add);
++            } else {
++                var_r6 = 0;
++            }
++            gp->gv.foursideUfo.x4 = grFs_804D69D8->ufo_stay_time + var_r6;
++            grAnime_801C8138(arg0, gp->map_id, (prev_building * 4) + 1);
++            Camera_800290D4(gp->gv.foursideUfo.xC);
++            gp->gv.foursideUfo.xC = 0;
++            gp->gv.foursideUfo.x0 = 2;
++        }
++        grFourside_801F3B70(arg0);
++        if (gp->gv.foursideUfo.x3 == 1) {
++            u8 building = gp->gv.foursideUfo.x1;
++            if (building == 0) {
++                Ground_801C53EC(0x704E4U);
++            } else if (building == 1) {
++                Ground_801C53EC(0x704E0U);
++            } else {
++                Ground_801C53EC(0x704E3U);
++            }
++            gp->gv.foursideUfo.x3 += 1;
++        }
++        break;
++    }
++    case 2: {
++        s32 timer = gp->gv.foursideUfo.x4;
++        if (timer <= 0) {
++            if (grAnime_801C84A4(arg0, 0, 7) != 0) {
++                grAnime_801C8138(arg0, gp->map_id, (prev_building * 4) + 2);
++                gp->gv.foursideUfo.x0 = 4;
++            }
++        } else {
++            gp->gv.foursideUfo.x4 = timer - 1;
++        }
++        break;
++    }
++    case 4: {
++        s32 timer = gp->gv.foursideUfo.x4;
++        if (timer >= 0x3C) {
++            HSD_JObjSetFlagsAll(jobj, 0x10);
++            mpLib_80057BC0(4);
++            gp->gv.foursideUfo.x4 = grFs_804D69D8->ufo_wait;
++            gp->gv.foursideUfo.x0 = 0;
++        } else {
++            gp->gv.foursideUfo.x4 = timer + 1;
++        }
++        break;
++    }
++    }
++    Ground_801C2FE0(arg0);
++    gp->gv.foursideUfo.x8 = 0;
++}
+ 
+ void grFourside_801F3B6C(Ground_GObj* arg) {}
+ 
+@@ -487,7 +588,73 @@ bool grFourside_801F3CC0(Ground_GObj* arg)
+     return false;
+ }
+ 
+-/// #grFourside_801F3CC8
++void grFourside_801F3CC8(Ground_GObj* gobj)
++{
++    Vec3 pos;
++    Ground* gp = GET_GROUND(gobj);
++    HSD_JObj* jobj = gobj->hsd_obj;
++    HSD_JObj* heli_jobj = Ground_801C3FA4(gobj, 2);
++    HSD_GObj* other;
++    Ground* other_gp;
++
++    switch (gp->gv.fourside2.x0) {
++    case 0:
++        if (gp->gv.fourside2.x4 <= 0) {
++            other = Ground_801C2BA4(5);
++            other_gp = other->user_data;
++            if (other_gp->gv.fourside2.x1 == 2 ||
++                other_gp->gv.fourside2.x0 == 0)
++            {
++                HSD_JObjClearFlagsAll(jobj, JOBJ_HIDDEN);
++                grAnime_801C8138(gobj, gp->map_id, 0);
++                gp->gv.fourside2.x1 = 0;
++                gp->gv.fourside2.x0 = 1;
++            }
++        } else {
++            gp->gv.fourside2.x4 -= 1;
++        }
++        break;
++    case 1:
++        if (gp->gv.fourside2.x1 == 0) {
++            lb_8000B1CC(heli_jobj, NULL, &pos);
++            if (pos.y <= 50.0f + Stage_GetCamBoundsTopOffset()) {
++                gp->gv.fourside2.x1 = 1;
++                Ground_801C53EC(0x704E1);
++            }
++        }
++        if (grAnime_801C83D0(gobj, 0, 7)) {
++            gp->gv.fourside2.x0 = 2;
++        }
++        break;
++    case 2:
++        if (gp->gv.fourside2.x4 <= 0) {
++            other = Ground_801C2BA4(5);
++            other_gp = other->user_data;
++            if (other_gp->gv.fourside2.x1 == 2 ||
++                other_gp->gv.fourside2.x0 == 0)
++            {
++                grAnime_801C8138(gobj, gp->map_id, 2);
++                gp->gv.fourside2.x0 = 3;
++                Ground_801C53EC(0x704E2);
++                gp->gv.fourside2.x4 = 0;
++            }
++        } else {
++            gp->gv.fourside2.x4 -= 1;
++        }
++        break;
++    case 3:
++        if (grAnime_801C83D0(gobj, 0, 7)) {
++            HSD_JObjSetFlagsAll(jobj, JOBJ_HIDDEN);
++            gp->gv.fourside2.x0 = 0;
++            gp->gv.fourside2.x4 = grFs_804D69D8->heli_wait +
++                                  (grFs_804D69D8->heli_wait_add != 0
++                                       ? HSD_Randi(grFs_804D69D8->heli_wait_add)
++                                       : 0);
++        }
++        gp->gv.fourside2.x4 += 1;
++        break;
++    }
++}
+ 
+ void grFourside_801F3F0C(Ground_GObj* arg) {}
+ 
+@@ -503,7 +670,36 @@ int grFourside_801F3F10(void)
+     return 0;
+ }
+ 
+-/// #fn_801F3F74
++void fn_801F3F74(HSD_GObj* gobj, int renderpass)
++{
++    Vec3 eye;
++    Ground* gp;
++    f32 abs_y;
++    f32 angle;
++    PAD_STACK(4);
++
++    if ((u32) renderpass == 1) {
++        gp = gobj->user_data;
++        HSD_CObjGetEyeVector(HSD_CObjGetCurrent(), &eye);
++        abs_y = eye.y;
++        if (abs_y < 0.0f) {
++            abs_y = -abs_y;
++        }
++        if (abs_y < 0.99f) {
++            angle = atan2f(-eye.x, -eye.z);
++            if (gp->gv.fourside.x0 != NULL) {
++                HSD_JObjSetRotationY(gp->gv.fourside.x0, 0.2f * angle);
++            }
++            if (gp->gv.fourside.x4 != NULL) {
++                HSD_JObjSetRotationY(gp->gv.fourside.x4, 0.4f * angle);
++            }
++            if (gp->gv.fourside.x8 != NULL) {
++                HSD_JObjSetRotationY(gp->gv.fourside.x8, 0.7f * angle);
++            }
++        }
++    }
++    grDisplay_801C5DB0(gobj, renderpass);
++}
+ 
+ DynamicsDesc* grFourside_801F41E0(enum_t arg)
+ {
+diff --git a/src/melee/gr/gricemt.c b/src/melee/gr/gricemt.c
+index 6496bc085d..a1acc0a10c 100644
+--- a/src/melee/gr/gricemt.c
++++ b/src/melee/gr/gricemt.c
+@@ -144,7 +144,6 @@ void grIceMt_801F686C(void)
+     f32 y_pos4;
+     HSD_GObj* gobj;
+     HSD_JObj* jobj;
+-    PAD_STACK(16);
+ 
+     grIm_804D69F4 = Ground_801C49F8();
+     stage_info.unk8C.b4 = true;
+@@ -172,9 +171,7 @@ void grIceMt_801F686C(void)
+             field30 = grIm_803E4068[row_idx].id;
+             break;
+         }
+-        if (row_idx >= ICEMT_FIELD_MAX) {
+-            __assert("gricemt.c", 0x258, "<ICEMT_FIELD_MAX>");
+-        }
++        HSD_ASSERTMSG(0x258, row_idx < ICEMT_FIELD_MAX, "<ICEMT_FIELD_MAX>");
+ 
+         // Second loop: find row where xAC[0], xAC[1], and field30 don't match
+         for (row_idx = 0; row_idx < ICEMT_FIELD_MAX; row_idx++) {
+@@ -192,9 +189,7 @@ void grIceMt_801F686C(void)
+             field29 = grIm_803E4068[row_idx].id;
+             break;
+         }
+-        if (row_idx >= ICEMT_FIELD_MAX) {
+-            __assert("gricemt.c", 0x261, "<ICEMT_FIELD_MAX>");
+-        }
++        HSD_ASSERTMSG(0x261, row_idx < ICEMT_FIELD_MAX, "<ICEMT_FIELD_MAX>");
+ 
+         // Third loop: find row where xAC[0], xAC[1], field30, and field29
+         // don't match
+@@ -216,9 +211,7 @@ void grIceMt_801F686C(void)
+             field28 = grIm_803E4068[row_idx].id;
+             break;
+         }
+-        if (row_idx >= ICEMT_FIELD_MAX) {
+-            __assert("gricemt.c", 0x26B, "<ICEMT_FIELD_MAX>");
+-        }
++        HSD_ASSERTMSG(0x26B, row_idx < ICEMT_FIELD_MAX, "<ICEMT_FIELD_MAX>");
+ 
+         // Calculate Y positions for the 3 topi platforms
+         y_pos = Ground_801C0498();
+@@ -522,7 +515,6 @@ bool grIceMt_801F796C(Ground_GObj* arg0)
+ {
+     Ground* gp = GET_GROUND(arg0);
+     HSD_GObj* gobj;
+-    PAD_STACK(8);
+     if (gp->gv.icemt2.xC4 != NULL) {
+         gobj = Ground_801C2BA4(gp->gv.icemt2.xC4);
+         if (gobj == NULL) {
+@@ -532,7 +524,7 @@ bool grIceMt_801F796C(Ground_GObj* arg0)
+     if (gp->gv.icemt.xCC != NULL) {
+         gobj = Ground_801C2BA4(gp->gv.icemt2.xC4);
+         if (gobj == NULL) {
+-            __assert("gricemt.c", 0x47A, "mgobj");
++            __assert("gricemt.c", 0x4A7, "mgobj");
+         }
+     }
+     //__assert("gricemt.c",0x475,"mgobj");
+@@ -655,7 +647,6 @@ void grIceMt_801F7D94(Ground_GObj* arg0)
+ {
+     Ground* gp = GET_GROUND(arg0);
+     Ground_801C2ED0(arg0->hsd_obj, gp->map_id);
+-    PAD_STACK(8);
+     grAnime_801C8138(arg0, gp->map_id, 0);
+     grAnime_801C77FC(arg0, 0, 7);
+     gp->gv.icemt2.xC8 = Ground_801C3FA4(arg0, 3);
+@@ -706,7 +697,6 @@ void grIceMt_801F7F70(Ground_GObj* arg0)
+     HSD_JObj* jobj;
+     HSD_JObj* jobj2;
+     Ground_801C2ED0(arg0->hsd_obj, gp->map_id);
+-    PAD_STACK(8);
+     grAnime_801C8138(arg0, gp->map_id, 0);
+     grAnime_801C77FC(arg0, 0, 7);
+     jobj = Ground_801C3FA4(arg0, 4);
+@@ -761,7 +751,6 @@ void grIceMt_801F8208(Ground_GObj* arg0)
+     HSD_JObj* jobj;
+     HSD_JObj* jobj2;
+     Ground_801C2ED0(arg0->hsd_obj, gp->map_id);
+-    PAD_STACK(8);
+     grAnime_801C8138(arg0, gp->map_id, 0);
+     grAnime_801C77FC(arg0, 0, 7);
+     gp->gv.icemt2.xC8 = Ground_801C3FA4(arg0, 5);
+@@ -813,7 +802,6 @@ void grIceMt_801F83EC(Ground_GObj* arg0)
+     HSD_JObj* jobj2;
+     Ground_801C0498();
+     Ground_801C2ED0(arg0->hsd_obj, gp->map_id);
+-    PAD_STACK(16);
+     grAnime_801C8138(arg0, gp->map_id, 0);
+     grAnime_801C77FC(arg0, 0, 7);
+     jobj = Ground_801C3FA4(arg0, 7);
+@@ -869,7 +857,6 @@ void grIceMt_801F865C(Ground_GObj* arg0)
+     HSD_JObj* jobj2;
+     // Ground_801C0498();
+     Ground_801C2ED0(arg0->hsd_obj, gp->map_id);
+-    PAD_STACK(8);
+     grAnime_801C8138(arg0, gp->map_id, 0);
+     grAnime_801C77FC(arg0, 0, 7);
+     // jobj = Ground_801C3FA4(arg0,7);
+@@ -924,7 +911,6 @@ void grIceMt_801F8850(Ground_GObj* arg0)
+     HSD_JObj* jobj2;
+     // Ground_801C0498();
+     Ground_801C2ED0(arg0->hsd_obj, gp->map_id);
+-    PAD_STACK(8);
+     grAnime_801C8138(arg0, gp->map_id, 0);
+     grAnime_801C77FC(arg0, 0, 7);
+     // jobj = Ground_801C3FA4(arg0,7);
+@@ -994,7 +980,6 @@ void grIceMt_801F8B10(Ground_GObj* arg0)
+     HSD_JObj* jobj;
+     double dVar3;
+     double dVar4;
+-    PAD_STACK(16);
+     dVar4 = 0.3;
+     jobj = Ground_801C3FA4(arg0, 8);
+     HSD_JObjGetTranslationY(jobj);
+@@ -1204,7 +1189,7 @@ float grIceMt_801F96E0(Ground_GObj* gobj, float y)
+     HSD_JObjAddTranslationY(jobj->hsd_obj, y);
+     jobj = Ground_801C2BA4(7);
+     if (jobj == NULL) {
+-        __assert("gricemt.c", 2635, "mgobj");
++        __assert("gricemt.c", 2639, "mgobj");
+     }
+     if (jobj->hsd_obj == NULL) {
+         __assert("gricemt.c", 2630, "jobj");
+@@ -1249,7 +1234,6 @@ void grIceMt_801F9ACC(Ground_GObj* gobj, float y, HSD_GObjEvent ev,
+     HSD_GObj* jobj;
+     double dVar3;
+     double dVar4;
+-    PAD_STACK(96);
+     dVar4 = 0.3;
+ 
+     jobj = Ground_801C2BA4(4);
+@@ -1283,7 +1267,7 @@ bool grIceMt_801FA364(void* state_, f32* out, HSD_GObjEvent cb_,
+                       Ground_GObj* gobj)
+ {
+     grIceMt_FA364_State* state = state_;
+-    s32 (*cb)(HSD_GObj*, s32*) = (s32 (*)(HSD_GObj*, s32*)) cb_;
++    s32 (*cb)(HSD_GObj*, s32*) = (s32(*)(HSD_GObj*, s32*)) cb_;
+     bool ret = true;
+     f32 result;
+     s32 next_delay;
+@@ -1340,10 +1324,9 @@ int grIceMt_801FA500(HSD_GObj* param1)
+     int iVar1 = NULL;
+     int iVar2;
+     int iVar3;
+-    PAD_STACK(8);
+     iVar3 = 0;
+     if (param1->hsd_obj == NULL) {
+-        __assert("gricemt.c", 2994, "jobj");
++        __assert("gricemt.c", 2993, "jobj");
+         iVar1 = 0;
+         //} else {
+         //	ivar1 = param1->hsd_obj
+diff --git a/src/melee/gr/grkongo.c b/src/melee/gr/grkongo.c
+index f28299b111..fa63230d15 100644
+--- a/src/melee/gr/grkongo.c
++++ b/src/melee/gr/grkongo.c
+@@ -3,7 +3,6 @@
+ #include "grkongo.static.h"
+ 
+ #include "grmaterial.h"
+-#include "placeholder.h"
+ #include "types.h"
+ 
+ #include "ef/efsync.h"
+@@ -33,6 +32,8 @@
+ #include <baselib/jobj.h>
+ #include <baselib/random.h>
+ #include <baselib/spline.h>
++#include "it/it_266F.h"
++#include "it/items/itbox.h"
+ 
+ void grKongo_801D5490(Ground_GObj* arg0)
+ {
+@@ -176,7 +177,6 @@ void grKongo_801D55D8(Ground_GObj* arg0)
+     Vec3 sp14;
+     Ground* temp_r31;
+     void* temp_r28;
+-    PAD_STACK(8);
+ 
+     temp_r31 = arg0->user_data;
+     temp_r28 = arg0->hsd_obj;
+@@ -278,7 +278,6 @@ void grKongo_801D577C(Ground_GObj* arg0)
+     f32 var_f0;
+     HSD_GObj* temp_r3_9;
+     Vec3 vec;
+-    PAD_STACK(32);
+ 
+     switch (temp_r31->gv.kongo3.xC4) {
+     default:
+@@ -891,7 +890,6 @@ void grKongo_801D6AFC(void)
+     _struct_grKg_803E188C_0x18* var_r6;
+ 
+     s32 var_ctr = 3;
+-    PAD_STACK(80);
+     var_r5 = &sp44;
+     var_r3 = var_r5;
+     do {
+@@ -1330,7 +1328,7 @@ HSD_GObj* grKongo_801D5340(s32 gobj_id)
+             HSD_GObj_SetupProc(gobj, callbacks->callback2, 4);
+         }
+     } else {
+-        OSReport("%s:%d: couldn t get gobj(id=%d)\n", "grstory.c", 270,
++        OSReport("%s:%d: couldn t get gobj(id=%d)\n", "grstory.c", 220,
+                  gobj_id);
+     }
+     return gobj;
+@@ -1456,9 +1454,179 @@ static void fn_801D7700(Ground* gp, s32 arg1, CollData* cd, s32 arg3,
+     }
+ }
+ 
+-/// #grKongo_801D77E0
++void grKongo_801D77E0(HSD_GObj* gobj, s32 arg1)
++{
++    Ground* gp = gobj->user_data;
++    s32 i;
++    f32 v;
++    f32 limit;
++    f32 step;
++
++    if (arg1 != 0) {
++        gp->gv.kongo.xC4 = 0.0f;
++        gp->gv.kongo.xC8 = 0.0f;
++        gp->gv.kongo.xD4 = 0.0f;
++        gp->gv.kongo.xD8 = 0.0f;
++    } else {
++        Ground* q = gp;
++        for (i = 2; i != 0; i--) {
++            if (q->gv.kongo.xC4 > 0.0f) {
++                if (q->gv.kongo.xC8 > 0.0f) {
++                    step = 0.017453292f * grKg_804D6980->unkB4;
++                } else {
++                    step = 0.017453292f * grKg_804D6980->unkB4 * 0.5f;
++                }
++                q->gv.kongo.xC8 -= step;
++            } else if (q->gv.kongo.xC4 < 0.0f) {
++                if (q->gv.kongo.xC8 < 0.0f) {
++                    step = 0.017453292f * grKg_804D6980->unkB4;
++                } else {
++                    step = 0.017453292f * grKg_804D6980->unkB4 * 0.5f;
++                }
++                q->gv.kongo.xC8 += step;
++            }
++            q->gv.kongo.xC4 += q->gv.kongo.xC8;
++            v = q->gv.kongo.xC4;
++            limit = 0.017453292f *
++                    (grKg_804D6980->unkB8 -
++                     0.017453292f * grKg_804D6980->unkAC);
++            if (v > limit) {
++                q->gv.kongo.xC4 = limit;
++                q->gv.kongo.xC8 = 0.0f;
++            } else if (v < -limit) {
++                q->gv.kongo.xC4 = -limit;
++                q->gv.kongo.xC8 = 0.0f;
++            } else {
++                f32 av = (v < 0.0f) ? -v : v;
++                f32 thresh = 0.017453292f * grKg_804D6980->unkB4;
++                if (av < thresh) {
++                    f32 av2 = (q->gv.kongo.xC8 < 0.0f) ? -q->gv.kongo.xC8
++                                                       : q->gv.kongo.xC8;
++                    if (av2 < thresh) {
++                        q->gv.kongo.xC4 = 0.0f;
++                        q->gv.kongo.xC8 = 0.0f;
++                    }
++                }
++            }
++            q = (Ground*) ((u8*) q + 0x10);
++        }
++    }
++    HSD_JObjSetRotationZ(gp->gv.kongo3.xCC, gp->gv.kongo.xC4);
++    HSD_JObjSetRotationZ(gp->gv.kongo3.xD0, gp->gv.kongo.xC4);
++    HSD_JObjSetRotationZ(gp->gv.kongo.xDC, gp->gv.kongo.xD4);
++    HSD_JObjSetRotationZ(gp->gv.kongo.xE0, gp->gv.kongo.xD4);
++}
++
++void grKongo_801D7BBC(HSD_GObj* gobj)
++{
++    s32 var_r29;
++    s32 var_r31;
++    Ground* gp;
++    f32 var_f31;
++    f32 var_f0;
++    s32 temp_r3;
++
++    gp = gobj->user_data;
++
++    if (gp->gv.kongo.xE4 > 0) {
++        gp->gv.kongo.xE4 -= 1;
++    }
++    if (gp->gv.kongo.xE4 == -1) {
++        return;
++    }
++    if (gp->gv.kongo.xE4 != 0) {
++        return;
++    }
++
++    var_r31 = 0;
++    if (gm_8016B238() == 0 && it_8026D324(It_Kind_Box) != 0) {
++        var_r31 = 1;
++    }
++    if (var_r31 != 0) {
++        var_f31 = grKg_804D6980->unkC;
++    } else {
++        var_f31 = 0.0f;
++    }
++    var_f31 = HSD_Randf() *
++              (grKg_804D6980->unk10 * (1.0f - grKg_804D6980->unk18) +
++               (grKg_804D6980->unk10 * grKg_804D6980->unk18 +
++                (grKg_804D6980->unk8 + var_f31)));
++    {
++        f32 r = HSD_Randf();
++        gp->gv.kongo.xE4 = (s16) ((grKg_804D6980->unk4 - grKg_804D6980->unk0) *
++                                      r +
++                                  grKg_804D6980->unk0);
++    }
++    var_f31 -= grKg_804D6980->unk8;
++    if (var_f31 < 0.0f) {
++        var_r31 = 1;
++    } else {
++        s32 flag = 0;
++        if (gm_8016B238() == 0 && it_8026D324(It_Kind_Box) != 0) {
++            flag = 1;
++        }
++        if (flag != 0) {
++            var_f0 = grKg_804D6980->unkC;
++        } else {
++            var_f0 = 0.0f;
++        }
++        var_f31 -= var_f0;
++        if (var_f31 < 0.0f) {
++            var_r31 = 2;
++        } else {
++            f32 temp_f3 = grKg_804D6980->unk10;
++            f32 temp_f2b = grKg_804D6980->unk18;
++            f32 prod = temp_f3 * temp_f2b;
++            var_f31 -= prod;
++            if (var_f31 < 0.0f) {
++                if (HSD_Randi(2) != 0) {
++                    var_r29 = 1;
++                } else {
++                    var_r29 = 2;
++                }
++                var_r31 = 3;
++            } else {
++                var_f31 -= temp_f3 * (1.0f - temp_f2b);
++                if (var_f31 >= 0.0f) {
++                    return;
++                }
++                temp_r3 = HSD_Randi(3);
++                if (temp_r3 == 0) {
++                    var_r29 = 7;
++                } else if (temp_r3 == 1) {
++                    var_r29 = 8;
++                } else {
++                    var_r29 = 9;
++                }
++                var_r31 = 3;
++            }
++        }
++    }
+ 
+-/// #grKongo_801D7BBC
++    if (gp->gv.kongo.xE6 == var_r31 && HSD_Randf() > grKg_804D6980->unk1C) {
++        return;
++    }
++    gp->gv.kongo.xE6 = var_r31;
++    switch (var_r31) {
++    case 1: {
++        HSD_GObj* obj = grKongo_801D5340(0xB);
++        if (obj != NULL && it_802E18B4((Item_GObj*) obj) == NULL) {
++            Ground_801C4A08(obj);
++        }
++        break;
++    }
++    case 2: {
++        HSD_GObj* obj = grKongo_801D5340(0xB);
++        if (obj != NULL && it_80286088((Item_GObj*) obj) == NULL) {
++            Ground_801C4A08(obj);
++        }
++        break;
++    }
++    case 3:
++        grKongo_801D5340(var_r29);
++        break;
++    }
++}
+ 
+ void fn_801D7E60(Ground* gp, s32 arg1, CollData* arg2, s32 arg3,
+                  mpLib_GroundEnum arg4, float arg8)
+@@ -1503,10 +1671,11 @@ Vec3* grKongo_801D7E78(HSD_GObj* gobj, Vec3* pos)
+ 
+ bool grKongo_801D7F78(HSD_GObj* gobj)
+ {
++    double _pre;
+     Vec3 pos1;
+     Vec3 pos2;
+     HSD_GObj* cur;
+-    PAD_STACK(16);
++    PAD_STACK(12);
+ 
+     if (grKongo_801D7E78(gobj, &pos1) == NULL) {
+         return false;
+diff --git a/src/melee/gr/grkongo.static.h b/src/melee/gr/grkongo.static.h
+index 86f092a127..c83e987600 100644
+--- a/src/melee/gr/grkongo.static.h
++++ b/src/melee/gr/grkongo.static.h
+@@ -64,6 +64,11 @@ static struct {
+     f32 unk9C;
+     f32 unkA0;
+     f32 unkA4;
++    f32 unkA8;
++    f32 unkAC;
++    f32 unkB0;
++    f32 unkB4;
++    f32 unkB8;
+ }* grKg_804D6980;
+ 
+ extern StageInfo stage_info;
+diff --git a/src/melee/gr/grmaterial.c b/src/melee/gr/grmaterial.c
+index 749b7468a0..32ba21643a 100644
+--- a/src/melee/gr/grmaterial.c
++++ b/src/melee/gr/grmaterial.c
+@@ -7,14 +7,34 @@
+ 
+ #include "lb/forward.h"
+ 
++#include "lb/lb_00B0.h"
+ #include "lb/lb_00F9.h"
+ 
+ #include <baselib/forward.h>
+ 
++#include <baselib/debug.h>
+ #include <baselib/dobj.h>
+ #include <baselib/gobj.h>
+ #include <baselib/id.h>
+ #include <baselib/jobj.h>
++#include <baselib/mobj.h>
++#include <baselib/state.h>
++#include <baselib/tev.h>
++#include <baselib/texp.h>
++#include <baselib/tobj.h>
++
++#include <dolphin/os.h>
++
++/* 1C897C */ static void grMaterial_801C897C(HSD_JObj* jobj, u32 flags);
++/* 1C8D44 */ Item_GObj*
++grMaterial_801C8D44(int arg0, int arg1, Ground* arg2, Vec3* arg3, int arg4,
++                    void (*arg5)(Item_GObj*, Ground*),
++                    void (*arg6)(Item_GObj*, Ground*, Vec3*, HSD_GObj*, f32),
++                    void (*arg7)(Item_GObj*, Ground*, HSD_GObj*));
++/* 1C8E48 */ static bool grMaterial_801C8E48(HSD_GObj* gobj);
++/* 1C8E74 */ static void grMaterial_801C8E74(void);
++/* 1C8EF8 */ static void fn_801C8EF8(HSD_MObj* mobj, u32 rendermode);
++/* 1C9490 */ void grMaterial_801C9490(Item_GObj* gobj, CommandInfo* cmd);
+ 
+ static inline ColorOverlay* grMaterial_GetOverlay(Ground* gp)
+ {
+@@ -22,6 +42,7 @@ static inline ColorOverlay* grMaterial_GetOverlay(Ground* gp)
+ }
+ 
+ /* 3E0A20 */ static HSD_MObjInfo grMaterial_803E0A20 = { 0 };
++/* 4D4568 */ static char grMaterial_804D4568[] = "0";
+ /* 4D456C */ static ItCmd grMaterial_804D456C[1];
+ 
+ static u32 data_section_pad[35] = { 0 };
+@@ -238,9 +259,189 @@ void grMaterial_801C8E74(void)
+     grMaterial_803E0A20.make_texp = hsdMObj.make_texp;
+ }
+ 
+-/// #fn_801C8EF8
++static void fn_801C8EF8(HSD_MObj* mobj, u32 rendermode)
++{
++    HSD_TECnst sp_cnst;
++    HSD_TevDesc sp_tevdesc;
++    GXColor sp114;
++    Ground* gp;
++    HSD_TObj* tobj;
++    HSD_TObj** cur_tobj;
++    s32 reg1;
++    s32 reg2;
++    s32 alpha_reg;
++    s32 var_r24;
++    s32 var_r23;
++    s32 var_r0;
++    u32 mobj_rendermode;
++    char* base = (char*) &grMaterial_803E0A20;
++    PAD_STACK(0x74);
++
++    HSD_StateInitTev();
++    mobj_rendermode = mobj->rendermode;
++    HSD_SetMaterialColor(mobj->mat->ambient, mobj->mat->diffuse,
++                         mobj->mat->specular, mobj->mat->alpha);
++    if (mobj_rendermode & RENDER_SPECULAR) {
++        HSD_SetMaterialShininess(mobj->mat->shininess);
++    }
++    cur_tobj = NULL;
++    tobj = mobj->tobj;
++    if ((mobj_rendermode & RENDER_SHADOW) && tobj_shadows != NULL) {
++        cur_tobj = &tobj;
++        while (*cur_tobj != NULL) {
++            cur_tobj = &(*cur_tobj)->next;
++        }
++        *cur_tobj = tobj_shadows;
++    }
++    if ((mobj_rendermode & RENDER_TOON) && tobj_toon != NULL &&
++        tobj_toon->imagedesc != NULL)
++    {
++        tobj_toon->next = tobj;
++        tobj = tobj_toon;
++    }
++    HSD_TObjSetup(tobj);
++    HSD_TObjSetupTextureCoordGen(tobj);
++    if (mobj->tevdesc == NULL) {
++        __assert(base + 0xF4, 0xF3, base + 0x104);
++    }
++    HSD_TExpSetupTev(mobj->tevdesc, mobj->texp);
++    HSD_TObjSetupVolatileTev(tobj, mobj_rendermode);
++
++    gp = HSD_GObj_804D7814->user_data;
++    if (grMaterial_GetOverlay(gp)->x7C_color_enable || gp->x10_flags.b6) {
++        sp_cnst = *(HSD_TECnst*) (base + 0xC4);
++        sp_tevdesc = *(HSD_TevDesc*) (base + 0x50);
++        sp_tevdesc.stage = HSD_StateAssignTev();
++        if (grMaterial_GetOverlay(gp)->x7C_color_enable) {
++            reg1 = lbGetFreeColorRegister(0, mobj, NULL);
++            if (reg1 == -1) {
++                OSReport(base + 0x114);
++                __assert(base + 0xF4, 0x7A, grMaterial_804D4568);
++            }
++            var_r24 = 1;
++            sp_cnst.comp = 1;
++            sp_cnst.ctype = 0;
++            sp_cnst.reg = (u8) reg1;
++            sp_cnst.val = &gp->x6C;
++            HSD_TExpSetReg((HSD_TExp*) &sp_cnst);
++            if (reg1 < 4) {
++            } else {
++                var_r24 = 0;
++            }
++            if (var_r24 != 0) {
++                var_r0 = 4;
++            } else {
++                var_r0 = 0;
++            }
++            reg2 = lbGetFreeColorRegister(var_r0, mobj, (HSD_TExp*) &sp_cnst);
++            if (reg2 == -1) {
++                OSReport(base + 0x114);
++                __assert(base + 0xF4, 0x88, grMaterial_804D4568);
++            }
++            var_r23 = 1;
++            sp_cnst.comp = 1;
++            sp_cnst.ctype = 0;
++            sp_cnst.reg = (u8) reg2;
++            sp114.r = gp->x6C.a;
++            sp114.g = gp->x6C.a;
++            sp114.b = gp->x6C.a;
++            sp_cnst.val = &sp114;
++            HSD_TExpSetReg((HSD_TExp*) &sp_cnst);
++            sp_tevdesc.u.tevconf.clr_b = lb_8000CC8C(reg1);
++            sp_tevdesc.u.tevconf.clr_c = lb_8000CC8C(reg2);
++            if (reg1 < 4) {
++            } else {
++                var_r23 = 0;
++            }
++            if (var_r23 != 0) {
++                sp_tevdesc.u.tevconf.kcsel = lb_8000CCA4(reg1);
++            } else {
++                if (reg2 < 4) {
++                    var_r0 = 1;
++                } else {
++                    var_r0 = 0;
++                }
++                if (var_r0 != 0) {
++                    sp_tevdesc.u.tevconf.kcsel = lb_8000CCA4(reg2);
++                }
++            }
++        }
++        if (gp->x10_flags.b6) {
++            alpha_reg = lbGetFreeAlphaRegister(0, mobj, NULL);
++            if (alpha_reg == -1) {
++                OSReport(base + 0x138);
++                __assert(base + 0xF4, 0xA7, grMaterial_804D4568);
++            }
++            sp_cnst.comp = 5;
++            sp_cnst.ctype = 3;
++            sp_cnst.reg = (u8) alpha_reg;
++            sp_cnst.val = &gp->xC0;
++            HSD_TExpSetReg((HSD_TExp*) &sp_cnst);
++            sp_tevdesc.u.tevconf.alpha_b = GX_CA_APREV;
++            sp_tevdesc.u.tevconf.alpha_c = lb_8000CD90(alpha_reg);
++            sp_tevdesc.u.tevconf.alpha_d = GX_CA_ZERO;
++        }
++        HSD_SetupTevStage(&sp_tevdesc);
++    }
++    HSD_SetupRenderModeWithCustomPE(mobj_rendermode, mobj->pe);
++    if (cur_tobj != NULL) {
++        *cur_tobj = NULL;
++    }
++}
+ 
+-/// #grMaterial_801C92C0
++void grMaterial_801C92C0(HSD_JObj* jobj)
++{
++    HSD_DObj* dobj;
++    HSD_JObj* grandchild;
++    HSD_MObj* mobj;
++    s32 cond;
++    u32 unused[8];
++
++    if (jobj == NULL) {
++        return;
++    }
++    if (jobj->flags & 0x4020) {
++        cond = 0;
++    } else {
++        cond = 1;
++    }
++    if (cond != 0) {
++        dobj = HSD_JObjGetDObj(jobj);
++        while (dobj != NULL) {
++            mobj = dobj != NULL ? dobj->mobj : NULL;
++            if (mobj != NULL) {
++                hsdChangeClass(mobj, &grMaterial_803E0A20);
++            }
++            dobj = dobj != NULL ? dobj->next : NULL;
++        }
++    }
++    jobj = jobj == NULL ? NULL : jobj->child;
++    while (jobj != NULL) {
++        if (jobj != NULL) {
++            if (jobj->flags & 0x4020) {
++                cond = 0;
++            } else {
++                cond = 1;
++            }
++            if (cond != 0) {
++                dobj = HSD_JObjGetDObj(jobj);
++                while (dobj != NULL) {
++                    mobj = dobj != NULL ? dobj->mobj : NULL;
++                    if (mobj != NULL) {
++                        hsdChangeClass(mobj, &grMaterial_803E0A20);
++                    }
++                    dobj = dobj != NULL ? dobj->next : NULL;
++                }
++            }
++            grandchild = jobj == NULL ? NULL : jobj->child;
++            while (grandchild != NULL) {
++                grMaterial_801C92C0(grandchild);
++                grandchild = grandchild == NULL ? NULL : grandchild->next;
++            }
++        }
++        jobj = jobj == NULL ? NULL : jobj->next;
++    }
++}
+ 
+ void grMaterial_801C9470(Item_GObj* gobj, CommandInfo* cmd)
+ {
+diff --git a/src/melee/gr/ground.c b/src/melee/gr/ground.c
+index daad2920d1..54b82ef99e 100644
+--- a/src/melee/gr/ground.c
++++ b/src/melee/gr/ground.c
+@@ -75,7 +75,7 @@
+ /* 1C1D38 */ static void Ground_801C1D38(HSD_GObj*);
+ /* 1C1E2C */ static void Ground_801C1E2C(HSD_GObj* gobj, int code);
+ /* 1C1E94 */ static void Ground_801C1E94(void);
+-/* 1C20E0 */ UNK_T Ground_801C20E0(UnkArchiveStruct*, UNK_T);
++/* 1C20E0 */ LightList** Ground_801C20E0(UnkArchiveStruct*, LightList**);
+ /* 1C24F8 */ static bool Ground_801C24F8(s32, u32, s32*);
+ /* 1C28CC */ void Ground_801C28CC(void*, s32);
+ /* 1C2BBC */ static void Ground_801C2BBC(HSD_GObj*, s32);
+@@ -1150,7 +1150,126 @@ f32 Ground_801C20D0(void)
+ char lightset[9] = "lightset";
+ char plightset[10] = "*lightset";
+ 
+-/// #Ground_801C20E0
++typedef struct LightOverrideEntry {
++    /* 0x0 */ HSD_LightDesc* desc;
++    /* 0x4 */ u8 _flag_pad0;
++    /* 0x5 */ u8 _flag_pad1;
++    /* 0x6 */ u8 _flag_pad2;
++    /* 0x7 */ u8 _flag_pad3;
++} LightOverrideEntry;
++
++typedef struct LightOverrideFlags {
++    u8 a:1;
++    u8 b:1;
++    u8 c:1;
++    u8 _:5;
++} LightOverrideFlags;
++
++LightList** Ground_801C20E0(UnkArchiveStruct* archive, LightList** lights)
++{
++    LightList** walker;
++    LightList** out;
++    LightList** clean;
++    LightOverrideEntry* arr;
++    UnkStageDat* dat;
++    HSD_LightDesc* desc;
++    s32 count;
++    s32 i;
++    s32 byte_off;
++    s32 found;
++    s32 b6, b7, b5;
++    s32 matched;
++
++    if (lights == NULL) {
++        __assert(__FILE__, 0x773, lightset);
++    }
++    if (*lights == NULL) {
++        __assert(__FILE__, 0x774, plightset);
++    }
++
++    walker = lights;
++    matched = 0;
++    while (*walker != NULL) {
++        dat = archive->unk4;
++        desc = *(HSD_LightDesc**)*walker;
++        count = dat->unk1C;
++        if (count != 0) {
++            found = 0;
++            for (i = 0, byte_off = 0; i < count; byte_off += 8, i++) {
++                arr = (LightOverrideEntry*)dat->unk18;
++                if (*(u32*)((u8*)arr + byte_off) == (u32)desc) {
++                    LightOverrideFlags* p = (LightOverrideFlags*)((u8*)arr + i * 8 + 4);
++                    found = 1;
++                    b6 = p->b;
++                    b7 = p->a;
++                    b5 = p->c;
++                    break;
++                }
++            }
++        } else {
++            found = 0;
++        }
++        if (found != 0 && (b6 != 0 || b7 != 0 || b5 != 0)) {
++            matched = 1;
++            break;
++        }
++        walker++;
++    }
++
++    if (matched == 0) {
++        return lights;
++    }
++
++    out = lights;
++    while (*out != NULL) {
++        desc = *(HSD_LightDesc**)*out;
++        if (desc->flags & 3) {
++            dat = archive->unk4;
++            count = dat->unk1C;
++            if (count != 0) {
++                found = 0;
++                for (i = 0, byte_off = 0; i < count; byte_off += 8, i++) {
++                    arr = (LightOverrideEntry*)dat->unk18;
++                    if (*(u32*)((u8*)arr + byte_off) == (u32)desc) {
++                        u8* p = (u8*)arr + i * 8 + 4;
++                        found = 1;
++                        b6 = (*p >> 6) & 1;
++                        b7 = (*p >> 7) & 1;
++                        b5 = (*p >> 5) & 1;
++                        break;
++                    }
++                }
++            } else {
++                found = 0;
++            }
++            if (found == 0 || (b6 == 0 && b7 == 0 && b5 == 0)) {
++                clean = out;
++                while ((clean[0] = clean[1]) != NULL) {
++                    clean++;
++                }
++                out--;
++            } else {
++                if (b6) {
++                    desc->flags |= 4;
++                } else {
++                    desc->flags &= ~4;
++                }
++                if (b7) {
++                    (*(HSD_LightDesc**)*out)->flags |= 8;
++                } else {
++                    (*(HSD_LightDesc**)*out)->flags &= ~8;
++                }
++                if (b5) {
++                    (*(HSD_LightDesc**)*out)->flags |= 0x400;
++                } else {
++                    (*(HSD_LightDesc**)*out)->flags &= ~0x400;
++                }
++            }
++        }
++        out++;
++    }
++    return lights;
++}
+ 
+ void Ground_801C2374(HSD_LObj* lobj)
+ {
+@@ -1347,7 +1466,54 @@ static char msg1[] =
+     "             check StageParam.csv or StageItem.csv, stdata.c\n";
+ static char msg2[] = " stageid=%d\n";
+ 
+-/// #Ground_801C28CC
++void Ground_801C28CC(void* arg0, s32 arg1)
++{
++    UnkBgmStruct* bgm = stage_info.param->xB0;
++    s32 count = stage_info.param->xB4;
++    s32 i;
++
++    for (i = 0; i < count; i++) {
++        if (bgm->x0 == arg1) {
++            UnkBgmStruct* b = bgm;
++            s32* out = (s32*) arg0;
++            s32 k;
++            s32 n = 0;
++            for (k = 0; k < 4; k++) {
++                out[0] = *(s16*) ((u8*) stage_info.param + n + 0x6A) * *(s16*) ((u8*) b + 0x1A);
++                out[1] = *(s16*) ((u8*) stage_info.param + n + 0x6C) * *(s16*) ((u8*) b + 0x1C);
++                out[2] = *(s16*) ((u8*) stage_info.param + n + 0x6E) * *(s16*) ((u8*) b + 0x1E);
++                out[3] = *(s16*) ((u8*) stage_info.param + n + 0x70) * *(s16*) ((u8*) b + 0x20);
++                out[4] = *(s16*) ((u8*) stage_info.param + n + 0x72) * *(s16*) ((u8*) b + 0x22);
++                out[5] = *(s16*) ((u8*) stage_info.param + n + 0x74) * *(s16*) ((u8*) b + 0x24);
++                out[6] = *(s16*) ((u8*) stage_info.param + n + 0x76) * *(s16*) ((u8*) b + 0x26);
++                out[7] = *(s16*) ((u8*) stage_info.param + n + 0x78) * *(s16*) ((u8*) b + 0x28);
++                b = (UnkBgmStruct*) ((u8*) b + 0x10);
++                out += 8;
++                n += 0x10;
++            }
++            if ((n >> 1) < 0x23) {
++                s16* bp = (s16*) ((u8*) b + 0x1A);
++                do {
++                    *out++ = *(s16*) ((u8*) stage_info.param + n + 0x6A) * *bp++;
++                    n += 2;
++                } while ((n >> 1) < 0x23);
++            }
++            return;
++        }
++        bgm++;
++    }
++
++    OSReport(msg0, __FILE__, 0x906, stage_info.internal_stage_id, arg1, count);
++    OSReport(msg1);
++    {
++        UnkBgmStruct* p = stage_info.param->xB0;
++        for (i = 0; i < count; i++) {
++            OSReport(msg2, p->x0);
++            p++;
++        }
++    }
++    while (1) {}
++}
+ 
+ s32* Ground_801C2AD8(void)
+ {
+@@ -1724,7 +1890,92 @@ u32 unknown[] = {
+     0xFFFFFFFF, 0,          0,          0,
+ };
+ 
+-/// #void Ground_801C34AC
++void Ground_801C34AC(s32 map_id, HSD_JObj* root, struct HSD_Joint* joint)
++{
++    HSD_JObj* phi_r31;
++    UnkStageDat* temp_r3_2;
++    UnkArchiveStruct* archive;
++    int temp_r4_2;
++    struct {
++        void* x0;
++        u8 x4_pad[0x8];
++    }* phi_r3;
++    s16* pair;
++    int count;
++    int phi_r28;
++    int phi_r5;
++    int target;
++    int i;
++    int j;
++
++    phi_r31 = root;
++    phi_r28 = -1;
++    archive = grDatFiles_801C6330(map_id);
++    if (archive == NULL) {
++        return;
++    }
++    if (root == NULL || joint == NULL) {
++        OSReport("%s:%d:Error (root=%08x joint=%08x)\n", __FILE__, __FILE__,
++                 root, joint);
++        return;
++    }
++    temp_r3_2 = archive->unk4;
++    temp_r4_2 = temp_r3_2->unk4;
++    if (temp_r4_2 == 0) {
++        return;
++    }
++    phi_r3 = temp_r3_2->unk0;
++    for (i = 0; true; i++) {
++        if (i >= temp_r4_2) {
++            return;
++        }
++        if (phi_r3[i].x0 == joint) {
++            break;
++        }
++    }
++    count = ((s32*) &phi_r3[i])[2];
++    pair = (s16*) ((void**) &phi_r3[i])[1];
++    if (count <= 0) {
++        return;
++    }
++    for (j = count; j > 0; j--) {
++        target = pair[0];
++        if (phi_r28 > target || phi_r28 == -1) {
++            phi_r31 = root;
++            phi_r5 = 0;
++        } else {
++            phi_r5 = phi_r28;
++        }
++        while (phi_r31 != NULL) {
++            if (phi_r5 == target) {
++                break;
++            }
++            if (!(phi_r31->flags & JOBJ_INSTANCE) &&
++                HSD_JObjGetChild(phi_r31) != NULL)
++            {
++                phi_r31 = HSD_JObjGetChild(phi_r31);
++            } else if (HSD_JObjGetNext(phi_r31) != NULL) {
++                phi_r31 = HSD_JObjGetNext(phi_r31);
++            } else {
++                while (1) {
++                    if (HSD_JObjGetParent(phi_r31) == NULL) {
++                        phi_r31 = NULL;
++                        break;
++                    }
++                    if (HSD_JObjGetNext(HSD_JObjGetParent(phi_r31)) != NULL) {
++                        phi_r31 = HSD_JObjGetNext(HSD_JObjGetParent(phi_r31));
++                        break;
++                    }
++                    phi_r31 = HSD_JObjGetParent(phi_r31);
++                }
++            }
++            phi_r5++;
++        }
++        phi_r28 = phi_r5;
++        stage_info.x280[pair[1]] = phi_r31;
++        pair = (s16*) ((u8*) pair + 4);
++    }
++}
+ 
+ void Ground_801C36F4(int map_id, HSD_JObj* root, UNK_T joint)
+ {
+diff --git a/src/melee/gr/grpura.c b/src/melee/gr/grpura.c
+index 10b26cfba3..68d62d18ea 100644
+--- a/src/melee/gr/grpura.c
++++ b/src/melee/gr/grpura.c
+@@ -99,7 +99,6 @@ const f32 grPu_804DBA7C = -30.0;
+ 
+ void grPura_80211D00(void)
+ {
+-    u8 _padA[8];
+     Vec3 cam_offset;
+     f32 fVar1;
+ 
+@@ -271,7 +270,6 @@ void grPura_8021231C(Ground_GObj* arg0)
+     HSD_JObjSetScale(jobj, vec);
+ 
+     // HSD_JObjGetFlags(jobj);
+-    PAD_STACK(40);
+     if ((HSD_JObjGetFlags(gp->gv.pura2.xC8) & 0x10) &&
+         ((HSD_JObjGetFlags(jobj) & 0x10) == NULL))
+     {
+@@ -355,7 +353,21 @@ void grPura_80212EF4(HSD_GObj* arg0)
+     // HSD_JObjGetFlags();
+ }
+ 
+-/// #grPura_80212FC0
++void grPura_80212FC0(HSD_GObj* arg0)
++{
++    u16* var_r31 = grPu_803E6C0C;
++    u32 var_r30 = 0;
++    do {
++        if ((s16) var_r31[0] != -1) {
++            HSD_GObj* temp_r3 = Ground_801C2BA4((s32)(s16) var_r31[1]);
++            if (temp_r3 != NULL) {
++                M2C_FIELD(var_r31, HSD_JObj**, 8) = Ground_801C3FA4(temp_r3, (s32)(s16) var_r31[2]);
++            }
++        }
++        var_r30 += 1;
++        var_r31 += 6;
++    } while (var_r30 < 0x2A);
++}
+ 
+ void grPura_80213030(Ground_GObj* arg0)
+ {
+diff --git a/src/melee/gr/grvenom.c b/src/melee/gr/grvenom.c
+index 1aa3f22679..402b86de9f 100644
+--- a/src/melee/gr/grvenom.c
++++ b/src/melee/gr/grvenom.c
+@@ -22,6 +22,9 @@
+ #include <baselib/lobj.h>
+ #include <baselib/random.h>
+ #include <baselib/sislib.h>
++#include "pl/player.h"
++#include "gr/grmaterial.h"
++#include "it/items/itarwinglaser.h"
+ 
+ /// Forward declaration of grVe_Data for use by multiple functions
+ /// @todo This struct should be defined in gr/types.h or a proper header
+@@ -68,7 +71,221 @@ typedef struct grVe_GroundData {
+     grVe_Lighting* x2C;
+ } grVe_GroundData;
+ 
+-/// #grVenom_8020362C
++/// grVenom_8020362C
++
++void grVenom_8020362C(void)
++{
++    grVe_ExtData* ext = VE_DATA;
++    s32 i;
++    s32 idx;
++    s32 spawn;
++    u32 ground_flags;
++    s32 group_a;
++    s32 group_b;
++    s32 combined;
++    s32 mode;
++    s32 lo;
++    s32 hi;
++    s32 diff;
++    s32 sub;
++    s32 has_active;
++
++    if (grVe_804D6A40 == 0) {
++        if (ext->x20[0] == NULL) {
++            grVe_804D6A38 = grVe_804D6A38 - 1;
++            if (grVe_804D6A38 <= 0) {
++                ground_flags = ((grVe_Lighting*) Ground_801C2BA4(7)->user_data)->xE0;
++                {
++                    s32 b4 = (ground_flags >> 4) & 1;
++                    s32 b3 = (ground_flags >> 3) & 1;
++                    s32 b7 = (ground_flags >> 7) & 1;
++                    s32 b6 = (ground_flags >> 6) & 1;
++                    s32 b2;
++                    s32 b5;
++                    s32 ab;
++                    ab = b4 | b3;
++                    b2 = (ground_flags >> 2) & 1;
++                    group_b = b7 | b6;
++                    if ((ab | b2) != 0) {
++                        group_a = 2;
++                    } else {
++                        group_a = 0;
++                    }
++                    b5 = (ground_flags >> 5) & 1;
++                    if ((group_b | b5) != 0) {
++                        group_b = 1;
++                    } else {
++                        group_b = 0;
++                    }
++                }
++                combined = group_b | group_a;
++                if (combined == 2) {
++                    idx = ext->x2C[0];
++                    do {
++                        if (idx == ext->x2C[0]) {
++                            idx = HSD_Randi(4) + 1;
++                        }
++                    } while (idx == ext->x2C[0]);
++                    if (ext->x38[0] == 4) {
++                        mode = 1;
++                    } else {
++                        mode = (HSD_Randf() > grVe_804D6A30->x10) ? 1 : 4;
++                    }
++                    grVe_804D6A34 = 0;
++                    ext->x2C[0] = idx;
++                    ext->x38[0] = mode;
++                    ext->x20[grVe_804D6A34] =
++                        grVenom_80203EAC(2);
++                } else if (combined < 2) {
++                    if (combined == 0) {
++                        idx = ext->x2C[0];
++                        do {
++                            if (idx == ext->x2C[0]) {
++                                idx = HSD_Randi(0xB) + 1;
++                            }
++                        } while (idx == ext->x2C[0]);
++                        if (ext->x38[0] == 4) {
++                            mode = 1;
++                        } else {
++                            mode =
++                                (HSD_Randf() > grVe_804D6A30->x10) ? 1 : 4;
++                        }
++                        grVe_804D6A34 = 0;
++                        ext->x2C[0] = idx;
++                        ext->x38[0] = mode;
++                        ext->x20[grVe_804D6A34] =
++                            grVenom_80203EAC(2);
++                    }
++                }
++            }
++        } else {
++            lo = (s32) grVe_804D6A30->x8;
++            hi = (s32) grVe_804D6A30->xC;
++            spawn = hi;
++            if (hi > lo) {
++                diff = hi - lo;
++                spawn = (diff != 0) ? HSD_Randi(diff) : 0;
++                spawn = lo + spawn;
++            } else if (hi < lo) {
++                sub = lo - hi;
++                spawn = (sub != 0) ? HSD_Randi(sub) : 0;
++                spawn = hi + spawn;
++            }
++            grVe_804D6A38 = spawn;
++        }
++    } else {
++        i = 0;
++        if (ext->x20[0] != NULL) {
++            i = 1;
++            if (ext->x20[1] != NULL) {
++                i = 2;
++                if (ext->x20[2] != NULL) {
++                    i = 3;
++                }
++            }
++        }
++        if (i < 3) {
++            grVe_804D6A38 = grVe_804D6A38 - 1;
++            if (grVe_804D6A38 <= 0) {
++                has_active = 0;
++                if (i != 0 && ext->x2C[0] < 8) {
++                    if (ext->x2C[0] >= 1) {
++                        if (ext->x20[0] != NULL) {
++                            has_active = 1;
++                        }
++                    }
++                }
++                if (i != 1 && ext->x2C[1] < 8) {
++                    if (ext->x2C[1] >= 1) {
++                        if (ext->x20[1] != NULL) {
++                            has_active = 1;
++                        }
++                    }
++                }
++                if (i != 2 && ext->x2C[2] < 8) {
++                    if (ext->x2C[2] >= 1) {
++                        if (ext->x20[2] != NULL) {
++                            has_active = 1;
++                        }
++                    }
++                }
++                if (has_active == 0) {
++                    idx = ext->x2C[i];
++                    do {
++                        if (idx == ext->x2C[0]) {
++                            idx = HSD_Randi(0xB) + 1;
++                            continue;
++                        }
++                        if (idx == ext->x2C[1]) {
++                            idx = HSD_Randi(0xB) + 1;
++                            continue;
++                        }
++                        if (idx == ext->x2C[2]) {
++                            idx = HSD_Randi(0xB) + 1;
++                            continue;
++                        }
++                        break;
++                    } while (1);
++                    grVe_804D6A34 = i;
++                    ext->x2C[i] = idx;
++                    ext->x38[i] = i + 1;
++                    ext->x20[grVe_804D6A34] =
++                        grVenom_80203EAC(2);
++                } else {
++                    ground_flags = ((grVe_Lighting*) Ground_801C2BA4(7)->user_data)->xE0;
++                    {
++                        s32 b4 = (ground_flags >> 4) & 1;
++                        s32 b3 = (ground_flags >> 3) & 1;
++                        s32 b7 = (ground_flags >> 7) & 1;
++                        s32 b6 = (ground_flags >> 6) & 1;
++                        s32 b2;
++                        s32 b5;
++                        s32 ab;
++                        ab = b4 | b3;
++                        b2 = (ground_flags >> 2) & 1;
++                        group_b = b7 | b6;
++                        if ((ab | b2) != 0) {
++                            group_a = 2;
++                        } else {
++                            group_a = 0;
++                        }
++                        b5 = (ground_flags >> 5) & 1;
++                        if ((group_b | b5) != 0) {
++                            group_b = 1;
++                        } else {
++                            group_b = 0;
++                        }
++                    }
++                    if ((group_b | group_a) == 0) {
++                        idx = ext->x2C[i];
++                        do {
++                            if (idx == ext->x2C[0]) {
++                                idx = HSD_Randi(4) + 8;
++                                continue;
++                            }
++                            if (idx == ext->x2C[1]) {
++                                idx = HSD_Randi(4) + 8;
++                                continue;
++                            }
++                            if (idx == ext->x2C[2]) {
++                                idx = HSD_Randi(4) + 8;
++                                continue;
++                            }
++                            break;
++                        } while (1);
++                        grVe_804D6A34 = i;
++                        ext->x2C[i] = idx;
++                        ext->x38[i] = i + 1;
++                        ext->x20[grVe_804D6A34] =
++                            grVenom_80203EAC(2);
++                    }
++                }
++            }
++        } else {
++            grVe_804D6A38 = 0xA;
++        }
++    }
++}
+ 
+ void grVenom_80203B14(bool arg) {}
+ 
+@@ -98,7 +315,6 @@ void grVenom_80203B18(void)
+     s32 flag;
+     HSD_GObj* gobj;
+     HSD_LObj* lobj;
+-    PAD_STACK(8);
+ 
+     data = (s32*) &grVe_803E5348;
+     grVe_804D6A30 = Ground_801C49F8();
+@@ -441,7 +657,178 @@ bool grVenom_80204544(Ground_GObj* arg)
+     return false;
+ }
+ 
+-/// #grVenom_8020454C
++extern f64 grVe_804DB760; // 0.0 (double)
++extern f32 grVe_804DB754; // 1000
++extern f32 grVe_804DB758; // -60000
++extern f32 grVe_804DB768; // 1033
++extern f32 grVe_804DB76C; // 1086
++extern f32 grVe_804DB770; // 1185
++extern f32 grVe_804DB774; // 1238
++extern f32 grVe_804DB778; // 1063
++extern f32 grVe_804DB77C; // 1116
++extern f32 grVe_804DB780; // 1215
++extern f32 grVe_804DB784; // 1268
++extern f32 grVe_804DB788; // 2460
++extern f32 grVe_804DB78C; // 6440
++extern f32 grVe_804DB790; // 9330
++extern f32 grVe_804DB794; // 2747
++extern f32 grVe_804DB798; // 3030
++extern f32 grVe_804DB79C; // 3393
++extern f32 grVe_804DB7A0; // 3727
++extern f32 grVe_804DB7A4; // 6880
++extern f32 grVe_804DB7A8; // 9600
++extern f32 grVe_804DB7AC; // 9835
++extern f32 grVe_804DB7B0; // 4070
++extern f32 grVe_804DB7B4; // 7220
++extern f32 grVe_804DB7B8; // 4200
++extern f32 grVe_804DB7BC; // 3800
++extern f32 grVe_804DB7C0; // 4400
++extern f32 grVe_804DB7C4; // 6100
++extern f32 grVe_804DB7C8; // 7210
++extern f32 grVe_804DB7CC; // 6810
++extern f32 grVe_804DB7D0; // 7410
++extern f32 grVe_804DB7D4; // 9200
++
++void grVenom_8020454C(Ground_GObj* gobj)
++{
++    Vec3 sp1C;
++    s32 i = 0;
++    Ground* gp = gobj->user_data;
++    Ground* gp_save = gp;
++    s32 visible;
++    HSD_GObj* lgobj;
++    HSD_LObj* lobj;
++    f32 frame;
++    f32 prev;
++    f32 lo = grVe_804DB754;
++    f32 hi = grVe_804DB758;
++    PAD_STACK(8);
++
++    do {
++        if (gp->gv.venom2.xC4 != NULL) {
++            lb_8000B1CC(gp->gv.venom2.xC4, NULL, &sp1C);
++            visible = 1;
++            if (!(sp1C.z < lo) && !(sp1C.z > hi)) {
++                visible = 0;
++            }
++            if (HSD_JObjGetFlags(gp->gv.venom2.xC4) & 0x10) {
++                if (visible != 0) {
++                    HSD_JObjClearFlagsAll(gp->gv.venom2.xC4, 0x10);
++                }
++            } else if (visible == 0) {
++                HSD_JObjSetFlagsAll(gp->gv.venom2.xC4, 0x10);
++            }
++        }
++        i++;
++        gp = (Ground*) ((char*) gp + 4);
++    } while (i < 7);
++    gp = gp_save;
++
++    if (grAnime_801C84A4((HSD_GObj*) gobj, 0, 7)) {
++        lgobj = Ground_801C498C();
++        if (lgobj != NULL) {
++            lobj = lgobj->hsd_obj;
++            while (lobj != NULL) {
++                if (lobj->aobj != NULL) {
++                    HSD_AObjReqAnim(lobj->aobj, grVe_804DB740);
++                }
++                if (lobj->position != NULL) {
++                    HSD_ForeachAnim(lobj->position, WOBJ_TYPE,
++                                    ALL_TYPE_MASK, HSD_AObjReqAnim,
++                                    AOBJ_ARG_AF, grVe_804DB760);
++                }
++                if (lobj->interest != NULL) {
++                    HSD_ForeachAnim(lobj->interest, WOBJ_TYPE,
++                                    ALL_TYPE_MASK, HSD_AObjReqAnim,
++                                    AOBJ_ARG_AF, grVe_804DB760);
++                }
++                if (lobj == NULL) {
++                    lobj = NULL;
++                } else {
++                    lobj = lobj->next;
++                }
++            }
++        }
++    }
++
++    {
++        HSD_AObj* a = grAnime_801C8318((HSD_GObj*) gobj, 0, 7);
++        if (a != NULL) {
++        prev = gp->gv.venom.xE4;
++        frame = HSD_AObjGetCurrFrame(a);
++        if ((prev < grVe_804DB768 && grVe_804DB768 <= frame) ||
++            (prev < grVe_804DB76C && grVe_804DB76C <= frame) ||
++            (prev < grVe_804DB770 && grVe_804DB770 <= frame) ||
++            (prev < grVe_804DB774 && grVe_804DB774 <= frame)) {
++            Ground_801C53EC(0x6B6C5);
++        }
++        if ((prev < grVe_804DB778 && grVe_804DB778 <= frame) ||
++            (prev < grVe_804DB77C && grVe_804DB77C <= frame) ||
++            (prev < grVe_804DB780 && grVe_804DB780 <= frame) ||
++            (prev < grVe_804DB784 && grVe_804DB784 <= frame)) {
++            Ground_801C53EC(0x6B6C6);
++        }
++        if ((prev < grVe_804DB788 && grVe_804DB788 <= frame) ||
++            (prev < grVe_804DB78C && grVe_804DB78C <= frame) ||
++            (prev < grVe_804DB790 && grVe_804DB790 <= frame)) {
++            gp->gv.venom2.xE0_state.b6 = 1;
++        }
++        if ((prev < grVe_804DB788 && grVe_804DB788 <= frame) ||
++            (prev < grVe_804DB794 && grVe_804DB794 <= frame) ||
++            (prev < grVe_804DB798 && grVe_804DB798 <= frame) ||
++            (prev < grVe_804DB79C && grVe_804DB79C <= frame) ||
++            (prev < grVe_804DB7A0 && grVe_804DB7A0 <= frame) ||
++            (prev < grVe_804DB78C && grVe_804DB78C <= frame) ||
++            (prev < grVe_804DB7A4 && grVe_804DB7A4 <= frame) ||
++            (prev < grVe_804DB790 && grVe_804DB790 <= frame) ||
++            (prev < grVe_804DB7A8 && grVe_804DB7A8 <= frame) ||
++            (prev < grVe_804DB7AC && grVe_804DB7AC <= frame)) {
++            Ground_801C53EC(0x6B6C7);
++        }
++        if ((prev < grVe_804DB7B0 && grVe_804DB7B0 <= frame) ||
++            (prev < grVe_804DB7B4 && grVe_804DB7B4 <= frame) ||
++            (prev > frame)) {
++            gp->gv.venom2.xE0_state.b6 = 0;
++        }
++        if (prev < grVe_804DB7B8 && grVe_804DB7B8 <= frame) {
++            gp->gv.venom2.xE0_state.b0 = 1;
++        }
++        if (prev < grVe_804DB7BC && grVe_804DB7BC <= frame) {
++            gp->gv.venom2.xE0_state.b1 = 1;
++        }
++        if (prev < grVe_804DB7C0 && grVe_804DB7C0 <= frame) {
++            Ground_801C5440(gp, 0, 0x6B6C4);
++            gp->gv.venom2.xE0_state.b2 = 1;
++            mpJointListAdd(2);
++        }
++        if (prev < grVe_804DB7C4 && grVe_804DB7C4 <= frame) {
++            Ground_801C5440(gp, 0, 0x6B6C3);
++            gp->gv.venom2.xE0_state.b0 = 0;
++            gp->gv.venom2.xE0_state.b1 = 0;
++            gp->gv.venom2.xE0_state.b2 = 0;
++            mpLib_80057BC0(2);
++        }
++        if (prev < grVe_804DB7C8 && grVe_804DB7C8 <= frame) {
++            gp->gv.venom2.xE0_state.b3 = 1;
++        }
++        if (prev < grVe_804DB7CC && grVe_804DB7CC <= frame) {
++            gp->gv.venom2.xE0_state.b4 = 1;
++        }
++        if (prev < grVe_804DB7D0 && grVe_804DB7D0 <= frame) {
++            gp->gv.venom2.xE0_state.b5 = 1;
++        }
++        if (prev < grVe_804DB7D4 && grVe_804DB7D4 <= frame) {
++            gp->gv.venom2.xE0_state.b3 = 0;
++            gp->gv.venom2.xE0_state.b4 = 0;
++            gp->gv.venom2.xE0_state.b5 = 0;
++        }
++        gp->gv.venom.xE4 = frame;
++        }
++    }
++
++    lbAudioAx_80024D78(gp->gv.venom2.xE0_state.b2 ? 2 : 1);
++    grVenom_80204B88(gobj);
++}
+ 
+ void grVenom_80204B84(Ground_GObj* arg) {}
+ 
+@@ -593,7 +980,48 @@ bool grVenom_80204EFC(Ground_GObj* arg)
+ 
+ void grVenom_80204F1C(Ground_GObj* arg) {}
+ 
+-/// #grVenom_80204F20
++void grVenom_80204F20(Ground_GObj* arg0)
++{
++    s32* base = (s32*) &grVe_803E5348;
++    Ground* gp = arg0->user_data;
++    HSD_JObj* jobj = arg0->hsd_obj;
++    u32 idx = grVe_804D6A34;
++    HSD_GObj* other;
++    f32 scale;
++    s32 state;
++
++    gp->gv.venom.xC8 = idx;
++    base[idx + 8] = (s32) arg0;
++
++    other = grVenom_80203EAC(base[base[idx + 14] + 170]);
++    if (other != NULL) {
++        Ground* other_gp = other->user_data;
++        other_gp->x10_flags.b2 = 0;
++        other_gp = other->user_data;
++        if (other_gp != NULL) {
++            other_gp->gv.venom.xC8 = gp->gv.venom.xC8;
++        } else {
++            OSReport((char*) ((u8*) base + 0x2BC), other_gp, 0);
++        }
++    }
++
++    scale = Ground_801C0498();
++    state = base[idx + 11];
++    if (state < 8) {
++        if (state >= 1) {
++            HSD_JObjSetScaleX(jobj, scale);
++            HSD_JObjSetScaleY(jobj, scale);
++            HSD_JObjSetScaleZ(jobj, scale * *(f32*) ((u8*) grVe_804D6A30 + 0x34));
++        }
++    } else if (state < 12) {
++        HSD_JObjSetScaleX(jobj, scale);
++        HSD_JObjSetScaleY(jobj, scale);
++        HSD_JObjSetScaleZ(jobj, scale);
++    }
++
++    gp->gv.venom.xD4 = 1;
++    gp->gv.venom.xD8 = 0;
++}
+ 
+ bool grVenom_802052D8(Ground_GObj* arg)
+ {
+@@ -774,7 +1202,61 @@ bool grVenom_80205750(Ground_GObj* arg)
+     return false;
+ }
+ 
+-/// #grVenom_80205758
++/// grVenom_80205758
++
++extern f32 grVe_804DB7E8;
++extern f64 grVe_804DB7F0;
++extern f64 grVe_804DB7F8;
++extern f64 grVe_804DB800;
++
++void grVenom_80205758(Ground_GObj* gobj)
++{
++    Ground* gp = gobj->user_data;
++    s32* base = (s32*) &grVe_803E5348;
++    HSD_JObj* jobj = gobj->hsd_obj;
++    s32* entry = base + gp->gv.venom.xC8;
++    f32 v;
++    f32 scale;
++
++    if ((u32) entry[8] != 0U) {
++        v = gp->gv.venom.xE8;
++        if (v < grVe_804DB740) {
++            v = -v;
++        }
++        if (v < grVe_804DB7E8) {
++            gp->gv.venom.xE8 = grVe_804DB740;
++            while (gp->gv.venom.xDC < (f32) grVe_804DB7F8) {
++                gp->gv.venom.xDC = gp->gv.venom.xDC + grVe_804DB7F0;
++            }
++            while (gp->gv.venom.xDC > (f32) grVe_804DB800) {
++                gp->gv.venom.xDC = gp->gv.venom.xDC - grVe_804DB7F0;
++            }
++            v = gp->gv.venom.xDC;
++            if (v < grVe_804DB740) {
++                v = -v;
++            }
++            if (v < grVe_804DB744) {
++                HSD_JObjClearFlagsAll(jobj, 0x10);
++            } else {
++                HSD_JObjSetFlagsAll(jobj, 0x10);
++            }
++        } else {
++            HSD_JObjSetFlagsAll(jobj, 0x10);
++        }
++
++        HSD_JObjSetTranslate(jobj, (Vec3*) &gp->gv.venom.xE0);
++
++        scale = Ground_801C0498();
++        HSD_JObjSetScaleX(jobj, scale * *(f32*) ((u8*) grVe_804D6A30 + 0x34));
++        HSD_JObjSetScaleY(jobj, scale * *(f32*) ((u8*) grVe_804D6A30 + 0x34));
++        HSD_JObjSetScaleZ(jobj, scale * *(f32*) ((u8*) grVe_804D6A30 + 0x34));
++
++        Ground_801C2FE0(gobj);
++    } else {
++        mpLib_80057BC0(base[entry[14] + 0xCE]);
++        Ground_801C4A08(gobj);
++    }
++}
+ 
+ void grVenom_80205AD0(Ground_GObj* arg) {}
+ 
+@@ -910,6 +1392,337 @@ s32 grVenom_80205E84(Vec3* pos)
+     return 0;
+ }
+ 
++/// grVenom_80205F30
++/// @todo First attempt at decomp; complex 592-instruction function.
++
++extern Vec3 grVe_803B82D0;
++extern Vec3 grVe_803B82DC;
++
++void grVenom_80205F30(Ground_GObj* gobj)
++{
++    Vec3 sp94;
++    Vec3 sp88;
++    Vec3 sp64;
++    Vec3 sp50;
++    Ground* gp;
++    HSD_JObj* jobj;
++    HSD_GObj* other;
++    Ground* other_gp;
++    HSD_JObj* tmp_jobj;
++    s32* base;
++    s32* entry;
++    s32 state;
++    s32 fire_kind;
++    s32 slot;
++    s32 retries;
++    u8* base_b;
++    s32 type_idx;
++    HSD_JObj* helper;
++
++    base = (s32*) &grVe_803E5348;
++    base_b = (u8*) &grVe_803E5348;
++    gp = gobj->user_data;
++    jobj = gobj->hsd_obj;
++    sp94 = grVe_803B82D0;
++    sp88 = grVe_803B82DC;
++
++    if (grVe_804D6A40 != 0) {
++        return;
++    }
++
++    entry = base + gp->gv.venom.xC8;
++    if ((u32) entry[8] != 0U) {
++
++    if (entry[14] == 4) {
++        tmp_jobj = Ground_801C3FA4((HSD_GObj*) gobj, 1);
++        if (tmp_jobj == NULL) {
++            __assert("jobj.h", 0x2A9, "jobj");
++        }
++        if (tmp_jobj->flags & 0x20000) {
++            __assert("jobj.h", 0x2AA, (char*) base + 0x2D4);
++        }
++        tmp_jobj->rotate.z = 0.0F;
++        if (!(tmp_jobj->flags & 0x02000000)) {
++            if (tmp_jobj != NULL) {
++                s32 dirty = 0;
++                u32 f = tmp_jobj->flags;
++                if (!(f & 0x800000) && (f & 0x40)) {
++                    dirty = 1;
++                }
++                if (dirty == 0) {
++                    HSD_JObjSetMtxDirtySub(tmp_jobj);
++                }
++            }
++        }
++    }
++
++    state = base[gp->gv.venom.xC8 + 11];
++    if (state < 8) {
++        if (state >= 1) {
++            if (jobj == NULL) {
++                __assert("jobj.h", 0x294, "jobj");
++            }
++            if (jobj->flags & 0x20000) {
++                __assert("jobj.h", 0x295, (char*) base + 0x2D4);
++            }
++            jobj->rotate.y = 0.0F;
++            if (!(jobj->flags & 0x02000000)) {
++                if (jobj != NULL) {
++                    s32 dirty = 0;
++                    u32 f = jobj->flags;
++                    if (!(f & 0x800000) && (f & 0x40)) {
++                        dirty = 1;
++                    }
++                    if (dirty == 0) {
++                        HSD_JObjSetMtxDirtySub(jobj);
++                    }
++                }
++            }
++
++            if (gp->gv.venom.xF4 != 0) {
++                if (gp->gv.venom.xF4 < 0 || gp->gv.venom.xF4 >= 5) {
++                    /* nothing */
++                } else {
++                    if (grAnime_801C83D0((HSD_GObj*) gobj, 0, 7) != 0) {
++                        gp->gv.venom.xF4 = 0;
++                        gp->gv.venom.xF8 = (s32) *(f32*) ((u8*) grVe_804D6A30 + 0x2C);
++                    }
++                }
++            } else {
++                if (gp->gv.venom.xF8 <= 0) {
++                    gp->gv.venom.xF4 = HSD_Randi(4) + 1;
++                    fire_kind = -1;
++                    {
++                        Ground* gp_re = gobj->user_data;
++                        s32 v = base[gp_re->gv.venom.xC8 + 14];
++                        if (v == 4) {
++                            fire_kind = 1;
++                        } else if (v >= 4) {
++                            /* default branch (>= 4 but != 4 - shouldn't happen for s32 == 4 case) */
++                        } else if (v == 0) {
++                            /* case 0: no change */
++                        } else if (v >= 0) {
++                            fire_kind = 0;
++                        }
++                    }
++                    {
++                        s32 idx0 = base[gp->gv.venom.xC8 + 14];
++                        s32 anim_id = base[idx0 * 4 + 0xD6]; /* +0x358 = +0xD6 in s32 */
++                        f32 frame = ((f32*) ((u8*) base + gp->gv.venom.xF4 * 8 + fire_kind * 4))[0xBF]; /* 0x2FC offset; but better: */
++                        (void) frame;
++                        grAnime_801C8098((HSD_GObj*) gobj, anim_id, 7,
++                                         *(s32*) ((u8*) base + gp->gv.venom.xF4 * 8 + fire_kind * 4 + 0x2FC),
++                                         0.0F, 1.0F);
++                    }
++                } else {
++                    s32 idx0 = base[gp->gv.venom.xC8 + 14];
++                    s32 anim_id = base[idx0 * 4 + 0xD6];
++                    tmp_jobj = Ground_801C3FA4((HSD_GObj*) gobj, anim_id);
++                    if (tmp_jobj == NULL) {
++                        __assert("jobj.h", 0x2A9, "jobj");
++                    }
++                    if (tmp_jobj->flags & 0x20000) {
++                        __assert("jobj.h", 0x2AA, (char*) base + 0x2D4);
++                    }
++                    tmp_jobj->rotate.z = 0.0F;
++                    if (!(tmp_jobj->flags & 0x02000000)) {
++                        if (tmp_jobj != NULL) {
++                            s32 dirty = 0;
++                            u32 f = tmp_jobj->flags;
++                            if (!(f & 0x800000) && (f & 0x40)) {
++                                dirty = 1;
++                            }
++                            if (dirty == 0) {
++                                HSD_JObjSetMtxDirtySub(tmp_jobj);
++                            }
++                        }
++                    }
++                }
++                gp->gv.venom.xF8 = gp->gv.venom.xF8 - 1;
++            }
++
++            other = (HSD_GObj*) base[gp->gv.venom.xC8 + 8];
++            if (other != NULL) {
++                Ground* other_gp_local = other->user_data;
++                Ground_801C2BA4(5);
++                lb_8000B1CC(Ground_801C3FA4(other, 5), NULL, &sp64);
++                {
++                    f32* tab = (f32*) ((u8*) base + base[other_gp_local->gv.venom.xC8 + 11] * 12);
++                    sp94.x = sp64.x + tab[0x86]; /* +0x218 / 4 */
++                    sp94.y = sp64.y + tab[0x87];
++                    sp94.z = sp64.z + tab[0x88];
++                }
++            } else {
++                sp94.x = 0.0F;
++                sp94.y = 0.0F;
++                sp94.z = 0.0F;
++            }
++
++            if (jobj == NULL) {
++                __assert("jobj.h", 0x394, "jobj");
++            }
++            jobj->translate.x = sp94.x;
++            jobj->translate.y = sp94.y;
++            jobj->translate.z = sp94.z;
++            if (!(jobj->flags & 0x02000000)) {
++                if (jobj != NULL) {
++                    s32 dirty = 0;
++                    u32 f = jobj->flags;
++                    if (!(f & 0x800000) && (f & 0x40)) {
++                        dirty = 1;
++                    }
++                    if (dirty == 0) {
++                        HSD_JObjSetMtxDirtySub(jobj);
++                    }
++                }
++            }
++
++            {
++                s32 idx0 = base[gp->gv.venom.xC8 + 14];
++                s32 anim_id = base[idx0 * 4 + 0xD6];
++                lb_8000B1CC(Ground_801C3FA4((HSD_GObj*) gobj, anim_id), NULL,
++                            &sp94);
++            }
++            if (*(u32*) &gp->gv.venom.xDC != 0U) {
++                void* sub = *(void**) ((u8*) (*(u32*) &gp->gv.venom.xDC) + 0x2C);
++                if (sub != NULL) {
++                    *(f32*) ((u8*) sub + 0xE0) = sp94.x;
++                    *(f32*) ((u8*) sub + 0xE4) = sp94.y;
++                    *(f32*) ((u8*) sub + 0xE8) = sp94.z;
++                }
++            }
++
++            {
++                s32 idx0 = base[gp->gv.venom.xC8 + 14];
++                s32 anim_id = base[idx0 * 4 + 0xD6];
++                helper = Ground_801C3FA4((HSD_GObj*) gobj, anim_id);
++                if (helper == NULL) {
++                    __assert("jobj.h", 0x2E9, "jobj");
++                }
++                if (*(u32*) &gp->gv.venom.xDC != 0U) {
++                    void* sub = *(void**) ((u8*) (*(u32*) &gp->gv.venom.xDC) + 0x2C);
++                    if (sub != NULL) {
++                        *(f32*) ((u8*) sub + 0xDC) = helper->rotate.z;
++                    }
++                }
++            }
++        }
++    } else if (state < 0xC) {
++        if (!(gp->gv.venom.xF0 & 7) && HSD_Randi(8) == 0) {
++            gp->gv.venom.xFC = 0;
++            type_idx = base[gp->gv.venom.xC8 + 11];
++            switch (type_idx) {
++            case 8:
++                if (gp->gv.venom.xF0 > 0x3C && gp->gv.venom.xF0 < 0xE6) {
++                    gp->gv.venom.xFC = 1;
++                }
++                break;
++            case 9:
++                if (gp->gv.venom.xF0 > 0x32 && gp->gv.venom.xF0 < 0xE6) {
++                    gp->gv.venom.xFC = 1;
++                }
++                break;
++            case 10:
++                if (gp->gv.venom.xF0 > 0x5A && gp->gv.venom.xF0 < 0x104) {
++                    gp->gv.venom.xFC = 1;
++                }
++                break;
++            case 11:
++                if (gp->gv.venom.xF0 > 0x46 && gp->gv.venom.xF0 < 0xF0) {
++                    gp->gv.venom.xFC = 1;
++                }
++                break;
++            }
++        } else {
++            gp->gv.venom.xFC = 0;
++        }
++
++        other = (HSD_GObj*) base[gp->gv.venom.xC8 + 8];
++        if (other != NULL) {
++            Ground* other_gp_local = other->user_data;
++            Ground_801C2BA4(5);
++            lb_8000B1CC(Ground_801C3FA4(other, 5), NULL, &sp50);
++            {
++                f32* tab = (f32*) ((u8*) base + base[other_gp_local->gv.venom.xC8 + 11] * 12);
++                sp94.x = sp50.x + tab[0x86];
++                sp94.y = sp50.y + tab[0x87];
++                sp94.z = sp50.z + tab[0x88];
++            }
++        } else {
++            sp94.x = 0.0F;
++            sp94.y = 0.0F;
++            sp94.z = 0.0F;
++        }
++
++        if (sp94.z < -100.0F && sp94.z > -2000.0F && gp->gv.venom.xFC != 0) {
++            gp->gv.venom.xFC = 0;
++            slot = HSD_Randi(4);
++            retries = 0;
++            do {
++                slot = (slot + retries) & 3;
++                if (Player_GetPlayerSlotType(slot) != 3) {
++                    break;
++                }
++                retries++;
++            } while (retries < 4);
++
++            Player_LoadPlayerCoords(slot, &sp88);
++            if ((sp88.x > 0.0F && sp94.x > 0.0F) ||
++                (sp88.x < 0.0F && sp94.x < 0.0F)) {
++                sp88.y += 5.0F;
++                lbAudioAx_800237A8(0x6B6C9, 0x7F, 0x40);
++                fire_kind = -1;
++                {
++                    Ground* gp_re = gobj->user_data;
++                    s32 v = base[gp_re->gv.venom.xC8 + 14];
++                    if (v == 4) {
++                        fire_kind = 1;
++                    } else if (v >= 4) {
++                    } else if (v == 0) {
++                    } else if (v >= 0) {
++                        fire_kind = 0;
++                    }
++                }
++                if (fire_kind == 1) {
++                    it_802E7654((s32) gobj, Ground_801C3FA4((HSD_GObj*) gobj, 7),
++                                &sp88, 3, 0,
++                                *(f32*) ((u8*) grVe_804D6A30 + 0x34));
++                } else {
++                    if (gp->gv.venom.x100 != 0) {
++                        it_802E7654((s32) gobj, Ground_801C3FA4((HSD_GObj*) gobj, 5),
++                                    &sp88, 1, 0,
++                                    *(f32*) ((u8*) grVe_804D6A30 + 0x34));
++                    } else {
++                        it_802E7654((s32) gobj, Ground_801C3FA4((HSD_GObj*) gobj, 6),
++                                    &sp88, 1, 0,
++                                    *(f32*) ((u8*) grVe_804D6A30 + 0x34));
++                    }
++                    gp->gv.venom.x100 = (gp->gv.venom.x100 + 1) & 1;
++                }
++                grMaterial_801C9604((HSD_GObj*) gobj,
++                                    *(s32*) ((u8*) grVe_804D6A30 + 0x38), 0);
++            }
++        }
++    }
++
++    gp->gv.venom.xF0 = gp->gv.venom.xF0 + 1;
++    } else {
++        if (*(u32*) &gp->gv.venom.xE0 != 0U) {
++            Ground_801C4A08(*(HSD_GObj**) &gp->gv.venom.xE0);
++        }
++        if (*(u32*) &gp->gv.venom.xE4 != 0U) {
++            Ground_801C4A08(*(HSD_GObj**) &gp->gv.venom.xE4);
++        }
++        if (*(u32*) &gp->gv.venom.xE8 != 0U) {
++            Ground_801C4A08(*(HSD_GObj**) &gp->gv.venom.xE8);
++        }
++        if (*(u32*) &gp->gv.venom.xEC != 0U) {
++            Ground_801C4A08(*(HSD_GObj**) &gp->gv.venom.xEC);
++        }
++        Ground_801C4A08((HSD_GObj*) gobj);
++    }
++}
++
+ /// #grVenom_80205F30
+ 
+ void grVenom_80206870(Ground_GObj* arg) {}
+@@ -930,7 +1743,6 @@ void grVenom_80206874(Ground_GObj* gobj)
+     HSD_JObj* jobj2;
+     f32 scl;
+     void* attr;
+-    PAD_STACK(8);
+ 
+     gp = gobj->user_data;
+     jobj = gobj->hsd_obj;
+diff --git a/src/melee/gr/types.h b/src/melee/gr/types.h
+index 39dc4a498d..e69a8c0c00 100644
+--- a/src/melee/gr/types.h
++++ b/src/melee/gr/types.h
+@@ -1790,7 +1790,8 @@ struct UnkStageDat {
+     HSD_Spline** unk10;
+     s32 unk14;
+ 
+-    u8 x18_fill[0x20 - 0x18];
++    void* unk18;
++    s32 unk1C;
+ 
+     void* unk20;
+     s32 unk24;
+diff --git a/src/melee/lb/lbarq.c b/src/melee/lb/lbarq.c
+index 8bc948661d..aed49968bd 100644
+--- a/src/melee/lb/lbarq.c
++++ b/src/melee/lb/lbarq.c
+@@ -1,6 +1,7 @@
+ #include "lbarq.h"
+ 
+ #include <dolphin/os.h>
++#include <baselib/debug.h>
+ 
+ u32 lbArq_80014ABC(lbArqNode* arg0)
+ {
+@@ -61,7 +62,51 @@ void lbArq_80014AC4(lbArqHandle* handle)
+     }
+ }
+ 
+-/// #lbArq_80014BD0
++void lbArq_80014BD0(u32 source, void* dest, size_t length, lbArqCallback callback, void* callback_arg)
++{
++    lbArqGlobal* global = &lbArq_804316C0;
++    lbArqNode* rp;
++    lbArqNode** tail;
++    lbArqNode** free_head;
++    BOOL intr;
++
++    DCInvalidateRange(dest, length);
++    intr = OSDisableInterrupts();
++    rp = global->list[0];
++    free_head = &global->list[0];
++    HSD_ASSERT(0x67, rp);
++    *free_head = rp->next;
++    rp->callback = callback;
++    rp->callback_arg = callback_arg;
++
++    tail = &global->list[1];
++    while (*tail != NULL) {
++        tail = &(*tail)->next;
++    }
++    *tail = rp;
++    rp->next = NULL;
++    rp->state = 1;
++
++    ARQPostRequest(&rp->arq, (u32) rp, 1, 0, source, (u32) dest, length, (ARQCallback) lbArq_80014AC4);
++
++    if (rp->callback == NULL) {
++        OSRestoreInterrupts(intr);
++        while (lbArq_80014ABC(rp) != 2) {}
++        intr = OSDisableInterrupts();
++        tail = &global->list[rp->state];
++        while (*tail != rp) {
++            tail = &(*tail)->next;
++        }
++        *tail = rp->next;
++        while (*free_head != NULL) {
++            free_head = &(*free_head)->next;
++        }
++        *free_head = rp;
++        rp->next = NULL;
++        rp->state = 0;
++    }
++    OSRestoreInterrupts(intr);
++}
+ 
+ void lbArq_80014D2C(void)
+ {
+diff --git a/src/melee/lb/lbarq.h b/src/melee/lb/lbarq.h
+index e2b58f62e1..1ea78cfbaa 100644
+--- a/src/melee/lb/lbarq.h
++++ b/src/melee/lb/lbarq.h
+@@ -30,7 +30,7 @@ extern lbArqGlobal lbArq_804316C0;
+ 
+ /* 014ABC */ u32 lbArq_80014ABC(lbArqNode* arg0);
+ /* 014AC4 */ void lbArq_80014AC4(lbArqHandle* handle);
+-/* 014BD0 */ void lbArq_80014BD0(u32, void*, size_t, UNK_T, UNK_T);
++/* 014BD0 */ void lbArq_80014BD0(u32, void*, size_t, lbArqCallback, void*);
+ /* 014D2C */ void lbArq_80014D2C(void);
+ 
+ #endif
+diff --git a/src/melee/ty/toy.h b/src/melee/ty/toy.h
+index f8b3261e91..c414ff8b8e 100644
+--- a/src/melee/ty/toy.h
++++ b/src/melee/ty/toy.h
+@@ -136,6 +136,11 @@
+ /* 4D6EB4 */ extern s16* un_804D6EB4;
+ /* 4DDCD0 */ extern f64 un_804DDCD0;
+ 
++/* un_80308354 externs */
++/* 3FE474 */ extern char un_803FE474[];
++/* 4D5A48 */ extern char un_804D5A48[];
++/* 4D5A50 */ extern char un_804D5A50[];
++
+ /* un_803102D0 externs */
+ /* 4D6ECC */ extern void* un_804D6ECC;
+ /* 4D6EA8 */ extern void* un_804D6EA8;
+diff --git a/src/melee/ty/tylist.c b/src/melee/ty/tylist.c
+index 8b2efa93b7..8322ad6f56 100644
+--- a/src/melee/ty/tylist.c
++++ b/src/melee/ty/tylist.c
+@@ -3,6 +3,7 @@
+ #include "gm/gmmain_lib.h"
+ #include "if/textlib.h"
+ #include "lb/lb_00B0.h"
++#include "lb/lb_00F9.h"
+ #include "lb/lbarchive.h"
+ #include "lb/lblanguage.h"
+ #include "ty/toy.h"
+@@ -13,14 +14,19 @@
+ #include <baselib/cobj.h>
+ #include <baselib/controller.h>
+ #include <baselib/displayfunc.h>
++#include <baselib/dobj.h>
+ #include <baselib/fog.h>
+ #include <baselib/gobj.h>
+ #include <baselib/gobjgxlink.h>
+ #include <baselib/gobjobject.h>
+ #include <baselib/gobjplink.h>
+ #include <baselib/gobjproc.h>
++#include <baselib/mobj.h>
+ #include <baselib/sislib.h>
++#include <baselib/tobj.h>
+ #include <baselib/video.h>
++#include "lb/lbaudio_ax.h"
++#include "mn/mnmain.h"
+ 
+ typedef struct {
+     u8 pad[0x28];
+@@ -187,9 +193,240 @@ char* un_80312834(char* buf, u32 num)
+     return buf;
+ }
+ 
+-/// #un_80312904
++extern f32 un_804DDE28;
++extern f32 un_804DDE2C;
++extern f32 un_804DDE30;
++extern f32 un_804DDE34;
++extern f32 un_804DDE38;
++extern f32 un_804DDE3C;
++extern f32 un_804DDE40;
++extern f32 un_804DDE44;
++extern f32 un_804DDE48;
++extern f32 un_804DDE4C;
++extern f32 un_804DDE50;
++
++extern GXColor lb_804D3760;
++extern GXColor lb_804D3764;
++
++typedef struct TyListGobjEntry {
++    /* 0x00 */ HSD_GObj* x0;
++    /* 0x04 */ HSD_GObj* x4;
++    /* 0x08 */ u8 pad_8[0x0C - 0x08];
++    /* 0x0C */ s8 x0C;
++    /* 0x0D */ u8 pad_0D[0x16 - 0x0D];
++    /* 0x16 */ s8 x16;
++} TyListGobjEntry;
++
++extern TyListGobjEntry un_804A2D6C;
++
++typedef struct TyListRow {
++    /* 0x00 */ u8 pad_0[0xC];
++    /* 0x0C */ HSD_JObj* jobj;
++    /* 0x10 */ u8 pad_10[0x18 - 0x10];
++    /* 0x18 */ HSD_Text* text0;
++    /* 0x1C */ HSD_Text* text1;
++    /* 0x20 */ HSD_Text* text2;
++    /* 0x24 */ s8 x24;
++    /* 0x25 */ u8 pad_25;
++    /* 0x26 */ s16 idx;
++    /* 0x28 */ s32 x28;
++    /* 0x2C */ u8 pad_2C[0x30 - 0x2C];
++    /* 0x30 */ f32 x30;
++} TyListRow;
++
++void un_80312904(void* arg0, s8 arg1)
++{
++    TyListState* state = (TyListState*) un_804A2AC0;
++    TyListRow* row = (TyListRow*) arg0;
++    f32 f30;
++    f32 f29;
++    f32 f31;
++    s32 skip;
++    u8* digits;
++    PAD_STACK(0x78);
++
++    if (row->idx == -1) {
++        return;
++    }
++
++    if (un_GetTrophyTotal() < 0xB) {
++        s8 v = row->x24;
++        if (v == -1 || v == (s8) state->entryCount - 2) {
++            skip = 0;
++        } else {
++            skip = 1;
++        }
++    } else {
++        skip = 1;
++    }
++
++    if (skip == 0) {
++        return;
++    }
++
++    f30 = HSD_JObjGetTranslationX(row->jobj) - un_804DDE28;
++    f29 = (-row->x30 - HSD_JObjGetTranslationY(state->gobj->hsd_obj)) -
++          un_804DDE2C;
++    f31 = HSD_JObjGetTranslationZ(state->gobj->hsd_obj);
++
++    if (arg1 != 0x63) {
++        if ((s8) row->x24 == arg1) {
++            row->text0->text_color = lb_804D3764;
++            row->text1->text_color = lb_804D3764;
++            row->text2->text_color = lb_804D3764;
++        } else {
++            row->text0->text_color = lb_804D3760;
++            row->text1->text_color = lb_804D3760;
++            row->text2->text_color = lb_804D3760;
++        }
++    }
++
++    row->text0->pos_x = f30;
++    row->text0->pos_y = f29;
++    row->text0->pos_z = f31;
++    row->text0->font_size.x = un_804DDE30;
++    row->text0->font_size.y = un_804DDE34;
++    row->text0->default_kerning = 1;
++    HSD_SisLib_803A6368(row->text0, un_80308354(row->idx));
++
++    row->text1->pos_x = un_804DDE38 + f30;
++    row->text1->pos_y = f29;
++    row->text1->pos_z = f31;
++    row->text1->font_size.x = un_804DDE30;
++    row->text1->font_size.y = un_804DDE34;
++    HSD_SisLib_803A6368(row->text1, 0x13B);
++
++    digits = ((u8**) ((char*) HSD_SisLib_804D1124[0] + 0x4B8))[row->x28];
++    un_80312834((char*) digits, un_803048C0(un_80308354(row->idx)));
++
++    row->text2->default_alignment = 2;
++    row->text2->default_kerning = 1;
++    row->text2->pos_x = un_804DDE3C + f30;
++    row->text2->pos_y = f29;
++    row->text2->pos_z = f31;
++    row->text2->font_size.x = un_804DDE40;
++    row->text2->font_size.y = un_804DDE34;
++    HSD_SisLib_803A6368(row->text2, row->x28 + 0x12E);
++}
++
++void un_80312BAC(TyListState* state, s8 arg1)
++{
++    void* archive = un_804D6ED8;
++    s16 old_idx;
++    s32 var_r28;
++    s32 i;
++    TyListArg* row;
++    HSD_JObj* jobj;
++
++    old_idx = un_804D6EDC[state->selectedIdx];
++    un_803067BC((s8) state->x29B, (s8) state->x29C);
++    state->selectedIdx = un_803062BC((s32) old_idx);
++
++    if (un_GetTrophyTotal() <= 0xA) {
++        var_r28 = state->selectedIdx;
++        i = 0;
++        while (i < (s8) state->x278->x24 + 1) {
++            if (--var_r28 < 0) {
++                var_r28 = un_GetTrophyTotal() - 1;
++            }
++            i++;
++        }
++    } else {
++        var_r28 = state->selectedIdx;
++        i = 0;
++        while (i < (s8) state->x278->x24 + 1) {
++            if (--var_r28 < 0) {
++                var_r28 = un_GetTrophyTotal() - 1;
++            }
++            i++;
++        }
++    }
++
++    jobj = state->jobj;
++    row = state->x270;
++    if (jobj != NULL) {
++        f32 y = row->x30;
++        if (jobj == NULL) {
++            __assert(&un_804D5A78, 0x3B3, &un_804D5A80);
++        }
++        jobj->translate.y = y;
++        if (!(jobj->flags & 0x02000000)) {
++            if (jobj == NULL) {
++                goto done_first_dirty;
++            }
++            if (jobj == NULL) {
++                __assert(&un_804D5A78, 0x234, &un_804D5A80);
++            }
++            {
++                u32 flags = jobj->flags;
++                s32 skip = 0;
++                if (!(flags & 0x800000) && (flags & 0x40)) {
++                    skip = 1;
++                }
++                if (skip == 0) {
++                    HSD_JObjSetMtxDirtySub(jobj);
++                }
++            }
++        }
++    }
++done_first_dirty:
++
++    for (i = 0; i < (s8) state->entryCount; i++) {
++        row->idx = var_r28;
++        un_80312904(row, arg1);
++        un_80313464(row);
++        if (row->x24 >= 0 &&
++            row->x24 < (s8) state->entryCount - 2 &&
++            row->idx == un_GetTrophyTotal() - 1)
++        {
++            HSD_JObj* jobj2 = state->jobj;
++            if (jobj2 != NULL) {
++                f32 y = row->x30;
++                if (jobj2 == NULL) {
++                    __assert(&un_804D5A78, 0x3B3, &un_804D5A80);
++                }
++                jobj2->translate.y = y;
++                if (!(jobj2->flags & 0x02000000)) {
++                    if (jobj2 == NULL) {
++                        goto done_inner_dirty;
++                    }
++                    if (jobj2 == NULL) {
++                        __assert(&un_804D5A78, 0x234, &un_804D5A80);
++                    }
++                    {
++                        u32 flags = jobj2->flags;
++                        s32 skip = 0;
++                        if (!(flags & 0x800000) && (flags & 0x40)) {
++                            skip = 1;
++                        }
++                        if (skip == 0) {
++                            HSD_JObjSetMtxDirtySub(jobj2);
++                        }
++                    }
++                }
++            }
++        }
++done_inner_dirty:
++        row = row->x4;
++        var_r28++;
++        if (var_r28 >= un_GetTrophyTotal()) {
++            var_r28 = 0;
++        }
++    }
+ 
+-/// #un_80312BAC
++    i = 0;
++    while (i < 3) {
++        HSD_JObj* anim_jobj = *((HSD_JObj**)((u8*) archive + i * 4 + 0x18));
++        if (i == (s8) state->x29B) {
++            HSD_JObjReqAnim(anim_jobj, un_804DDE44);
++        } else {
++            HSD_JObjReqAnim(anim_jobj, un_804DDE48);
++        }
++        HSD_AObjSetRate(anim_jobj->u.dobj->mobj->tobj->aobj, un_804DDE48);
++        HSD_JObjAnim(anim_jobj);
++        i++;
++    }
++}
+ 
+ void un_80312E88(TyListArg* arg, float delta)
+ {
+@@ -290,7 +527,89 @@ void un_80312E88(TyListArg* arg, float delta)
+     un_80312904(arg, 0x63);
+     un_80313464(arg);
+ }
+-/// #un_8031305C
++s8 un_8031305C(void* a, TyListState* state, s8 movedFlag)
++{
++    TyListArg* entry;
++    f32 delta;
++    s32 i;
++    PAD_STACK(8);
++
++    if ((s8) state->x29F > 0) {
++        delta = state->x2A4;
++        if ((s8) state->x2A1 == 0) {
++            delta *= un_804DDE50;
++        }
++        entry = state->entries;
++        i = 0;
++        while (i < (s8) state->entryCount) {
++            s8 x2A1 = state->x2A1;
++            if (((s8) x2A1 != 0 || (entry->x24 != -1)) &&
++                ((s8) x2A1 != 1 || (s8) state->entryCount - 1 != entry->x24)) {
++                un_80312E88(entry, delta);
++            }
++            entry = (TyListArg*) ((u8*) entry + 0x34);
++            i++;
++        }
++        state->x29F = (u8) (state->x29F - 1);
++        if ((s8) state->x29F == 0) {
++            i = 0;
++            entry = state->entries;
++            while (i < (s8) state->entryCount) {
++                un_80312E88(entry, un_804DDE4C);
++                if ((s8) state->x2A1 == 0) {
++                    entry->x24 = (s8) (entry->x24 - 1);
++                    if (entry->x24 < -1) {
++                        entry->x24 = (s8) (state->entryCount - 2);
++                    }
++                } else {
++                    entry->x24 = (s8) (entry->x24 + 1);
++                    if (entry->x24 >= (s8) state->entryCount - 1) {
++                        entry->x24 = (s8) -1;
++                    }
++                }
++                entry = entry->x4;
++                i++;
++            }
++            if ((s8) state->x2A1 == 0) {
++                state->x270->idx = (s16) (state->x274->idx + 1);
++                if (state->x270->idx >= un_GetTrophyTotal()) {
++                    state->x270->idx = 0;
++                }
++                un_80312904(state->x270, un_804A2D6C.x0C);
++                state->x278 = state->x278->x4;
++                state->selectedIdx = state->x278->idx;
++                state->x270 = state->x270->x4;
++                state->x274 = state->x274->x4;
++            } else {
++                state->x274->idx = (s16) (state->x270->idx - 1);
++                if (state->x274->idx < 0) {
++                    state->x274->idx = (s16) (un_GetTrophyTotal() - 1);
++                }
++                un_80312904(entry, un_804A2D6C.x0C);
++                state->x278 = state->x278->x0;
++                state->selectedIdx = state->x278->idx;
++                state->x270 = state->x270->x0;
++                state->x274 = state->x274->x0;
++            }
++            if ((s8) state->x29E > 0) {
++                state->x29E = (u8) (state->x29E - 1);
++            }
++            if ((s8) state->x29E == 0) {
++                HSD_JObjClearFlagsAll(state->x288, 0x10U);
++                un_80312904(state->x278, (s8) state->x278->x24);
++                if (HSD_PadCopyStatus->button & 0xC00) {
++                    state->pad_2A0 = 5;
++                } else {
++                    state->pad_2A0 = 0;
++                }
++            }
++            if (movedFlag != 0) {
++                lbAudioAx_80024030(2);
++            }
++        }
++    }
++    return (s8) state->x29F;
++}
+ 
+ void un_80313358(TyListState* state, s8 arg2, s8 arg3, s8 arg4)
+ {
+@@ -458,9 +777,338 @@ HSD_JObj* un_80313508(void* parent, void* symbol, float x, float y, float z)
+ 
+ /// #un_80313774
+ 
+-/// #fn_80313BD8
++extern s32 un_804D6EE8;
++extern s32 un_804D6EEC;
++extern f32 un_804DDE44;
++extern f32 un_804DDE48;
++extern f32 un_804DDE50;
++extern f32 un_804DDE68;
++extern f32 un_804DDE78;
++extern f32 un_804DDE7C;
++extern f32 un_804DDE80;
++extern f32 un_804DDE84;
++extern f32 un_804DDE88;
++extern f32 un_804DDE8C;
++extern f32 un_804DDE90;
++extern f32 un_804DDE94;
++extern f32 un_804DDE98;
++extern char un_803FE5E8[];
++extern char un_804D5A88[3];
++
++s8 un_8031305C(void* a, TyListState* state, s8 movedFlag);
++void un_80312BAC(TyListState* state, s8 arg1);
++
++void fn_80313BD8(HSD_GObj* gobj)
++{
++    TyListState* state = (TyListState*) un_804A2AC0;
++    s8* g = ((s8*) state) + 0x2AC;
++    f32 f30;
++    f32 f31;
++    HSD_JObj* jobj;
++    f32 ftmp;
++    s32 i;
++    TyListArg* p;
++    s8 v;
++
++    if (un_GetTrophyTotal() > 10) {
++        if (un_8031305C(g, state, 1) != 0) {
++            return;
++        }
++        if ((s8) state->pad_2A0 != 0) {
++            state->pad_2A0 = state->pad_2A0 - 1;
++            return;
++        }
++        if ((s8) state->x29E != 0) {
++            s32 d = (s8) state->pad_29D;
++            s32 half = d / 2;
++            s32 r;
++            if ((d % 2) != 0) {
++                if ((s8) state->x29E <= half) {
++                    r = 5 - (s8) state->x29E;
++                } else {
++                    r = 4 - (d - (s8) state->x29E);
++                }
++            } else if ((s8) state->x29E == half) {
++                r = 4 - (d - ((s8) state->x29E + 1));
++            } else if ((s8) state->x29E < half) {
++                r = 4 - (s8) state->x29E;
++            } else {
++                r = 4 - (d - (s8) state->x29E);
++            }
++            if (r < 2) {
++                r = 2;
++            }
++            un_80313358(state, -1, (s8) r, -1);
++            return;
++        }
++    }
++
++    /* Fall-through label: block_17 */
++    f30 = un_80305D00();
++    f31 = un_80305DB0();
++    if (f30 < un_804DDE78) {
++        g[0x12] = g[0x12] + 1;
++        f30 = un_804DDE50;
++        f31 = un_804DDE48;
++    } else if (f30 > un_804DDE7C) {
++        g[0x12] = g[0x12] + 1;
++        f30 = un_804DDE44;
++        f31 = un_804DDE48;
++    } else if (f31 < un_804DDE80 || (un_80305C44() & 4)) {
++        g[0x12] = g[0x12] + 1;
++        f30 = un_804DDE48;
++        f31 = un_804DDE44;
++    } else if (f31 > un_804DDE84 || (un_80305C44() & 8)) {
++        g[0x12] = g[0x12] + 1;
++        f30 = un_804DDE48;
++        f31 = un_804DDE50;
++    } else {
++        f31 = un_804DDE48;
++        g[0xF] = 0;
++        f30 = f31;
++        g[0x12] = 0;
++        g[0x14] = 6;
++        g[0x13] = 0;
++        g[0x11] = 0;
++        g[0x10] = 0;
++    }
++
++    if (mn_8022F218() != 0) {
++        lbAudioAx_80024030(0);
++        HSD_GObjProc_8038FE24(HSD_GObj_804D7838);
++        un_80310660(0);
++        un_803148E4(0);
++        mn_8022F268();
++        ((TyModeState*) un_804A284C)->x4 = 1;
++        return;
++    }
++
++    if (un_80305B88() & 0x200) {
++        lbAudioAx_80024030(0);
++        HSD_GObjProc_8038FE24(HSD_GObj_804D7838);
++        un_80310660(0);
++        un_803148E4(0);
++        ((TyModeState*) un_804A284C)->x4 = 1;
++        return;
++    }
++
++    if (un_GetTrophyTotal() == 0) {
++        return;
++    }
++
++    if (un_80305B88() & 0x1100) {
++        lbAudioAx_80024030(1);
++        HSD_GObjProc_8038FE24(HSD_GObj_804D7838);
++        un_80310660(0);
++        un_803148E4(1);
++        un_80310324();
++        return;
++    }
++
++    if ((s8) g[0x12] > (s8) g[0x14]) {
++        g[0x12] = g[0x14] + 1;
++        g[0x14] = 3;
++        g[0xF] = 0;
++    }
++
++    if ((f30 < un_804DDE48 && f30 != (f32) (s8) g[0x10]) ||
++        (un_80305B88() & 0x41))
++    {
++        g[0x10] = (s8) f30;
++        state->x29B = state->x29B - 1;
++        if ((s8) state->x29B < 0) {
++            state->x29B = 2;
++        }
++        un_80312BAC(state, g[0xC]);
++        lbAudioAx_80024030(1);
++        return;
++    }
++
++    if ((f30 > un_804DDE48 && f30 != (f32) (s8) g[0x10]) ||
++        (un_80305B88() & 0x22))
++    {
++        g[0x10] = (s8) f30;
++        state->x29B = state->x29B + 1;
++        if ((s8) state->x29B >= 3) {
++            state->x29B = 0;
++        }
++        un_80312BAC(state, g[0xC]);
++        lbAudioAx_80024030(1);
++        return;
++    }
++
++    if (un_GetTrophyTotal() < 2) {
++        return;
++    }
++
++    if (un_GetTrophyTotal() > 10) {
++        if (un_80305C44() & 0x400) {
++            HSD_JObjSetFlagsAll(state->jobj, 0x10);
++            if (state->entries[0].idx == 0 ||
++                state->entries[0].x0->idx + 9 < un_GetTrophyTotal())
++            {
++                un_80313358(state, 9, 4, 0);
++            } else {
++                un_80313358(state,
++                            (s8) (un_GetTrophyTotal() -
++                                  state->entries[0].idx),
++                            4, 0);
++            }
++            state->pad_29D = state->x29E;
++            return;
++        }
++        if (un_80305C44() & 0x800) {
++            s16 idx;
++            HSD_JObjSetFlagsAll(state->jobj, 0x10);
++            idx = state->entries[0].idx;
++            if (idx == un_GetTrophyTotal() - 1 ||
++                state->entries[0].x4->idx - 9 > 0)
++            {
++                un_80313358(state, 9, 4, 1);
++            } else {
++                un_80313358(state, (s8) idx, 4, 1);
++            }
++            state->pad_29D = state->x29E;
++            return;
++        }
++    }
++
++    if (f31 == un_804DDE48) {
++        return;
++    }
++    if ((s8) g[0xF] != 0) {
++        return;
++    }
++    g[0xF] = 1;
++    g[0xC] = (s8) ((f32) (s8) g[0xC] + f31);
++    if ((s8) g[0xC] < 0) {
++        g[0xC] = 0;
++    } else if ((s8) g[0xC] > (s8) state->entryCount - 3) {
++        g[0xC] = state->entryCount - 3;
++    }
++
++    if ((s8) g[0xC] != (s8) g[0xD]) {
++        i = 0;
++        g[0x12] = 0;
++        p = &state->entries[0];
++        g[0x13] = 0;
++        g[0x11] = (s8) f31;
++        for (; i < (s8) state->entryCount; i++, p++) {
++            if (((s8*) p)[0x24] == g[0xC]) {
++                state->selectedIdx = p->idx;
++                state->entries[10].x0 = (TyListArg*) p;
++                lbAudioAx_80024030(2);
++                jobj = state->jobj;
++                ftmp = p->x30;
++                if (jobj == NULL) {
++                    __assert(&un_804D5A78, 0x3B3, &un_804D5A80);
++                }
++                jobj->translate.y = ftmp;
++                if (!(jobj->flags & 0x02000000)) {
++                    if (jobj != NULL) {
++                        u32 flags = jobj->flags;
++                        s32 skip = 0;
++                        if (!(flags & 0x800000) && (flags & 0x40)) {
++                            skip = 1;
++                        }
++                        if (skip == 0) {
++                            HSD_JObjSetMtxDirtySub(jobj);
++                        }
++                    }
++                }
++            }
++            un_80312904(p, state->x2B8);
++        }
++        g[0xD] = g[0xC];
++        return;
++    }
++
++    if (un_GetTrophyTotal() <= 10) {
++        return;
++    }
++    if ((s8) g[0x11] == 0) {
++        g[0x13] = 5;
++        g[0x12] = g[0x14] + 1;
++        g[0x14] = 3;
++        g[0xF] = 0;
++    }
++    g[0x11] = (s8) f31;
++    v = g[0x13];
++    if (v == 0) {
++        g[0x13] = 1;
++        return;
++    }
++    if (v < 5) {
++        g[0x13] = v + 1;
++        return;
++    }
++
++    p = &state->entries[0];
++    for (i = 0; i < (s8) state->entryCount; i++, p++) {
++        un_80312904(p, state->entryCount);
++    }
++    HSD_JObjSetFlagsAll(state->jobj, 0x10);
++    if (f31 > un_804DDE48) {
++        un_80313358(state, 1, 6, 0);
++    } else {
++        un_80313358(state, 1, 6, 1);
++    }
++}
++
++typedef struct TyListArchive {
++    /* 0x00 */ HSD_JObj** x0;
++    /* 0x04 */ u8 pad_4[0x18 - 0x4];
++    /* 0x18 */ HSD_JObj* jobjs[3];
++} TyListArchive;
+ 
+-/// #fn_8031438C
++void fn_8031438C(HSD_GObj* arg0)
++{
++    TyListState* state = (TyListState*) un_804A2AC0;
++    TyListGobjEntry* entry = (TyListGobjEntry*) &state->gobj_2AC;
++    TyListArchive* archive = un_804D6ED8;
++    s32 i;
++    HSD_GObj* tmp;
++    PAD_STACK(0x18);
++
++    if (((s8*) state)[0x2C2] != 0) {
++        if (entry->x16 > 1) {
++            for (i = 0; i < 3; i++) {
++                u8* base_p = (u8*) archive + i * 4;
++                if (i == (s8) state->x29B) {
++                    HSD_JObjReqAnim(*(HSD_JObj**) (base_p + 0x18),
++                                    un_804DDE44);
++                } else {
++                    HSD_JObjReqAnim(*(HSD_JObj**) (base_p + 0x18),
++                                    un_804DDE48);
++                }
++                HSD_AObjSetRate(
++                    archive->jobjs[0]->u.dobj->mobj->tobj->aobj,
++                    un_804DDE48);
++            }
++            HSD_JObjAnimAll((HSD_JObj*) archive->x0[10]);
++        } else {
++            tmp = entry->x4;
++            if (tmp != NULL) {
++                ((s32*) tmp)[9] = 0;
++                ((s32*) tmp)[8] = 0x42100000;
++            }
++            state->x290 = HSD_SisLib_803A6754(3, un_804D6EEC);
++            state->x290->pos_z = un_804DDE68;
++            state->x290->font_size.x = un_804DDE40;
++            state->x290->font_size.y = un_804DDE34;
++            state->x290->default_kerning = 1;
++            state->x290->default_alignment = 2;
++            HSD_SisLib_803A6B98(state->x290, un_804DDE88, un_804DDE8C,
++                                un_804D5A88, un_GetTrophyTotal());
++        }
++        entry->x16--;
++        return;
++    }
++
++    HSD_GObjProc_8038FED4(arg0);
++    HSD_GObj_SetupProc(entry->x0, fn_80313BD8, 0);
++    HSD_GObj_80390CD4(entry->x0);
++}
+ 
+ void fn_80314504(HSD_GObj* gobj)
+ {
+@@ -475,7 +1123,63 @@ void fn_80314504(HSD_GObj* gobj)
+     }
+ }
+ 
+-/// #un_8031457C
++void un_8031457C(void)
++{
++    TyListGobjEntry* entry = &un_804A2D6C;
++    TyArchiveData* archive = un_804D6ED8;
++    HSD_CameraDescPerspective* desc;
++    HSD_CObj* cobj;
++    Vec3 interest;
++    Vec3 eye;
++    Scissor scissor;
++    HSD_RectS16 viewport;
++
++    desc = HSD_ArchiveGetPublicAddress(archive->data, un_803FE5E8);
++    if (desc != NULL) {
++        entry->x0 = GObj_Create(1, 2, 0);
++        HSD_GObjObject_80390A70(entry->x0, HSD_GObj_804D784B,
++                                lb_80013B14(desc));
++        GObj_SetupGXLinkMax(entry->x0, (GObj_RenderFunc) un_80306954, 0);
++        entry->x0->gxlink_prios = 0x9010000000000000ULL;
++        HSD_GObj_SetupProc(entry->x0, fn_8031438C, 0);
++        HSD_GObj_80390CD4(entry->x0);
++        entry->x16 = 0x1A;
++    }
++    un_804D6EEC = HSD_SisLib_803A611C(3, entry->x0, 0xC, 0xC, 0, 0x3F, 0, 0);
++    if (desc != NULL) {
++        entry->x4 = GObj_Create(1, 2, 0);
++        cobj = lb_80013B14(desc);
++        HSD_GObjObject_80390A70(entry->x4, HSD_GObj_804D784B, cobj);
++        GObj_SetupGXLinkMax(entry->x4, (GObj_RenderFunc) fn_80314504, 0);
++        entry->x4->gxlink_prios = 0x0210000000000000ULL;
++        interest.x = un_804DDE90;
++        interest.y = un_804DDE94;
++        interest.z = un_804DDE48;
++        HSD_CObjSetInterest(cobj, &interest);
++        eye.x = un_804DDE90;
++        eye.y = un_804DDE94;
++        eye.z = un_804DDE98;
++        HSD_CObjSetEyePosition(cobj, &eye);
++        viewport.xmin = 0x76;
++        viewport.xmax = 0x230;
++        viewport.ymin = 0x4E;
++        viewport.ymax = 0x19C;
++        HSD_CObjSetViewport(cobj, &viewport);
++        viewport.ymin = 0x60;
++        if (un_GetTrophyTotal() < 10) {
++            viewport.ymax = un_GetTrophyTotal() * 0x1E + 0x60;
++        } else {
++            viewport.ymax = 0x18A;
++        }
++        scissor.left = viewport.xmin;
++        scissor.right = viewport.xmax;
++        scissor.top = viewport.ymin;
++        scissor.bottom = viewport.ymax;
++        HSD_CObjSetScissor(cobj, &scissor);
++        un_804D6EE8 = HSD_SisLib_803A611C(0, entry->x4, 0xB, 0xB, 0, 0x3E, 0,
++                                          0);
++    }
++}
+ 
+ void un_803147C4(void)
+ {
+diff --git a/src/melee/ty/tylist.h b/src/melee/ty/tylist.h
+index 3110a83545..44be0a74c6 100644
+--- a/src/melee/ty/tylist.h
++++ b/src/melee/ty/tylist.h
+@@ -16,13 +16,17 @@ struct TyListState;
+ /* 3127D4 */ void un_803127D4(void);
+ /* 312834 */ char* un_80312834(char* buf, u32 num);
+ /* 312904 */ void un_80312904(void*, s8);
++/* 312BAC */ void un_80312BAC(struct TyListState* state, s8 arg1);
+ /* 312E88 */ void un_80312E88(struct TyListArg* arg, float delta);
++/* 31305C */ s8 un_8031305C(void* a, struct TyListState* state, s8 movedFlag);
+ /* 313358 */ void un_80313358(struct TyListState* state, s8 arg2, s8 arg3,
+                               s8 arg4);
+ /* 313464 */ void un_80313464(struct TyListArg* arg);
+ /* 313508 */ HSD_JObj* un_80313508(void* parent, void* symbol, float x,
+                                    float y, float z);
+ /* 313774 */ void un_80313774(void);
++/* 313BD8 */ void fn_80313BD8(HSD_GObj* gobj);
++/* 31438C */ void fn_8031438C(HSD_GObj* arg0);
+ /* 314504 */ void fn_80314504(HSD_GObj* gobj);
+ /* 3147C4 */ void un_803147C4(void);
+ /* 3148E4 */ void un_803148E4(s32 arg0);
+diff --git a/src/melee/ty/types.h b/src/melee/ty/types.h
+index 1af64a9d70..24cd2ee9dc 100644
+--- a/src/melee/ty/types.h
++++ b/src/melee/ty/types.h
+@@ -67,7 +67,9 @@ typedef struct TyListArg {
+     /* 0x0C */ struct HSD_JObj* xC;
+     /* 0x10 */ struct HSD_JObj* x10;
+     /* 0x14 */ struct HSD_JObj* x14;
+-    /* 0x18 */ u8 pad_18[0x26 - 0x18];
++    /* 0x18 */ u8 pad_18[0x24 - 0x18];
++    /* 0x24 */ s8 x24;
++    /* 0x25 */ u8 pad_25;
+     /* 0x26 */ s16 idx;
+     /* 0x28 */ u8 pad_28[0x2C - 0x28];
+     /* 0x2C */ float x2C;
+@@ -77,11 +79,15 @@ typedef struct TyListArg {
+ /* Trophy list UI state. Size: 0x2D8 bytes. */
+ typedef struct TyListState {
+     /* 0x000 */ TyListArg entries[12]; /* 12 * 0x34 = 0x270 */
+-    /* 0x270 */ u8 pad_270[0xC];
++    /* 0x270 */ struct TyListArg* x270;
++    /* 0x274 */ struct TyListArg* x274;
++    /* 0x278 */ struct TyListArg* x278;
+     /* 0x27C */ struct HSD_GObj* gobj;
+-    /* 0x280 */ u8 pad_280[0xC];
++    /* 0x280 */ u8 pad_280[0x8];
++    /* 0x288 */ struct HSD_JObj* x288;
+     /* 0x28C */ struct HSD_JObj* jobj;
+-    /* 0x290 */ u8 pad_290[8];
++    /* 0x290 */ struct HSD_Text* x290;
++    /* 0x294 */ u8 pad_294[4];
+     /* 0x298 */ s16 selectedIdx;
+     /* 0x29A */ s8 entryCount;
+     /* 0x29B */ u8 x29B;
+diff --git a/src/sysdolphin/baselib/hsd_3AA7.c b/src/sysdolphin/baselib/hsd_3AA7.c
+index 6944ba0990..c4c4bb2366 100644
+--- a/src/sysdolphin/baselib/hsd_3AA7.c
++++ b/src/sysdolphin/baselib/hsd_3AA7.c
+@@ -8,6 +8,7 @@
+ 
+ /* 4D7980 */ extern s32 hsd_804D7980;
+ /* 4D7984 */ extern volatile s32 hsd_804D7984;
++/* 4D7988 */ extern s32 hsd_804D7988;
+ /* 4D7998 */ extern s32 hsd_804D7998;
+ /* 4D799C */ extern s32 hsd_804D799C;
+ 
+@@ -17,7 +18,115 @@ typedef struct CardBufEntry {
+     s32 x14, x18, x1C, x20;
+ } CardBufEntry;
+ 
+-/// #fn_803AA790
++typedef struct CardQueueEntry {
++    /* 0x00 */ s32 x0;
++    /* 0x04 */ s32 x4;
++    /* 0x08 */ s32 x8;
++    /* 0x0C */ s32 xC;
++    /* 0x10 */ s32 x10;
++    /* 0x14 */ void (*x14)(s32, s32);
++} CardQueueEntry;
++
++s32 fn_803AA790(void)
++{
++    CardQueueEntry* entry;
++    s32 idx;
++    s32 result;
++    s32 arg0;
++    s32 sub_state;
++    void (*cb)(s32, s32);
++
++    idx = hsd_804D7990;
++    entry = (CardQueueEntry*) ((u8*) &hsd_804D2348 + idx * 0x18);
++    arg0 = entry->x4;
++    hsd_804D7990 = (idx + 1) % 32;
++
++    switch (entry->x0) {
++    case 1:
++        result = fn_803ADF90(entry->x4, entry->x8, entry->xC, 1,
++                             (s32) entry->x14);
++        if (result < 0) {
++            cb = entry->x14;
++            if (cb != NULL) {
++                cb(entry->x8, result);
++            }
++        }
++        entry->x0 = 0;
++        return result;
++    case 2:
++        sub_state = ((s32*) (arg0 + 0x28))[entry->x8];
++        switch (sub_state) {
++        case 3:
++            result = fn_803B0120(entry->x4, entry->x8, entry->xC, 1,
++                                 (s32) entry->x14);
++            break;
++        case 0:
++            result = fn_803AE7F8(entry->x4, entry->x8, entry->xC, 1,
++                                 (s32) entry->x14);
++            break;
++        default:
++            if (sub_state > 0 && sub_state < 3) {
++                result = fn_803AF3F0(entry->x4, entry->x8, entry->xC, 1,
++                                     (s32) entry->x14);
++            } else {
++                result = -0x101;
++            }
++            break;
++        }
++        if (result < 0) {
++            cb = entry->x14;
++            if (cb != NULL) {
++                cb(entry->x8, result);
++            }
++        }
++        entry->x0 = 0;
++        return result;
++    case 3:
++        result = fn_803B1F78((CardState*) entry->x4, entry->x8, entry->xC,
++                             entry->x10, (s32) entry->x14);
++        if (result < 0) {
++            cb = entry->x14;
++            if (cb != NULL) {
++                cb(0, result);
++            }
++        }
++        entry->x0 = 0;
++        return result;
++    case 4:
++        result = fn_803B21E8(entry->x4, entry->xC, entry->x10, (s32) entry->x14);
++        if (result < 0) {
++            cb = entry->x14;
++            if (cb != NULL) {
++                cb(0, result);
++            }
++        }
++        entry->x0 = 0;
++        return result;
++    case 5:
++        result = fn_803ADE4C(arg0, entry->x8, (s32) entry->x14);
++        if (result < 0) {
++            cb = entry->x14;
++            if (cb != NULL) {
++                cb(0, result);
++            }
++        }
++        entry->x0 = 0;
++        return result;
++    case 6:
++        result = fn_803B26CC((CardState*) arg0, entry->x8, entry->xC,
++                             entry->x10, (s32) entry->x14);
++        if (result < 0) {
++            cb = entry->x14;
++            if (cb != NULL) {
++                cb(0, result);
++            }
++        }
++        entry->x0 = 0;
++        return result;
++    default:
++        return -0x101;
++    }
++}
+ 
+ /// #hsd_803AAA48
+ 
+@@ -155,9 +264,111 @@ void hsd_803AC3E0(struct hsd_803AC3E0_arg0_t* file_desc, int file_idx,
+     file_desc->x70[file_idx] = file_flags;
+ }
+ 
+-/// #fn_803AC3F8
++void fn_803AC3F8(void* arg0, u8* data, s32 idx)
++{
++    struct hsd_803AC3E0_arg0_t* file_desc = (struct hsd_803AC3E0_arg0_t*) arg0;
++    s32 start;
++    s32 i;
++    s32 remaining;
++    s32 unroll;
+ 
+-/// #hsd_803AC558
++    if (idx + 1 >= 9 || file_desc->x4C[idx + 1] == 0) {
++        start = idx - 2;
++    } else {
++        start = idx - 1;
++    }
++    if (start < 0) {
++        start = 0;
++    }
++
++    for (i = 0; i < 3 && i < 9; i++) {
++        s32 j = start + i;
++        u32 flags = file_desc->x28[j];
++        data[0] = (u8) j;
++        data[1] = (u8) (((file_desc->x4C[j] >> 16) & 0x3F) | ((flags << 6) & 0xC0));
++        data[2] = (u8) (file_desc->x4C[j] >> 8);
++        data[3] = (u8) file_desc->x4C[j];
++        data += 4;
++    }
++
++    remaining = 3 - i;
++    if (i >= 3) {
++        return;
++    }
++
++    unroll = remaining >> 3;
++    if (unroll != 0) {
++        do {
++            data[0] = 0;
++            data[1] = 0;
++            data[2] = 0;
++            data[3] = 0;
++            data[4] = 0;
++            data[5] = 0;
++            data[6] = 0;
++            data[7] = 0;
++            data[8] = 0;
++            data[9] = 0;
++            data[10] = 0;
++            data[11] = 0;
++            data[12] = 0;
++            data[13] = 0;
++            data[14] = 0;
++            data[15] = 0;
++            data[16] = 0;
++            data[17] = 0;
++            data[18] = 0;
++            data[19] = 0;
++            data[20] = 0;
++            data[21] = 0;
++            data[22] = 0;
++            data[23] = 0;
++            data[24] = 0;
++            data[25] = 0;
++            data[26] = 0;
++            data[27] = 0;
++            data[28] = 0;
++            data[29] = 0;
++            data[30] = 0;
++            data[31] = 0;
++            data += 0x20;
++            unroll--;
++        } while (unroll != 0);
++        remaining &= 7;
++        if (remaining == 0) {
++            return;
++        }
++    }
++
++    do {
++        data[0] = 0;
++        data[1] = 0;
++        data[2] = 0;
++        data[3] = 0;
++        data += 4;
++        remaining--;
++    } while (remaining != 0);
++}
++
++/// @todo Currently 76.6% match - mwcc emits combined `rlwimi. r6,r0,8,10,23`
++/// (14-bit insert with CR0) and `srawi/clrlwi` for top-2-bit extract; permuter
++/// queued
++void hsd_803AC558(struct hsd_803AC3E0_arg0_t* file_desc, u8* data)
++{
++    int i;
++    for (i = 0; i < 3; i++) {
++        u8 file_idx = data[0];
++        u8 byte1 = data[1];
++        u32 size = (((u32) data[2] | ((byte1 << 8) & 0x3F00)) << 8) | data[3];
++        u8 flags = byte1 >> 6;
++
++        if (size != 0 && file_desc->x4C[file_idx] == 0) {
++            file_desc->x28[file_idx] = flags;
++            file_desc->x4C[file_idx] = size;
++        }
++        data += 4;
++    }
++}
+ 
+ u32 fn_803AC634(struct hsd_803AC3E0_arg0_t* file_desc, s32 file_idx)
+ {
+@@ -187,7 +398,65 @@ u32 fn_803AC634(struct hsd_803AC3E0_arg0_t* file_desc, s32 file_idx)
+     }
+ }
+ 
+-/// #fn_803AC6B8
++/// @todo Currently 93.75% match - 16 mismatches: dead bgt/li/b branch in i=0
++/// path (compiler emits redundant 0-result fallback) plus regalloc swaps
++/// (r5/r6/r8) in inlined sector arithmetic, and +1 absorption order
++s32 fn_803AC6B8(struct hsd_803AC3E0_arg0_t* file_desc, s32 file_count)
++{
++    s32 first_size;
++    s32 total;
++    s32 i;
++    u32 sector_size;
++    u32 usable;
++    s32 remaining;
++    s32 cur_size;
++    s32 cur_blocks;
++
++    if (file_count >= 9) {
++        return 0;
++    }
++    if (file_count == 0) {
++        return 0;
++    }
++
++    first_size = file_desc->x4C[0];
++    total = 1;
++    if (first_size > 0) {
++        sector_size = file_desc->x8;
++        remaining = first_size - (s32) ((sector_size - 0x20) -
++                                        (file_desc->x24 + 0x30) % sector_size);
++        usable = sector_size - 0x20;
++        if (remaining <= 0) {
++            total = 1;
++        } else {
++            total = (u32) (remaining + sector_size - 0x21) / usable + 1;
++        }
++    }
++
++    for (i = 1; i < file_count; i++) {
++        cur_size = file_desc->x4C[i];
++        if (cur_size <= 0) {
++            cur_blocks = 0;
++        } else if (i == 0) {
++            sector_size = file_desc->x8;
++            remaining = first_size - (s32) ((sector_size - 0x20) -
++                                            (file_desc->x24 + 0x30) % sector_size);
++            usable = sector_size - 0x20;
++            if (remaining <= 0) {
++                cur_blocks = 1;
++            } else {
++                cur_blocks = (u32) (remaining + sector_size - 0x21) / usable + 1;
++            }
++        } else {
++            sector_size = file_desc->x8;
++            cur_blocks = (u32) (cur_size + sector_size - 0x21) /
++                         (sector_size - 0x20);
++        }
++        total += cur_blocks;
++    }
++
++    return total;
++}
+ 
+ /// #fn_803AC7DC
+ 
+@@ -730,7 +999,21 @@ s32 fn_803B21E8(s32 card_state, s32 file_id, s32 seq_num, s32 callback)
+     return 0;
+ }
+ 
+-/// #hsd_803B2374
++void hsd_803B2374(void)
++{
++    s32 i;
++
++    hsd_804D7990 = 0;
++    hsd_804D7994 = 0;
++    memset(&hsd_804D2348, 0, sizeof(hsd_804D2348));
++    hsd_804D7980 = 0;
++    hsd_804D7984 = 0;
++    hsd_804D799C = 2;
++    for (i = 0; i < 128; i++) {
++        hsd_804D1148[i][0] = 0;
++    }
++    hsd_804D7988 = 0;
++}
+ 
+ void hsd_803B24E4(s32* ctx, int channel, int file_no, void* work_buf)
+ {
+@@ -741,7 +1024,77 @@ void hsd_803B24E4(s32* ctx, int channel, int file_no, void* work_buf)
+     ctx[0] = (s32) work_buf;
+ }
+ 
+-/// #hsd_803B2550
++int hsd_803B2550(s32* arg0, const char* arg1, void (*arg2)(int, int))
++{
++    u8* base;
++    char* filename;
++    s32 chan;
++    s32 retries;
++    s32 result;
++    s32 write_idx;
++    PAD_STACK(8);
++
++    base = hsd_804D1138;
++    filename = (char*) arg1;
++    chan = arg0[1];
++    retries = 0;
++    do {
++        result = CARDOpen(chan, filename, (CARDFileInfo*) (arg0 + 3));
++        if (result != -1) {
++            break;
++        }
++        retries++;
++    } while (retries < 10);
++
++    if (result < 0) {
++        return result;
++    }
++
++    {
++        s32 tmp = arg0[4];
++        retries = 0;
++        if (tmp == -1) {
++            do {
++                retries++;
++            } while (retries < 10);
++        }
++        if (tmp < 0) {
++            return tmp;
++        }
++        retries = tmp;
++    }
++
++    chan = 0;
++    do {
++        if (CARDClose((CARDFileInfo*) (arg0 + 3)) != -1) {
++            break;
++        }
++        chan++;
++    } while (chan < 10);
++
++    {
++        s32 read_idx = hsd_804D7990;
++        write_idx = hsd_804D7994;
++
++        if (read_idx == write_idx) {
++            if (*(s32*) (base + 0x1210 + read_idx * 0x18) != 0) {
++                return -265;
++            }
++        }
++    }
++
++    {
++        u8* entry = base + 0x1210 + write_idx * 0x18;
++        s32 next = write_idx + 1;
++        *(s32*) (entry + 0x00) = 5;
++        *(s32*) (entry + 0x04) = (s32) arg0;
++        *(s32*) (entry + 0x08) = retries;
++        *(s32*) (entry + 0x14) = (s32) arg2;
++        hsd_804D7994 = next % 32;
++    }
++
++    return 0;
++}
+ 
+ s32 hsd_803B2674(CardState* state)
+ {
+diff --git a/src/sysdolphin/baselib/hsd_3AA7.h b/src/sysdolphin/baselib/hsd_3AA7.h
+index 378275ce46..55e81df38e 100644
+--- a/src/sysdolphin/baselib/hsd_3AA7.h
++++ b/src/sysdolphin/baselib/hsd_3AA7.h
+@@ -20,7 +20,7 @@ typedef struct CardState {
+     /* 0x24 */ u32 x24;
+ } CardState;
+ 
+-/* 3AA790 */ UNK_RET fn_803AA790(UNK_PARAMS);
++/* 3AA790 */ s32 fn_803AA790(void);
+ /* 3AAA48 */ UNK_RET hsd_803AAA48(UNK_PARAMS);
+ /* 3AC168 */ s32 fn_803AC168(s32* cmd_buf);
+ /* 3AC258 */ void fn_803AC258(CardState* card_state, s32 block_idx);
+@@ -36,7 +36,8 @@ typedef struct CardState {
+ /* 3AC558 */ void hsd_803AC558(struct hsd_803AC3E0_arg0_t*, u8*);
+ /* 3AC634 */ u32 fn_803AC634(struct hsd_803AC3E0_arg0_t* file_desc,
+                              s32 file_idx);
+-/* 3AC6B8 */ UNK_RET fn_803AC6B8(UNK_PARAMS);
++/* 3AC6B8 */ s32 fn_803AC6B8(struct hsd_803AC3E0_arg0_t* file_desc,
++                              s32 file_count);
+ 
+ /* 3AC7DC */ s32 fn_803AC7DC(CardState*);
+ /* 3ACB74 */ s32 fn_803ACB74(s32 seq_a, s32 seq_b);
+@@ -52,10 +53,10 @@ typedef struct CardState {
+                              s32 version);
+ /* 3AD16C */ UNK_RET fn_803AD16C(UNK_PARAMS);
+ /* 3ADE4C */ s32 fn_803ADE4C(s32 card_state, s32 channel, s32 callback);
+-/* 3ADF90 */ UNK_RET fn_803ADF90(UNK_PARAMS);
+-/* 3AE7F8 */ UNK_RET fn_803AE7F8(UNK_PARAMS);
+-/* 3AF3F0 */ UNK_RET fn_803AF3F0(UNK_PARAMS);
+-/* 3B0120 */ UNK_RET fn_803B0120(UNK_PARAMS);
++/* 3ADF90 */ s32 fn_803ADF90(s32, s32, s32, s32, s32);
++/* 3AE7F8 */ s32 fn_803AE7F8(s32, s32, s32, s32, s32);
++/* 3AF3F0 */ s32 fn_803AF3F0(s32, s32, s32, s32, s32);
++/* 3B0120 */ s32 fn_803B0120(s32, s32, s32, s32, s32);
+ /* 3B0E9C */ s32 fn_803B0E9C(s32, s32, s32, s32, s32);
+ /* 3B1338 */ s32 fn_803B1338(CardState* state, s32);
+ /* 3B1F78 */ s32 fn_803B1F78(CardState* state, s32 channel, s32 file_id,
+diff --git a/src/sysdolphin/baselib/synth.c b/src/sysdolphin/baselib/synth.c
+index 952b4acd25..e8a6713f0f 100644
+--- a/src/sysdolphin/baselib/synth.c
++++ b/src/sysdolphin/baselib/synth.c
+@@ -247,7 +247,40 @@ static void HSD_SynthSFXGroupDataReaddressCallback(void* result, int length,
+ 
+ u8 data_pad_2[0x84] = { 0 };
+ 
+-/// #HSD_SynthSFXGroupDataReaddress
++void HSD_SynthSFXGroupDataReaddress(AXVPB* arg0, void* callback)
++{
++    u8* q;
++    int i;
++    int delta;
++    u8* p;
++
++    p = (u8*) arg0 + 0x18;
++    sfxGroupDataReaddressCounter += 1;
++    HSD_DevComRequest(0, (uintptr_t) arg0->callback, (uintptr_t) callback,
++                      arg0->userContext, 0x1B, 0,
++                      (HSD_DevComCallback) HSD_SynthSFXGroupDataReaddressCallback,
++                      NULL);
++    i = 0;
++    delta = ((u8*) callback - (u8*) arg0->callback) * 2;
++    while (i < arg0->priority) {
++        int count = *(int*) (p + 8);
++        q = p;
++        if (count > 0) {
++            do {
++                if (*(u16*) (q + 0x10) != 0) {
++                    *(u32*) (q + 0x14) += delta;
++                }
++                *(u32*) (q + 0x18) += delta;
++                *(u32*) (q + 0x1C) += delta;
++                q += 0x40;
++            } while (--count != 0);
++        }
++        p += (count << 6);
++        p += 0x10;
++        i++;
++    }
++    arg0->callback = (void (*)(void*)) callback;
++}
+ 
+ void HSD_SynthSFXBankDeflag(int bank_id)
+ {

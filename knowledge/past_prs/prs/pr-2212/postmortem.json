@@ -1,0 +1,134 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2212",
+  "pr": {
+    "number": 2212,
+    "title": "itlikelike cleanup with inlines, add itemstatetable",
+    "url": "https://github.com/doldecomp/melee/pull/2212",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2026-03-04T23:03:22Z",
+    "merged_at": "2026-03-04T23:07:35Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Cleaned up the Like Like item implementation by adding its typed ItemStateTable data, introducing local inline helpers, replacing repeated transition sequences with existing helpers, and correcting the Like Like attribute header to model offset 0 as either Vec3* or S32Vec3*. The decomp.dev report showed meaningful progress: matched code +360 bytes, matched data +440 bytes, `.data` for `main/melee/it/items/itlikelike` went from 0% to 100%, and several near-matches became full matches, though two previously full functions regressed by 1 byte each.",
+  "change_classification": {
+    "primary_type": "item cleanup and data matching",
+    "categories": [
+      "cleanup",
+      "decomp-matching",
+      "data-matching",
+      "headers",
+      "inlines",
+      "refactor"
+    ],
+    "systems": [
+      "item",
+      "itlikelike",
+      "itCommonItems"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/it/items/itlikelike.c",
+      "role": "Like Like item cleanup; added `zero_vec`, `ItemStateTable it_803F8468`, local inline helpers, and transition-helper reuse."
+    },
+    {
+      "path": "src/melee/it/itCommonItems.h",
+      "role": "Changed `itLikelikeAttributes.x0` from `Vec3*` to a union of `Vec3* x0_f32` and `S32Vec3* x0_s32`."
+    }
+  ],
+  "what_changed": [
+    "Added `const Vec3 zero_vec = { 0.0f, 0.0f, 0.0f }` and used it in `it_802DC4BC` instead of the previous unresolved `Vec3 it_803B86D8` global.",
+    "Added `ItemStateTable it_803F8468[]` with Like Like motion callback triplets such as `itLikelike_UnkMotion0_Anim/Phys/Coll` through `itLikelike_UnkMotion21_Anim/Phys/Coll`, including a `NULL` collision callback for `UnkMotion18`.",
+    "Changed `itLikelikeAttributes` offset 0 to a union named `x0`, with typed arms `x0_f32` and `x0_s32`; updated velocity reads from `attr->x0->y` to `attr->x0.x0_f32->y` and the damage threshold in `it_2725_Logic5_DmgReceived` to `attr->x0.x0_s32->x`.",
+    "Introduced local inline helpers `swapVelocity` and `likelikeVelocity` to centralize velocity flipping and the repeated stuck-position check used around Like Like collision handling.",
+    "Changed the collision callback cast in `itLikelike_UnkMotion1_Coll` to `(HSD_GObjEvent) it_802D9B78` and removed temporary aliases such as `new_var`, `ip2`, and goto-based flow in that function.",
+    "Replaced repeated reset-to-idle call sequences with the existing helper `it_802D9DDC(gobj)` in multiple motion handlers, including `itLikelike_UnkMotion17_Anim`, `itLikelike_UnkMotion8_Phys`, `itLikelike_UnkMotion12_Anim`, `itLikelike_UnkMotion9_Anim`, `itLikelike_UnkMotion10_Anim`, `it_802DBA68`, `itLikelike_UnkMotion14_Anim`, and `itLikelike_UnkMotion15_Anim`.",
+    "Simplified `it_802DAD18` from a regswap workaround with an artificial loop into `GET_ITEM`, `PAD_STACK(0x20)`, and `HSD_JObjSetRotationZ(GET_JOBJ(gobj), M_PI)`.",
+    "Replaced duplicated transition code in `it_2725_Logic5_Dropped`, `itLikelike_UnkMotion6_Phys`, and `it_802DC4BC` with calls to helpers such as `it_802DA960`, `it_802DA104`, `it_802DAA10`, and `it_802DAD18`."
+  ],
+  "smart_moves": [
+    "Promoting `it_803F8468` to a typed `ItemStateTable` immediately paid off in data matching: the bot reported `.data` for `main/melee/it/items/itlikelike` improved from 0.00% to 100.00% for +392 bytes.",
+    "The header union was a concise way to document that the same Like Like attribute pointer is read as both float-vector data and signed-integer-vector data, instead of scattering casts throughout `itlikelike.c`.",
+    "Keeping `itSwapVelocity` local was justified by the source comment that it cannot live in `inlines.h` because `GET_ATTRS` is dynamic; the added `swapVelocity` wrapper let callback-style code reuse it cleanly.",
+    "Factoring repeated state-reset blocks into `it_802D9DDC` made the state machine easier to audit and made common transitions searchable across the file.",
+    "Using `PAD_STACK(0x20)` plus direct `GET_JOBJ(gobj)` in `it_802DAD18` replaced a fake do/while padding trick and corresponded with a full match for that function according to the bot.",
+    "The `zero_vec` replacement in `it_802DC4BC` clarified the spawn velocity/position setup and contributed to reported improvements in data/rodata-related matching."
+  ],
+  "decomp_lessons": [
+    "If an item attribute field is used with incompatible element types, model the overlap explicitly with a union at the header level; future uses then encode intent through names like `x0_f32` and `x0_s32`.",
+    "Adding a real `ItemStateTable` can unlock a large amount of `.data` at once and gives future decomp work a map from state index to anim/phys/coll callbacks.",
+    "Local `static inline` helpers can remove decompiler noise without introducing new calls, but they should be checked against decomp.dev because helper reuse can still perturb small matches.",
+    "Replacing repeated transition code with existing helpers is good cleanup, but this PR is evidence that the match impact must be measured: `it_2725_Logic5_Dropped` and `itLikelike_UnkMotion6_Phys` each lost 1 byte of match accuracy.",
+    "For register-allocation-sensitive near-matches, prefer explicit `PAD_STACK` and direct macro calls over artificial dead loops when the diff shows it preserves or improves matching.",
+    "Even small expression-shape changes matter: `it_804D6D40[2]` and `attr->x0.x0_s32->x` helped complete `it_2725_Logic5_DmgReceived`."
+  ],
+  "naming_conventions": [
+    "Like Like motion callbacks follow `itLikelike_UnkMotionN_Anim`, `itLikelike_UnkMotionN_Phys`, and `itLikelike_UnkMotionN_Coll` triplets.",
+    "Unidentified data symbols still use address-style names such as `it_803F8468` until a semantic name is known.",
+    "The new union keeps the offset-style field name `x0` while naming union arms by interpreted element type: `x0_f32` for `Vec3*` and `x0_s32` for `S32Vec3*`.",
+    "The file continues to use `GET_ATTRS(ip)` for `ip->xC4_article_data->x4_specialAttributes`, rather than passing article attributes directly.",
+    "Local helpers use descriptive lower/camel names such as `swapVelocity` and `likelikeVelocity`, while exported or existing item routines retain address-based `it_802Dxxxx` names."
+  ],
+  "assembly_or_matching_tactics": [
+    "Typed union access changed generated loads in `it_2725_Logic5_DmgReceived` and velocity code without broad casts.",
+    "`PAD_STACK(0x20)` in `it_802DAD18` replaced an artificial padding loop and helped finish a previous regswap-adjacent near-match.",
+    "Using `HSD_JObjSetRotationZ(GET_JOBJ(gobj), M_PI)` directly affected register use compared with storing the JObj in a temporary first.",
+    "The `likelikeVelocity` inline preserved the exact ABS-distance threshold pattern while removing a goto and temporary variables from `itLikelike_UnkMotion1_Coll`.",
+    "The cast to `HSD_GObjEvent` for `it_8026D8A4` made the callback type explicit.",
+    "The file still contains a deliberate empty condition in `itLikelike_UnkMotion16_Anim` with the comment `This line is to get 100%`, showing an expression-shape hack retained for matching.",
+    "Bot metrics for this PR: code +360 bytes, data +440 bytes, new full matches for `.data`, `.sdata2`, `it_2725_Logic5_DmgReceived`, `it_802DAD18`, and `itLikelike_UnkMotion1_Coll`; partial improvements for `.rodata` and `it_802DC4BC`."
+  ],
+  "review_feedback": [
+    "No human PR body, reviews, or review comments were present in the slice.",
+    "The only comment was from `decomp-dev[bot]`, reporting matched code 54.49% (+0.01%, +360 bytes) and matched data 34.51% (+0.04%, +440 bytes).",
+    "The bot reported 5 new matches: `.data`, `it_2725_Logic5_DmgReceived`, `.sdata2`, `it_802DAD18`, and `itLikelike_UnkMotion1_Coll` in `main/melee/it/items/itlikelike`.",
+    "The bot also reported 2 broken matches: `it_2725_Logic5_Dropped` from 100.00% to 99.67% and `itLikelike_UnkMotion6_Phys` from 100.00% to 99.80%."
+  ],
+  "searchable_terms": [
+    "pr-2212",
+    "PsiLupan",
+    "itlikelike",
+    "Like Like",
+    "ItemStateTable",
+    "it_803F8468",
+    "zero_vec",
+    "it_803B86D8",
+    "itCommonItems.h",
+    "itLikelikeAttributes",
+    "x0_f32",
+    "x0_s32",
+    "S32Vec3",
+    "Vec3",
+    "GET_ATTRS",
+    "GET_ITEM",
+    "GET_JOBJ",
+    "itSwapVelocity",
+    "swapVelocity",
+    "likelikeVelocity",
+    "it_802D9DDC",
+    "it_802DAD18",
+    "it_802DC4BC",
+    "it_2725_Logic5_DmgReceived",
+    "it_2725_Logic5_Dropped",
+    "itLikelike_UnkMotion1_Coll",
+    "itLikelike_UnkMotion6_Phys",
+    "HSD_GObjEvent",
+    "PAD_STACK",
+    "Item_80268E5C",
+    "It_Kind_Likelike",
+    ".data",
+    ".sdata2",
+    ".rodata"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that restore full matches for `it_2725_Logic5_Dropped` and `itLikelike_UnkMotion6_Phys` after this cleanup.",
+    "Search for other item attribute structs where one pointer field is read as both `Vec3*` and `S32Vec3*` and may need a similar union.",
+    "Search for remaining unidentified `ItemStateTable` data in item files and compare their callback table layout to `it_803F8468`.",
+    "Check whether `it_803F8468` or the `itLikelike_UnkMotionN` names were later renamed to semantic Like Like state names.",
+    "Look for later cleanup of the `This line is to get 100%` empty condition in `itLikelike_UnkMotion16_Anim`.",
+    "Search for later treatment of `zero_vec` and whether other item spawn helpers replaced unresolved zero-vector globals similarly."
+  ],
+  "confidence": 0.88
+}

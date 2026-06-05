@@ -1,0 +1,795 @@
+diff --git a/src/melee/it/itCommonItems.h b/src/melee/it/itCommonItems.h
+index 866d4ea9c8..966e47b971 100644
+--- a/src/melee/it/itCommonItems.h
++++ b/src/melee/it/itCommonItems.h
+@@ -189,6 +189,8 @@ typedef struct itLugiaAttributes {
+     /* +08 */ f32 x8;
+     /* +0C */ f32 xC;
+     /* +10 */ f32 x10;
++    /* +14 */ f32 x14;
++    /* +18 */ f32 x18;
+ } itLugiaAttributes;
+ 
+ /// Box/Crate item attributes loaded from .dat file
+@@ -208,7 +210,7 @@ typedef struct itDosei_ItemVars {
+     s32 xDD4;
+     s32 xDD8;
+     f32 xDDC;
+-    s32 xDE0;
++    f32 xDE0;
+     Vec3 xDE4;
+     f32 xDF0;
+     f32 xDF4;
+@@ -516,6 +518,12 @@ typedef struct itTincle_ItemVars {
+     /* +5C ip+E30 */ f32 x5C;
+ } itTincle_ItemVars;
+ 
++typedef struct itTincleAttributes {
++    /* 0x00 */ u8 pad[0x44];
++    /* 0x44 */ f32 x44;
++    /* 0x48 */ f32 x48;
++} itTincleAttributes;
++
+ typedef struct itGShell_HurtInit {
+     /* 0x00 */ s32 state;
+     /* 0x04 */ Vec3 a_offset;
+@@ -656,6 +664,17 @@ typedef struct {
+     };
+ } itPokemon_ItemVars;
+ 
++typedef struct {
++    /* +00 ip+DD4 */ s16 x0;
++    /* +02 */ u8 padding[0xE34 - 0xDD8];
++    /* +60 ip+E34 */ f32 timer;
++    /* +64 ip+E38 */ f32 x64;
++    /* +68 ip+E3C */ f32 x68;
++    /* +6C ip+E40 */ s32 x6C;
++    /* +70 ip+E44 */ s32 xE44;
++    /* +74 ip+E48 */ s32 xE48;
++} itKabigon_ItemVars;
++
+ typedef struct itHitodeman_ItemVars {
+     /*  +0 ip+DD4 */ char pad_0[0x60];
+     /* +60 ip+E34 */ float x60;
+@@ -1247,12 +1266,14 @@ typedef struct itWhiteBea_ItemVars {
+     /* +2C ip+E00 */ char pad_2C[0x10];
+     /* +3C ip+E10 */ s32 x3C;
+     /* +40 ip+E14 */ s32 x40;
++    /* +44 ip+E18 */ s32 x44;
+ } itWhiteBea_ItemVars;
+ 
+ typedef struct itWhiteBeaAttributes {
+     /* +0 */ s32* x0;
+     /* +4 */ f32 x4;
+-    /* +8 */ char pad_x8[0xC];
++    /* +8 */ char pad_x8[0x8];
++    /* +10 */ f32 x10;
+     /* +14 */ s16 x14;
+ } itWhiteBeaAttributes;
+ 
+diff --git a/src/melee/it/items/itdosei.c b/src/melee/it/items/itdosei.c
+index c3398791b8..a2ba84fa93 100644
+--- a/src/melee/it/items/itdosei.c
++++ b/src/melee/it/items/itdosei.c
+@@ -10,10 +10,13 @@
+ #include "it/item.h"
+ #include "lb/lb_00B0.h"
+ 
++#include <baselib/random.h>
+ #include <math.h>
+ 
+ /* 282DE4 */ static void it_80282DE4(Item_GObj* gobj);
+ 
++extern s32 it_803F56B8[];
++
+ /// #it_3F14_Logic7_Spawned
+ 
+ void fn_80281390(Item_GObj* gobj)
+@@ -211,7 +214,26 @@ void itDosei_UnkMotion4_Phys(Item_GObj* gobj) {}
+ 
+ /// #it_3F14_Logic7_Dropped
+ 
+-/// #it_3F14_Logic7_Thrown
++void it_3F14_Logic7_Thrown(Item_GObj* gobj)
++{
++    Item* ip = gobj->user_data;
++    HSD_JObj* jobj = gobj->hsd_obj;
++    itDoseiAttributes* attr = ip->xC4_article_data->x4_specialAttributes;
++
++    if (ip->msid != 5) {
++        it_8026B390(gobj);
++        HSD_JObjClearFlagsAll(HSD_JObjGetChild(jobj), JOBJ_HIDDEN);
++        Item_80268E5C(gobj, 5, 6);
++        {
++            f32 speed = attr->unk0;
++            ip->x5D0_animFrameSpeed = speed;
++            lb_8000BA0C(jobj, speed);
++        }
++    } else {
++        Item_80268E5C(gobj, 5, 6);
++    }
++    it_80274484(gobj, jobj, ip->xDD4_itemVar.dosei.xDE0);
++}
+ 
+ bool itDosei_UnkMotion5_Anim(Item_GObj* gobj)
+ {
+@@ -386,7 +408,16 @@ bool itDosei_UnkMotion11_Coll(Item_GObj* gobj)
+     return false;
+ }
+ 
+-/// #it_3F14_Logic7_DmgDealt
++bool it_3F14_Logic7_DmgDealt(Item_GObj* gobj)
++{
++    Item* ip = gobj->user_data;
++    Item_8026AF0C(ip, it_803F56B8[HSD_Randi(3)], 127, 64);
++    if (ip->msid == 5) {
++        itColl_BounceOffVictim(gobj);
++        it_802725D4(gobj);
++    }
++    return false;
++}
+ 
+ bool itDosei_Logic7_Reflected(Item_GObj* gobj)
+ {
+diff --git a/src/melee/it/items/itgreatfoxlaser.c b/src/melee/it/items/itgreatfoxlaser.c
+index 4a3781d0ba..70677bac5b 100644
+--- a/src/melee/it/items/itgreatfoxlaser.c
++++ b/src/melee/it/items/itgreatfoxlaser.c
+@@ -37,7 +37,19 @@ void it_802EB268(Item_GObj* gobj)
+ 
+ /// #itGreatfoxlaser_UnkMotion1_Anim
+ 
+-/// #itGreatfoxlaser_UnkMotion1_Phys
++void itGreatfoxlaser_UnkMotion1_Phys(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    if (ip->xDD4_itemVar.greatfoxlaser.x34 != 0) {
++        ip->facing_dir = -ip->facing_dir;
++        it_8027C56C(gobj, ip->facing_dir);
++        ip = GET_ITEM(gobj);
++        it_8026B3A8(gobj);
++        ip->xDD4_itemVar.greatfoxlaser.x36 = 60;
++        ip->xDD4_itemVar.greatfoxlaser.x34 = 0;
++        Item_80268E5C(gobj, 1, ITEM_ANIM_UPDATE);
++    }
++}
+ 
+ bool itGreatFoxLaser_Logic27_DmgDealt(Item_GObj* item_gobj)
+ {
+diff --git a/src/melee/it/items/itkabigon.c b/src/melee/it/items/itkabigon.c
+index 4b8f5d1309..6a17768dea 100644
+--- a/src/melee/it/items/itkabigon.c
++++ b/src/melee/it/items/itkabigon.c
+@@ -1,19 +1,49 @@
+ #include "itkabigon.h"
+ 
+-#include "it/itCommonItems.h"
+-
+ #include <placeholder.h>
+ #include <platform.h>
+ 
+ #include "cm/camera.h"
+ #include "ef/eflib.h"
++#include "ef/efsync.h"
++#include "gr/stage.h"
+ #include "it/inlines.h"
+ #include "it/it_266F.h"
+ #include "it/it_26B1.h"
+ #include "it/it_2725.h"
++#include "it/itCommonItems.h"
+ #include "it/item.h"
+ 
+-/// #it_802C9D40
++#include <baselib/random.h>
++
++typedef struct itKabigonAttributes {
++    f32 x0;
++    f32 x4;
++    f32 x8;
++    f32 xC;
++    s32 x10;
++    s32 x14;
++    f32 x18;
++} itKabigonAttributes;
++
++void it_802C9D40(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    itKabigonAttributes* attrs = ip->xC4_article_data->x4_specialAttributes;
++    ip->xDD4_itemVar.kabigon.timer = attrs->x4;
++    ip->xDD4_itemVar.kabigon.x64 = attrs->x8;
++    ip->xDD4_itemVar.kabigon.x68 = attrs->xC;
++    ip->xDD4_itemVar.kabigon.x6C = attrs->x10;
++    ip->xDD4_itemVar.kabigon.xE44 = attrs->x14;
++    ip->xDD4_itemVar.kabigon.xE48 = (s32) attrs->x18;
++    ip->xDCC_flag.b3 = 1;
++    ip->xDAC_itcmd_var0 = 0;
++    ip->xDB0_itcmd_var1 = 0;
++    ip->xDB4_itcmd_var2 = 1;
++    it_80279CDC(gobj, attrs->x0);
++    Item_8026AE84(ip, 0x2723, 0x7F, 0x40);
++    it_802CA324(gobj);
++}
+ 
+ void it_802C9DFC(Item_GObj* gobj) {}
+ 
+@@ -45,7 +75,24 @@ void it_802C9E8C(Item_GObj* gobj)
+     Camera_80030E44(3, NULL);
+ }
+ 
+-/// #itKabigon_UnkMotion0_Anim
++bool itKabigon_UnkMotion0_Anim(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++
++    if (ip->xDB0_itcmd_var1 != 0) {
++        ip->x40_vel.y = ip->xDD4_itemVar.kabigon.timer;
++        it_802762BC(ip);
++        if (ip->xDB4_itcmd_var2 != 0) {
++            ip->xDB4_itcmd_var2 = 0;
++        }
++    }
++
++    if (ip->pos.y > Stage_GetBlastZoneTopOffset()) {
++        it_802CA074(gobj);
++    }
++
++    return false;
++}
+ 
+ void itKabigon_UnkMotion0_Phys(Item_GObj* gobj)
+ {
+@@ -78,12 +125,12 @@ void it_802CA014(Item_GObj* gobj)
+     Item* ip = gobj->user_data;
+     if (ip->xDB0_itcmd_var1 != 0) {
+         s32 timer;
+-        timer = --ip->xDD4_itemVar.pokemon.xE44_s32;
++        timer = --ip->xDD4_itemVar.kabigon.xE44;
+         if (timer == 0) {
+             itPokemonAttributes* attr =
+                 ip->xC4_article_data->x4_specialAttributes;
+             it_802CA3F4(gobj);
+-            ip->xDD4_itemVar.pokemon.xE44_s32 = attr->x14;
++            ip->xDD4_itemVar.kabigon.xE44 = attr->x14;
+         }
+     }
+ }
+@@ -124,4 +171,17 @@ bool itKabigon_UnkMotion2_Coll(Item_GObj* gobj)
+     return it_8027A118(gobj, (void (*)(HSD_GObj*)) it_802C9E44);
+ }
+ 
+-/// #it_802CA3F4
++void it_802CA3F4(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    itKabigonAttributes* attr = ip->xC4_article_data->x4_specialAttributes;
++    Vec3 pos = ip->pos;
++    f32 r;
++
++    r = HSD_Randf();
++    pos.x += 2.0F * attr->x18 * r - attr->x18;
++    r = HSD_Randf();
++    pos.y += 2.0F * attr->x18 * r - attr->x18;
++
++    efSync_Spawn(0x405, gobj, &pos);
++}
+diff --git a/src/melee/it/items/itkabigon.h b/src/melee/it/items/itkabigon.h
+index fefb89e850..637a6e6b9d 100644
+--- a/src/melee/it/items/itkabigon.h
++++ b/src/melee/it/items/itkabigon.h
+@@ -15,7 +15,7 @@
+ /* 2C9F74 */ void itKabigon_UnkMotion0_Phys(Item_GObj* gobj);
+ /* 2C9FBC */ bool itKabigon_UnkMotion0_Coll(Item_GObj* gobj);
+ /* 2CA014 */ void it_802CA014(Item_GObj* gobj);
+-/* 2CA074 */ UNK_RET it_802CA074(UNK_PARAMS);
++/* 2CA074 */ void it_802CA074(Item_GObj* gobj);
+ /* 2CA198 */ bool itKabigon_UnkMotion1_Anim(Item_GObj* gobj);
+ /* 2CA318 */ void itKabigon_UnkMotion1_Phys(Item_GObj* gobj);
+ /* 2CA31C */ bool itKabigon_UnkMotion1_Coll(Item_GObj* gobj);
+diff --git a/src/melee/it/items/itlugia.c b/src/melee/it/items/itlugia.c
+index 2cfd4bac67..ac85aabef0 100644
+--- a/src/melee/it/items/itlugia.c
++++ b/src/melee/it/items/itlugia.c
+@@ -155,7 +155,18 @@ bool itLugia_UnkMotion4_Anim(Item_GObj* gobj)
+     return false;
+ }
+ 
+-/// #itLugia_UnkMotion4_Phys
++void itLugia_UnkMotion4_Phys(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    itLugiaAttributes* attrs = ip->xC4_article_data->x4_specialAttributes;
++    it_8027A344(gobj);
++    ip->xDD4_itemVar.lugia.xE50.x += attrs->x18;
++    ip->x40_vel.y = ip->xDD4_itemVar.lugia.xE50.x;
++    if (ip->x40_vel.y > it_804DD450) {
++        ip->x40_vel.y = it_804DD450;
++        it_802D1A44(gobj);
++    }
++}
+ 
+ bool itLugia_UnkMotion4_Coll(Item_GObj* gobj)
+ {
+diff --git a/src/melee/it/items/itlugia.h b/src/melee/it/items/itlugia.h
+index 86b63e45a7..94986ad0e1 100644
+--- a/src/melee/it/items/itlugia.h
++++ b/src/melee/it/items/itlugia.h
+@@ -25,7 +25,7 @@
+ /* 2D1930 */ bool itLugia_UnkMotion4_Anim(Item_GObj* gobj);
+ /* 2D19C0 */ void itLugia_UnkMotion4_Phys(Item_GObj* gobj);
+ /* 2D1A3C */ bool itLugia_UnkMotion4_Coll(Item_GObj* gobj);
+-/* 2D1A44 */ UNK_RET it_802D1A44(UNK_PARAMS);
++/* 2D1A44 */ void it_802D1A44(Item_GObj* gobj);
+ /* 2D1B30 */ bool itLugia_UnkMotion5_Anim(Item_GObj* gobj);
+ /* 2D1B94 */ void itLugia_UnkMotion5_Phys(Item_GObj* gobj);
+ /* 2D1BB4 */ bool itLugia_UnkMotion5_Coll(Item_GObj* gobj);
+@@ -48,6 +48,7 @@
+ /* 3F7EE8 */ extern ItemStateTable it_803F7EE8[];
+ /* 3F7F48 */ extern ItemStateTable it_803F7F48[];
+ 
++extern f32 it_804DD450;
+ extern f32 it_804DD490;
+ 
+ #endif
+diff --git a/src/melee/it/items/itnesspkflush.c b/src/melee/it/items/itnesspkflush.c
+index 674521d01b..410a83381a 100644
+--- a/src/melee/it/items/itnesspkflush.c
++++ b/src/melee/it/items/itnesspkflush.c
+@@ -8,6 +8,9 @@
+ #include "ft/chara/ftNess/ftNs_SpecialN.h"
+ #include "ft/ftlib.h"
+ 
++#include "ft/chara/ftKirby/ftKb_Init.h"
++#include "ft/chara/ftNess/ftNs_SpecialN.h"
++
+ #include "it/forward.h"
+ 
+ #include "it/inlines.h"
+@@ -81,11 +84,11 @@ HSD_GObj* it_802AA8C0(Item_GObj* gobj, Vec3* pos, ItemKind kind,
+ 
+     spawn.kind = kind;
+     spawn.prev_pos = *pos;
+-    spawn.prev_pos.z = 0.0f;
++    spawn.prev_pos.z = 0.0F;
+     it_8026BB68(gobj, &spawn.pos);
+     spawn.facing_dir = facing_dir;
+     spawn.x3C_damage = 0;
+-    spawn.vel.x = spawn.vel.y = spawn.vel.z = 0.0f;
++    spawn.vel.x = spawn.vel.y = spawn.vel.z = 0.0F;
+     spawn.x0_parent_gobj = gobj;
+     spawn.x4_parent_gobj2 = spawn.x0_parent_gobj;
+     spawn.x44_flag.b0 = true;
+@@ -100,7 +103,7 @@ HSD_GObj* it_802AA8C0(Item_GObj* gobj, Vec3* pos, ItemKind kind,
+         ip->xDB0_itcmd_var1 = 0;
+         ip->xDAC_itcmd_var0 = 0;
+         it_80275158(flash, attr->x0_FLASH_LIFETIMER);
+-        ip->xDD4_itemVar.pkflush.xDD8_PKFlash = 0.0f;
++        ip->xDD4_itemVar.pkflush.xDD8_PKFlash = 0.0F;
+         ip->xDD4_itemVar.pkflush.xDDC_PKFlash = 0;
+         ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner = gobj;
+         ip->xDD4_itemVar.pkflush.xDE4_PKFlash = 0;
+diff --git a/src/melee/it/items/itnesspkthundertrail.c b/src/melee/it/items/itnesspkthundertrail.c
+index 772901a54c..55a72d1635 100644
+--- a/src/melee/it/items/itnesspkthundertrail.c
++++ b/src/melee/it/items/itnesspkthundertrail.c
+@@ -27,11 +27,11 @@ Item_GObj* it_802AC43C(Fighter_GObj* gobj, Item_GObj* ball, Vec3* pos,
+ 
+     spawn.kind = it_803F6C18[trail_idx];
+     spawn.prev_pos = *pos;
+-    spawn.prev_pos.z = 0.0f;
++    spawn.prev_pos.z = 0.0F;
+     spawn.pos = spawn.prev_pos;
+     spawn.facing_dir = facing_dir;
+     spawn.x3C_damage = 0;
+-    spawn.vel.x = spawn.vel.y = spawn.vel.z = 0.0f;
++    spawn.vel.x = spawn.vel.y = spawn.vel.z = 0.0F;
+     spawn.x0_parent_gobj = gobj;
+     spawn.x4_parent_gobj2 = ball;
+     spawn.x44_flag.b0 = true;
+@@ -50,9 +50,9 @@ Item_GObj* it_802AC43C(Fighter_GObj* gobj, Item_GObj* ball, Vec3* pos,
+         it_8026B3A8(trail);
+         ip->xDC8_word.flags.x13 = 0;
+         it_80272940(trail);
+-        ip->x40_vel.z = 0.0f;
+-        ip->x40_vel.x = 0.0f;
+-        ip->x40_vel.y = 0.0f;
++        ip->x40_vel.z = 0.0F;
++        ip->x40_vel.x = 0.0F;
++        ip->x40_vel.y = 0.0F;
+         ip->xDCC_flag.b3 = false;
+         if (gobj != NULL) {
+             db_80225DD8(trail, gobj);
+@@ -122,12 +122,12 @@ void itNesspkthundertrail_UnkMotion0_Phys(Item_GObj* gobj)
+                     ip->xDD4_itemVar.nesspkthundertrail.x4);
+         it_802AB468(ip->xDD4_itemVar.nesspkthundertrail.x0, &radius,
+                     ip->xDD4_itemVar.nesspkthundertrail.x4);
+-        HSD_JObjSetScaleZ(jobj, 2.0f * radius / 4);
++        HSD_JObjSetScaleZ(jobj, 2.0F * radius / 4);
+ 
+         it_802AB3F0(ip->xDD4_itemVar.nesspkthundertrail.x0, &next_pos,
+                     ip->xDD4_itemVar.nesspkthundertrail.x4 + 1);
+ 
+-        if (ip->facing_dir == 1.0f) {
++        if (ip->facing_dir == 1.0F) {
+             angle = atan2f(ip->pos.y - next_pos.y, ip->pos.x - next_pos.x);
+         } else {
+             angle =
+diff --git a/src/melee/it/items/itnesspkthundertrail.h b/src/melee/it/items/itnesspkthundertrail.h
+index bac422602d..fe6b5944e5 100644
+--- a/src/melee/it/items/itnesspkthundertrail.h
++++ b/src/melee/it/items/itnesspkthundertrail.h
+@@ -6,8 +6,9 @@
+ 
+ #include "it/items/types.h"
+ 
+-/* 2AC43C */ Item_GObj* it_802AC43C(Fighter_GObj*, Item_GObj*, Vec3*, s32,
+-                                    s32, f32);
++/* 2AC43C */ Item_GObj* it_802AC43C(Fighter_GObj* gobj, Item_GObj* ball,
++                                    Vec3* pos, s32 trail_idx, s32 arg4,
++                                    f32 facing_dir);
+ /* 3F6C18 */ extern ItemKind it_803F6C18[];
+ /* 2AC58C */ void it_802AC58C(Item_GObj* gobj);
+ /* 2AC5D8 */ void it_802AC5D8(Item_GObj* gobj);
+diff --git a/src/melee/it/items/itnessyoyo.c b/src/melee/it/items/itnessyoyo.c
+index 80c0b8237d..1e9a6b1b61 100644
+--- a/src/melee/it/items/itnessyoyo.c
++++ b/src/melee/it/items/itnessyoyo.c
+@@ -1,10 +1,14 @@
+ #include "itnessyoyo.h"
+ 
+ #include <placeholder.h>
++#include <baselib/gobjplink.h>
+ 
++#include "ft/chara/ftNess/ftNs_AttackHi4.h"
+ #include "it/inlines.h"
+ #include "it/it_26B1.h"
++#include "it/itYoyo.h"
+ #include "it/item.h"
++#include "lb/lb_00B0.h"
+ 
+ void it_802BE598(Item_GObj* gobj)
+ {
+@@ -16,11 +20,45 @@ void it_802BE5B8(Item_GObj* gobj)
+     it_8026B73C(gobj);
+ }
+ 
+-/// #it_802BE5D8
++void it_802BE5D8(void* arg, float frame)
++{
++    HSD_GObj* gobj = arg;
++    Item* ip = gobj->user_data;
++    itYoyoAttributes* attrs = ip->xC4_article_data->x4_specialAttributes;
++    HSD_JObj* jobj = ip->xDD4_itemVar.flipper.xDEC;
++    HSD_JObjRemoveAnimAll(jobj);
++    HSD_JObjAddAnimAll(jobj, NULL,
++                        (HSD_MatAnimJoint*) attrs->x58_UNK6, NULL);
++    lb_8000BA0C(jobj, 1.0F);
++    HSD_JObjReqAnimAll(jobj, frame);
++    HSD_JObjAnimAll(jobj);
++}
+ 
+ /// #it_802BE65C
+ 
+-/// #it_802BE958
++void it_802BE958(void* gobj)
++{
++    Item* ip = ((HSD_GObj*) gobj)->user_data;
++    if (ip != NULL) {
++        if (gobj != NULL) {
++            if (ip->owner != NULL) {
++                ftNs_AttackHi4_YoyoItemSetFlag(ip->owner);
++            }
++            ip->owner = NULL;
++            {
++                ItemLink* link =
++                    (ItemLink*) ip->xDD4_itemVar.samusgrapple.x8;
++                while (link != NULL) {
++                    HSD_GObj* tmp = link->gobj;
++                    link = link->next;
++                    HSD_GObjPLink_80390228(tmp);
++                }
++            }
++        }
++        Item_8026A8EC(gobj);
++    }
++    PAD_STACK(8);
++}
+ 
+ /// #it_802BE9D8
+ 
+diff --git a/src/melee/it/items/itoldottosea.c b/src/melee/it/items/itoldottosea.c
+index d040c03085..111089c60d 100644
+--- a/src/melee/it/items/itoldottosea.c
++++ b/src/melee/it/items/itoldottosea.c
+@@ -173,7 +173,18 @@ bool itOldottosea_UnkMotion7_Anim(Item_GObj* gobj)
+ 
+ /// #itOldottosea_UnkMotion7_Phys
+ 
+-/// #itOldottosea_UnkMotion7_Coll
++bool itOldottosea_UnkMotion7_Coll(Item_GObj* gobj)
++{
++    Item* ip = gobj->user_data;
++    PAD_STACK(8);
++    it_8026D62C(gobj, it_802E2BC0);
++    if (ip->x40_vel.x != 0.0f) {
++        if (it_80276308(gobj) != 0) {
++            it_802E3098(gobj);
++        }
++    }
++    return it_802E35CC(gobj);
++}
+ 
+ void it_802E3098(Item_GObj* gobj)
+ {
+diff --git a/src/melee/it/items/itpatapata.c b/src/melee/it/items/itpatapata.c
+index 198f1739dd..197584ff74 100644
+--- a/src/melee/it/items/itpatapata.c
++++ b/src/melee/it/items/itpatapata.c
+@@ -87,7 +87,23 @@ bool itPatapata_UnkMotion2_Anim(Item_GObj* gobj)
+ 
+ /// #itPatapata_UnkMotion3_Coll
+ 
+-/// #it_802E0D9C
++void it_802E0D9C(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    itPatapataAttributes* attrs =
++        ip->xC4_article_data->x4_specialAttributes;
++    switch (ip->xDD4_itemVar.patapata.x40) {
++    case 0:
++        ip->x40_vel.x = -ip->facing_dir * attrs->x0->x4;
++        break;
++    case 1:
++    case 2:
++    default:
++        break;
++    }
++    it_802E1648(gobj, 3, 2);
++    ip->facing_dir = -ip->facing_dir;
++}
+ 
+ /// #itPatapata_UnkMotion3_Anim
+ 
+diff --git a/src/melee/it/items/itpatapata.h b/src/melee/it/items/itpatapata.h
+index 26564c85e8..7a24436004 100644
+--- a/src/melee/it/items/itpatapata.h
++++ b/src/melee/it/items/itpatapata.h
+@@ -14,7 +14,7 @@
+ /* 2E0974 */ bool itPatapata_UnkMotion2_Anim(Item_GObj* gobj);
+ /* 2E09BC */ void itPatapata_UnkMotion3_Phys(Item_GObj* gobj);
+ /* 2E0B78 */ bool itPatapata_UnkMotion3_Coll(Item_GObj* gobj);
+-/* 2E0D9C */ UNK_RET it_802E0D9C(UNK_PARAMS);
++/* 2E0D9C */ void it_802E0D9C(Item_GObj* gobj);
+ /* 2E0E10 */ bool itPatapata_UnkMotion3_Anim(Item_GObj* gobj);
+ /* 2E0EE0 */ bool it_2725_Logic4_DmgReceived(Item_GObj*);
+ /* 2E0F1C */ bool it_802E0F1C(Item_GObj*);
+diff --git a/src/melee/it/items/itpikachutjoltair.c b/src/melee/it/items/itpikachutjoltair.c
+index 581db60cd2..fab7404294 100644
+--- a/src/melee/it/items/itpikachutjoltair.c
++++ b/src/melee/it/items/itpikachutjoltair.c
+@@ -1,5 +1,7 @@
+ #include "itpikachutjoltair.h"
+ 
++#include "db/db.h"
++#include "it/item.h"
+ #include "lb/lb_00B0.h"
+ 
+ #include <placeholder.h>
+@@ -58,7 +60,16 @@ void it_802B43B0(Item_GObj* gobj)
+     }
+ }
+ 
+-/// #it_802B43D0
++void it_802B43D0(Item_GObj* gobj, HSD_GObj* arg1)
++{
++    Item* ip = GET_ITEM(gobj);
++    it_8026B3A8(gobj);
++    ip->xDC8_word.flags.x13 = 0;
++    it_80272940(gobj);
++    Item_80268E5C((HSD_GObj*) gobj, 0, 2);
++    Item_802694CC((HSD_GObj*) gobj);
++    db_80225DD8(gobj, arg1);
++}
+ 
+ /// #itPikachutjoltair_UnkMotion0_Anim
+ 
+diff --git a/src/melee/it/items/itpikachutjoltair.h b/src/melee/it/items/itpikachutjoltair.h
+index 3d3d773c34..fe1be88cdd 100644
+--- a/src/melee/it/items/itpikachutjoltair.h
++++ b/src/melee/it/items/itpikachutjoltair.h
+@@ -16,7 +16,7 @@
+ /* 2B4224 */ Item_GObj* it_802B4224(HSD_GObj* owner, Item_GObj* gobj,
+                                     Vec3* pos, s32 kind, f32 facing_dir);
+ /* 2B43B0 */ void it_802B43B0(Item_GObj* gobj);
+-/* 2B43D0 */ UNK_RET it_802B43D0(UNK_PARAMS);
++/* 2B43D0 */ void it_802B43D0(Item_GObj* gobj, HSD_GObj* arg1);
+ /* 2B4450 */ bool itPikachutjoltair_UnkMotion0_Anim(Item_GObj* gobj);
+ /* 2B45D0 */ void itPikachutjoltair_UnkMotion0_Phys(Item_GObj*);
+ /* 2B45F0 */ bool it_2725_Logic107_DmgDealt(Item_GObj*);
+diff --git a/src/melee/it/items/ittincle.c b/src/melee/it/items/ittincle.c
+index fb020e8148..0509c1d3f9 100644
+--- a/src/melee/it/items/ittincle.c
++++ b/src/melee/it/items/ittincle.c
+@@ -126,7 +126,24 @@ bool itTincle_UnkMotion4_Anim(Item_GObj* gobj)
+     return false;
+ }
+ 
+-/// #itTincle_UnkMotion4_Phys
++void itTincle_UnkMotion4_Phys(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    itTincleAttributes* sa = ip->xC4_article_data->x4_specialAttributes;
++    if (ip->xDD4_itemVar.tincle.x20 == 0) {
++        f32 dist;
++        ip->x40_vel.y = -sa->x48;
++        dist = ip->xDD4_itemVar.tincle.x4C - ip->pos.y;
++        if (dist < 0) {
++            dist = -dist;
++        }
++        if (dist > sa->x44) {
++            it_802EC18C(gobj);
++        }
++    } else {
++        ip->xDD4_itemVar.tincle.x20 -= 1;
++    }
++}
+ 
+ bool itTincle_UnkMotion4_Coll(Item_GObj* gobj)
+ {
+@@ -193,7 +210,19 @@ void it_802EC1F4(Item_GObj* gobj)
+ 
+ void itTincle_UnkMotion7_Phys(Item_GObj* gobj) {}
+ 
+-/// #itTincle_UnkMotion7_Coll
++bool itTincle_UnkMotion7_Coll(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    if (ip->ground_or_air == GA_Air) {
++        it_8026E414(gobj, it_802EC3F4);
++    } else {
++        if (ip->xDD4_itemVar.tincle.x20 < 0) {
++            it_802EC3F4(gobj);
++        }
++        it_8026D6F4(gobj, it_802EC35C);
++    }
++    return false;
++}
+ 
+ void it_802EC35C(Item_GObj* gobj)
+ {
+diff --git a/src/melee/it/items/itwhitebea.c b/src/melee/it/items/itwhitebea.c
+index 25cad9f3a9..8f84a297a6 100644
+--- a/src/melee/it/items/itwhitebea.c
++++ b/src/melee/it/items/itwhitebea.c
+@@ -8,6 +8,8 @@
+ #include "it/item.h"
+ #include "it/items/itfreeze.h"
+ #include "it/types.h"
++#include "mp/mpcoll.h"
++#include "mp/mplib.h"
+ #include "sysdolphin/baselib/random.h"
+ 
+ void it_802E31F8(Item_GObj* gobj)
+@@ -218,7 +220,27 @@ bool itWhitebea_UnkMotion0_Coll(Item_GObj* gobj)
+ 
+ /// #it_802E3AC8
+ 
+-/// #itWhitebea_UnkMotion1_Anim
++bool itWhitebea_UnkMotion1_Anim(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    PAD_STACK(8);
++    if (!it_80272C6C(gobj)) {
++        Item_80268E5C(gobj, 1, ITEM_ANIM_UPDATE | ITEM_HIT_PRESERVE);
++    }
++    if (ip->xDD4_itemVar.whitebea.x44 <= 0) {
++        int local;
++        int* sfx;
++        sfx = mpLib_80056A1C(mpLineGetFlags(ip->xC30), &local);
++        ip->xDD4_itemVar.whitebea.x44 = 14;
++        Item_8026AE84(ip, 0x13C, 0x7F, 0x40);
++        if (*sfx != -1) {
++            Item_8026AE84(ip, *sfx, 0x7F, 0x40);
++        }
++    } else {
++        ip->xDD4_itemVar.whitebea.x44--;
++    }
++    return false;
++}
+ 
+ /// #itWhitebea_UnkMotion1_Phys
+ 
+@@ -235,7 +257,28 @@ bool itWhitebea_UnkMotion1_Coll(Item_GObj* gobj)
+     return it_8027C794(gobj);
+ }
+ 
+-/// #it_802E3DA0
++void it_802E3DA0(Item_GObj* gobj)
++{
++    Item* ip = gobj->user_data;
++    itWhiteBeaAttributes* attrs =
++        ip->xC4_article_data->x4_specialAttributes;
++    PAD_STACK(8);
++    ip->xDD4_itemVar.whitebea.x40 = 0;
++    ip->x40_vel.x *= attrs->x4;
++    if ((ip->facing_dir > 0.0f && ip->x70_nudge.x < 0.0f) ||
++        (ip->facing_dir < 0.0f && ip->x70_nudge.x > 0.0f))
++    {
++        int int_dir;
++        ip->facing_dir = -ip->facing_dir;
++        if (-1.0f == ip->facing_dir) {
++            int_dir = -1;
++        } else {
++            int_dir = 1;
++        }
++        mpCollSetFacingDir(&ip->x378_itemColl, int_dir);
++    }
++    Item_80268E5C(gobj, 3, ITEM_ANIM_UPDATE);
++}
+ 
+ bool itWhitebea_UnkMotion3_Anim(Item_GObj* gobj)
+ {
+@@ -339,7 +382,18 @@ bool itWhitebea_UnkMotion5_Coll(Item_GObj* gobj)
+     return it_8027C794(gobj);
+ }
+ 
+-/// #it_802E4464
++void it_802E4464(Item_GObj* gobj)
++{
++    Item* ip = gobj->user_data;
++    itWhiteBeaAttributes* attrs =
++        ip->xC4_article_data->x4_specialAttributes;
++    PAD_STACK(8);
++    it_802762BC(ip);
++    ip->x40_vel.y = attrs->x10;
++    it_80275258(gobj);
++    Item_8026AE84(ip, 0x4A, 0x7F, 0x40);
++    Item_80268E5C(gobj, 6, ITEM_ANIM_UPDATE);
++}
+ 
+ bool itWhitebea_UnkMotion6_Anim(Item_GObj* gobj)
+ {
+@@ -410,7 +464,30 @@ bool itWhitebea_UnkMotion8_Anim(Item_GObj* gobj)
+ 
+ void itWhitebea_UnkMotion8_Phys(Item_GObj* gobj) {}
+ 
+-/// #it_2725_Logic9_Dropped
++void it_2725_Logic9_Dropped(Item_GObj* gobj)
++{
++    Item* ip;
++    itWhiteBeaAttributes* attrs;
++    PAD_STACK(8);
++    it_8027CBA4(gobj);
++    ip = GET_ITEM(gobj);
++    attrs = ip->xC4_article_data->x4_specialAttributes;
++    ip->xDD4_itemVar.whitebea.x40 = 0;
++    ip->x40_vel.x *= attrs->x4;
++    if ((ip->facing_dir > 0.0f && ip->x70_nudge.x < 0.0f) ||
++        (ip->facing_dir < 0.0f && ip->x70_nudge.x > 0.0f))
++    {
++        int int_dir;
++        ip->facing_dir = -ip->facing_dir;
++        if (-1.0f == ip->facing_dir) {
++            int_dir = -1;
++        } else {
++            int_dir = 1;
++        }
++        mpCollSetFacingDir(&ip->x378_itemColl, int_dir);
++    }
++    Item_80268E5C(gobj, 3, ITEM_ANIM_UPDATE);
++}
+ 
+ void it_2725_Logic9_Thrown(Item_GObj* gobj)
+ {
+diff --git a/src/melee/it/types.h b/src/melee/it/types.h
+index dad1db3c35..99096c157b 100644
+--- a/src/melee/it/types.h
++++ b/src/melee/it/types.h
+@@ -569,6 +569,7 @@ struct Item {
+         itHeart_ItemVars heart;
+         itHeiho_ItemVars heiho;
+         itHitodeman_ItemVars hitodeman;
++        itKabigon_ItemVars kabigon;
+         itKinoko_ItemVars kinoko;
+         itKirbyHammer_ItemVars kirbyhammer;
+         itkireihana_ItemVars kireihana;

@@ -1,0 +1,439 @@
+diff --git a/src/melee/ft/chara/ftCommon/ftCo_Attack100.c b/src/melee/ft/chara/ftCommon/ftCo_Attack100.c
+index d852268d9e..b7d0b98599 100644
+--- a/src/melee/ft/chara/ftCommon/ftCo_Attack100.c
++++ b/src/melee/ft/chara/ftCommon/ftCo_Attack100.c
+@@ -1489,7 +1489,24 @@ void fn_800DA190(Fighter_GObj* gobj)
+     }
+ }
+ 
+-/// #fn_800DA1D8
++void fn_800DA1D8(Fighter_GObj* gobj)
++{
++    Fighter* fp = GET_FIGHTER(gobj);
++    HSD_JObj* jobj;
++    PAD_STACK(8);
++    fp->gr_vel = 0.0F;
++    Fighter_ChangeMotionState(gobj, ftCo_MS_CatchWait, 0, 0.0F, 1.0F, 0.0F,
++                              NULL);
++    fp->accessory1_cb = fn_800DA4A0;
++    fp->take_dmg_cb = fn_800DA490;
++    fp->x221B_b7 = false;
++    jobj = fp->parts[fp->ft_data->x8->x11].joint;
++    fp->mv.co.capturedamage.x18 = jobj;
++    efAsync_Spawn(gobj, &GET_FIGHTER(gobj)->x60C, 1, 0x41D, jobj);
++    ftCommon_8007EBAC(fp, 3, 0);
++    ftCommon_8007E2F4(fp, 0x1FF);
++    fn_800DB6C8(fp->victim_gobj);
++}
+ 
+ void fn_800DA2B0(Fighter_GObj* gobj)
+ {
+diff --git a/src/melee/ft/chara/ftCommon/ftCo_Attack100.h b/src/melee/ft/chara/ftCommon/ftCo_Attack100.h
+index 6381124a87..5807806fe6 100644
+--- a/src/melee/ft/chara/ftCommon/ftCo_Attack100.h
++++ b/src/melee/ft/chara/ftCommon/ftCo_Attack100.h
+@@ -120,7 +120,7 @@
+ /* 0D9FDC */ void ftCo_CatchPull_Coll(Fighter_GObj* gobj);
+ /* 0DA004 */ void fn_800DA004(Fighter_GObj* gobj);
+ /* 0DA190 */ void fn_800DA190(Fighter_GObj* gobj);
+-/* 0DA1D8 */ UNK_RET fn_800DA1D8(UNK_PARAMS);
++/* 0DA1D8 */ void fn_800DA1D8(Fighter_GObj* gobj);
+ /* 0DA2B0 */ void fn_800DA2B0(Fighter_GObj*);
+ /* 0DA318 */ void ftCo_CatchWait_Anim(Fighter_GObj* gobj);
+ /* 0DA31C */ void ftCo_CatchWait_IASA(Fighter_GObj* gobj);
+diff --git a/src/melee/ft/chara/ftCrazyHand/ftCh_Init.c b/src/melee/ft/chara/ftCrazyHand/ftCh_Init.c
+index 57fc61216d..549676245d 100644
+--- a/src/melee/ft/chara/ftCrazyHand/ftCh_Init.c
++++ b/src/melee/ft/chara/ftCrazyHand/ftCh_Init.c
+@@ -31,6 +31,7 @@
+ #include "gr/stage.h"
+ #include "it/it_26B1.h"
+ #include "it/items/itmasterhandlaser.h"
++#include "mp/mplib.h"
+ #include "lb/lb_00B0.h"
+ #include "lb/lbaudio_ax.h"
+ #include "lb/lbvector.h"
+@@ -931,7 +932,29 @@ void ftCh_Init_80157170(HSD_GObj* gobj)
+     ft_PlaySFX(fp, 0x4E207, 127, 64);
+ }
+ 
+-/// #ftCh_Damage2_Anim
++void ftCh_Damage2_Anim(HSD_GObj* gobj)
++{
++    if (!ftAnim_IsFramesRemaining(gobj)) {
++        Fighter* fp = GET_FIGHTER(gobj);
++        Vec3 pos;
++        mpFloorGetRight(0, &pos);
++        if (fp->cur_pos.x > pos.x) {
++            ftCh_Init_8015737C(gobj);
++        } else {
++            ftCrazyHand_DatAttrs* attrs;
++            fp = GET_FIGHTER(gobj);
++            attrs = fp->ft_data->ext_attr;
++            fp->mv.ch.unk0.xC.x = fp->cur_pos.x - attrs->x28;
++            fp->mv.ch.unk0.xC.y = attrs->x24;
++            Fighter_ChangeMotionState(
++                gobj, ftMh_MS_Damage, 0,
++                fp->mv.ch.unk0.xC.z = ftCh_Init_804DA070,
++                ftCh_Init_804DA074, ftCh_Init_804DA070, NULL);
++            ftAnim_8006EBA4(gobj);
++            ft_PlaySFX(fp, 0x4E207, 127, 64);
++        }
++    }
++}
+ 
+ void ftCh_Damage2_IASA(HSD_GObj* gobj)
+ {
+diff --git a/src/melee/ft/chara/ftPopo/ftPp_SpecialS.c b/src/melee/ft/chara/ftPopo/ftPp_SpecialS.c
+index 7fcebaf774..75119a87e9 100644
+--- a/src/melee/ft/chara/ftPopo/ftPp_SpecialS.c
++++ b/src/melee/ft/chara/ftPopo/ftPp_SpecialS.c
+@@ -1021,7 +1021,46 @@ void ftPp_SpecialHiThrow_0_Anim(Fighter_GObj* gobj)
+     }
+ }
+ 
+-/// #ftPp_SpecialAirHiThrow_0_Anim
++void ftPp_SpecialAirHiThrow_0_Anim(Fighter_GObj* gobj)
++{
++    Fighter* fp = gobj->user_data;
++    ftIceClimberAttributes* da = fp->dat_attrs;
++    PAD_STACK(40);
++
++    if (!ftAnim_IsFramesRemaining(gobj)) {
++        ftCo_80096900(gobj, 0, 1, false, da->x74, da->x78);
++    }
++
++    {
++        Fighter* fp = gobj->user_data;
++        if (fp->cmd_vars[1] != 0) {
++            fp->cmd_vars[1] = 0;
++            {
++                int found;
++                Fighter_GObj* nn_gobj =
++                    Player_GetEntityAtIndex(GET_FIGHTER(gobj)->player_id,
++                                            1);
++                if (nn_gobj != NULL &&
++                    ftNn_Init_8012309C(nn_gobj) == 1)
++                {
++                    found = 1;
++                } else {
++                    found = 0;
++                }
++                if (found == 1) {
++                    ftPp_SpecialHi_8012280C(gobj);
++                    return;
++                }
++            }
++        }
++    }
++
++    {
++        Fighter* fp = GET_FIGHTER(gobj);
++        ++fp->mv.pp.unk_80123954.x0;
++        ftPp_SpecialS_80120FE0(gobj);
++    }
++}
+ 
+ void ftPp_SpecialHiThrow_0_IASA(Fighter_GObj* gobj) {}
+ 
+diff --git a/src/melee/ft/ftcolanim.c b/src/melee/ft/ftcolanim.c
+index a1260b2044..c29dee48fd 100644
+--- a/src/melee/ft/ftcolanim.c
++++ b/src/melee/ft/ftcolanim.c
+@@ -125,7 +125,31 @@ void ft_800C0098(Fighter* fp)
+ }
+ #pragma pop
+ 
+-/// #ftCo_800C0134
++#pragma push
++#pragma auto_inline off
++#pragma global_optimizer off
++void ftCo_800C0134(Fighter* fp)
++{
++    lb_80014498(&fp->x488);
++    if (ftData_UnkMotionStates4[fp->kind] != NULL) {
++        ftData_UnkMotionStates4[fp->kind](fp->gobj);
++    }
++    if (ftCo_800C53E4(fp) != 0) {
++        s32 arg1 = 0x6A;
++        if (arg1 >= 0x7B) {
++            s32 temp = arg1 - 0x7B;
++            lb_800144C8(&fp->x508, Fighter_804D6538, temp, 0);
++        } else {
++            Fighter_804D653C_t* entry = &Fighter_804D653C[arg1];
++            if (entry->unk5 != 0) {
++                lb_800144C8(&fp->x488, Fighter_804D653C, arg1, 0);
++            } else {
++                lb_800144C8(&fp->x408, Fighter_804D653C, arg1, 0);
++            }
++        }
++    }
++}
++#pragma pop
+ 
+ #pragma push
+ #pragma dont_inline on
+diff --git a/src/melee/gm/gm_16AE.c b/src/melee/gm/gm_16AE.c
+index 4d507f7899..41f7803660 100644
+--- a/src/melee/gm/gm_16AE.c
++++ b/src/melee/gm/gm_16AE.c
+@@ -2211,7 +2211,7 @@ void fn_8016F140(int arg0)
+     gmMainLib_8015DAB4(arg0);
+ }
+ 
+-void fn_8016F160(int arg0, int arg1)
++int fn_8016F160(int arg0, int arg1)
+ {
+-    pl_80039418(arg0, arg1);
++    return pl_80039418(arg0, arg1);
+ }
+diff --git a/src/melee/gm/gm_16AE.h b/src/melee/gm/gm_16AE.h
+index 763e626128..436774f11e 100644
+--- a/src/melee/gm/gm_16AE.h
++++ b/src/melee/gm/gm_16AE.h
+@@ -114,6 +114,6 @@
+ /* 16F088 */ void gm_8016F088(struct StartMeleeData*); /// Checks rumble?
+ /* 16F120 */ int gm_8016F120(int);
+ /* 16F140 */ void fn_8016F140(int);
+-/* 16F160 */ void fn_8016F160(int, int);
++/* 16F160 */ int fn_8016F160(int, int);
+ 
+ #endif
+diff --git a/src/melee/gm/gm_16F1.h b/src/melee/gm/gm_16F1.h
+index 9368481a5a..2a7ea93b28 100644
+--- a/src/melee/gm/gm_16F1.h
++++ b/src/melee/gm/gm_16F1.h
+@@ -27,7 +27,7 @@ struct lbl_804D65A8_t;
+ /* 16F870 */ UNK_RET fn_8016F870(UNK_PARAMS);
+ /* 16F9A8 */ UNK_RET fn_8016F9A8(UNK_PARAMS);
+ /* 16FAD4 */ int fn_8016FAD4(UNK_T, u16, int, u8);
+-/* 16FFD4 */ UNK_RET fn_8016FFD4(UNK_PARAMS);
++/* 16FFD4 */ void fn_8016FFD4(struct lbl_8046B6A0_24C_t*, int, int);
+ /* 170110 */ int fn_80170110(void*, int, int, u8);
+ /* 1701A0 */ UNK_RET gm_801701A0(UNK_PARAMS);
+ /* 1701AC */ UNK_RET fn_801701AC(UNK_PARAMS);
+diff --git a/src/melee/gm/gmregclear.c b/src/melee/gm/gmregclear.c
+index dfcef75289..7e4a8182dc 100644
+--- a/src/melee/gm/gmregclear.c
++++ b/src/melee/gm/gmregclear.c
+@@ -1129,7 +1129,32 @@ s32 fn_8017F14C(void* arg0)
+     return 0;
+ }
+ 
+-/// #fn_8017F1B8
++void fn_8017F1B8(void)
++{
++    int i;
++    int mask;
++
++    for (i = 0; i < 256; i++) {
++        if (fn_8016F1F0(i) < 0xD7) {
++            mask = fn_8017F008();
++            if (mask & (u8) fn_8016F180(i)) {
++                if ((u32) fn_8016F160(0, i) != 0) {
++                    fn_8016F140(i);
++                }
++            }
++        } else {
++            mask = fn_8017F008();
++            if (mask & (u8) fn_8016F180(i)) {
++                if ((u32) fn_801701C0(gm_8016B774(), 0, i) != 0) {
++                    fn_8016F140(i);
++                }
++            }
++        }
++    }
++
++    mask = (u8) fn_8017F008();
++    fn_8016FFD4(gm_8016B774(), mask, 0);
++}
+ 
+ int fn_8017F294(void)
+ {
+diff --git a/src/melee/gm/gmregclear.h b/src/melee/gm/gmregclear.h
+index b2459d7e26..e1f37cb462 100644
+--- a/src/melee/gm/gmregclear.h
++++ b/src/melee/gm/gmregclear.h
+@@ -79,7 +79,7 @@
+ /* 17F008 */ int fn_8017F008(void);
+ /* 17F09C */ s32 fn_8017F09C(void);
+ /* 17F14C */ s32 fn_8017F14C(void* arg0);
+-/* 17F1B8 */ UNK_RET fn_8017F1B8(UNK_PARAMS);
++/* 17F1B8 */ void fn_8017F1B8(void);
+ /* 17F2A4 */ UNK_RET fn_8017F2A4(UNK_PARAMS);
+ /* 17F47C */ UNK_RET fn_8017F47C(UNK_PARAMS);
+ /* 17F608 */ UNK_RET fn_8017F608(UNK_PARAMS);
+diff --git a/src/melee/lb/lbmthp.c b/src/melee/lb/lbmthp.c
+index e6d44b7fa0..8add150cb3 100644
+--- a/src/melee/lb/lbmthp.c
++++ b/src/melee/lb/lbmthp.c
+@@ -94,7 +94,40 @@ s32 fn_8001EBF0(THPDecComp* data)
+ 
+ /// #fn_8001EF5C
+ 
+-/// #fn_8001F06C
++s32 fn_8001F06C(THPDecComp* data)
++{
++    BOOL intr;
++
++    intr = OSDisableInterrupts();
++
++    if (data->unk_108 > 0 || data->unk_6C == 0) {
++        data->unk_78++;
++
++        if (data->unk_78 == data->unk_40) {
++            if (data->unk_68 != 0) {
++                data->unk_78 = 0;
++            } else {
++                data->unk_78--;
++                goto end;
++            }
++        }
++
++        data->unk_88++;
++        data->unk_108--;
++
++        if (data->unk_88 >= data->unk_104) {
++            data->unk_88 = 0;
++        }
++    }
++
++    if (data->unk_108 < data->unk_10C) {
++        data->unk_10C = data->unk_108;
++    }
++
++end:
++    OSRestoreInterrupts(intr);
++    return 1;
++}
+ 
+ /// #fn_8001F13C
+ 
+diff --git a/src/melee/lb/lbmthp.h b/src/melee/lb/lbmthp.h
+index 3f409e4b9a..b4ed3145ed 100644
+--- a/src/melee/lb/lbmthp.h
++++ b/src/melee/lb/lbmthp.h
+@@ -17,8 +17,9 @@ typedef struct THPDecComp {
+     /* 0x44 */ u32 width;
+     /* 0x48 */ u32 height;
+     /* 0x4C */ u8 pad4C[0x68 - 0x4C];
+-    /* 0x68 */ u32 unk_68;
+-    /* 0x6C */ u8 pad6C[0x78 - 0x6C];
++    /* 0x68 */ s32 unk_68;
++    /* 0x6C */ s32 unk_6C;
++    /* 0x70 */ u8 pad70[0x78 - 0x70];
+     /* 0x78 */ u32 unk_78;
+     /* 0x7C */ u32 unk_7C;
+     /* 0x80 */ u32 unk_80;
+@@ -39,6 +40,8 @@ typedef struct THPDecComp {
+     /* 0xAD */ u8 padAD[0x100 - 0xAD];
+     /* 0x100 */ u32 unk_100;
+     /* 0x104 */ u32 unk_104;
++    /* 0x108 */ s32 unk_108;
++    /* 0x10C */ s32 unk_10C;
+ } THPDecComp;
+ 
+ /* 01E910 */ UNK_RET fn_8001E910(UNK_PARAMS);
+@@ -46,7 +49,7 @@ typedef struct THPDecComp {
+ /* 01EBF0 */ s32 fn_8001EBF0(THPDecComp* data);
+ /* 01ECF4 */ UNK_RET fn_8001ECF4(UNK_PARAMS);
+ /* 01EF5C */ UNK_RET fn_8001EF5C(UNK_PARAMS);
+-/* 01F06C */ UNK_RET fn_8001F06C(UNK_PARAMS);
++/* 01F06C */ s32 fn_8001F06C(THPDecComp* data);
+ /* 01F13C */ UNK_RET fn_8001F13C(UNK_PARAMS);
+ /* 01F294 */ s32 fn_8001F294(void);
+ /* 01F2A4 */ UNK_RET fn_8001F2A4(UNK_PARAMS);
+diff --git a/src/melee/mn/mnname.c b/src/melee/mn/mnname.c
+index 6b368ee4f1..69a55050ad 100644
+--- a/src/melee/mn/mnname.c
++++ b/src/melee/mn/mnname.c
+@@ -245,7 +245,39 @@ f32 mnName_80238964(u8 index, u8 target, u8 flag)
+     }
+ }
+ 
+-/// #mnName_80238A04
++#pragma push
++#pragma dont_inline on
++void mnName_80238A04(HSD_GObj* gobj, u8 target, u8 flag)
++{
++    AnimLoopSettings* base = mnName_803ED538;
++    HSD_JObj* jobj;
++    HSD_JObj* jobj2;
++    int i;
++
++    for (i = 0x18; i < 0x1B; i++) {
++        jobj = mnName_802388D4(gobj, i);
++        HSD_JObjReqAnimAll(jobj, mnName_80238964(i, target, flag));
++        HSD_JObjAnimAll(jobj);
++    }
++
++    jobj2 = (HSD_JObj*) gobj->prev_gx;
++
++    if ((u8) target == 0x18) {
++        if ((u8) flag) {
++            HSD_JObjReqAnimAll(jobj2, base[5].start_frame);
++        } else {
++            HSD_JObjReqAnimAll(jobj2, base[4].start_frame);
++        }
++    } else {
++        if ((u8) flag) {
++            HSD_JObjReqAnimAll(jobj2, base[8].start_frame);
++        } else {
++            HSD_JObjReqAnimAll(jobj2, base[6].start_frame);
++        }
++    }
++    HSD_JObjAnimAll(jobj2);
++}
++#pragma pop
+ 
+ /// #mnName_80238AE0
+ 
+diff --git a/src/melee/mn/mnname.h b/src/melee/mn/mnname.h
+index 2a308f8591..8bf8dfa2fb 100644
+--- a/src/melee/mn/mnname.h
++++ b/src/melee/mn/mnname.h
+@@ -37,7 +37,7 @@ typedef struct MnName_GObj {
+ /* 238754 */ void mnName_80238754(HSD_GObj* gobj);
+ /* 2388D4 */ HSD_JObj* mnName_802388D4(HSD_GObj* gobj, u8 index);
+ /* 238964 */ f32 mnName_80238964(u8 index, u8 target, u8 flag);
+-/* 238A04 */ UNK_RET mnName_80238A04(UNK_PARAMS);
++/* 238A04 */ void mnName_80238A04(HSD_GObj* gobj, u8 target, u8 flag);
+ /* 238AE0 */ UNK_RET mnName_80238AE0(UNK_PARAMS);
+ /* 238C34 */ UNK_RET mnName_80238C34(UNK_PARAMS);
+ /* 239574 */ UNK_RET fn_80239574(UNK_PARAMS);
+diff --git a/src/melee/pl/pltrick.c b/src/melee/pl/pltrick.c
+index baf1bc90dc..41c4ea6ef4 100644
+--- a/src/melee/pl/pltrick.c
++++ b/src/melee/pl/pltrick.c
+@@ -36,7 +36,30 @@ void pl_80037BC0(struct plAttackStats* stats, union Struct2070* ev)
+ 
+ /// #pl_80037C60
+ 
+-/// #pl_80037DF4
++void pl_80037DF4(HSD_GObj* gobj, union Struct2070* ev)
++{
++    Fighter* ft = GET_FIGHTER(gobj);
++    union Struct2070 local_ev;
++    plActionStats* acp = Player_GetActionStats(ft->player_id);
++    local_ev = *ev;
++    acp->attacks.total++;
++    acp->attacks.by_attack_counts[local_ev.x2073]++;
++    if (local_ev.count_thrown_items) {
++        acp->attacks.thrown_item_count++;
++    }
++    if (local_ev.count_aerials) {
++        acp->attacks.aerials_count++;
++    }
++    if (local_ev.count_specials) {
++        acp->attacks.specials_count++;
++    }
++    if (local_ev.count_x1A0) {
++        acp->attacks.x1A0_count++;
++    }
++    if (local_ev.count_x1A4) {
++        acp->attacks.x1A4_count++;
++    }
++}
+ 
+ void pl_80037ECC(HSD_GObj* gobj)
+ {

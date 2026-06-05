@@ -1,0 +1,153 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2366",
+  "pr": {
+    "number": 2366,
+    "title": "Fighter decompilation matches",
+    "url": "https://github.com/doldecomp/melee/pull/2366",
+    "state": "CLOSED",
+    "author": "johnwinston",
+    "created_at": "2026-03-28T18:35:55Z",
+    "merged_at": null
+  },
+  "agent_status": "agent_completed",
+  "summary": "Closed, unmerged fighter decomp PR for Kirby copy-ability logic and common fighter death/rebirth behavior. The diff replaced several placeholder comments with C implementations, added an `unk_deadup` motion-var layout refinement, and added one callback prototype. decomp.dev reported +684 matched bytes and 3 new full matches, while two claimed functions were only partial improvements.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "fighter-logic",
+      "headers",
+      "cleanup",
+      "struct-layout"
+    ],
+    "systems": [
+      "fighter",
+      "ftKirby",
+      "ftCommon",
+      "death-star-ko",
+      "rebirth-respawn"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/chara/ftKirby/ftKb_Init.c",
+      "role": "Implemented Kirby Neutral Special copy-ability functions: Yoshi hat loading plus two copy-resource cleanup dispatchers."
+    },
+    {
+      "path": "src/melee/ft/ft_0D31.c",
+      "role": "Implemented common fighter DeadUpFall physics and rebirth-platform transition to RebirthWait."
+    },
+    {
+      "path": "src/melee/ft/chara/ftCommon/types.h",
+      "role": "Expanded `ftCommon_MotionVars.unk_deadup` from padding into a float and two Vec3 fields used by DeadUpFall physics."
+    },
+    {
+      "path": "src/melee/ft/ft_0D31.h",
+      "role": "Added prototype for `fn_800D54A4`, used as a rebirth accessory callback."
+    }
+  ],
+  "what_changed": [
+    "`ftCommon_MotionVars.unk_deadup` changed from a large `pad_x48` region to explicit fields `x4C`, `x50`, and `x5C`, preserving `x68` at `fp+2368`.",
+    "`ftKb_SpecialN_800F10D4` was implemented as the Yoshi copy-ability hat load path, with an existing-data early return, `HSD_ObjAlloc` allocations, Kirby hat setup helpers, `ftParts_8007487C`, `ftAnim_80070200`, and `ftCo_8009D81C`.",
+    "`ftKb_SpecialN_800F19AC` and `ftKb_SpecialN_800F1A8C` were implemented as `fp->fv.kb.hat.kind` switch dispatchers for copy-ability cleanup handlers across Popo, Peach, Fox/Falco, Link/Young Link, Mewtwo, Ness, Samus, Seak, Yoshi, Donkey, and GameWatch.",
+    "The two Kirby cleanup dispatchers are nearly identical, but differ for Mewtwo: `ftKb_SpecialN_800F19AC` calls `ftKb_SpecialNMt_8010709C`, while `ftKb_SpecialN_800F1A8C` calls `ftKb_SpecialNMt_80107130`.",
+    "`ftCo_DeadUpFall_Phys` was implemented with `p_ftCommonData` offset reads, animation gating through `ftAnim_80070FD0`, `lbVector_Lerp` for phase 1, and `ftCommon_Fall` plus `lbVector_Add`/velocity reset for phase 3.",
+    "`ftCo_800D5600` was implemented to reset collision and vertical velocity, set a common timer from `p_ftCommonData->x5D4`, change to `ftCo_MS_RebirthWait` with keep/skip flags, set several fighter bitfields, and choose `fn_800D54A4` or `fn_800D55B4` as `accessory1_cb`.",
+    "Added includes for `ft/ftanim.h`, `lb/lbvector.h`, and `<melee/mp/mpcoll.h>` to support the new common fighter implementations."
+  ],
+  "smart_moves": [
+    "Turned raw `unk_deadup` padding into offset-preserving typed fields only where the new physics function needed them, which is a low-risk struct-layout refinement for matching.",
+    "Kept the two Kirby cleanup entrypoints separate instead of over-sharing code, preserving the observed Mewtwo handler difference between stock-loss and revival-platform cleanup paths.",
+    "Grouped identical switch cases for clone/similar copy abilities, such as Fox/Falco and Link/CLINK, while still emitting per-kind dispatch shape.",
+    "Used existing helper APIs and headers rather than introducing ad hoc externs for animation, vector math, collision, object allocation, parts setup, and motion-state transition calls.",
+    "Added the missing `fn_800D54A4` prototype before assigning it as a callback, keeping the header consistent with `ft_0D31.c` usage."
+  ],
+  "decomp_lessons": [
+    "Bot metrics matter: the PR body says 5 matched functions, but the decomp.dev report only confirmed 3 new full matches; `ftCo_DeadUpFall_Phys` reached 99.97% and `ftKb_SpecialN_800F10D4` reached 81.20%.",
+    "Closed-without-merge PRs should be treated as candidate matching work, not as landed source truth; check current master or successor PRs before reusing the code directly.",
+    "When a common motion-vars union member starts being used by a decompiled function, narrow padding into typed fields at exact offsets instead of naming more of the struct than the evidence supports.",
+    "For paired lifecycle callbacks, verify small dispatch differences carefully; one differing handler call can justify keeping separate functions even when most cases match.",
+    "Pointer-offset access into common data can be acceptable evidence when the target struct is not yet fully named, but future cleanup should replace offsets with typed fields when the layout is known."
+  ],
+  "naming_conventions": [
+    "`ftKb_` prefixes denote Kirby fighter code; `SpecialN` marks Neutral Special/copy-ability logic.",
+    "`ftCo_` prefixes denote common fighter behavior, including death and rebirth states.",
+    "Address-suffixed names such as `ftCo_800D5600`, `fn_800D54A4`, and `ftKb_SpecialN_800F19AC` were retained where fuller semantic names were not established.",
+    "Unknown motion-variable fields kept offset-style names such as `x4C`, `x50`, and `x5C` under `unk_deadup`.",
+    "The diff uses existing enum spelling exactly, including `FTKIND_SEAK`; do not silently rename it to Sheik in decomp records."
+  ],
+  "assembly_or_matching_tactics": [
+    "`ftKb_SpecialN_800F10D4` used `#pragma push`, `#pragma dont_inline on`, and `#pragma pop` to constrain codegen.",
+    "The Yoshi hat loader used an explicit `u8 sp14[0x90]` stack buffer plus `PAD_STACK(8)`; evidence suggests stack layout was part of the matching attempt.",
+    "`Fighter* fp = fp = gobj->user_data;` appears in `ftKb_SpecialN_800F10D4` as a codegen-oriented quirk; no review comment explains it, so reuse cautiously.",
+    "`ftCo_DeadUpFall_Phys` casts `p_ftCommonData` to `u8*` and accesses offsets like `0x520`, `0x18`, `0x24`, `0x34`, and `0x38` to match known data layout without a named struct.",
+    "Explicit casts to `Vec3*`, `float*`, `FtPartsDesc*`, and `ftData_x8_x8*` were used to satisfy call signatures and likely preserve generated code shape.",
+    "Nested animation-gate branches using `fp->x2222_b6` and `ftAnim_80070FD0(fp)` control whether vector interpolation/addition proceeds, which may be important for branch matching."
+  ],
+  "review_feedback": [
+    "No human review comments or formal reviews are present in the slice.",
+    "decomp.dev bot reported matched code at 61.12%, +0.02%, +684 bytes.",
+    "decomp.dev bot reported 3 new full matches: `ftCo_800D5600`, `ftKb_SpecialN_800F19AC`, and `ftKb_SpecialN_800F1A8C`.",
+    "decomp.dev bot reported 2 partial improvements, not full matches: `ftCo_DeadUpFall_Phys` at 99.97% and `ftKb_SpecialN_800F10D4` at 81.20%."
+  ],
+  "searchable_terms": [
+    "pr-2366",
+    "Fighter decompilation matches",
+    "johnwinston",
+    "ftKb_Init.c",
+    "ft_0D31.c",
+    "ftCommon/types.h",
+    "ft_0D31.h",
+    "ftKb_SpecialN_800F10D4",
+    "ftKb_SpecialN_800F19AC",
+    "ftKb_SpecialN_800F1A8C",
+    "ftCo_DeadUpFall_Phys",
+    "ftCo_800D5600",
+    "fn_800D54A4",
+    "fn_800D55B4",
+    "unk_deadup",
+    "x4C",
+    "x50",
+    "x5C",
+    "KirbyHatStruct",
+    "HSD_ObjAlloc",
+    "fighter_x2040_alloc_data",
+    "ftParts_8007487C",
+    "ftAnim_80070200",
+    "ftCo_8009D81C",
+    "ftAnim_80070FD0",
+    "lbVector_Lerp",
+    "lbVector_Add",
+    "ftCommon_Fall",
+    "mpColl_80043680",
+    "Fighter_ChangeMotionState",
+    "ftCo_MS_RebirthWait",
+    "FTKIND_POPO",
+    "FTKIND_PEACH",
+    "FTKIND_FOX",
+    "FTKIND_FALCO",
+    "FTKIND_LINK",
+    "FTKIND_CLINK",
+    "FTKIND_MEWTWO",
+    "FTKIND_NESS",
+    "FTKIND_SAMUS",
+    "FTKIND_SEAK",
+    "FTKIND_YOSHI",
+    "FTKIND_DONKEY",
+    "FTKIND_GAMEWATCH",
+    "dont_inline",
+    "PAD_STACK",
+    "RebirthWait",
+    "DeadUpFall",
+    "Yoshi copy ability hat"
+  ],
+  "follow_up_queries": [
+    "Find whether a later merged PR incorporated the `ftKb_SpecialN_800F19AC`, `ftKb_SpecialN_800F1A8C`, or `ftCo_800D5600` matches from closed PR #2366.",
+    "Check current `ftCommon_MotionVars.unk_deadup` field names before reusing `x4C`, `x50`, and `x5C`.",
+    "Compare `ftKb_SpecialN_800F10D4` against the target assembly; this PR only reached 81.20% according to decomp.dev.",
+    "Compare `ftCo_DeadUpFall_Phys` against the target assembly; this PR only reached 99.97% according to decomp.dev.",
+    "Search for the Mewtwo cleanup distinction between `ftKb_SpecialNMt_8010709C` and `ftKb_SpecialNMt_80107130` in Kirby copy-ability lifecycle code."
+  ],
+  "confidence": 0.86
+}

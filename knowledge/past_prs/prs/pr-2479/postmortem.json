@@ -1,0 +1,157 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2479",
+  "pr": {
+    "number": 2479,
+    "title": "Jj/hsd 3 b34",
+    "url": "https://github.com/doldecomp/melee/pull/2479",
+    "state": "CLOSED",
+    "author": "jurrejelle",
+    "created_at": "2026-05-10T16:00:23Z",
+    "merged_at": null
+  },
+  "agent_status": "agent_completed",
+  "summary": "Draft PR, closed unmerged, that attempted a large HSD JPEG decomp/refactor across sysdolphin/baselib hsd_3B34 and hsd_3B5C. It replaced much raw M2C/jmp-buffer-offset style code with an HSDJpegWork work-buffer struct, clearer DCT/IDCT-style transform loops, split lookup tables, revised prototypes, and a local JPEG bit-emission macro. The direction was useful for readability and semantic discovery, but decomp.dev reported broken matches and sizable regressions, especially hsd_3B34 .data and hsd_803B5C2C, so this PR is best treated as a cautionary/idea source rather than a landed matching fix.",
+  "change_classification": {
+    "primary_type": "unmerged decomp-refactor attempt",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "data-layout",
+      "refactor",
+      "jpeg-codec"
+    ],
+    "systems": [
+      "src/sysdolphin/baselib",
+      "HSD JPEG",
+      "hsd_3B34",
+      "hsd_3B5C"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/sysdolphin/baselib/hsd_3B34.c",
+      "delta": "+520/-1660",
+      "role": "Main HSD JPEG encoder-side rewrite: table declarations, hsd_803B3CD8/hsd_803B4D64/hsd_803B51C8 work, bit emission, and use of HSDJpegWork over raw offsets."
+    },
+    {
+      "path": "src/sysdolphin/baselib/hsd_3B34.h",
+      "delta": "+22/-9",
+      "role": "Added HSDJpegWork, changed several prototypes, and exposed helper symbols such as fn_803B376C, fn_803B61B4, and fn_803B6820."
+    },
+    {
+      "path": "src/sysdolphin/baselib/hsd_3B5C.c",
+      "delta": "+259/-542",
+      "role": "Decoder-side/type cleanup and transform/color-conversion rewrites using HSDJpegWork and clearer loops."
+    }
+  ],
+  "what_changed": [
+    "Modified 3 files with 801 added lines and 2211 deleted lines; PR body was absent and there were no human review comments in the slice.",
+    "In hsd_3B34.c, added hsd_3A94.h and __mem.h, removed placeholder/Gecko_setjmp/string includes, introduced static data for hsd_803B5C2C, and changed several extern declarations including hsd_804D79BC from u8* to s32.",
+    "Reorganized JPEG-related tables: lbl_80430C40, lbl_80430C80, lbl_80431090, lbl_80431638, lbl_80431678, lbl_80431690, lbl_8043169C, and lbl_804316B4 were declared explicitly near the top of hsd_3B34.c; lbl_803B9670 changed from a fixed-size array to an unsized const array.",
+    "Added HSDJpegWork in hsd_3B34.h with pad_000[0x118], luma[256], cb[64], cr[64], tmp[64], and pred[3], then used it as a typed view over hsd_804D2648 and hsd_804D2E70.",
+    "Rewrote transform helpers fn_803B376C and fn_803B61B4 with named f32 temporaries and 8-iteration row/column loops, followed by a 64-element right-shift pass.",
+    "Reworked hsd_803B3CD8 around JPEG DC/AC Huffman emission, using dc_code/dc_size/ac_code/ac_size lookup pointers and a local HSD_JPEG_EMIT_BITS macro to replace repeated manual byte-emission blocks.",
+    "Revised hsd_803B51C8 to use HSDJpegWork state, __setjmp on hsd_804D2648, hsd_803B3344/hsd_803B3398 byte writes, JPEG marker output, comment sizing from lbl_803B9670, and final EOI emission.",
+    "In hsd_3B5C.c, changed signatures including hsd_803B5C4C(s32)->int, hsd_803B5D70(s32,s32)->u8, hsd_803B5EA0(s32)->void hsd_803B5EA0(int), and hsd_803B6BE4(char*,s32,void*)->int hsd_803B6BE4(char*,int,void*).",
+    "Made previously static helpers fn_803B61B4 and fn_803B6820 non-static and declared them in hsd_3B34.h.",
+    "decomp.dev reported two .sdata2 improvements but also broken matches and many regressions, and the PR was closed without merging."
+  ],
+  "smart_moves": [
+    "Introducing HSDJpegWork was a useful semantic step: it replaced opaque offsets like hsd_804D2648 + 0x118/0x518/0x618/0x718/0x818 with fields such as luma, cb, cr, tmp, and pred.",
+    "The local HSD_JPEG_EMIT_BITS macro captured repeated JPEG bit-buffer behavior, including byte flushing and 0xFF byte stuffing, making the intended control flow easier to audit.",
+    "The transform rewrites used named math variables and row/column passes instead of long blocks of temp_r/temp_f decompiler output, which is valuable for understanding DCT/IDCT code even if it did not match here.",
+    "Keeping address-derived labels like lbl_80431638 and function names like fn_803B61B4 while adding semantics avoided premature invented names.",
+    "The header collected the newly inferred work-buffer structure and helper prototypes in one place, which is helpful for cross-file hsd_3B34/hsd_3B5C coordination."
+  ],
+  "decomp_lessons": [
+    "Typed work-buffer structs are powerful but risky: every field offset must be verified before replacing raw M2C_FIELD accesses, especially when the same storage is also used as a jmp buffer.",
+    "Large JPEG lookup tables are match-sensitive. Moving declarations, changing staticness, splitting lbl_80430C80 into smaller/table-adjacent arrays, or changing array sizes can regress .data even when the values look correct.",
+    "Readable loops can hurt MWCC matching when the original codegen was unrolled or depended on specific temporary lifetimes; this PR's loop cleanup coincided with regressions in hsd_803B3CD8, hsd_803B51C8, fn_803B376C, fn_803B61B4, and fn_803B6820.",
+    "Prototype cleanup must be tied to ABI/codegen evidence. Changes like s32->int, u32->s32, and s32 return->u8 return may be semantically plausible but can alter matching.",
+    "When a PR touches both code and data layout, split the work into smaller match-checkable steps: first table placement/staticness, then struct overlays, then algorithmic cleanup.",
+    "Use bot reports as hard evidence. Here, the readability improvements did not outweigh the reported broken hsd_3B34 .data and hsd_803B5C2C matches."
+  ],
+  "naming_conventions": [
+    "New semantic struct name: HSDJpegWork.",
+    "HSDJpegWork fields were named descriptively: luma, cb, cr, tmp, pred, with pad_000 preserving unknown leading layout.",
+    "Unknown helper functions retained address-style fn_ names: fn_803B376C, fn_803B61B4, fn_803B6820.",
+    "Existing address-based data labels were preserved: lbl_80430C40, lbl_80430C80, lbl_80431090, lbl_80431638, lbl_80431678, lbl_80431690, lbl_8043169C, lbl_804316B4.",
+    "Header prototypes continued the project convention of address comments such as /* 3B3408 */ and /* 3B61B4 */ before declarations.",
+    "A local all-caps macro name, HSD_JPEG_EMIT_BITS, was used for scoped bitstream emission behavior."
+  ],
+  "assembly_or_matching_tactics": [
+    "Overlayed hsd_804D2648 and hsd_804D2E70 with HSDJpegWork pointers instead of using raw byte-buffer arithmetic.",
+    "Replaced repeated bit write/flush/0xFF-stuffing code with HSD_JPEG_EMIT_BITS inside hsd_803B3CD8.",
+    "Used table pointer selection for luminance/chrominance paths: dc_code/dc_size and ac_code/ac_size chosen from lbl_80431678/lbl_8043169C/lbl_80431090 offsets.",
+    "Rewrote repeated row and column transform code as two 8-iteration loops and a 64-element shift loop.",
+    "Used hsd_803B3344 and hsd_803B3398 helper calls for JPEG marker and block writes instead of open-coded buffer checks in some places.",
+    "Caution from this PR: these tactics improved readability but did not preserve matching in the submitted form; verify each tactic against codegen and data order before reuse."
+  ],
+  "review_feedback": [
+    "No human PR body, review comments, or reviews were present in the slice.",
+    "decomp-dev[bot] GALE01 report: matched code 67.18% (-32 bytes) and matched data 39.32% (-1104 bytes).",
+    "decomp-dev[bot] reported 2 broken matches: main/sysdolphin/baselib/hsd_3B34 .data dropped from 100.00% to 52.77% (-522 bytes), and hsd_803B5C2C dropped from 100.00% to 0.00% (-32 bytes).",
+    "decomp-dev[bot] listed 2 .sdata2 improvements: hsd_3B5C .sdata2 +22 bytes and hsd_3B34 .sdata2 +13 bytes.",
+    "decomp-dev[bot] listed regressions in hsd_803B3CD8, hsd_803B51C8, hsd_803B46D4, hsd_803B4A2C, hsd_803B3408, hsd_803B6BE4, fn_803B376C, fn_803B61B4, fn_803B6820, hsd_803B5EA0, and hsd_803B4D64.",
+    "PR metadata shows draft=true, merged=false, and closed_at 2026-05-18T18:25:52Z."
+  ],
+  "searchable_terms": [
+    "pr-2479",
+    "Jj/hsd 3 b34",
+    "jj/hsd_3B34",
+    "jurrejelle",
+    "sysdolphin",
+    "baselib",
+    "HSD JPEG",
+    "JPEG",
+    "JFIF",
+    "hsd_3B34.c",
+    "hsd_3B34.h",
+    "hsd_3B5C.c",
+    "HSDJpegWork",
+    "HSD_JPEG_EMIT_BITS",
+    "hsd_804D2648",
+    "hsd_804D2E70",
+    "hsd_804D79A0",
+    "hsd_804D79A4",
+    "hsd_804D79A8",
+    "hsd_804D79AC",
+    "hsd_804D79B0",
+    "lbl_80430C40",
+    "lbl_80430C80",
+    "lbl_80431090",
+    "lbl_80431638",
+    "lbl_803B9670",
+    "hsd_803B3408",
+    "fn_803B376C",
+    "hsd_803B3CD8",
+    "hsd_803B4D64",
+    "hsd_803B51C8",
+    "hsd_803B5C2C",
+    "hsd_803B5C4C",
+    "hsd_803B5D70",
+    "hsd_803B5EA0",
+    "fn_803B61B4",
+    "fn_803B6820",
+    "hsd_803B6BE4",
+    "quantization table",
+    "Huffman table",
+    "DCT",
+    "IDCT",
+    "RGB565",
+    "YCbCr",
+    "decomp.dev broken matches",
+    ".data regression",
+    ".sdata2 improvement"
+  ],
+  "follow_up_queries": [
+    "Search later accepted PRs for HSDJpegWork or hsd_3B34 JPEG work before reusing this draft's struct layout.",
+    "Re-audit hsd_804D2648 and hsd_804D2E70 offsets against assembly before replacing M2C_FIELD uses with HSDJpegWork fields.",
+    "Check table placement/staticness for lbl_80430C40, lbl_80430C80, lbl_80431090, and lbl_80431638; decomp.dev reported hsd_3B34 .data breakage.",
+    "Test whether HSD_JPEG_EMIT_BITS-style factoring can match MWCC, or whether the bit emission must stay unrolled/open-coded.",
+    "Validate prototype changes for hsd_803B5C4C, hsd_803B5D70, hsd_803B5EA0, hsd_803B51C8, and hsd_803B6BE4 against callsites and generated assembly.",
+    "If reviving this work, split it into separate PRs for data tables, header/struct layout, encoder code, and decoder code to isolate regressions."
+  ],
+  "confidence": 0.76
+}

@@ -1,0 +1,179 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2402",
+  "pr": {
+    "number": 2402,
+    "title": "ft: 6 match progress (100%)",
+    "url": "https://github.com/doldecomp/melee/pull/2402",
+    "state": "MERGED",
+    "author": "johnwinston",
+    "created_at": "2026-04-10T20:20:26Z",
+    "merged_at": "2026-04-11T14:26:53Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Merged a fighter-only split from #2345 that replaced six `/// #` placeholders across `ft_0D31.c`, `ftCo_Attack100.c`, and `ftKb_Init.c` with matching C for respawn/dead-up state logic, catch-pull item transition logic, and Kirby copied-hat matrix/Pichu-hat initialization. decomp.dev reported +1404 matched bytes; its early bot report listed five new 100% matches and `ftCo_800D41C4` as 98.33%, while the PR body/title claimed six 100% matches.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "fighter-decompilation",
+      "asm-placeholder-replacement",
+      "100-percent-match-progress",
+      "matching-tactics"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "ftKirby",
+      "catch-pull-hookshot-grapple",
+      "rebirth-respawn",
+      "dead-up-star-ice",
+      "HSD-JObj",
+      "Kirby-copy-hats"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/ft_0D31.c",
+      "added": 80,
+      "deleted": 3,
+      "role": "Implemented `ftCo_800D41C4`, `ftCo_Rebirth_Phys`, and `fn_800D54A4` for dead-up/star-ice state setup, respawn platform velocity, and accessory translation."
+    },
+    {
+      "path": "src/melee/ft/chara/ftCommon/ftCo_Attack100.c",
+      "added": 55,
+      "deleted": 1,
+      "role": "Implemented `ftCo_CatchPull_Anim`, including Link/Young Link hookshot, Samus grapple, and generic throw-flag transition paths."
+    },
+    {
+      "path": "src/melee/ft/chara/ftKirby/ftKb_Init.c",
+      "added": 59,
+      "deleted": 2,
+      "role": "Added `<baselib/jobj.h>` and implemented `ftKb_UnkMtxFunc0` plus `ftKb_SpecialN_800F14B4` for Kirby hat matrix display and Pichu hat initialization."
+    }
+  ],
+  "what_changed": [
+    "PR body listed six fighter functions as 100%: `fn_800D54A4`, `ftCo_Rebirth_Phys`, `ftCo_800D41C4`, `ftCo_CatchPull_Anim`, `ftKb_UnkMtxFunc0`, and `ftKb_SpecialN_800F14B4`.",
+    "`ftCo_CatchPull_Anim` now branches on `fp->kind`: Link/Young Link use `fp->fv.lk.xC` and `linkhookshot.x14`, Samus uses `fp->fv.ss.x223C` and `samusgrapple.x14`, and the fallback uses `ftAnim_IsFramesRemaining` plus one-shot clearing of `throw_flags_b3`; if transition is needed it calls `fn_800DA1D8`.",
+    "`ftKb_UnkMtxFunc0` now early-returns without a Kirby hat JObj or when `x2225_b2` is false, then copies the head/part-6 joint matrix to the hat JObj, sets `JOBJ_USER_DEF_MTX | JOBJ_MTX_INDEP_PARENT | JOBJ_MTX_INDEP_SRT`, marks the matrix dirty, and calls `HSD_JObjDispAll`.",
+    "`ftKb_SpecialN_800F14B4` initializes Kirby's Pichu copy hat from `ft_80459B88.hats[FTKIND_PICHU]`, allocates two `fighter_x2040_alloc_data` objects, runs the `800EF040`/`800EF0E4`/`800EF35C`/`800EF438` helper sequence, wires parts/visibility/animation tables, copies a color-RGBA overlay, and updates model scale.",
+    "`ftCo_800D41C4` now sets the dead-up flag, copies `p_ftCommonData->x504` into `mv.co.unk_deadup.x40`, changes to `ftCo_MS_DeadUpStarIce`, runs cleanup/state helpers, plays death SFX, notifies player state, and sets `mv.co.unk_deadup.x68 = 1`.",
+    "`ftCo_Rebirth_Phys` now computes a respawn target from `Stage_80224E38`, `Player_GetSomePos`, facing direction, and `ftCommon_800804EC`, then converts target-current position delta into `self_vel` over `mv.co.common.x0`; the alternate `x221F_b4` path copies velocity from `Player_GetEntityAtIndex(player_id, 0)`.",
+    "`fn_800D54A4` now checks a partner entity at player entity index 1, raises the current fighter Y position to the partner's Y if needed, and sets `x20A0_accessory` translation to current position offset by facing direction."
+  ],
+  "smart_moves": [
+    "Kept the PR scoped as a fighter-only split from larger PR #2345, making the matching slice small enough to review and merge quickly.",
+    "Used a single `should_transition` boolean in `ftCo_CatchPull_Anim` to converge Link, Samus, and generic transition paths into one final `fn_800DA1D8` call while still preserving per-kind item-field checks.",
+    "Guarded Kirby hat matrix work with early returns before touching hat JObj data, matching the null/flag semantics visible in the diff and avoiding unnecessary nested control flow.",
+    "Wrapped `ftKb_SpecialN_800F14B4` in `#pragma push` / `#pragma dont_inline on` / `#pragma pop`, indicating inline control was important to preserve final asm layout.",
+    "Preserved decomp-specific stack/register shape with `PAD_STACK`, dummy byte arrays, scoped temporaries, casts through `u8*`, and odd-looking assignments such as `Fighter* fp = fp = gobj->user_data` where needed for matching."
+  ],
+  "decomp_lessons": [
+    "For common fighter callbacks, inspect `fp->kind` before assuming one character path: `ftCo_CatchPull_Anim` uses Link/Young Link-specific hookshot storage, Samus-specific grapple storage, and a generic animation/throw-flag fallback.",
+    "Kirby copy-hat code is descriptor-driven: this Pichu path uses `ft_80459B88.hats[FTKIND_PICHU]`, `KirbyHatStruct`, `FtPartsDesc`, `FtPartsVisLookup`, `hat_dynamics`, and the fighter parts visibility/animation helpers.",
+    "HSD custom-matrix callbacks need the full JObj sequence: get source bone matrix, copy into target JObj, set user/independent matrix flags, mark dirty, then dispatch display with the parent display context.",
+    "Respawn physics matching can require computing target positions into `mv.co.common` first, then deriving velocity by dividing by a stored frame/count field rather than directly moving the fighter.",
+    "Incomplete or packed struct knowledge can be bridged by precise casts and pointer arithmetic, but follow-up struct naming should be based on repeated evidence before replacing `x` fields."
+  ],
+  "naming_conventions": [
+    "`ftCo_` prefixes common fighter-state functions such as `ftCo_Rebirth_Phys`, `ftCo_CatchPull_Anim`, and `ftCo_800D41C4`.",
+    "`ftKb_` prefixes Kirby-specific code, with `SpecialN_800F14B4` remaining address-suffixed until its exact semantic name is established.",
+    "`fn_800D54A4` remains an address-based unknown helper despite the PR body describing accessory-position behavior; future renames should verify callers and semantics first.",
+    "Lifecycle suffixes such as `_Anim`, `_IASA`, `_Phys`, and `_Coll` are preserved for fighter motion callbacks.",
+    "Use `GET_FIGHTER` and `GET_ITEM` access macros for `Fighter_GObj` and `Item_GObj` user data, matching surrounding fighter code style.",
+    "Character constants appear as `FTKIND_LINK`, `FTKIND_CLINK`, `FTKIND_SAMUS`, and `FTKIND_PICHU`; `CLINK` corresponds to the Young Link path in the PR body.",
+    "Unknown bitfields and offsets remain in project style, e.g. `x221F_b4`, `x221F_b3`, `x2225_b2`, `x2227_b6`, `x20A0_accessory`, `x610_color_rgba`, and `mv.co.unk_deadup`."
+  ],
+  "assembly_or_matching_tactics": [
+    "`PAD_STACK(16)`, `PAD_STACK(12)`, and `PAD_STACK(8)` were used in implemented functions to preserve stack layout.",
+    "Dummy stack storage appears as `u8 _[8]` in `ftCo_800D41C4` and `u8 sp14[0x88]` in `ftKb_SpecialN_800F14B4`.",
+    "`#pragma dont_inline on` was applied only around `ftKb_SpecialN_800F14B4`, a reusable tactic when helper calls would otherwise disturb a known match.",
+    "Scoped temporaries and duplicate-looking locals such as `int* temp_r31`, `Fighter* fp2`, `Fighter* new_var`, and `Fighter* fp = fp = gobj->user_data` suggest register-lifetime shaping for MWCC matching.",
+    "Type-punning casts like `*(f32*) &mv.co.common.x8`, `(ftData_x8_x8*) &new_var->desc.vis_table`, and `(u32*) ((u8*) new_var->hat_dynamics[4] + 4)` were used where struct types were not yet fully modeled.",
+    "The catch-pull implementation avoids early returns in favor of a final conditional transition call, likely matching the original branch convergence."
+  ],
+  "review_feedback": [
+    {
+      "source": "review",
+      "reviewer": "jurrejelle",
+      "state": "APPROVED",
+      "submitted_at": "2026-04-11T14:23:12Z",
+      "body": "No written review feedback."
+    },
+    {
+      "source": "review_comments",
+      "message": "No inline review comments were present in the slice."
+    },
+    {
+      "source": "decomp.dev bot",
+      "created_at": "2026-04-10T20:24:05Z",
+      "message": "Reported GALE01 matched code 62.59% (+0.04%, +1404 bytes), with five new 100% matches and three unmatched-item improvements."
+    },
+    {
+      "source": "decomp.dev bot discrepancy",
+      "message": "Bot report listed `ftCo_800D41C4` as 98.33% at report time, while the PR title/body listed six 100% matches; verify final status from build artifacts if exact percentage matters."
+    }
+  ],
+  "searchable_terms": [
+    "pr-2402",
+    "johnwinston",
+    "ft: 6 match progress",
+    "split from #2345",
+    "src/melee/ft/ft_0D31.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Attack100.c",
+    "src/melee/ft/chara/ftKirby/ftKb_Init.c",
+    "fn_800D54A4",
+    "ftCo_Rebirth_Phys",
+    "ftCo_800D41C4",
+    "ftCo_CatchPull_Anim",
+    "ftKb_UnkMtxFunc0",
+    "ftKb_SpecialN_800F14B4",
+    "ftCo_MS_DeadUpStarIce",
+    "ftCo_800D40B8_inline",
+    "ftCommon_8007EFC0",
+    "ft_800881D8",
+    "pl_8003DF44",
+    "ftCo_80090AC0",
+    "ftCommon_8007EBAC",
+    "Stage_80224E38",
+    "Player_GetSomePos",
+    "Player_GetEntityAtIndex",
+    "ftCommon_800804EC",
+    "HSD_JObjSetTranslate",
+    "FTKIND_LINK",
+    "FTKIND_CLINK",
+    "FTKIND_SAMUS",
+    "FTKIND_PICHU",
+    "linkhookshot.x14",
+    "samusgrapple.x14",
+    "throw_flags_b3",
+    "fn_800DA1D8",
+    "HSD_JObjGetMtxPtr",
+    "HSD_JObjCopyMtx",
+    "JOBJ_USER_DEF_MTX",
+    "JOBJ_MTX_INDEP_PARENT",
+    "JOBJ_MTX_INDEP_SRT",
+    "HSD_JObjSetMtxDirty",
+    "HSD_JObjDispAll",
+    "HSD_GObj_80390EB8",
+    "KirbyHatStruct",
+    "FtPartsVisLookup",
+    "ft_80459B88.hats",
+    "HSD_ObjAlloc",
+    "fighter_x2040_alloc_data",
+    "ftParts_8007487C",
+    "ftAnim_80070200",
+    "ftParts_80074D7C",
+    "hat_dynamics",
+    "Fighter_UpdateModelScale",
+    "PAD_STACK",
+    "pragma dont_inline"
+  ],
+  "follow_up_queries": [
+    "Verify final match status for `ftCo_800D41C4` against current build/decomp.dev data because the PR body and early bot report disagree.",
+    "Search nearby Kirby hat init functions for repeated `ft_80459B88.hats[FTKIND_*]`, `hat_dynamics[3]`, and `hat_dynamics[4]` patterns to improve `KirbyHatStruct` and visibility-table field names.",
+    "Find callers of `fn_800D54A4` and uses of `x20A0_accessory` to determine whether the helper can be renamed around accessory/hookshot positioning.",
+    "Compare `ftCo_CatchPull_Anim` with other catch/pull/grapple callbacks and `fn_800DA1D8` callers to name `linkhookshot.x14`, `samusgrapple.x14`, and `throw_flags_b3` more precisely.",
+    "Audit other respawn/dead-up functions in `ft_0D31.c` for the meaning of `mv.co.common.x0`, `mv.co.unk_deadup.x40`, `x44`, and `x68`."
+  ],
+  "confidence": 0.86
+}

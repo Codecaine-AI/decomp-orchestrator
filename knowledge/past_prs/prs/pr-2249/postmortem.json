@@ -1,0 +1,139 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2249",
+  "pr": {
+    "number": 2249,
+    "title": "grmaterial: match 3 functions",
+    "url": "https://github.com/doldecomp/melee/pull/2249",
+    "state": "CLOSED",
+    "author": "johnwinston",
+    "created_at": "2026-03-10T13:26:38Z",
+    "merged_at": null
+  },
+  "agent_status": "agent_completed",
+  "summary": "Closed, unmerged PR that attempted to decompile and 100% match three stage material functions: grMaterial_801C9490, grMaterial_801C9604, and grMaterial_801C9698. The patch corrected grMaterial_801C9470/801C9490 to use Item_GObj and CommandInfo, implemented ColorOverlay handling via Ground-relative pointer arithmetic, and added the needed lb forward include. A later comment explained the pointer arithmetic was not easily replaceable with struct fields because the material system overlays ColorOverlay data at Ground+0x40 and uses padding around Ground+0xC0. The PR was later closed with the note that it was consolidated into other PRs.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decompilation",
+      "matching",
+      "prototype-correction",
+      "headers",
+      "struct-layout-workaround",
+      "closed-unmerged"
+    ],
+    "systems": [
+      "stage",
+      "ground",
+      "grmaterial",
+      "color-overlay"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/gr/grmaterial.c",
+      "role": "Implemented grMaterial_801C9490, grMaterial_801C9604, grMaterial_801C9698 and adjusted grMaterial_801C9470 forwarding/signature."
+    },
+    {
+      "path": "src/melee/gr/grmaterial.h",
+      "role": "Added lb/forward.h and updated grMaterial_801C9470 prototype from HSD_JObj* to Item_GObj*, CommandInfo*."
+    }
+  ],
+  "what_changed": [
+    "Replaced the grMaterial_801C9490 stub with code taking Item_GObj* and CommandInfo*, reading a u16 command value from cmd->ptr[0], extracting ((value >> 2) & 0xFF), storing it as f32 at Ground+0xC0, and setting gp->x10_flags.b6.",
+    "Changed grMaterial_801C9470 from an HSD_JObj* wrapper to an Item_GObj*/CommandInfo* wrapper that forwards to grMaterial_801C9490.",
+    "Implemented grMaterial_801C9604 to treat Ground+0x40 as a ColorOverlay, initialize priority/pointer/timer/loop/color-enable fields, clear gp->x10_flags.b4, then call grMaterial_801C9698.",
+    "Implemented grMaterial_801C9698 to call lb_80014258(gobj, ColorOverlay at Ground+0x40, fn_801C9664) and set gp->x10_flags.b4 if that helper returns true.",
+    "Added lb/forward.h to grmaterial.h, apparently to support the CommandInfo prototype.",
+    "PR body claimed ninja built cleanly and fuzzy_match_percent was 100.0 for all three decompiled functions.",
+    "The PR was closed unmerged after a comment saying the work was consolidated into other PRs."
+  ],
+  "smart_moves": [
+    "Corrected the callback-style signatures to Item_GObj* and CommandInfo* instead of forcing the old HSD_JObj* declaration, which better matched the command dispatch code.",
+    "Used the existing ColorOverlay type for the Ground+0x40 overlay rather than leaving all accesses as raw bytes.",
+    "Kept explicit byte-offset pointer arithmetic where the shared Ground struct did not accurately model the material overlay layout, avoiding speculative struct fields.",
+    "Documented why the ugly offsets were present: ColorOverlay occupies an overlaid Ground region and Ground+0xC0 lies in unnamed padding before GroundVars.",
+    "Preserved flag behavior around gp->x10_flags.b4 and gp->x10_flags.b6 while matching the helper/callback flow through lb_80014258 and fn_801C9664."
+  ],
+  "decomp_lessons": [
+    "Stage material code may overlay temporary material data onto generic Ground storage; do not add naive Ground fields until the overlapping layout is understood.",
+    "Pointer arithmetic such as (u8*) gp + 0x40 or +0xC0 can be the least-wrong interim representation when a shared struct needs a future union to model overlays.",
+    "When an item-command callback function appears to take the wrong object type, check the ItCmd/CommandInfo dispatch path before preserving an old placeholder prototype.",
+    "A 100% fuzzy match claim is useful evidence, but a closed-unmerged PR should be treated as a source of tactics, not necessarily final project state.",
+    "For future cleanup, the comment points to a possible Ground union covering roughly offsets 0x40 through 0xC3 to represent the ColorOverlay/padding overlap."
+  ],
+  "naming_conventions": [
+    "Address-suffixed grMaterial names were retained: grMaterial_801C9490, grMaterial_801C9604, grMaterial_801C9698.",
+    "The patch used short local names consistent with nearby decomp style: gobj for HSD_GObj/Item_GObj, gp for Ground*, co for ColorOverlay*, and cmd for CommandInfo*.",
+    "Existing offset-based field names were reused rather than renamed: x10_flags.b4, x10_flags.b6, x4_pri, x8_ptr1, x0_timer, xC_loop, x7C_color_enable, x7C_flag2.",
+    "The file/module remains lowercase grmaterial while functions use the existing grMaterial_ address-prefix style."
+  ],
+  "assembly_or_matching_tactics": [
+    "Command bit extraction in grMaterial_801C9490 used (*(u16*) cmd->ptr[0] >> 2) & 0xFF, then converted the result to f32 for storage.",
+    "Ground-relative casts were used to force exact layout: (ColorOverlay*) ((u8*) gp + 0x40) and *(f32*) ((u8*) gp + 0xC0).",
+    "grMaterial_801C9604 zeroed multiple ColorOverlay state fields before immediately calling grMaterial_801C9698, matching the init-then-update control flow.",
+    "grMaterial_801C9698 used the boolean return from lb_80014258 to conditionally set gp->x10_flags.b4.",
+    "Verification evidence in the PR body was limited to a clean ninja build and fuzzy_match_percent: 100.0 for the three functions."
+  ],
+  "review_feedback": [
+    {
+      "source": "issue comment",
+      "feedback": "Author initially said pointer math would be fixed soon.",
+      "resolution": "A later comment said the pointer math could not simply become struct field access because ColorOverlay is overlaid at Ground+0x40 and Ground+0xC0 is unnamed padding."
+    },
+    {
+      "source": "issue comment",
+      "feedback": "Fixing the layout properly would require adding a union around the Ground 0x40-0xC3 region.",
+      "resolution": "Marked as non-trivial; no such union is shown in this PR slice."
+    },
+    {
+      "source": "issue comment",
+      "feedback": "The PR was consolidated into other PRs.",
+      "resolution": "PR closed without merge."
+    }
+  ],
+  "searchable_terms": [
+    "pr-2249",
+    "grmaterial",
+    "grMaterial_801C9490",
+    "grMaterial_801C9604",
+    "grMaterial_801C9698",
+    "grMaterial_801C9470",
+    "src/melee/gr/grmaterial.c",
+    "src/melee/gr/grmaterial.h",
+    "Ground",
+    "Ground+0x40",
+    "Ground+0xC0",
+    "ColorOverlay",
+    "ColorOverlay_x8_t",
+    "Item_GObj",
+    "CommandInfo",
+    "ItCmd",
+    "HSD_GObj",
+    "HSD_JObj",
+    "lb_80014258",
+    "fn_801C9664",
+    "cmd->ptr[0]",
+    "x10_flags.b4",
+    "x10_flags.b6",
+    "x4_pri",
+    "x8_ptr1",
+    "x0_timer",
+    "xC_loop",
+    "x7C_color_enable",
+    "x7C_flag2",
+    "fuzzy_match_percent 100.0",
+    "pointer math",
+    "Ground struct union",
+    "closed unmerged",
+    "consolidated into other PRs"
+  ],
+  "follow_up_queries": [
+    "Find the later consolidated PRs that replaced PR 2249 for grMaterial_801C9490 grMaterial_801C9604 grMaterial_801C9698.",
+    "Check current master signatures for grMaterial_801C9470 and grMaterial_801C9490.",
+    "Search for Ground struct overlay or union work around offsets 0x40 through 0xC3.",
+    "Search for other uses of lb_80014258 with ColorOverlay and fn_801C9664.",
+    "Verify whether pointer arithmetic at Ground+0x40 and Ground+0xC0 remains in the final accepted grmaterial implementation."
+  ],
+  "confidence": 0.88
+}

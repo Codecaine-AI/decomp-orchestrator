@@ -1,0 +1,162 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2482",
+  "pr": {
+    "number": 2482,
+    "title": "mnsoundtest data cleanup",
+    "url": "https://github.com/doldecomp/melee/pull/2482",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2026-05-11T01:59:33Z",
+    "merged_at": "2026-05-11T02:04:42Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Cleaned up mnSoundTest and mnDataDel menu data by splitting large anonymous .data blobs into typed objects, arrays, vectors, text IDs, and string labels, then updating C/header code to use those explicit symbols. The PR had no body and no human review comments, so intent is inferred from the diff and decomp.dev output. Automated results reported +280 matched code bytes, +1808 matched data bytes, 3 new matches, and 100% .data for both main/melee/mn/mndatadel and main/melee/mn/mnsoundtest.",
+  "change_classification": {
+    "primary_type": "data-symbol-cleanup-for-matching",
+    "categories": [
+      "cleanup",
+      "decomp-matching",
+      "data-segmentation",
+      "headers",
+      "type-correction",
+      "symbol-map"
+    ],
+    "systems": [
+      "mn menu",
+      "mnSoundTest",
+      "mnDataDel",
+      "GALE01 symbols"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "config/GALE01/symbols.txt",
+      "role": "Split mnSoundTest and mnDataDel .data ranges into smaller typed symbols; adjusted local/global scope for several bss/sdata2 symbols."
+    },
+    {
+      "path": "src/melee/mn/mndatadel.static.h",
+      "role": "Shrank MnDataDelData, added static initializers for AnimLoopSettings, u32/u16 data arrays, and Vec3 position data; converted user-data flag bytes into x3[6]."
+    },
+    {
+      "path": "src/melee/mn/mndatadel.c",
+      "role": "Updated code from struct-field and pointer-cast indexing to direct typed arrays/symbols such as mnDataDel_803EF8AC, mnDataDel_803EF8C8, mnDataDel_803EF888, mnDataDel_803EF894, and lbl_803EF8D4."
+    },
+    {
+      "path": "src/melee/mn/mnsoundtest.c",
+      "role": "Added vec_8, changed data_4 to s32, corrected data_3/data_4 indexing, changed one input check to MenuInput_StartButton, and returned HSD_GObjProc* directly."
+    },
+    {
+      "path": "src/melee/mn/mnsoundtest.h",
+      "role": "Changed mnSoundTest_8024BEE0 prototype from s32 to HSD_GObjProc*."
+    }
+  ],
+  "what_changed": [
+    "In symbols.txt, mnSoundTest_803EF0A8 was replaced by vec_0 through vec_8, and mnSoundTest_803EF114 was split into text_ids, data_2, data_3, data_4, and several mnSoundTest_803EF4F4-style string symbols.",
+    "In symbols.txt, mnDataDel_803EF870 was reduced from a 0x30 object to smaller AnimLoopSettings-like float objects at mnDataDel_803EF870, mnDataDel_803EF888, mnDataDel_803EF894, and mnDataDel_803EF8A0.",
+    "The previous large mnDataDel_803EF8AC data blob was split into mnDataDel_803EF8AC as u32 data, mnDataDel_803EF8C8 as u16 data, lbl_803EF8D4 as Vec3-like float data, and multiple string labels from lbl_803EF8E0 through lbl_803EFA60.",
+    "MnDataDelGObjUserData changed from separate bytes x3 through x8 plus padding to a contiguous u8 x3[6] flag array, and mndatadel.c now uses x3[i] or x3[n] consistently.",
+    "mndatadel.c replaced casts such as ((s32*) &mnDataDel_803EF870.x3C)[i] and ((u16*) &mnDataDel_803EF870.x58)[idx] with direct typed array access through mnDataDel_803EF8AC[i] and mnDataDel_803EF8C8[idx].",
+    "mndatadel.c now references standalone animation settings mnDataDel_803EF888, mnDataDel_803EF894, and mnDataDel_803EF8A0 instead of fields x18, x24, and x30 in a larger data struct.",
+    "mnDataDel_8024EA6C was rewritten from pointer-walk/do-while style to a for loop over six entries, with lang typed as enum_t and the gmMainLib_8015F588 argument cast to u8.",
+    "mnDataDel_8024FE4C now zeroes the flag array with ARRAY_SIZE, iterates over ARRAY_SIZE(user_data->x10), adds child joints through mnDataDel_803EF8AC[i], and reloads user_data before updating text.",
+    "mnsoundtest.c added Vec3 vec_8 = { -1.7, 2, 0 } and changed two text-positioning sites to use vec_8 values.",
+    "mnsoundtest.c changed data_4 from u32[] to s32[], changed mnSoundTest_8024BCA0 to use data_3[user_data->unk3] and data_4[temp_r29_3], and simplified a boolean argument to temp_r29_2 == 0.",
+    "mnsoundtest.c changed one input branch from MenuInput_LTrigger to MenuInput_StartButton in fn_8024AED0.",
+    "mnSoundTest_8024BEE0 now returns HSD_GObjProc* in both the C file and header instead of casting the proc pointer to s32."
+  ],
+  "smart_moves": [
+    "The main matching win was splitting heterogeneous data blobs into correctly typed pieces instead of forcing unrelated vectors, animation settings, text IDs, strings, and integer tables into one synthetic struct.",
+    "Turning x3 through x8 into x3[6] made the data-delete menu state match the repeated indexing pattern already present in the code and removed manual byte-offset writes.",
+    "Replacing pointer casts against struct subfields with real u32 and u16 arrays made the code clearer and gave the compiler more direct indexed accesses.",
+    "Keeping uncertain names generic, such as vec_0, vec_8, data_2, data_3, data_4, and address-based mnDataDel_803EFxxx labels, avoided inventing semantics while still improving symbol/data accuracy.",
+    "The return type correction for mnSoundTest_8024BEE0 removed a pointer-to-s32 cast and aligned the declaration with the value actually returned by HSD_GObj_SetupProc.",
+    "The symbols.txt changes captured object sizes, data kinds, alignment, and local scope; this was enough for decomp.dev to report both affected .data units at 100%."
+  ],
+  "decomp_lessons": [
+    "For menu data, do not assume a contiguous .data span is one logical struct; inspect relocations and uses to split it into AnimLoopSettings, Vec3, text ID arrays, integer remap arrays, and strings.",
+    "If several adjacent byte fields are manipulated with indexes, model them as an array even if the current field names are still offset-style placeholders.",
+    "Typed static data in a .static.h can be a practical bridge: it preserves address-based names while allowing C code to stop using brittle casts into oversized extern blobs.",
+    "Correct C types can be small but important matching levers: this PR used enum_t, u8 casts, s32 arrays, HSD_GObjProc* returns, and explicit u16 text ID arrays.",
+    "ARRAY_SIZE loops are useful when the recovered structure actually has array shape; they reduced manual initialization in MnDataDelGObjUserData without losing matching.",
+    "Automated match reports are valuable evidence for cleanup PRs with little prose: here the bot tied data-symbol cleanup to concrete code/data byte improvements."
+  ],
+  "naming_conventions": [
+    "Unknown but now-separated mnSoundTest data used generic names vec_0 through vec_8, text_ids, data_2, data_3, and data_4 rather than over-specific inferred names.",
+    "Unidentified data-delete globals kept address-based labels such as mnDataDel_803EF888, mnDataDel_803EF894, mnDataDel_803EF8AC, mnDataDel_803EF8C8, and lbl_803EF8D4.",
+    "Compiler/local labels in symbols.txt use forms such as @8, @156, @203, and ...bss.0 when the symbol should not be promoted to a named global.",
+    "Offset-style struct field names were preserved where semantics are still unknown, but repeated bytes were grouped as x3[6] instead of x3, x4, x5, x6, x7, x8.",
+    "Function prototypes should reflect actual returned object types; mnSoundTest_8024BEE0 is now declared as returning HSD_GObjProc*."
+  ],
+  "assembly_or_matching_tactics": [
+    "Symbol-map segmentation changed mnSoundTest_803EF0A8 from one 0x6C float object into nine 0xC Vec3-like objects and split mnSoundTest_803EF114 into tables and strings.",
+    "Symbol-map segmentation changed mnDataDel_803EF8AC from one 0x1DC 4-byte blob into a 0x1C u32 table, a 0xC u16 table, a Vec3-like float object, and multiple string objects.",
+    "mndatadel.c local declarations and padding were adjusted in mnDataDel_8024EA6C, including u8 pad[0x8] and PAD_STACK(0x10), which appears to be part of preserving the target stack/register layout.",
+    "Direct references to mnDataDel_803EF888, mnDataDel_803EF894, and mnDataDel_803EF8A0 replaced accesses through removed struct fields, reducing artificial offset arithmetic.",
+    "Using mnDataDel_803EF8AC[i] for joint indices and mnDataDel_803EF8C8[idx] for SIS text IDs avoided casts such as ((s32*) &data->x3C) and ((u16*) &data->x58).",
+    "mnsoundtest matching improved through small expression/type changes: data_4 became s32[], mnSoundTest_8024BCA0 uses data_3 then data_4, and a negated integer idiom became temp_r29_2 == 0.",
+    "decomp.dev reported new matches for mndatadel .data, mnsoundtest .data, and mnSoundTest_8024A958, plus improvements in mnDataDel_80250170, fn_8024F840, mnDataDel_8024FE4C, mnSoundTest_8024BCA0, mnDataDel_8024EA6C, fn_8024FD40, fn_8024B2B0, fn_8024ECCC, and fn_8024AED0."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the PR slice.",
+    "The PR body was empty, so rationale beyond the title is inferred from code changes and the automated match report.",
+    "decomp-dev[bot] reported matched code at 66.56% (+0.01%, +280 bytes) and matched data at 39.00% (+0.15%, +1808 bytes).",
+    "decomp-dev[bot] reported 3 new matches: main/melee/mn/mndatadel .data to 100.00%, main/melee/mn/mnsoundtest .data to 100.00%, and mnSoundTest_8024A958 to 100.00%."
+  ],
+  "searchable_terms": [
+    "PR2482",
+    "mnsoundtest data cleanup",
+    "mnSoundTest",
+    "mnDataDel",
+    "mndatadel.c",
+    "mndatadel.static.h",
+    "mnsoundtest.c",
+    "mnsoundtest.h",
+    "config/GALE01/symbols.txt",
+    "mnSoundTest_8024BEE0",
+    "mnSoundTest_8024BCA0",
+    "mnSoundTest_8024A958",
+    "fn_8024AED0",
+    "fn_8024B2B0",
+    "mnDataDel_8024E940",
+    "mnDataDel_8024EA6C",
+    "mnDataDel_8024EBC8",
+    "fn_8024ECCC",
+    "fn_8024F318",
+    "fn_8024F840",
+    "fn_8024FBA4",
+    "fn_8024FC48",
+    "fn_8024FD40",
+    "mnDataDel_8024FE4C",
+    "mnDataDel_80250170",
+    "mnDataDel_803EF870",
+    "mnDataDel_803EF888",
+    "mnDataDel_803EF894",
+    "mnDataDel_803EF8A0",
+    "mnDataDel_803EF8AC",
+    "mnDataDel_803EF8C8",
+    "lbl_803EF8D4",
+    "vec_0",
+    "vec_8",
+    "text_ids",
+    "data_2",
+    "data_3",
+    "data_4",
+    "AnimLoopSettings",
+    "Vec3",
+    "HSD_GObjProc",
+    "HSD_SisLib",
+    "MenuInput_StartButton",
+    "ARRAY_SIZE",
+    "data blob split",
+    "matched data 100%"
+  ],
+  "follow_up_queries": [
+    "Search nearby mn menu files for large address-based .data blobs that combine AnimLoopSettings, Vec3, text IDs, and strings and may benefit from this same split-symbol tactic.",
+    "Look for remaining casts like ((s32*) &data->field)[i] or ((u16*) &data->field)[i] in menu code; they may indicate missing typed arrays.",
+    "If more semantics are recovered, rename vec_0..vec_8, data_2, data_3, data_4, mnDataDel_803EF8AC, mnDataDel_803EF8C8, and lbl_803EF8D4 to descriptive names.",
+    "Check other menu user-data structs for adjacent flag bytes that should be modeled as arrays instead of individual xN fields.",
+    "When touching symbols near the edited sdata2 and bss entries, verify local labels such as @8, @156, @203, and ...bss.0 remain correctly scoped."
+  ],
+  "confidence": 0.88
+}

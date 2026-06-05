@@ -1,0 +1,148 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2260",
+  "pr": {
+    "number": 2260,
+    "title": "Match and link ftlinkspecialn via hacky solution, cleanup inline names",
+    "url": "https://github.com/doldecomp/melee/pull/2260",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2026-03-10T19:44:46Z",
+    "merged_at": "2026-03-10T19:48:53Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Made Link's neutral special source, ftLk_SpecialN.c, build as a Matching object and therefore link into GALE01. The source-side fix was explicitly described as hacky: it cleaned up placeholder inline helper names while also using codegen-sensitive tactics such as duplicate zero Vec3 constants, stack padding macros, helper splitting, and literal/ordering changes. The symbols file was also adjusted heavily for local/global scope and BSS layout, including baselib/devcom data. decomp.dev reported +1616 matched code bytes, +6500 linked code bytes, and +33024 matched data bytes, with new matches for ftLk_SpecialNStart_Anim, ftLk_SpecialAirNStart_Anim, and devcom BSS/SBSS.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "linking",
+      "fighter-special-move",
+      "inline-helper-cleanup",
+      "naming-cleanup",
+      "symbol-scope-fix",
+      "data-layout"
+    ],
+    "systems": [
+      "fighter/ftLink",
+      "ftLk_SpecialN",
+      "build configuration",
+      "GALE01 symbols",
+      "sysdolphin/baselib/devcom data"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/chara/ftLink/ftLk_SpecialN.c",
+      "role": "Refactored Link neutral-B helpers and applied matching hacks for animation/collision codegen."
+    },
+    {
+      "path": "configure.py",
+      "role": "Changed ftLk_SpecialN.c from Object(NonMatching) to Object(Matching)."
+    },
+    {
+      "path": "config/GALE01/symbols.txt",
+      "role": "Updated local/global symbol scopes, added local section labels, renamed ftLk zero constants, and split devcom BSS objects."
+    }
+  ],
+  "what_changed": [
+    "configure.py now lists melee/ft/chara/ftLink/ftLk_SpecialN.c as Matching instead of NonMatching.",
+    "ftLk_SpecialN.c replaced placeholder/generic helpers such as unkCondition and inlineA* with more descriptive helpers: isDrawback, isDrawn, animate, animate_nopad, doEndColl, and doAirColl.",
+    "Moved static MotionFlags constants mf and coll_mf near the top of ftLk_SpecialN.c and reused them for motion-state transitions.",
+    "Added three separate static const Vec3 zero constants, zero/zero2/zero3, and used them to initialize lpos/rpos/root in the Link bow animation path.",
+    "Split identical-looking animation logic into animate, which includes FORCE_PAD_STACK_16 and FORCE_PAD_STACK_8 padding, and animate_nopad, which avoids that padding for loop callsites.",
+    "Reshaped ftLk_SpecialNStart_Anim and ftLk_SpecialAirNStart_Anim so they inline command-variable handling, call isDrawn, update arrow positioning through animate, and transition to loop motion states when frames finish.",
+    "Reshaped collision helpers: setupParts and updateParts became static inline, doEndColl was moved and padded, doAirColl was extracted before air collision wrappers, and transition literals were normalized to 1.0f/0.0f.",
+    "symbols.txt changed many compiler-local symbols from global to local, added labels such as ...rodata.0, ...data.0, and ...bss.0, renamed ftLk SpecialN rodata constants to zero/zero2/zero3, and split HSD_DevCom_804C6330 into HSD_DevCom_804C6330 plus HSD_DevCom_804C6330_bufs and fileinfo."
+  ],
+  "smart_moves": [
+    "Used helper splitting instead of forcing one shared helper everywhere: animate and animate_nopad preserve readable intent while allowing different stack layouts at different callsites.",
+    "Kept duplicate zero Vec3 constants rather than deduplicating them, matching the emitted rodata layout and symbol references needed by the object.",
+    "Combined source-level codegen shaping with symbol-scope cleanup before flipping the configure.py object state to Matching.",
+    "Renamed helpers from inlineA*/unkCondition to action-oriented names, making the decomp more searchable without claiming exact struct field meanings that are still unknown.",
+    "Localized compiler-emitted or file-private symbols in symbols.txt, reducing accidental global exports and enabling data matches outside the ftLink source itself."
+  ],
+  "decomp_lessons": [
+    "A mostly matched fighter file may still require non-semantic stack/layout work before it can be linked; FORCE_PAD_STACK and local variable lifetime/order can be decisive.",
+    "Do not prematurely deduplicate identical constants in decomp code: separate static const objects like zero, zero2, and zero3 may be required to match rodata identity and ordering.",
+    "When one inline helper matches one callsite but not another, create explicit padded and unpadded variants rather than hiding the difference in less readable control flow.",
+    "Flipping an object from NonMatching to Matching can require symbols.txt maintenance beyond that object, especially local/global scope corrections and BSS object splitting.",
+    "If field semantics are uncertain, preserve placeholder field names such as cmd_unk* but improve helper names around observed behavior, such as isDrawn and isDrawback.",
+    "Explicit float literals, boolean false, helper declaration order, and static const placement can all affect MWCC output enough to matter for small final matches."
+  ],
+  "naming_conventions": [
+    "Boolean helpers use is* predicate names, shown by isDrawback and isDrawn.",
+    "Use descriptive action helpers like animate, doEndColl, and doAirColl instead of placeholder inlineA* names once behavior is recognizable.",
+    "Use a suffix such as _nopad to document a matching-only stack-layout variant, as in animate_nopad.",
+    "Short local MotionFlags constants were named mf and coll_mf, with coll_mf indicating collision-state transition flags.",
+    "When the only proven meaning is codegen/layout, plain names like zero, zero2, and zero3 are preferable to invented semantic names."
+  ],
+  "assembly_or_matching_tactics": [
+    "Applied FORCE_PAD_STACK_16, FORCE_PAD_STACK_8, and FORCE_PAD_STACK_4 to influence stack frame layout.",
+    "Initialized Vec3 locals from three distinct static const Vec3 objects to preserve separate rodata entries.",
+    "Split animation helper code into padded and unpadded inline variants for callsite-specific matching.",
+    "Used explicit 1.0f and 0.0f transition arguments and false boolean assignments where the diff showed literal normalization.",
+    "Reordered static constants and helper definitions so emitted data/code aligned with expected output.",
+    "Adjusted symbols.txt scopes from global to local for file-private callbacks, strings, floats, BSS, SBSS, and SData symbols.",
+    "Added local section labels such as ...rodata.0, ...data.0, and ...bss.0 to match section starts.",
+    "Split HSD_DevCom_804C6330 BSS layout into a 0x10 global object, an 0x8000 local buffer object, and a local fileinfo object."
+  ],
+  "review_feedback": [
+    "No human PR body, review comments, or reviews were present in the slice; intent is inferred from the title, diff, and bot report.",
+    "decomp-dev[bot] reported GALE01 matched code at 55.88% (+0.04%, +1616 bytes), linked code at 32.28% (+0.17%, +6500 bytes), matched data at 37.51% (+2.73%, +33024 bytes), and linked data +52 bytes.",
+    "decomp-dev[bot] listed 4 new matches: main/sysdolphin/baselib/devcom .bss, ftLk_SpecialAirNStart_Anim, ftLk_SpecialNStart_Anim, and main/sysdolphin/baselib/devcom .sbss."
+  ],
+  "searchable_terms": [
+    "pr-2260",
+    "PsiLupan",
+    "ftlinkspecialn",
+    "ftLk_SpecialN.c",
+    "Link Neutral B",
+    "Link bow arrow",
+    "ftLk_SpecialNStart_Anim",
+    "ftLk_SpecialAirNStart_Anim",
+    "ftLk_SpecialNLoop_Anim",
+    "ftLk_SpecialAirNLoop_Anim",
+    "ftLk_SpecialNEnd_Coll",
+    "ftLk_SpecialAirNEnd_Coll",
+    "isDrawback",
+    "isDrawn",
+    "animate",
+    "animate_nopad",
+    "doEndColl",
+    "doAirColl",
+    "mf",
+    "coll_mf",
+    "FORCE_PAD_STACK_16",
+    "FORCE_PAD_STACK_8",
+    "FORCE_PAD_STACK_4",
+    "Vec3 zero zero2 zero3",
+    "it_802A83E0",
+    "it_802A8398",
+    "it_802A850C",
+    "ftParts_GetBoneIndex",
+    "FtPart_LThumbNb",
+    "FtPart_RThumbNb",
+    "cmd_unk2",
+    "cmd_unk1_bool",
+    "Object(Matching)",
+    "config/GALE01/symbols.txt",
+    "HSD_DevCom_804C6330_bufs",
+    "devComARQR",
+    "devComStatus",
+    "aramstate",
+    "dvdDC",
+    "aramDC",
+    "devComRelayBufFlag",
+    "local scope symbols",
+    "...data.0",
+    "...bss.0"
+  ],
+  "follow_up_queries": [
+    "ftLk_SpecialN animate_nopad FORCE_PAD_STACK",
+    "ftlinkspecialn zero zero2 zero3 rodata",
+    "HSD_DevCom_804C6330_bufs fileinfo symbols",
+    "cmd_unk2 Link SpecialNStart Anim x0.x",
+    "ftLink SpecialN Object(Matching) NonMatching"
+  ],
+  "confidence": 0.85
+}

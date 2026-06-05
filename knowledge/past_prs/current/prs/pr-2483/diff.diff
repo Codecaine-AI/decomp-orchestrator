@@ -1,0 +1,906 @@
+diff --git a/compile_flags.txt b/compile_flags.txt
+index 4b9c1bbac0..5b31965f00 100644
+--- a/compile_flags.txt
++++ b/compile_flags.txt
+@@ -22,14 +22,22 @@
+ -Werror=pointer-type-mismatch
+ -Werror=strict-prototypes
+ -Werror=typedef-redefinition
++-Wno-bitfield-constant-conversion
+ -Wno-builtin-macro-redefined
++-Wno-for-loop-analysis
++-Wno-format
++-Wno-fortify-source
+ -Wno-gnu-folding-constant
+ -Wno-incompatible-library-redeclaration
++-Wno-integer-overflow
+ -Wno-missing-braces
+ -Wno-missing-field-initializers
++-Wno-return-type
++-Wno-sign-compare
++-Wno-sometimes-uninitialized
+ -Wno-switch
+--Wno-tautological-compare
+ -Wno-tautological-bitwise-compare
++-Wno-tautological-compare
+ -Wno-undefined-internal
+ -Wno-unknown-pragmas
+ -Wno-unsequenced
+@@ -38,10 +46,3 @@
+ -Wno-unused-parameter
+ -Wno-unused-value
+ -Wno-unused-variable
+--Wno-for-loop-analysis
+--Wno-integer-overflow
+--Wno-sign-compare
+--Wno-return-type
+--Wno-sometimes-uninitialized
+--Wno-fortify-source
+--Wno-bitfield-constant-conversion
+diff --git a/src/melee/lb/forward.h b/src/melee/lb/forward.h
+index 774bd8ff86..fc114dd59c 100644
+--- a/src/melee/lb/forward.h
++++ b/src/melee/lb/forward.h
+@@ -20,6 +20,7 @@ typedef struct HitResult HitResult;
+ typedef struct HitVictim HitVictim;
+ typedef struct HSD_AllocEntry HSD_AllocEntry;
+ typedef struct HurtCapsule HurtCapsule;
++typedef struct lbCardNew_SnapshotEntry lbCardNew_SnapshotEntry;
+ typedef struct lbRefract_CallbackData lbRefract_CallbackData;
+ typedef struct PreloadCache PreloadCache;
+ typedef struct PreloadCacheScene PreloadCacheScene;
+diff --git a/src/melee/lb/lb_01F8.c b/src/melee/lb/lb_01F8.c
+index 5a3cc6925b..306af10c0d 100644
+--- a/src/melee/lb/lb_01F8.c
++++ b/src/melee/lb/lb_01F8.c
+@@ -1,6 +1,5 @@
+-#include "lbmthp.h"
+-
+ #include "lbfile.h"
++#include "lbmthp.h"
+ 
+ #include <sysdolphin/baselib/memory.h>
+ #include <sysdolphin/baselib/sobjlib.h>
+@@ -45,8 +44,8 @@ void* lbMthp8001F890(HSD_GObj* gobj)
+     lbl_804335B8.x80 = 0.0F;
+     lbl_804335B8.x88 = &lbl_804335B8.x70;
+     lbl_804335B8.x8C = 0;
+-    lbl_804335B8.x90 = HSD_SObjLib_803A477C(
+-        gobj, (int) &lbl_804335B8.x88, 0, 0, 0x80, 0);
++    lbl_804335B8.x90 =
++        HSD_SObjLib_803A477C(gobj, (int) &lbl_804335B8.x88, 0, 0, 0x80, 0);
+     lbl_804335B8.x90->x40 |= 0x10;
+     return lbl_804335B8.x90;
+ }
+@@ -59,22 +58,19 @@ void lbMthp8001F928(HSD_GObj* gobj, int arg1)
+     /* First texture - full size */
+     GXInitTexObj(&lbl_804335B8.tex0, lbl_804335B8.x20, lbl_804335B8.x6C,
+                  lbl_804335B8.x6E, 1, 0, 0, 0);
+-    GXInitTexObjLOD(&lbl_804335B8.tex0, 0, 0, 0.0F, 0.0F,
+-                    0.0F, 0, 0, 0);
++    GXInitTexObjLOD(&lbl_804335B8.tex0, 0, 0, 0.0F, 0.0F, 0.0F, 0, 0, 0);
+     GXLoadTexObj(&lbl_804335B8.tex0, 0);
+ 
+     /* Second texture - half size */
+     GXInitTexObj(&lbl_804335B8.tex1, lbl_804335B8.x44, (u16) (*pWidth >> 1),
+                  (u16) (*pHeight >> 1), 1, 0, 0, 0);
+-    GXInitTexObjLOD(&lbl_804335B8.tex1, 0, 0, 0.0F, 0.0F,
+-                    0.0F, 0, 0, 0);
++    GXInitTexObjLOD(&lbl_804335B8.tex1, 0, 0, 0.0F, 0.0F, 0.0F, 0, 0, 0);
+     GXLoadTexObj(&lbl_804335B8.tex1, 1);
+ 
+     /* Third texture - half size */
+     GXInitTexObj(&lbl_804335B8.tex2, lbl_804335B8.x68, (u16) (*pWidth >> 1),
+                  (u16) (*pHeight >> 1), 1, 0, 0, 0);
+-    GXInitTexObjLOD(&lbl_804335B8.tex2, 0, 0, 0.0F, 0.0F,
+-                    0.0F, 0, 0, 0);
++    GXInitTexObjLOD(&lbl_804335B8.tex2, 0, 0, 0.0F, 0.0F, 0.0F, 0, 0, 0);
+     GXLoadTexObj(&lbl_804335B8.tex2, 2);
+ 
+     HSD_SObjLib_803A49E0(gobj, arg1);
+diff --git a/src/melee/lb/lbcardnew.c b/src/melee/lb/lbcardnew.c
+index 88b65277f3..ed68a5088f 100644
+--- a/src/melee/lb/lbcardnew.c
++++ b/src/melee/lb/lbcardnew.c
+@@ -8,6 +8,7 @@
+ #include <sysdolphin/baselib/hsd_3B27.h>
+ #include <sysdolphin/baselib/memory.h>
+ #include <melee/lb/lb_0192.h>
++#include <MSL/strtoul.h>
+ 
+ int lb_80019BB8(int card_result)
+ {
+@@ -153,9 +154,9 @@ void lb_80019EF0(int chan, UNK_T save_data, UNK_T status_out, UNK_T callback)
+     lb_80432A68.unk_14 = NULL;
+     lb_80432A68.unk_18 = 0;
+     lb_80432A68.unk_1C = 0;
+-    lb_80432A68.unk_20 = 0;
+-    lb_80432A68.unk_24 = NULL;
+-    lb_80432A68.unk_28 = NULL;
++    lb_80432A68.snapshot_entries = NULL;
++    lb_80432A68.free_blocks = NULL;
++    lb_80432A68.free_files = NULL;
+     lb_80432A68.unk_34 = 0x10;
+ 
+     for (i = 0; i < 9; i++) {
+@@ -315,6 +316,33 @@ void lb_8001A4CC(const char* filename, UNK_T file_entries)
+     task->x8 = file_entries;
+ }
+ 
++struct CardEntry {
++    int file_size, file_flags, data_size;
++};
++
++struct SnapshotNode {
++    struct SnapshotNode* next;
++    u32 time;
++    s16 file_no;
++    u16 blocks;
++};
++
++inline void setup_card_entries(void* ctx, void* icon, struct CardEntry* entry)
++{
++    int i;
++
++    hsd_803B2ADC(ctx, icon);
++    i = 0;
++    while (entry->file_size != -1) {
++        if (entry->file_size != 0) {
++            hsd_803AC3E0(ctx, i, entry->file_size, entry->file_flags,
++                         entry->data_size);
++        }
++        i++;
++        entry++;
++    }
++}
++
+ int lb_8001A594(char* filename, void* file_entries)
+ {
+     int open_result;
+@@ -324,10 +352,6 @@ int lb_8001A594(char* filename, void* file_entries)
+     int unused_2;
+     int unused_3;
+     int unused_4;
+-    int i;
+-    struct {
+-        int unk0, unk4, unk8;
+-    }* entry;
+     u8 _[8];
+ 
+     unused_2 = 0;
+@@ -365,18 +389,8 @@ int lb_8001A594(char* filename, void* file_entries)
+                 } else if (lb_80432A68.unused_files == 0) {
+                     lb_80432A68.unk_34 = 6;
+                 } else {
+-                    entry = file_entries;
+-                    hsd_803B2ADC(&lb_80432A68.unk_A8, lb_80432A68.unk_C);
+-                    i = 0;
+-                    while (entry->unk0 != -1) {
+-                        if (entry->unk0 != 0) {
+-                            hsd_803AC3E0((void*) &lb_80432A68.unk_A8, i,
+-                                         entry->unk0, entry->unk4,
+-                                         entry->unk8);
+-                        }
+-                        i++;
+-                        entry++;
+-                    }
++                    setup_card_entries(&lb_80432A68.unk_A8, lb_80432A68.unk_C,
++                                       file_entries);
+                     if (lb_80432A68.unused_bytes <
+                         (hsd_803B2674((void*) &lb_80432A68.unk_A8) << 0xD))
+                     {
+@@ -519,9 +533,7 @@ int lb_8001ACEC(UNK_T file_entries)
+     int hsd_result;
+     int unused;
+     int i;
+-    struct {
+-        int unk0, unk4, unk8;
+-    }* entries = file_entries; ///< @todo this seems fake
++    struct CardEntry* entries = file_entries; ///< @todo this seems fake
+     volatile int cached_flag;
+     volatile int pad_stack;
+     volatile int cached_data;
+@@ -531,8 +543,8 @@ int lb_8001ACEC(UNK_T file_entries)
+         cached_flag = lb_80432A68.xF4[i];
+         cached_data = lb_80432A68.xD0[i];
+         if (lb_80432A68.xF4[i] != 0) {
+-            hsd_result = hsd_803B29D8(&lb_80432A68.unk_A8, i, entries[i].unk8,
+-                                      fn_8001A0B0);
++            hsd_result = hsd_803B29D8(&lb_80432A68.unk_A8, i,
++                                      entries[i].data_size, fn_8001A0B0);
+             lb_80432A68.unk_38[i].unk_0 = convert_hsdcard_error(hsd_result);
+             lb_80432A68.unk_38[i].unk_4 = hsd_result;
+             file_error = lb_80432A68.unk_38[i].unk_0;
+@@ -555,9 +567,7 @@ int lb_8001AE38(UNK_T file_entries)
+     int hsd_result;
+     int unused;
+     int i;
+-    struct {
+-        int unk0, unk4, unk8;
+-    }* entries = file_entries; ///< @todo this seems fake
++    struct CardEntry* entries = file_entries; ///< @todo this seems fake
+     volatile int cached_flag;
+     volatile int pad_stack;
+     volatile int cached_data;
+@@ -567,8 +577,8 @@ int lb_8001AE38(UNK_T file_entries)
+         cached_flag = lb_80432A68.xF4[i];
+         cached_data = lb_80432A68.xD0[i];
+         if (lb_80432A68.xF4[i] != 0) {
+-            hsd_result = hsd_803B2A4C(&lb_80432A68.unk_A8, i, entries[i].unk8,
+-                                      fn_8001A0B0);
++            hsd_result = hsd_803B2A4C(&lb_80432A68.unk_A8, i,
++                                      entries[i].data_size, fn_8001A0B0);
+             lb_80432A68.unk_38[i].unk_0 = convert_hsdcard_error(hsd_result);
+             lb_80432A68.unk_38[i].unk_4 = hsd_result;
+             file_error = lb_80432A68.unk_38[i].unk_0;
+@@ -619,10 +629,71 @@ int lb_8001B068(void)
+     return lb_80432A68.unk_34;
+ }
+ 
+-/// UnclePunch map calls this "MemoryCard_ScanForSnapshots"
+-/// Stubbing it out for now
+ int lb_8001B14C(void)
+ {
++    struct SnapshotNode* head;
++    CARDStat stat[1];
++    struct SnapshotNode* node;
++    char* company;
++    char* game;
++    struct SnapshotNode* nodes;
++    DVDDiskID* disk_id;
++    int file_no;
++    int count;
++    int i;
++    struct SnapshotNode** scan;
++    lbCardNew_SnapshotEntry* snapshot_entries;
++
++    head = NULL;
++    disk_id = DVDGetCurrentDiskID();
++    lb_80432A68.x8AC = 0;
++    if (lb_80432A68.free_blocks != NULL) {
++        *lb_80432A68.free_blocks = lb_80432A68.unused_bytes / 0x2000;
++    }
++    if (lb_80432A68.free_files != NULL) {
++        *lb_80432A68.free_files = lb_80432A68.unused_files;
++    }
++    nodes = HSD_MemAlloc(0x5F4);
++    node = nodes;
++    snapshot_entries = lb_80432A68.snapshot_entries;
++    company = (char*) stat[0].company;
++    game = (char*) stat[0].gameName;
++    count = 0;
++    for (file_no = 0; file_no < 0x7F; file_no++) {
++        if (CARDGetStatus(lb_80432A68.chan, file_no, stat) == 0 &&
++            strncmp(company, disk_id->company, 2) == 0 &&
++            strncmp(game, disk_id->gameName, 4) == 0 &&
++            isdigit(stat[0].fileName[0]))
++        {
++            node->time = strtoul(stat[0].fileName, NULL, 10);
++            node->file_no = file_no;
++            node->blocks = stat[0].length >> 13;
++            scan = &head;
++            while (*scan != NULL && (*scan)->time > node->time) {
++                scan = &(*scan)->next;
++            }
++            node->next = *scan;
++            count++;
++            *scan = node;
++            node++;
++        }
++    }
++    {
++        struct SnapshotNode** copy_scan;
++        int j;
++
++        copy_scan = &head;
++        for (j = 0; j < count; j++) {
++            snapshot_entries[j].time = (*copy_scan)->time;
++            snapshot_entries[j].file_no = (*copy_scan)->file_no;
++            snapshot_entries[j].blocks = (*copy_scan)->blocks;
++            copy_scan = &(*copy_scan)->next;
++        }
++    }
++    for (i = count; i < 0x7F; i++) {
++        snapshot_entries[i].file_no = -1;
++    }
++    HSD_Free(nodes);
+     lb_80432A68.unk_34 = 0;
+     return lb_80432A68.unk_34;
+ }
+@@ -755,7 +826,16 @@ int lb_8001B99C(int chan, const char* filename, UNK_T status_out)
+ 
+ int lb_8001BA44(int chan, const char* filename, UNK_T status_out)
+ {
+-    s32 result = lb_8001B99C(chan, filename, status_out);
++    s32 result;
++    u8 _[0x10];
++
++    lb_80019EF0(chan, 0, status_out, 0);
++    setup_task(0, 0x10000);
++    setup_task(1, 0x201);
++    lb_8001A4CC_dontinline(filename, 0);
++    setup_task(3, -1);
++    strncpy(setup_task(5, 0xE)->x10, filename, 0x20);
++    result = lb_80019CB0(0x10);
+     if (result == 0xB) {
+         do {
+         } while ((result = lb_8001B6F8()) == 0xB);
+@@ -817,9 +897,23 @@ int lb_8001BC18(int chan, char* filename, void** file_entries, void* save_data,
+                 const char* write_buf, int write_offset, int write_len,
+                 UNK_T status_out)
+ {
+-    s32 result =
+-        lb_8001BB48_inline(chan, filename, file_entries, save_data, write_buf,
+-                           write_offset, write_len, status_out);
++    int new_var;
++    s32 result;
++    u8 _[0x18];
++
++    lb_80019EF0(chan, save_data, status_out, 0);
++
++    setup_task(0, 0x10000);
++    new_var = 0x20;
++    setup_task(1, 0x201);
++    lb_8001A4CC_dontinline(filename, file_entries);
++    setup_task(3, -1);
++    memcpy(setup_task(7, 0x10)->x10, filename, new_var);
++    lb_80432A68.unk_14 = write_buf;
++    lb_80432A68.unk_18 = write_offset;
++    lb_80432A68.unk_1C = write_len;
++    result = lb_80019CB0(0x10);
++
+     if (result == 0xB) {
+         do {
+         } while ((result = lb_8001B6F8()) == 0xB);
+@@ -915,7 +1009,8 @@ int lb_8001BF04(int chan, char* filename, void* file_entries,
+     return lb_80019CB0(0x10);
+ }
+ 
+-int lb_8001BFD8(int chan, UNK_T snap_buf, UNK_T snap_count, UNK_T snap_max)
++int lb_8001BFD8(int chan, lbCardNew_SnapshotEntry* snapshot_entries,
++                int* free_blocks, int* free_files)
+ {
+     s32 result;
+     u8 _[0x18];
+@@ -926,9 +1021,9 @@ int lb_8001BFD8(int chan, UNK_T snap_buf, UNK_T snap_count, UNK_T snap_max)
+     lb_8001A4CC_dontinline(NULL, 0);
+     setup_task(3, -1);
+     setup_task(12, 0x80);
+-    lb_80432A68.unk_20 = snap_buf;
+-    lb_80432A68.unk_24 = snap_count;
+-    lb_80432A68.unk_28 = snap_max;
++    lb_80432A68.snapshot_entries = snapshot_entries;
++    lb_80432A68.free_blocks = free_blocks;
++    lb_80432A68.free_files = free_files;
+     result = lb_80019CB0(0x10);
+     if (result == 0xB) {
+         do {
+@@ -1034,24 +1129,29 @@ int lb_8001C404(int chan)
+ 
+ int lb_8001C4A8(void* file_entries, void* icon_data)
+ {
+-    struct {
+-        int unk0, unk4, unk8;
+-    }* entry;
+-    int i;
++    void* icon = icon_data;
++    struct CardEntry* entry;
++    s32* ctx;
+ 
+     entry = file_entries;
+-    hsd_803B24E4(&lb_80432A68.unk_A8, 0, 0x2000, lb_80432A68.lib_area);
+-    hsd_803B2ADC(&lb_80432A68.unk_A8, icon_data);
+-    i = 0;
+-    while (entry->unk0 != -1) {
+-        if (entry->unk0 != 0) {
+-            hsd_803AC3E0((struct hsd_803AC3E0_arg0_t*) &lb_80432A68.unk_A8, i,
+-                         entry->unk0, entry->unk4, entry->unk8);
++    ctx = &lb_80432A68.unk_A8;
++    hsd_803B24E4(ctx, 0, 0x2000, lb_80432A68.lib_area);
++    hsd_803B2ADC(ctx, icon);
++    {
++        int i;
++
++        i = 0;
++        while (entry->file_size != -1) {
++            if (entry->file_size != 0) {
++                hsd_803AC3E0((struct hsd_803AC3E0_arg0_t*) ctx, i,
++                             entry->file_size, entry->file_flags,
++                             entry->data_size);
++            }
++            i++;
++            entry++;
+         }
+-        i++;
+-        entry++;
+     }
+-    return hsd_803B2674((CardState*) &lb_80432A68.unk_A8);
++    return hsd_803B2674((CardState*) ctx);
+ }
+ 
+ void lb_8001C550(void)
+diff --git a/src/melee/lb/lbcardnew.h b/src/melee/lb/lbcardnew.h
+index 2274bd9eaf..bc12f1770e 100644
+--- a/src/melee/lb/lbcardnew.h
++++ b/src/melee/lb/lbcardnew.h
+@@ -4,6 +4,8 @@
+ #include <placeholder.h>
+ #include <platform.h>
+ 
++#include <melee/lb/forward.h>
++
+ #include <sysdolphin/baselib/gobj.h>
+ 
+ /* 019BB8 */ int lb_80019BB8(int card_result);
+@@ -54,8 +56,9 @@
+ /* 01BF04 */ int lb_8001BF04(int chan, char* filename, void* file_entries,
+                              const char* write_buf, int write_offset,
+                              int write_len, UNK_T status_out);
+-/* 01BFD8 */ int lb_8001BFD8(int chan, UNK_T snap_buf, UNK_T snap_count,
+-                             UNK_T snap_max);
++/* 01BFD8 */ int lb_8001BFD8(int chan,
++                             lbCardNew_SnapshotEntry* snapshot_entries,
++                             int* free_blocks, int* free_files);
+ /* 01C0F4 */ int lb_8001C0F4(int chan, const char* name_a, const char* name_b,
+                              const char* name_c, UNK_T status_out);
+ /* 01C2D8 */ int lb_8001C2D8(int chan, const char* company,
+diff --git a/src/melee/lb/lbmthp.c b/src/melee/lb/lbmthp.c
+index 737919609a..7d8b42361f 100644
+--- a/src/melee/lb/lbmthp.c
++++ b/src/melee/lb/lbmthp.c
+@@ -50,7 +50,7 @@ void fn_8001E910(int arg0, int arg1, void* arg2, bool cancelflag)
+         Movieplayer.unk_138 = 0;
+         if ((u32) Movieplayer.unk_74 != (u32) Movieplayer.unk_40) {
+             struct lbl_804333E0_t* streamPlayer = &Movieplayer;
+-            HSD_ASSERTREPORT(0x121, (u32)streamPlayer->currPackedSize != 0,
++            HSD_ASSERTREPORT(0x121, (u32) streamPlayer->currPackedSize != 0,
+                              "filnum = %d, ofs = %d, by sugano.",
+                              Movieplayer.unk_128, Movieplayer.unk_120);
+ 
+@@ -340,7 +340,7 @@ s32 fn_8001F13C(THPDecComp* streamPlayer)
+         streamPlayer->unk_13C = OSGetTick();
+         streamPlayer->unk_138 = 0;
+         if (streamPlayer->unk_74 != streamPlayer->unk_40) {
+-            HSD_ASSERTREPORT(0x121, (u32)streamPlayer->currPackedSize != 0,
++            HSD_ASSERTREPORT(0x121, (u32) streamPlayer->currPackedSize != 0,
+                              "filnum = %d, ofs = %d, by sugano.",
+                              streamPlayer->unk_128, streamPlayer->unk_120);
+             HSD_DevComRequest(streamPlayer->unk_128, streamPlayer->unk_120,
+diff --git a/src/melee/lb/lbmthp.h b/src/melee/lb/lbmthp.h
+index bfe67e8512..7bca12ac32 100644
+--- a/src/melee/lb/lbmthp.h
++++ b/src/melee/lb/lbmthp.h
+@@ -6,6 +6,7 @@
+ 
+ #include "lb/forward.h"
+ #include <baselib/forward.h>
++
+ #include <dolphin/gx/GXStruct.h>
+ 
+ /* THPDec function declarations */
+diff --git a/src/melee/lb/lbsnap.c b/src/melee/lb/lbsnap.c
+index 0613ad130e..4f2f57d43d 100644
+--- a/src/melee/lb/lbsnap.c
++++ b/src/melee/lb/lbsnap.c
+@@ -36,10 +36,10 @@ int lbSnap_8001D338(int arg0)
+ int lbSnap_8001D350(int chan)
+ {
+     struct Unk80433380_48* ptr = &lbSnap_80433380.x48[chan];
+-    if (ptr->unk0 == 0 && lbSnap_80433380.x54_stateChanged[chan]) {
+-        ptr->unk0 = 8;
++    if (ptr->card_result == 0 && lbSnap_80433380.x54_stateChanged[chan]) {
++        ptr->card_result = 8;
+     }
+-    return ptr->unk0;
++    return ptr->card_result;
+ }
+ 
+ int lbSnap_8001D394(int chan)
+@@ -49,34 +49,35 @@ int lbSnap_8001D394(int chan)
+ 
+ int lbSnap_8001D3B0(int chan)
+ {
+-    return lbSnap_80433380.x48[chan].unk8;
++    return lbSnap_80433380.x48[chan].free_blocks;
+ }
+ 
+ int lbSnap_8001D3CC(int chan)
+ {
+-    return lbSnap_80433380.x48[chan].unkC;
++    return lbSnap_80433380.x48[chan].free_files;
+ }
+ 
+ int lbSnap_8001D3E8(int chan, int index)
+ {
+-    return lbSnap_80433380.x48[chan].unk10[index].unk6;
++    return lbSnap_80433380.x48[chan].entries[index].blocks;
+ }
+ 
+ int lbSnap_8001D40C(int chan)
+ {
+     struct Unk80433380_48* ptr = &lbSnap_80433380.x48[chan];
+     lbSnap_80433380.x54_stateChanged[chan] = 0;
+-    ptr->unk0 = lb_8001BFD8(chan, &ptr->unk10, &ptr->unk8, &ptr->unkC);
+-    if (ptr->unk0 == 0) {
++    ptr->card_result =
++        lb_8001BFD8(chan, ptr->entries, &ptr->free_blocks, &ptr->free_files);
++    if (ptr->card_result == 0) {
+         int i;
+         for (i = 0; i < 0x7F; i++) {
+-            if (ptr->unk10[i].unk4 == -1) {
++            if (ptr->entries[i].file_no == -1) {
+                 break;
+             }
+         }
+         ptr->num = i;
+     }
+-    return ptr->unk0;
++    return ptr->card_result;
+ }
+ 
+ void lbSnap_8001D4A4(int chan, char* arg1)
+@@ -90,7 +91,7 @@ void lbSnap_8001D4A4(int chan, char* arg1)
+ 
+     do {
+         for (i = 0; i < new_var; i++) {
+-            if (time == ptr->unk10[i].unk0) {
++            if (time == ptr->entries[i].time) {
+                 time++;
+                 break;
+             }
+@@ -110,10 +111,10 @@ int lbSnap_8001D5FC(int chan, int index)
+     int i;
+     PAD_STACK(8);
+ 
+-    if (ptr->unk0 == 0 && lbSnap_80433380.x54_stateChanged[chan] != 0) {
+-        ptr->unk0 = 8;
++    if (ptr->card_result == 0 && lbSnap_80433380.x54_stateChanged[chan] != 0) {
++        ptr->card_result = 8;
+     }
+-    if (ptr->unk0 == 0) {
++    if (ptr->card_result == 0) {
+         HSD_ASSERTMSG(410, index < lbSnap_80433380.x48[chan].num,
+                       "index < _p(slot)[chan].num");
+         i = 0;
+@@ -121,11 +122,11 @@ int lbSnap_8001D5FC(int chan, int index)
+             text[i] = '\0';
+             i++;
+         }
+-        sprintf(text, "%u", lbSnap_80433380.x48[chan].unk10[index].unk0);
+-        lbSnap_80433380.x48[chan].unk0 = 8;
++        sprintf(text, "%u", lbSnap_80433380.x48[chan].entries[index].time);
++        lbSnap_80433380.x48[chan].card_result = 8;
+         return lb_8001B99C(chan, text, 0);
+     } else {
+-        return ptr->unk0;
++        return ptr->card_result;
+     }
+ }
+ 
+@@ -138,10 +139,10 @@ int lbSnap_8001D7B0(int chan, int index, int jndex)
+     int i;
+     PAD_STACK(8);
+ 
+-    if (ptr->unk0 == 0 && lbSnap_80433380.x54_stateChanged[chan] != 0) {
+-        ptr->unk0 = 8;
++    if (ptr->card_result == 0 && lbSnap_80433380.x54_stateChanged[chan] != 0) {
++        ptr->card_result = 8;
+     }
+-    if (ptr->unk0 == 0) {
++    if (ptr->card_result == 0) {
+         HSD_ASSERTMSG(410, index < lbSnap_80433380.x48[chan].num,
+                       "index < _p(slot)[chan].num");
+         i = 0;
+@@ -149,7 +150,7 @@ int lbSnap_8001D7B0(int chan, int index, int jndex)
+             text1[i] = '\0';
+             i++;
+         }
+-        sprintf(text1, "%u", lbSnap_80433380.x48[chan].unk10[index].unk0);
++        sprintf(text1, "%u", lbSnap_80433380.x48[chan].entries[index].time);
+         HSD_ASSERTMSG(410, jndex < lbSnap_80433380.x48[chan].num,
+                       "index < _p(slot)[chan].num");
+         i = 0;
+@@ -157,12 +158,12 @@ int lbSnap_8001D7B0(int chan, int index, int jndex)
+             text2[i] = '\0';
+             i++;
+         }
+-        sprintf(text2, "%u", lbSnap_80433380.x48[chan].unk10[jndex].unk0);
++        sprintf(text2, "%u", lbSnap_80433380.x48[chan].entries[jndex].time);
+         lbSnap_8001D4A4(chan, text3);
+-        lbSnap_80433380.x48[chan].unk0 = 8;
++        lbSnap_80433380.x48[chan].card_result = 8;
+         return lb_8001C0F4(chan, text1, text2, text3, 0);
+     } else {
+-        return ptr->unk0;
++        return ptr->card_result;
+     }
+ }
+ 
+@@ -299,12 +300,12 @@ int lbSnap_8001DF6C(int chan)
+     int ret;
+     PAD_STACK(8);
+ 
+-    if (ptr->unk0 == 0 && lbSnap_80433380.x54_stateChanged[chan] != 0) {
+-        ptr->unk0 = 8;
++    if (ptr->card_result == 0 && lbSnap_80433380.x54_stateChanged[chan] != 0) {
++        ptr->card_result = 8;
+     }
+-    ret = ptr->unk0;
++    ret = ptr->card_result;
+     if (ret == 0) {
+-        lbSnap_80433380.x48[chan].unk0 = 8;
++        lbSnap_80433380.x48[chan].card_result = 8;
+         lbSnap_8001D4A4(chan, text);
+         // This is probably an offsetof call, but I don't know what pointer is
+         // in xC
+@@ -327,10 +328,10 @@ int lbSnap_8001E058(int chan, int index)
+     char text[0x21];
+     PAD_STACK(8);
+ 
+-    if (ptr->unk0 == 0 && lbSnap_80433380.x54_stateChanged[chan] != 0) {
+-        ptr->unk0 = 8;
++    if (ptr->card_result == 0 && lbSnap_80433380.x54_stateChanged[chan] != 0) {
++        ptr->card_result = 8;
+     }
+-    if (ptr->unk0 == 0) {
++    if (ptr->card_result == 0) {
+         HSD_ASSERTMSG(410, index < lbSnap_80433380.x48[chan].num,
+                       "index < _p(slot)[chan].num");
+         i = 0;
+@@ -338,14 +339,14 @@ int lbSnap_8001E058(int chan, int index)
+             text[i] = '\0';
+             i++;
+         }
+-        sprintf(text, "%u", lbSnap_80433380.x48[chan].unk10[index].unk0);
++        sprintf(text, "%u", lbSnap_80433380.x48[chan].entries[index].time);
+         lbSnap_803BACC8.x1C = lbSnap_80433380.x0;
+         return lb_8001BF04(chan, text, &lbSnap_803BACC8.x14,
+                            lbSnap_80433380.x4_string,
+                            lbSnap_80433380.x44_LbMcSnap_MemSnapIconData[0],
+                            lbSnap_80433380.x44_LbMcSnap_MemSnapIconData[1], 0);
+     } else {
+-        return ptr->unk0;
++        return ptr->card_result;
+     }
+ }
+ 
+@@ -363,8 +364,8 @@ void lbSnap_8001E218(void* arg0, struct Unk80433380_48* arg1)
+ {
+     lbSnap_80433380.x0 = arg0;
+     lbSnap_80433380.x48 = arg1;
+-    lbSnap_80433380.x48->unk0 = 8;
+-    lbSnap_80433380.x48[1].unk0 = 8;
++    lbSnap_80433380.x48->card_result = 8;
++    lbSnap_80433380.x48[1].card_result = 8;
+     lbArchive_80016DBC("LbMcSnap.",
+                        (void**) &lbSnap_80433380.x44_LbMcSnap_MemSnapIconData,
+                        "MemSnapIconData", 0);
+diff --git a/src/melee/lb/lbsnap.static.h b/src/melee/lb/lbsnap.static.h
+index fef1030cb0..7ac1440048 100644
+--- a/src/melee/lb/lbsnap.static.h
++++ b/src/melee/lb/lbsnap.static.h
+@@ -7,20 +7,14 @@
+ #include <platform.h>
+ 
+ #include "it/types.h"
+-
+-struct Unk80433380_48_10 {
+-    unsigned int unk0;
+-    s16 unk4;
+-    u16 unk6;
+-};
+-STATIC_ASSERT(sizeof(struct Unk80433380_48_10) == 0x8);
++#include "lb/types.h"
+ 
+ struct Unk80433380_48 {
+-    int unk0;
++    int card_result;
+     int num;
+-    int unk8;
+-    int unkC;
+-    struct Unk80433380_48_10 unk10[0x7F];
++    int free_blocks;
++    int free_files;
++    lbCardNew_SnapshotEntry entries[0x7F];
+ };
+ STATIC_ASSERT(sizeof(struct Unk80433380_48) == 0x408);
+ 
+diff --git a/src/melee/lb/types.h b/src/melee/lb/types.h
+index 0f5f72235f..77d9428188 100644
+--- a/src/melee/lb/types.h
++++ b/src/melee/lb/types.h
+@@ -311,6 +311,13 @@ struct lb_80432A68_38_t {
+ };
+ STATIC_ASSERT(sizeof(struct lb_80432A68_38_t) == 0x8);
+ 
++struct lbCardNew_SnapshotEntry {
++    /* 0x0 */ u32 time;
++    /* 0x4 */ s16 file_no;
++    /* 0x6 */ u16 blocks;
++};
++STATIC_ASSERT(sizeof(lbCardNew_SnapshotEntry) == 0x8);
++
+ struct lb_80432A68_t {
+     /* 0x000 */ UNK_T work_area;
+     /* 0x004 */ UNK_T lib_area;
+@@ -320,9 +327,9 @@ struct lb_80432A68_t {
+     /* 0x014 */ const char* unk_14;
+     /* 0x018 */ s32 unk_18;
+     /* 0x01C */ s32 unk_1C;
+-    /* 0x020 */ UNK_T unk_20;
+-    /* 0x024 */ int* unk_24;
+-    /* 0x028 */ int* unk_28;
++    /* 0x020 */ lbCardNew_SnapshotEntry* snapshot_entries;
++    /* 0x024 */ int* free_blocks;
++    /* 0x028 */ int* free_files;
+     /* 0x02C */ char x2C[2];
+     /* 0x02C */ char x2E;
+     /* 0x02C */ char x2F[4];
+diff --git a/src/melee/mn/mndatadel.c b/src/melee/mn/mndatadel.c
+index 251a92236f..be8b4f86a0 100644
+--- a/src/melee/mn/mndatadel.c
++++ b/src/melee/mn/mndatadel.c
+@@ -195,9 +195,9 @@ void fn_8024ECCC(HSD_GObj* arg0)
+                 } else {
+                     sis_id = 319;
+                 }
+-                text = HSD_SisLib_803A5ACC(
+-                    0, 1, lbl_803EF8D4.x, lbl_803EF8D4.y,
+-                    lbl_803EF8D4.z, 250.0f, 5.0f);
++                text =
++                    HSD_SisLib_803A5ACC(0, 1, lbl_803EF8D4.x, lbl_803EF8D4.y,
++                                        lbl_803EF8D4.z, 250.0f, 5.0f);
+                 mnDataDel_804D6C6C = text;
+                 text->font_size.x = 0.05f;
+                 text->font_size.y = 0.05f;
+@@ -348,9 +348,9 @@ void fn_8024F318(HSD_GObj* gobj)
+                 } else {
+                     sis_id = 0x13F;
+                 }
+-                text = HSD_SisLib_803A5ACC(
+-                    0, 1, lbl_803EF8D4.x, lbl_803EF8D4.y,
+-                    lbl_803EF8D4.z, 250.0f, 5.0f);
++                text =
++                    HSD_SisLib_803A5ACC(0, 1, lbl_803EF8D4.x, lbl_803EF8D4.y,
++                                        lbl_803EF8D4.z, 250.0f, 5.0f);
+                 mnDataDel_804D6C6C = text;
+                 text->font_size.x = 0.05f;
+                 text->font_size.y = 0.05f;
+@@ -514,8 +514,8 @@ void fn_8024F840(HSD_GObj* gobj)
+     if (buttons & 1) {
+         lbAudioAx_80024030(2);
+         joint = (HSD_JObj*) mn_80231634(
+-            (struct mn_80231634_t*) user_data
+-                ->x10[mnDataDel_803EF8AC[user_data->x0]]);
++            (struct mn_80231634_t*)
++                user_data->x10[mnDataDel_803EF8AC[user_data->x0]]);
+         mnDataDel_8024EBC8(joint, user_data->x0, 0U, 0U);
+         cursor = user_data->x0;
+         if (cursor != 0) {
+@@ -524,8 +524,8 @@ void fn_8024F840(HSD_GObj* gobj)
+             user_data->x0 = 5U;
+         }
+         joint = (HSD_JObj*) mn_80231634(
+-            (struct mn_80231634_t*) user_data
+-                ->x10[mnDataDel_803EF8AC[user_data->x0]]);
++            (struct mn_80231634_t*)
++                user_data->x10[mnDataDel_803EF8AC[user_data->x0]]);
+         mnDataDel_8024EBC8(joint, user_data->x0, 1U, 0U);
+         user_data = mnDataDel_804D6C68->user_data;
+         if (user_data->xC != NULL) {
+@@ -543,8 +543,8 @@ void fn_8024F840(HSD_GObj* gobj)
+     if (buttons & 2) {
+         lbAudioAx_80024030(2);
+         joint = (HSD_JObj*) mn_80231634(
+-            (struct mn_80231634_t*) user_data
+-                ->x10[mnDataDel_803EF8AC[user_data->x0]]);
++            (struct mn_80231634_t*)
++                user_data->x10[mnDataDel_803EF8AC[user_data->x0]]);
+         mnDataDel_8024EBC8(joint, user_data->x0, 0U, 0U);
+         cursor = user_data->x0;
+         if (cursor == 5) {
+@@ -553,8 +553,8 @@ void fn_8024F840(HSD_GObj* gobj)
+             user_data->x0 = cursor + 1;
+         }
+         joint = (HSD_JObj*) mn_80231634(
+-            (struct mn_80231634_t*) user_data
+-                ->x10[mnDataDel_803EF8AC[user_data->x0]]);
++            (struct mn_80231634_t*)
++                user_data->x10[mnDataDel_803EF8AC[user_data->x0]]);
+         mnDataDel_8024EBC8(joint, user_data->x0, 1U, 0U);
+         user_data = mnDataDel_804D6C68->user_data;
+         if (user_data->xC != NULL) {
+@@ -580,11 +580,12 @@ void fn_8024FBA4(HSD_GObj* gobj)
+ 
+     data = &mnDataDel_803EF870;
+     user_data = gobj->user_data;
+-    frame = mn_8022EE84(GET_JOBJ(gobj), &mnDataDel_803EF870.xC, (enum _HSD_TypeMask) 0x480);
++    frame = mn_8022EE84(GET_JOBJ(gobj), &mnDataDel_803EF870.xC,
++                        (enum _HSD_TypeMask) 0x480);
+     for (i = 0; i < 6; i++) {
+-        mn_8022EE84(*(HSD_JObj**) (user_data +
+-                                   mnDataDel_803EF8AC[i] * 4 + 0x10),
+-                    &data->xC, (enum _HSD_TypeMask) 0x480);
++        mn_8022EE84(
++            *(HSD_JObj**) (user_data + mnDataDel_803EF8AC[i] * 4 + 0x10),
++            &data->xC, (enum _HSD_TypeMask) 0x480);
+     }
+     if (frame >= data->xC.end_frame) {
+         HSD_GObjPLink_80390228(gobj);
+@@ -616,8 +617,7 @@ void fn_8024FC48(HSD_GObj* gobj)
+             lb_80011E24(
+                 fn_8024FC48_inline(mn_80231634(
+                     *(struct mn_80231634_t**) ((u8*) gobj->user_data +
+-                                               mnDataDel_803EF8AC[i] *
+-                                                   4 +
++                                               mnDataDel_803EF8AC[i] * 4 +
+                                                0x10))),
+                 &jobj, 1, -1);
+             if (user_data[0] == i) {
+@@ -647,10 +647,11 @@ void fn_8024FD40(HSD_GObj* gobj)
+         HSD_SisLib_803A5CC4(user_data->xC);
+         return;
+     }
+-    frame = mn_8022EE84(jobj, &mnDataDel_803EF870.x0, (enum _HSD_TypeMask) 0x480);
++    frame =
++        mn_8022EE84(jobj, &mnDataDel_803EF870.x0, (enum _HSD_TypeMask) 0x480);
+     for (i = 0; i < 6; i++) {
+-        mn_8022EE84(user_data->x10[mnDataDel_803EF8AC[i]], &mnDataDel_803EF870.x0,
+-                    (enum _HSD_TypeMask) 0x480);
++        mn_8022EE84(user_data->x10[mnDataDel_803EF8AC[i]],
++                    &mnDataDel_803EF870.x0, (enum _HSD_TypeMask) 0x480);
+     }
+     if (frame == mnDataDel_803EF870.x0.end_frame) {
+         HSD_GObjProc_8038FE24(HSD_GObj_804D7838);
+diff --git a/src/melee/mn/mndatadel.static.h b/src/melee/mn/mndatadel.static.h
+index 4df2cfc991..b2f7313991 100644
+--- a/src/melee/mn/mndatadel.static.h
++++ b/src/melee/mn/mndatadel.static.h
+@@ -84,12 +84,7 @@ static AnimLoopSettings mnDataDel_803EF8A0 = {
+ }; /// mnDataDel_803EF870[4]
+ static u32 mnDataDel_803EF8AC[] = { 1, 2, 3, 4, 5, 6, 7 };
+ static u16 mnDataDel_803EF8C8[] = {
+-    0xC0,
+-    0xC1,
+-    0xC2,
+-    0xC3,
+-    0xC4,
+-    0xC6,
++    0xC0, 0xC1, 0xC2, 0xC3, 0xC4, 0xC6,
+ };
+ static Vec3 lbl_803EF8D4 = { -5.5, -2.8, 23 };
+ static StaticModelDesc mnDataDel_804A0918;
+diff --git a/src/sysdolphin/baselib/hsd_3AA7.c b/src/sysdolphin/baselib/hsd_3AA7.c
+index 22fddd1658..51556eebed 100644
+--- a/src/sysdolphin/baselib/hsd_3AA7.c
++++ b/src/sysdolphin/baselib/hsd_3AA7.c
+@@ -258,11 +258,11 @@ int hsd_803AC340(void* header)
+ }
+ 
+ void hsd_803AC3E0(struct hsd_803AC3E0_arg0_t* file_desc, int file_idx,
+-                  int file_size, int file_offset, int file_flags)
++                  int file_size, int file_flags, int data_size)
+ {
+-    file_desc->x28[file_idx] = file_offset;
++    file_desc->x28[file_idx] = file_flags;
+     file_desc->x4C[file_idx] = file_size;
+-    file_desc->x70[file_idx] = file_flags;
++    file_desc->x70[file_idx] = data_size;
+ }
+ 
+ void fn_803AC3F8(void* arg0, u8* data, s32 idx)
+diff --git a/src/sysdolphin/baselib/hsd_3AA7.h b/src/sysdolphin/baselib/hsd_3AA7.h
+index c43d456350..525dc2a43c 100644
+--- a/src/sysdolphin/baselib/hsd_3AA7.h
++++ b/src/sysdolphin/baselib/hsd_3AA7.h
+@@ -30,8 +30,8 @@ typedef struct CardState {
+ /* 3AC334 */ UNK_RET fn_803AC334(UNK_PARAMS);
+ /* 3AC340 */ int hsd_803AC340(void* header);
+ /* 3AC3E0 */ void hsd_803AC3E0(struct hsd_803AC3E0_arg0_t* file_desc,
+-                               int file_idx, int file_size, int file_offset,
+-                               int file_flags);
++                               int file_idx, int file_size, int file_flags,
++                               int data_size);
+ /* 3AC3F8 */ void fn_803AC3F8(void*, u8*, s32);
+ /* 3AC558 */ void hsd_803AC558(struct hsd_803AC3E0_arg0_t*, u8*);
+ /* 3AC634 */ u32 fn_803AC634(struct hsd_803AC3E0_arg0_t* file_desc,

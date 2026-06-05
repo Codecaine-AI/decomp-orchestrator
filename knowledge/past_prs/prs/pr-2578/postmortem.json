@@ -1,0 +1,138 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2578",
+  "pr": {
+    "number": 2578,
+    "title": "Match several ft, pl, and if functions",
+    "url": "https://github.com/doldecomp/melee/pull/2578",
+    "state": "OPEN",
+    "author": "itsgrimetime",
+    "created_at": "2026-06-04T09:13:46Z",
+    "merged_at": null
+  },
+  "agent_status": "agent_completed",
+  "summary": "Open decomp-matching PR that matched four functions across fighter common guard, player attack stats, and interface/UI code: ftCo_80092158, ftCo_80093790, plAttack_8003759C, and un_802FE260. It also improved fn_802FDA78 in if_2FC93 using better local struct access, signed byte sentinel typing, fieldwise color stores, const data, and stack/local-layout tuning. The decomp-dev GALE01 report shows matched code +2016 bytes and the four listed functions at 100.00%.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "types-structs",
+      "signedness-fix",
+      "data-constness",
+      "cleanup-refactor",
+      "stack-layout-matching"
+    ],
+    "systems": [
+      "fighter-common-guard",
+      "player-attack-stats",
+      "interface-ui"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/chara/ftCommon/ftCo_Guard.c",
+      "role": "Matched ftCo_80092158 and ftCo_80093790 by replacing M2C color-table access and adjusting local/stack layout."
+    },
+    {
+      "path": "src/melee/if/if_2FC93.c",
+      "role": "Matched un_802FE260 and improved fn_802FDA78 with file-local struct pointer access, signed x31 sentinel handling, const slot data, and fieldwise material diffuse writes."
+    },
+    {
+      "path": "src/melee/pl/plattack.c",
+      "role": "Matched plAttack_8003759C by introducing static inline clearAttackStats and zeroing all attack-stat indices."
+    }
+  ],
+  "what_changed": [
+    "ftCo_80092158 now computes a color-table offset as Player_GetUnk45(GET_FIGHTER(gobj)->player_id) << 2, indexes Fighter_804D650C through a color pointer, and passes packed RGB as (color[0] << 16) | (color[1] << 8) | color[2] to efSync_Spawn instead of M2C_FIELD/M2C_BITWISE temporaries.",
+    "ftCo_80093790 now uses an explicit 8-byte dummy local array, calls ftCo_80092158 directly with fp->parts[fp->ft_data->x8->x11].joint, then sets fp->x2219_b0 and calls ft_PlaySFX.",
+    "if_2FC93 changed un_804A1F10.x31 from unsigned char to signed char, using -1 as the sentinel instead of 0xFF.",
+    "if_2FC93 made un_804DDBA8 a static const char array and casts its element address to void* when assigning gobj->user_data.",
+    "fn_802FDA78 now takes struct un_804A1F10_t* p = &un_804A1F10, uses u8 j/k counters, writes GXColor diffuse components r/g/b/a field-by-field through HSD_MObj locals, uses 2.6f, and accesses x28/x30/x31/x32 through p.",
+    "un_802FE260 now uses the same p pointer for x24, x28, and x4 writes during the four UI GObj setup loop.",
+    "plattack.c added static inline clearAttackStats(struct plAttackStats* s) and calls it for stats->attacks, stats->hits, and stats->x358_hits.",
+    "plAttack_8003759C now loops from 0 to StatsAttack_Count for by_attack_counts and x504 resets, replacing prior loops that started at 2."
+  ],
+  "smart_moves": [
+    "Replaced decompiler artifact macros in ftCo_80092158 with a real stride-4 color-table interpretation, improving both readability and matching.",
+    "Typed x31 as signed so the observed 0xFF sentinel can be expressed naturally as -1, avoiding unsigned compare/codegen friction.",
+    "Used a file-local pointer to the global un_804A1F10 state to shape repeated global field access in both fn_802FDA78 and un_802FE260.",
+    "Changed whole GXColor struct assignments into per-channel diffuse stores, a useful tactic when aggregate assignment emits the wrong store pattern.",
+    "Introduced a small static inline reset helper in plattack.c to deduplicate three identical plAttackStats clears while still matching the target code.",
+    "Used concrete dummy/local variables, including u8 _[8] in ftCo_80093790, instead of leaving broad M2C/PAD_STACK artifacts."
+  ],
+  "decomp_lessons": [
+    "When a table index is later used as a byte offset, check for hidden struct/stride semantics; here Player_GetUnk45 was shifted by 2 before indexing Fighter_804D650C.",
+    "Byte fields holding 0xFF may really be signed sentinels; changing the field type can unlock cleaner comparisons and matching.",
+    "For small global state structs, introducing a local pointer to the static object can materially affect codegen and is reusable in similar file-local UI/state code.",
+    "Do not assume aggregate struct assignment is best for matching; fieldwise stores may be required for HSD material or GXColor writes.",
+    "Loop lower bounds are matching-sensitive. This PR changed reset loops from 2 to 0 for StatsAttack_Count arrays, so future work should verify decompiler-guessed bounds against expected codegen.",
+    "Const-qualifying small static data can help data matching, but user_data assignments may then need explicit casts.",
+    "Dummy stack locals are acceptable matching tools when evidenced by the diff, but should be kept narrow and documented by context."
+  ],
+  "naming_conventions": [
+    "Existing unresolved symbol names were preserved for matched functions and globals: ftCo_80092158, ftCo_80093790, plAttack_8003759C, un_802FE260, fn_802FDA78, un_804A1F10, and un_804DDBA8.",
+    "The new helper uses lowerCamelCase descriptive naming: clearAttackStats.",
+    "Local names moved away from temp_ret/temp_r7/M2C-style names toward semantic names such as offset and color.",
+    "The file-local global pointer is named p in if_2FC93, matching a compact decomp style for repeated access to un_804A1F10.",
+    "The signed sentinel field remains structurally named x31, but comparisons now use -1 rather than 0xFF."
+  ],
+  "assembly_or_matching_tactics": [
+    "Color packing expression in ftCo_80092158: (color[0] << 16) | (color[1] << 8) | color[2].",
+    "Stack/local-layout padding in ftCo_80093790 via u8 _[8] = { 0 }.",
+    "Removed PAD_STACK(24) in fn_802FDA78 by replacing it with concrete scoped HSD_MObj* locals and explicit diffuse component stores.",
+    "Used u8 j and u8 k counters initialized before the switch in fn_802FDA78.",
+    "Used 2.6f instead of 2.6 in HSD_JObjSetTranslateY calculations to influence floating-point codegen.",
+    "Cast const slot-byte addresses with gobj->user_data = (void*) &un_804DDBA8[i].",
+    "Used static inline clearAttackStats so repeated reset logic could be expressed once while still inlining at the three callsites."
+  ],
+  "review_feedback": [
+    "No human review comments or reviews were present in the slice.",
+    "decomp-dev[bot] GALE01 report: matched code 70.13% (+0.05%, +2016 bytes) and matched data 41.28% (+0.00%, +16 bytes).",
+    "decomp-dev[bot] reported 5 new matches: plAttack_8003759C, ftCo_80093790, ftCo_80092158, un_802FE260, and .sdata.",
+    "decomp-dev[bot] also reported fn_802FDA78 improved from 82.48% to 99.25%, plus improvements to several unmatched ftCo_Guard items and .sdata2."
+  ],
+  "searchable_terms": [
+    "pr-2578",
+    "itsgrimetime",
+    "ftCo_80092158",
+    "ftCo_80093790",
+    "ftCo_Guard.c",
+    "Fighter_804D650C",
+    "Player_GetUnk45",
+    "GET_FIGHTER",
+    "efSync_Spawn",
+    "M2C_FIELD",
+    "M2C_BITWISE",
+    "u8 _[8]",
+    "ft_PlaySFX",
+    "plAttack_8003759C",
+    "plattack.c",
+    "clearAttackStats",
+    "plAttackStats",
+    "StatsAttack_Count",
+    "Player_GetActionStats",
+    "x504",
+    "un_802FE260",
+    "fn_802FDA78",
+    "if_2FC93.c",
+    "un_804A1F10",
+    "un_804A1F10_t",
+    "un_804DDBA8",
+    "signed char x31",
+    "-1 sentinel",
+    "GXColor",
+    "HSD_MObj",
+    "diffuse r g b a",
+    "HSD_JObjSetTranslateY",
+    "2.6f",
+    "GALE01 100.00%"
+  ],
+  "follow_up_queries": [
+    "Find other Fighter_804D650C uses that may need stride-4 color indexing and packed RGB construction.",
+    "Investigate the remaining fn_802FDA78 mismatch after this PR's 99.25% improvement, especially local order, signedness, and material store patterns.",
+    "Search for other plAttackStats reset code that could reuse or validate clearAttackStats-style inlining.",
+    "Audit un_804A1F10_t fields x24, x28, x2C, x30, x31, and x32 for better names once more interface/UI context is available.",
+    "Look for other 0xFF byte sentinels that should be signed char fields compared against -1."
+  ],
+  "confidence": 0.92
+}

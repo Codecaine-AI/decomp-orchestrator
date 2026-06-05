@@ -1,0 +1,144 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2541",
+  "pr": {
+    "number": 2541,
+    "title": "Match hsd_803A949C (92%)",
+    "url": "https://github.com/doldecomp/melee/pull/2541",
+    "state": "MERGED",
+    "author": "jurrejelle",
+    "created_at": "2026-05-25T19:47:01Z",
+    "merged_at": "2026-05-31T13:45:23Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched more of the sysdolphin baselib memory-card async callback hsd_803A949C. The diff re-modeled command-buffer access through CMD_* offset macros over hsd_804D1138, reused the shared CardState layout with file_info and digest fields, marked the command index hsd_804D7980 volatile, and updated the callback prototype to take chan plus arg1. decomp.dev reported hsd_803A949C improving from 58.78% to 93.40% (+1679 bytes), though the PR title says 92%.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-layout",
+      "matching-tactics",
+      "async-callback"
+    ],
+    "systems": [
+      "src",
+      "sysdolphin",
+      "baselib",
+      "CARD"
+    ]
+  },
+  "key_files": [
+    {
+      "file": "src/sysdolphin/baselib/hsd_3A94.c",
+      "role": "Main hsd_803A949C matching rewrite: command-buffer macros, CardState usage, volatile index, callback logic reshaping."
+    },
+    {
+      "file": "src/sysdolphin/baselib/hsd_3A94.h",
+      "role": "Updated hsd_803A949C prototype from one argument to CARD-style two-argument callback signature."
+    },
+    {
+      "file": "src/sysdolphin/baselib/hsd_3AA7.h",
+      "role": "Not directly changed, but its existing CardState definition became the reused state type instead of a local CardStateExt duplicate."
+    }
+  ],
+  "what_changed": [
+    "Changed extern s32 hsd_804D7980 to extern volatile s32 hsd_804D7980.",
+    "Removed local CardStateExt and CardCmdEntry definitions and removed hsd_803A949C_GetEntry.",
+    "Added CardBufEntry and macros CMD_S32(off), CMD_STATE, CMD_PTR(off), and CMD_TYPE to access command data from hsd_804D1138 plus offsets indexed by hsd_804D7980.",
+    "Changed hsd_803A949C_Close and hsd_803A949C_IconSize to take CardState* and use shared fields such as file_info and digest.",
+    "Changed hsd_803A949C signature from void hsd_803A949C(s32 arg1) to void hsd_803A949C(s32 chan, s32 arg1), mirrored in the header.",
+    "Replaced many entry->field accesses with CMD_S32/CMD_PTR offset accesses, including command type, state pointer, slot, file id, sequence/version-like values, data pointers, and lengths.",
+    "Restructured several switch cases to put block parsing and validation inside each branch rather than after a shared block, including file-id, x12, and memcmp checks.",
+    "For digest validation/copy cases, replaced state->x430 accesses with CMD_STATE->digest and used state->x8 directly rather than a sector_size local.",
+    "In the create/open-related case, added a loop that waits up to 10 iterations for state->file_info.fileNo to become non-negative before copying it to state->x20.",
+    "In case 13, replaced CardBlock pointer reuse with direct byte indexing from state->x0 plus offsets for slot 0 and nonzero slots, then calls hsd_803AC558 with the payload pointer.",
+    "At function end, clears CMD_TYPE instead of entry->x0, resets hsd_804D799C, and advances hsd_804D7980 modulo 128."
+  ],
+  "smart_moves": [
+    "Using volatile on hsd_804D7980 is a strong matching tactic for async callback state: it prevents the compiler from assuming the command index is stable across accesses.",
+    "The CMD_S32(off) macro models the command buffer as overlapping offset windows over hsd_804D1138 rather than forcing a misleading fixed struct; this also lets CMD_TYPE be assigned as an lvalue.",
+    "Reusing CardState avoids a local duplicate CardStateExt and lets known fields like file_info and digest drive clearer and more consistent codegen.",
+    "Adding the unused chan parameter aligns hsd_803A949C with Dolphin CARD async callback shape, which matters even when call sites cast to void (*)(s32, s32).",
+    "Keeping some validation duplicated inside branches, rather than factoring it into a single shared block, preserves the control-flow shape needed for matching.",
+    "Switching some CardBlock reads to direct byte-indexed loads documents that exact load shape can matter more than a tidy struct access in stubborn matching work."
+  ],
+  "decomp_lessons": [
+    "For async CARD callbacks, prefer the real callback ABI signature with channel/result-style parameters even when one parameter is unused.",
+    "Before inventing local extension structs, search nearby baselib headers for shared state structs; CardState in hsd_3AA7.h already had the needed file_info and digest fields.",
+    "A command queue may not decompile cleanly as one C struct. Offset macros over a byte buffer can be a practical interim representation when the assembly accesses differently shifted views.",
+    "Globals touched by callback or scheduler state may need volatile to reproduce repeated loads and stores.",
+    "Matching long switch callbacks often requires preserving branch-local ordering of close calls, CRC/hash checks, memcpy/memcmp, and error assignment instead of refactoring for readability.",
+    "When a helper struct creates the wrong code shape, direct byte addressing from the backing buffer can be a valid matching tactic, as seen in the case 13 CardBlock handling.",
+    "Header prototypes are part of matching work: correcting hsd_803A949C in hsd_3A94.h kept declarations consistent with the implementation and CARD callback usage."
+  ],
+  "naming_conventions": [
+    "Kept address-based symbol names for unknown/static helpers: hsd_803A949C_Close, hsd_803A949C_IconSize, and hsd_803A949C_FileId.",
+    "Used CardBufEntry for a temporary command-buffer element type while retaining x0/x4/x8-style unknown field names.",
+    "Used all-caps macros for command-buffer views: CMD_S32, CMD_STATE, CMD_PTR, and CMD_TYPE.",
+    "Moved from local xC/x430 field names to shared CardState field names file_info and digest.",
+    "Named the new callback parameter chan while leaving the second parameter as arg1, reflecting known channel semantics but weak evidence for the second parameter's final name.",
+    "Kept CardBlock fields as offset names x10, x11, x12, and x20 where semantic names were not established."
+  ],
+  "assembly_or_matching_tactics": [
+    "Mark hsd_804D7980 volatile to force reloads of the current command index.",
+    "Use CMD_S32(off) as (((CardBufEntry*) (hsd_804D1138 + off))[hsd_804D7980].x0) to match indexed loads from shifted command-buffer offsets.",
+    "Make CMD_TYPE an lvalue macro so the final command clear compiles as a store through the same buffer view.",
+    "Add an unused leading callback parameter chan to match the two-register CARD callback ABI.",
+    "Remove the local sector_size variable and use state->x8 directly in digest/data comparisons, likely influencing register allocation.",
+    "Move block pointer creation until after hsd_803B31CC and hsd_803A949C_Close checks, and duplicate comparisons inside both branches.",
+    "Use direct state->x0 byte loads for case 13 file id and version fields instead of hsd_803A949C_FileId(block).",
+    "Add a bounded 10-iteration fileNo polling loop before assigning state->x20 from state->file_info.fileNo."
+  ],
+  "review_feedback": [
+    "No human review comments or review approvals were captured in the slice, and the PR body was empty.",
+    "decomp-dev[bot] reported one unmatched-item improvement for GALE01: main/sysdolphin/baselib/hsd_3A94 hsd_803A949C improved by +1679 bytes, from 58.78% to 93.40%."
+  ],
+  "searchable_terms": [
+    "pr-2541",
+    "hsd_803A949C",
+    "hsd_3A94.c",
+    "hsd_3A94.h",
+    "hsd_3AA7.h",
+    "CardState",
+    "CardStateExt",
+    "CardCmdEntry",
+    "CardBufEntry",
+    "CardBlock",
+    "CMD_S32",
+    "CMD_STATE",
+    "CMD_PTR",
+    "CMD_TYPE",
+    "hsd_804D1138",
+    "hsd_804D1148",
+    "hsd_804D7980",
+    "hsd_804D7988",
+    "hsd_804D799C",
+    "volatile",
+    "file_info",
+    "digest",
+    "CARDFileInfo",
+    "CARDClose",
+    "CARDReadAsync",
+    "CARDWriteAsync",
+    "CARDCreateAsync",
+    "CARDSetStatusAsync",
+    "CARD callback",
+    "hsd_803B31CC",
+    "hsd_803B2B20",
+    "hsd_803AC558",
+    "memcmp",
+    "memcpy",
+    "GALE01",
+    "58.78%",
+    "93.40%"
+  ],
+  "follow_up_queries": [
+    "Search hsd_3AA7.c and related baselib code for command-buffer definitions that could replace CMD_S32/CMD_PTR macros with a better typed command struct later.",
+    "Investigate semantics for CMD_S32 offsets 0x18, 0x1c, 0x20, 0x24, 0x28, and 0x30 across command types.",
+    "Confirm final naming for hsd_803A949C's second callback parameter; evidence supports chan for the first parameter but leaves arg1 semantic naming weak.",
+    "Look for similar async callback functions that still have one-argument prototypes or non-volatile command queue indices.",
+    "After more of hsd_3A94/hsd_3AA7 is matched, revisit whether duplicated case 1 and case 16 logic can be named or structurally explained."
+  ],
+  "confidence": 0.86
+}

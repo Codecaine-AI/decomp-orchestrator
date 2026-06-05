@@ -1,0 +1,151 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2523",
+  "pr": {
+    "number": 2523,
+    "title": "Jj/plbonus",
+    "url": "https://github.com/doldecomp/melee/pull/2523",
+    "state": "CLOSED",
+    "author": "jurrejelle",
+    "created_at": "2026-05-23T15:49:11Z",
+    "merged_at": ""
+  },
+  "agent_status": "agent_completed",
+  "summary": "Draft PR against plbonus that was closed without merge. It replaced the `/// #fn_80039618` placeholder with a large C implementation for player bonus/stat flag calculation, typed more of `pl_804D6470_t`, added a `dont_inline` guard around `fn_80038700`, and adjusted `fn_8003CC84` digit arithmetic. The decomp-dev bot reported +1640 matched code bytes, +456 matched data bytes, full matches for plbonus `.data`, `.sdata2`, and `fn_8003CC84`, plus `fn_80039618` reaching 99.67%, but there was no human review feedback in the slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "data-typing",
+      "matching-tactics",
+      "closed-unmerged-draft"
+    ],
+    "systems": [
+      "melee/pl",
+      "plbonus",
+      "player bonus",
+      "player stats",
+      "melee-core"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/pl/plbonus.c",
+      "added": 319,
+      "deleted": 3,
+      "role": "Implemented `fn_80039618`, protected `fn_80038700` from inlining, and changed `fn_8003CC84` arithmetic for matching."
+    },
+    {
+      "path": "src/melee/pl/types.h",
+      "added": 9,
+      "deleted": 6,
+      "role": "Refined `pl_804D6470_t` from byte padding at several offsets into typed float/u32/int threshold fields used by plbonus."
+    }
+  ],
+  "what_changed": [
+    "Added a full C body for `fn_80039618(int player)`, using `Player_GetStaleMoveTableIndexPtr2`, `Player_GetActionStats`, `Player_GetEntity`, stale move table counters, action stats, falls, KOs, and game-mode helpers to set many bonus flags via `setFlag`.",
+    "Typed previously opaque parts of `pl_804D6470_t`: examples include `x0`, `x8`, `x10`, `x20`, and `x160` as floats, and `xC`, `x50`, `x54`, and `xF0` as integer thresholds.",
+    "Wrapped `fn_80038700` in `#pragma push`, `#pragma dont_inline on`, and `#pragma pop`, preserving it as a separate helper for summing ranges.",
+    "Adjusted `fn_8003CC84` decimal digit extraction from `% 100` expressions to quotient/subtraction expressions: `(temp_ret - (temp_r5 * 100)) / 10` and the corresponding ones digit calculation.",
+    "Bot report says plbonus `.data` became 100%, `.sdata2` became 100%, `fn_8003CC84` became 100%, and `fn_80039618` improved from 0.00% to 99.67%.",
+    "The PR was draft, had no body, no reviews, no review comments, and was closed unmerged, so the slice does not show final acceptance or rejection rationale."
+  ],
+  "smart_moves": [
+    "The implementation caches many `plActionStats` fields and table pointers into locals before the branch-heavy logic, which is a common register-allocation/control-flow tactic for matching large functions.",
+    "The code keeps small scoped blocks for independent computations such as special-move sums, combo count min/max, hit-count classification, ratio accumulation, and KO streak checks, helping constrain local lifetimes.",
+    "It uses explicit labels/gotos such as `skip_only_low_moves` and `skip_combo_count` to model early loop exits rather than forcing structured C that might produce different branches.",
+    "The PR refines only the `pl_804D6470_t` offsets needed by observed accesses while retaining offset-style names, avoiding overclaiming semantics for threshold data.",
+    "The `%`-to-subtraction rewrite in `fn_8003CC84` is a precise codegen-focused change that produced a full function match according to the bot report.",
+    "`PAD_STACK(16)` was added at the end of `fn_80039618`, indicating attention to stack-frame matching beyond source-level behavior."
+  ],
+  "decomp_lessons": [
+    "For large stat/bonus routines, first expose threshold/config struct fields at the exact offsets the function reads; even offset-style typed fields can unlock code and data matches.",
+    "Do not assume idiomatic C is best for matching: explicit subtraction after division can beat `%` when reconstructing compiler output.",
+    "Tiny helper functions may need `#pragma dont_inline` once a large caller is decompiled, especially if inlining would change both the helper and caller matches.",
+    "Branch shape matters in long classifier functions; negated conditions with `break`, labels, and carefully ordered `else if` threshold ladders may be necessary to reproduce original codegen.",
+    "When evidence for semantics is weak, keep address-based function names and `xNN` field names while using descriptive locals to make the decomp readable.",
+    "Because this PR closed unmerged and `fn_80039618` was only 99.67%, reuse these tactics as leads and compare against later merged plbonus work before treating the implementation as final."
+  ],
+  "naming_conventions": [
+    "Preserved address-based unknown names such as `fn_80039618`, `fn_80038700`, `pl_80038628`, and `pl_80037B2C`.",
+    "Used offset-style struct member names in `pl_804D6470_t` such as `x0`, `x8`, `xC`, `x10`, `x20`, `x50`, `x54`, `xF0`, and `x160`, while improving their C types.",
+    "Used descriptive local names for inferred counters and aggregates: `aerials`, `atk_thrown`, `hit_thrown`, `attacks_total`, `hits_total`, `x358_total`, `found_low`, `found_high`, `sum_attacks`, `sum_x358`, `max_ratio`, and `sum_ratio`.",
+    "Relied on existing accessor naming style with `Player_GetActionStats`, `Player_GetStaleMoveTableIndexPtr2`, `Player_GetEntity`, `Player_GetFalls`, and `Player_GetKOsByPlayerIndex`.",
+    "Kept partially understood stat group names like `x358_hits`, `x1A8`, `x1A0_count`, and stale move table offsets rather than inventing semantic labels."
+  ],
+  "assembly_or_matching_tactics": [
+    "`#pragma push` / `#pragma dont_inline on` / `#pragma pop` around `fn_80038700` to prevent unwanted inlining/codegen drift.",
+    "`PAD_STACK(16)` in `fn_80039618` for stack-frame alignment/matching.",
+    "Changed modulo digit extraction to quotient/subtract arithmetic in `fn_8003CC84`.",
+    "Used explicit casts in comparisons, including `(f32)(max - min)`, `(f32) max * pl_804D6470->x28`, `(s32) table->x0_staleMoveTable.xC64`, and `(u32)` casts around table fields.",
+    "Used pointer walking over `x358_counts` with `u32* p = &x358_counts[1]`, `*p`, and `p++` for the 99-entry loop.",
+    "Preserved non-idiomatic branch forms such as `if (!(...)) { break; }` and labeled skip targets to match original control flow.",
+    "Repeated some accessor expressions even when a local `table` exists, likely to influence register lifetime/codegen, though the slice does not explicitly document intent."
+  ],
+  "review_feedback": [
+    "No human reviews or review comments are present in the slice.",
+    "The only comment is the decomp-dev bot report for GALE01: matched code 67.81% (+0.04%, +1640 bytes) and matched data 39.68% (+0.04%, +456 bytes).",
+    "Bot-reported new/full matches: `main/melee/pl/plbonus` `.data` +400 bytes to 100%, `fn_8003CC84` +34 bytes to 100%, and `.sdata2` +24 bytes to 100%.",
+    "Bot-reported partial improvement: `fn_80039618` +6678 bytes from 0.00% to 99.67%.",
+    "PR metadata shows it was a draft and closed without merge; the slice does not explain why."
+  ],
+  "searchable_terms": [
+    "pr-2523",
+    "Jj/plbonus",
+    "jj/plbonus",
+    "jurrejelle",
+    "plbonus",
+    "src/melee/pl/plbonus.c",
+    "src/melee/pl/types.h",
+    "fn_80039618",
+    "fn_80038700",
+    "fn_8003CC84",
+    "pl_804D6470_t",
+    "pl_804D6470",
+    "pl_StaleMoveTableExt_t",
+    "plActionStats",
+    "Player_GetStaleMoveTableIndexPtr2",
+    "Player_GetActionStats",
+    "Player_GetEntity",
+    "Player_GetFalls",
+    "Player_GetKOsByPlayerIndex",
+    "setFlag",
+    "pl_CalculateAverage",
+    "pl_80038628",
+    "pl_80037B2C",
+    "pl_800414C0",
+    "gm_80172140",
+    "gm_801720B4",
+    "gm_8016B3A0",
+    "gm_8016B558",
+    "PAD_STACK",
+    "dont_inline",
+    "staleMoveTable",
+    "x904",
+    "xC60",
+    "xC64",
+    "xC74",
+    "xC78",
+    "xC94",
+    "xD04",
+    "xD0C",
+    "xDC8",
+    "xDD1",
+    "x358_hits",
+    "aerials_count",
+    "specials_count",
+    "thrown_item_count",
+    "matched data",
+    ".sdata2",
+    ".data"
+  ],
+  "follow_up_queries": [
+    "Search later PRs for `fn_80039618` to see whether the remaining 0.33% was completed and merged.",
+    "Search master/current history for `pl_804D6470_t` to verify which offset field types and names survived review.",
+    "Compare the final `fn_8003CC84` implementation to see whether the subtraction-based digit extraction remained necessary.",
+    "Look for follow-up review or PR discussion explaining why draft PR #2523 was closed unmerged.",
+    "Investigate semantic names for the `setFlag` bonus IDs used throughout `fn_80039618` before renaming fields or flags."
+  ],
+  "confidence": 0.78
+}

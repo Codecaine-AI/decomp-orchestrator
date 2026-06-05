@@ -1,0 +1,127 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2472",
+  "pr": {
+    "number": 2472,
+    "title": "hsd_803A949C",
+    "url": "https://github.com/doldecomp/melee/pull/2472",
+    "state": "MERGED",
+    "author": "jurrejelle",
+    "created_at": "2026-05-09T18:33:42Z",
+    "merged_at": "2026-05-18T14:58:25Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Decompiled the previously empty sysdolphin/baselib implementation for hsd_803A949C and exposed its prototype in hsd_3A94.h. The function is a large CARD-related command completion dispatcher using local reconstructed card state/command/block structs, close/retry handling, checksum/validation helpers, and per-command memcpy/memcmp paths; decomp.dev reported hsd_803A949C improved by +2852 bytes from 0.00% to 58.78%.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "function-implementation",
+      "local-struct-reconstruction"
+    ],
+    "systems": [
+      "src/sysdolphin/baselib",
+      "HSD baselib",
+      "Dolphin CARD",
+      "memory-card"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/sysdolphin/baselib/hsd_3A94.c",
+      "role": "Added 491 lines implementing hsd_803A949C plus file-local structs CardStateExt, CardCmdEntry, CardBlock and helper functions."
+    },
+    {
+      "path": "src/sysdolphin/baselib/hsd_3A94.h",
+      "role": "Added the public prototype /* 3A949C */ void hsd_803A949C(s32 arg1);"
+    }
+  ],
+  "what_changed": [
+    "Filled in hsd_3A94.c from an effectively empty source file with includes for hsd_3A94.h, hsd_3AA7.h, hsd_3B2B.h, hsd_3B2E.h, dolphin/card.h, and string.h.",
+    "Declared extern globals hsd_804D7980, hsd_804D7988, and hsd_804D799C used as command queue/status state.",
+    "Added local reconstructed structs CardStateExt, CardCmdEntry, and CardBlock with explicit offset comments and padding fields.",
+    "Added static helpers hsd_803A949C_GetEntry, hsd_803A949C_Close, hsd_803A949C_IconSize, and hsd_803A949C_FileId.",
+    "Implemented hsd_803A949C(s32 arg1) as a switch on entry->x0 with handled command cases 1, 2, 5, 7, 8, 9, 10, 11, 13, 15, and 16.",
+    "Implemented CARD close handling through CARDClose retries, propagating arg1 and negative close results into hsd_804D7988.",
+    "Added data verification/copy paths using hsd_803B31CC, hsd_803B2B20, hsd_803AC558, memcpy, and memcmp across card header, icon, data, and checksum-like trailer regions.",
+    "Completed the dispatcher by clearing entry->x0, clearing hsd_804D799C, and advancing hsd_804D7980 modulo 128.",
+    "Added the hsd_803A949C prototype to hsd_3A94.h."
+  ],
+  "smart_moves": [
+    "Kept uncertain layouts local to hsd_3A94.c, avoiding premature public exposure of CardStateExt/CardCmdEntry/CardBlock while still documenting offsets.",
+    "Factored repeated low-level behavior into small static helpers: current queue entry lookup, CARDClose retry loop, icon-size selection, and two-byte file-id extraction.",
+    "Preserved opaque numeric command cases and error/sentinel values such as -0x105, -0x107, 2, and -0x7FFF rather than inventing unsupported semantic names.",
+    "Separated first-sector and later-sector handling with explicit icon_size, hdr_plus_icon, remaining, data_offset, and sector_size temporaries, making the large dispatcher easier to audit.",
+    "Used existing Dolphin and baselib primitives rather than reimplementing them: CARDFileInfo/CARDClose for file state, hsd_803B31CC for validation, and hsd_803B2B20 for computed trailer/check data."
+  ],
+  "decomp_lessons": [
+    "For large asynchronous CARD-style callbacks, reconstruct the outer dispatcher first by command opcode, then pull out tiny repeated idioms into file-local helpers to keep control flow matchable.",
+    "Offset-commented local structs are useful when field semantics are incomplete: they allow exact accesses and padding without forcing unstable names into headers.",
+    "Header changes can stay minimal: this PR only exported the newly implemented function while keeping helper functions and provisional struct definitions private.",
+    "When evidence for names is weak, retain address-based function names and x-offset fields; add descriptive helper suffixes only where the operation is directly visible from code.",
+    "Card save/load routines often split header, icon, payload, and trailer/check regions; matching work should preserve those boundary calculations exactly."
+  ],
+  "naming_conventions": [
+    "Primary symbol remains address-based: hsd_803A949C.",
+    "File-local helpers use the address prefix plus descriptive suffixes: hsd_803A949C_GetEntry, hsd_803A949C_Close, hsd_803A949C_IconSize, hsd_803A949C_FileId.",
+    "Unknown fields use x-offset names such as x0, x8, x24, x170, x270, x370, x3B0, x430, and x460.",
+    "Padding fields use pad_OFFSET names such as pad_04, pad_28, pad_3B1, pad_00, and pad_13.",
+    "Local domain structs use readable Card-prefixed typedefs even while their fields remain mostly unknown: CardStateExt, CardCmdEntry, CardBlock.",
+    "Data globals remain address-named: hsd_804D7980, hsd_804D7988, hsd_804D799C, and hsd_804D1148."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used a do-while CARDClose retry loop that stops when CARDClose no longer returns -1 or after 10 attempts.",
+    "Indexed the command queue as &((CardCmdEntry*) hsd_804D1148)[hsd_804D7980] and advanced hsd_804D7980 with modulo 128 at function exit.",
+    "Preserved command dispatch as a numeric switch over entry->x0 instead of abstracting to enums before the opcode meanings are proven.",
+    "Computed wrapped block offsets with (state->x24 + 0x30) % state->x8 for slot-zero/special block handling.",
+    "Used exact region math for card contents: icon_size from state->x3B0, hdr_plus_icon = icon_size + 0x40, remaining = state->x24 - sector_size * entry->x8, and data_offset = sector_size * entry->x8 - 0x40 - icon_size.",
+    "Kept casts visible where they likely affect generated code and pointer arithmetic, including (void*) entry fields, (u8*) entry->x10 + data_offset, and (u32) remaining > sector_size."
+  ],
+  "review_feedback": [
+    "No human PR body or review comments were captured in the slice.",
+    "decomp-dev bot reported one unmatched-item improvement for GALE01: main/sysdolphin/baselib/hsd_3A94 item hsd_803A949C improved by +2852 bytes, from 0.00% to 58.78%."
+  ],
+  "searchable_terms": [
+    "pr2472",
+    "hsd_803A949C",
+    "hsd_3A94",
+    "src/sysdolphin/baselib/hsd_3A94.c",
+    "src/sysdolphin/baselib/hsd_3A94.h",
+    "CardStateExt",
+    "CardCmdEntry",
+    "CardBlock",
+    "CARDFileInfo",
+    "CARDClose",
+    "hsd_804D1148",
+    "hsd_804D7980",
+    "hsd_804D7988",
+    "hsd_804D799C",
+    "hsd_803B31CC",
+    "hsd_803B2B20",
+    "hsd_803AC558",
+    "hsd_803A949C_GetEntry",
+    "hsd_803A949C_Close",
+    "hsd_803A949C_IconSize",
+    "hsd_803A949C_FileId",
+    "memory card",
+    "Dolphin CARD",
+    "icon_size",
+    "hdr_plus_icon",
+    "sector_size",
+    "data_offset",
+    "-0x105",
+    "-0x107",
+    "-0x7FFF",
+    "GALE01",
+    "58.78%"
+  ],
+  "follow_up_queries": [
+    "Find writers of hsd_804D1148/CardCmdEntry to map entry->x0 command values 1, 2, 5, 7, 8, 9, 10, 11, 13, 15, and 16 to semantic operation names.",
+    "Identify the true layout and ownership of CardStateExt, especially x0 buffer, x8 sector size, x24 size/offset, x170/x270 arrays, x370 header, x3B0 icon mode, x430 trailer/check data, and x460 bounds.",
+    "Search for hsd_803B31CC and hsd_803B2B20 call sites to confirm whether they are checksum, validation, or digest helpers.",
+    "Check whether CardCmdEntry and CardStateExt should eventually move from hsd_3A94.c into a shared private header once more users are decompiled.",
+    "Investigate callers of hsd_803A949C to determine whether arg1 is a CARD async result/status callback parameter."
+  ],
+  "confidence": 0.84
+}

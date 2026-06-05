@@ -1,0 +1,137 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2337",
+  "pr": {
+    "number": 2337,
+    "title": "Permuter fixes and itlinkarrow work",
+    "url": "https://github.com/doldecomp/melee/pull/2337",
+    "state": "MERGED",
+    "author": "lukechampine",
+    "created_at": "2026-03-21T03:09:59Z",
+    "merged_at": "2026-03-21T20:16:20Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Permuter-driven matching pass focused on Link's arrow item code/data and Yoshi special move edge cases. The PR had no body or human review comments, but the decomp.dev bot reported +5220 matched code bytes and +256 matched data bytes, including `itlinkarrow` `.data` reaching 100%, several `itlinkarrow` functions reaching 100%, and three Yoshi SpecialS collision functions reaching 100%. The diff is mostly codegen-shaping refactors: static inline helpers, stack/local-variable reshaping, bool/cast cleanup, data-symbol placement, and a few explicit fake/permuter helper artifacts.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "permuter-fix",
+      "item-codegen",
+      "fighter-codegen",
+      "data-matching",
+      "headers"
+    ],
+    "systems": [
+      "items/itlinkarrow",
+      "fighter/Yoshi SpecialS",
+      "fighter/Yoshi SpecialHi"
+    ]
+  },
+  "key_files": [
+    "src/melee/it/items/itlinkarrow.c - major Link Arrow code/data matching work, fake JObj assert file handling, static inline refactors, bool/cast cleanup",
+    "src/melee/it/items/itlinkarrow.h - updated `fn_802A81C4` prototype and exported `it_803F6A78`",
+    "src/melee/ft/chara/ftYoshi/ftYs_SpecialS.c - permuter helper inlines and expression/stack shaping for Yoshi Egg Roll anim/coll functions",
+    "src/melee/ft/chara/ftYoshi/ftYs_SpecialHi.c - small local-variable lifetime/rename tweak in `ftYs_SpecialS_8012DF8C`"
+  ],
+  "what_changed": [
+    "`itlinkarrow.c` added `placeholder.h`, `baselib/forward.h`, and `baselib/gobj.h`; it also temporarily overrides `__FILE__` to `jobj.h` around fake `HSD_JObjSetRotation`/`fake_HSD_JObjSetTranslate` wrappers, then restores `itlinkarrow.c`.",
+    "Anonymous Link Arrow float tables `numbers` and `numbers_l` were replaced with address-named globals `it_803F6A78` and `it_803F6A98`; `it_803F6A78` was declared in the header.",
+    "`fn_802A81C4` changed from `void fn_802A81C4(HSD_GObj*)` to `s32 fn_802A81C4(Item_GObj*)`, switched to `GET_ITEM`/`GET_JOBJ`, and uses `(f32*) &it_803F6A28 + x9C` with `temp_r3[23]`/`temp_r3[31]` to reproduce Link Arrow random angle table access.",
+    "`it_802A850C` was heavily reshaped: early locals became `ip`, `jobj`, and `attr`; stack padding was adjusted; the owner/fighter check was nested; `ftLib_80086630(...)->mtx` feeds `HSD_MtxGetRotation`; `M_PI_2` replaced a literal; and casts to `HSD_GObj*`/`UNK_T` were removed where typed APIs allowed it.",
+    "Link Arrow animation/collision/hit logic was split into helper inlines such as `itLinkarrow_UnkMotion1_Anim_inline2`, `itLinkarrow_UnkMotion4_Coll_inline`, and `itLinkArrow_Logic98_HitShield_inline`, while many `return 0/1` sites were rewritten as `return false/true`.",
+    "`itLinkarrow_UnkMotion4_Anim` now duplicates the random-angle logic from `fn_802A81C4`; the in-code comment says it is the same function but the author could not get it to inline.",
+    "Yoshi SpecialS added local static inline permuter helpers: `perm_vel_inline`, `perm_neg_inline`, `perm_mul_inline`, and `perm_vel_x_inline`; the diff explicitly comments that some are 'permuter-generated helpers, almost certainly fake'.",
+    "Yoshi SpecialS changed expression forms around `M_PI`, `M_PI_2`, `ABS`, `gr_vel`, `self_vel.x`, stack pads, and boolean conditions, including `ABS(fp->gr_vel = fp->self_vel.x)` and a manual ternary replacement for `ABS(fp->self_vel.x)`.",
+    "Yoshi SpecialHi `ftYs_SpecialS_8012DF8C` changed `temp_f4` to a longer-lived `mag` variable and applies `mag *= getStickDirX(fp)` before computing the throw angle."
+  ],
+  "smart_moves": [
+    "The data-layout fix was high leverage: putting the Link Arrow angle tables behind the state table as `it_803F6A78`/`it_803F6A98` and accessing them through `&it_803F6A28` matched the original address arithmetic and made `itlinkarrow` `.data` reach 100%.",
+    "The PR kept fake/permuter helpers local and explicitly labeled, which preserves matching progress while making future cleanup searchable.",
+    "Using small static inline boundaries instead of large semantic rewrites let the author control stack/register/call shape in sensitive functions like `itLinkArrow_Logic98_HitShield` and `itLinkarrow_UnkMotion4_Coll`.",
+    "Replacing casts and generic object accessors with typed `Item_GObj*`, `GET_ITEM`, `GET_JOBJ`, and direct `gobj->hsd_obj` reduced noise while also affecting codegen in the desired direction.",
+    "The temporary `__FILE__` override around fake JObj setters is a targeted assertion-string tactic: it localizes the hack and documents that it should go away once the neighboring `lbcoll` work is matched.",
+    "The bot results show the pass focused on near-complete functions where tiny expression changes paid off: Yoshi SpecialS loop collisions gained the last 2 bytes each, and Link Arrow functions moved from high-90s to exact matches."
+  ],
+  "decomp_lessons": [
+    "For decomp matching, semantically pointless static inlines can be legitimate temporary tools when they reproduce compiler load/order behavior; mark them clearly and keep them file-local.",
+    "Data matching may depend on symbol order and base-relative indexing, not just equivalent values. Convenient standalone arrays can prevent `.data` from matching if the original code indexes through a nearby table symbol.",
+    "Stack layout is fragile: changing `PAD_STACK` sizes, using explicit `u8 pad[...]`, and moving locals into narrower scopes can be enough to close the last percent of a match.",
+    "Inlining boundaries are a first-class matching knob. If an obvious helper will not inline, duplicating the body with a comment can be preferable to leaving a function nearly matched.",
+    "Use typed gobj aliases and macros once known (`Item_GObj*`, `GET_ITEM`, `GET_JOBJ`), but verify codegen; these are both readability and matching changes.",
+    "Prefer named constants like `M_PI`, `M_PI_2`, and `deg_to_rad` over long literals when they match the compiler's constant emission and improve readability.",
+    "Header updates should accompany refined signatures and globals, but odd artifacts such as `s32 fn_802A81C4(...)` with no visible return should be tracked for later cleanup rather than assumed semantically meaningful."
+  ],
+  "naming_conventions": [
+    "Matched globals use address-style names: `it_803F6A28`, `it_803F6A78`, `it_803F6A98` instead of descriptive placeholder names like `numbers`.",
+    "Item code in this PR favors `ip` for `Item*`, `attr` for `itLinkArrowAttributes*`, `jobj` for `HSD_JObj*`, and `gobj` for object handles.",
+    "Fighter code keeps established `fp` and `attributes`/`da` naming for `Fighter*` and Yoshi attribute structs.",
+    "Boolean functions should use `true`/`false` returns and comparisons where the prototype is `bool`.",
+    "`perm_*_inline` names identify local permuter/codegen artifacts, not durable semantic APIs.",
+    "Unknown item variables remain as offset names such as `xDD4_itemVar.linkarrow.x9C`; the PR does not invent field meanings."
+  ],
+  "assembly_or_matching_tactics": [
+    "Static inline load wrappers forced codegen around `fp->gr_vel` and `fp->self_vel.x`: `perm_vel_inline(fp)` and `perm_vel_x_inline(fp)`.",
+    "Arithmetic wrappers `perm_neg_inline` and `perm_mul_inline` changed generated instruction order without changing apparent semantics.",
+    "Manual ABS shaping was used where macro expansion did not match, e.g. ternary logic for `fp->self_vel.x` and `ABS(fp->gr_vel = fp->self_vel.x)`.",
+    "Stack and local-variable shaping used `u8 pad[4]`, `u8 pad[28]`, and `PAD_STACK(4/8/12)` in targeted functions.",
+    "Link Arrow random-angle code uses base-relative float table indexing from `(f32*) &it_803F6A28`, with offsets `temp_r3[23]` and `temp_r3[31]`.",
+    "`goto end` in `itLinkArrow_Logic98_HitShield` preserves the branch/return shape needed for the match.",
+    "`#undef __FILE__` / `#define __FILE__ \"jobj.h\"` around fake HSD JObj assertion helpers matches source-file metadata expected by `HSD_ASSERT`.",
+    "Some HSD object access forms were intentionally swapped (`HSD_GObjGetHSDObj` to `GET_JOBJ` or `gobj->hsd_obj`) as codegen controls."
+  ],
+  "review_feedback": [
+    "No human review comments or review records were present in the slice; the PR body was empty.",
+    "decomp.dev bot reported matched code 59.36% (+0.13%, +5220 bytes) and matched data 37.72% (+0.02%, +256 bytes).",
+    "Bot reported 9 new matches, including `itlinkarrow` `.data`, `itLinkArrow_Logic98_HitShield`, `itLinkarrow_UnkMotion4_Coll`, `itLinkarrow_UnkMotion1_Coll`, `fn_802A81C4`, `itLinkArrow_Logic98_Reflected`, and three Yoshi SpecialS loop collision functions.",
+    "Bot reported 5 improved-but-not-yet-matched items: `itLinkarrow_UnkMotion1_Anim`, `ftYs_SpecialAirSLoop_1_Anim`, `it_802A850C`, `ftYs_SpecialAirSLoop_2_Coll`, and `ftYs_SpecialS_8012DF8C`."
+  ],
+  "searchable_terms": [
+    "PR2337",
+    "Permuter fixes",
+    "claude-permute",
+    "itlinkarrow",
+    "it_803F6A28",
+    "it_803F6A78",
+    "it_803F6A98",
+    "fn_802A81C4",
+    "it_802A850C",
+    "it_802A7E40",
+    "itLinkarrow_UnkMotion1_Anim",
+    "itLinkarrow_UnkMotion1_Coll",
+    "itLinkarrow_UnkMotion4_Anim",
+    "itLinkarrow_UnkMotion4_Coll",
+    "itLinkArrow_Logic98_HitShield",
+    "itLinkArrow_Logic98_Reflected",
+    "fake_HSD_JObjSetRotation",
+    "fake_HSD_JObjSetTranslate",
+    "__FILE__ jobj.h",
+    "placeholder.h",
+    "GET_ITEM",
+    "GET_JOBJ",
+    "Item_GObj",
+    "ftYs_SpecialAirSLoop_1_Anim",
+    "ftYs_SpecialAirSLoop_0_Coll",
+    "ftYs_SpecialAirSLoop_1_Coll",
+    "ftYs_SpecialAirSLoop_2_Coll",
+    "ftYs_SpecialAirSLoop_3_Coll",
+    "ftYs_SpecialS_8012DF8C",
+    "perm_vel_inline",
+    "perm_vel_x_inline",
+    "perm_neg_inline",
+    "perm_mul_inline",
+    "M_PI_2",
+    "deg_to_rad",
+    "PAD_STACK",
+    "HSD_MtxGetRotation",
+    "ftLib_80086630"
+  ],
+  "follow_up_queries": [
+    "Search for `perm_*_inline` in Yoshi SpecialS and decide whether each fake helper can be replaced with semantic code after neighboring functions stabilize.",
+    "Revisit `fake_HSD_JObjSetRotation`, `fake_HSD_JObjSetTranslate`, and the `__FILE__` override once the noted `lbcoll` dependency is matched.",
+    "Audit `fn_802A81C4`: the prototype changed to `s32 fn_802A81C4(Item_GObj*)`, but the diff does not show an explicit return.",
+    "Compare `itLinkarrow_UnkMotion4_Anim` against `fn_802A81C4`; the source comment says it is duplicate logic because the helper would not inline.",
+    "Look for other item files where post-state-table float arrays should be promoted to address-named globals and indexed from the state table base for `.data` matching."
+  ],
+  "confidence": 0.89
+}

@@ -1,0 +1,135 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2497",
+  "pr": {
+    "number": 2497,
+    "title": "lb: improve lbheap matching",
+    "url": "https://github.com/doldecomp/melee/pull/2497",
+    "state": "closed",
+    "author": "itsgrimetime",
+    "created_at": "2026-05-15T11:00:56Z",
+    "merged_at": null
+  },
+  "agent_status": "agent_completed",
+  "summary": "Closed, unmerged PR that retuned src/melee/lb/lbheap.c for lbheap matching. It rewrote lbHeap_80015900 around heap create/destroy helpers, corrected the heap bounds scan to cover heaps 2-5, and changed lbHeap_80015F3C setup to preserve/achieve full matching. The author reported lbHeap_80015900 improving from 94.3% to 96.5% while keeping lbHeap_80015F3C at 100%; the decomp.dev bot reported +544 matched bytes overall, lbHeap_80015F3C becoming a 100% match, and lbHeap_80015900 improving to 96.48%.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "logic-fix",
+      "refactor"
+    ],
+    "systems": [
+      "library",
+      "lb",
+      "lbheap",
+      "lbmemory",
+      "heap-memory"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/lb/lbheap.c",
+      "role": "Only changed file; matching and heap-bound logic updates for lbHeap_80015900 and lbHeap_80015F3C.",
+      "symbols": [
+        "lbHeap_80015900",
+        "lbHeap_80015F3C",
+        "lbHeap_803BA380",
+        "lbHeap_80431FA0",
+        "lbHeap_HeapDesc",
+        "lbHeap_HeapOffsetView",
+        "lbHeap_GetHeapOffsetView",
+        "lbHeap_ResetHeap",
+        "lbHeap_DestroyOffsetViewIfCreated",
+        "lbHeap_CreateOffsetViewIfDestroyed"
+      ]
+    }
+  ],
+  "what_changed": [
+    "Named the formerly anonymous heap descriptor struct as struct lbHeap_HeapDesc and kept lbHeap_803BA380 as a 5-entry descriptor table ending with idx 6.",
+    "Added struct lbHeap_HeapOffsetView with a 0x10-byte pad before struct Heap, plus lbHeap_GetHeapOffsetView(offset), to access heap entries through byte offsets from lbHeap_80431FA0.",
+    "Added static inline helpers lbHeap_ResetHeap, lbHeap_DestroyOffsetViewIfCreated, and lbHeap_CreateOffsetViewIfDestroyed for repeated heap initialization and create/destroy state transitions.",
+    "Reworked lbHeap_80015900 to destroy transient heaps 2-5 through offset views, use u32 arena/ARAM bounds values, set up main_heap and aram_heap pointers, then recreate non-transient heaps 2-5 through the new helper.",
+    "Fixed the heap bounds scan in lbHeap_80015900: the old TODO-described loop checked heaps 2 and 3 then 2 and 1; the new two-iteration loop processes heap_array entries 2/3 and 4/5.",
+    "Reworked lbHeap_80015F3C to call lbHeap_ResetHeap explicitly for heap_array[0] through heap_array[5], then walk lbHeap_803BA380 with a descriptor pointer desc++ instead of an index variable."
+  ],
+  "smart_moves": [
+    "The offset-view struct and lbHeap_GetHeapOffsetView macro model the global layout directly, a useful matching tactic when normal heap_array indexing does not produce the desired codegen.",
+    "Factoring create/destroy/reset logic into small static inline helpers reduced repeated field code while still allowing the compiler to inline match-friendly sequences.",
+    "The bounds scan fix improved the actual modeled behavior at the same time as the match: it now covers the intended reserved/user heaps 2-5 instead of the old incorrect scan noted by the removed TODO.",
+    "Pointer-walking lbHeap_803BA380 with desc++ mirrors a common compiler pattern for sentinel tables and helped keep lbHeap_80015F3C at 100%.",
+    "Verification explicitly checked both the improved unmatched function lbHeap_80015900 and the already-sensitive lbHeap_80015F3C, reducing risk of regressing nearby matching."
+  ],
+  "decomp_lessons": [
+    "For heap/global-layout code, matching may require representing an interior view of a global struct with padding and byte offsets rather than relying only on high-level array indexing.",
+    "When assembly treats addresses as integer arithmetic, using u32 temporaries for arena_lo, arena_hi, aram_lo, and aram_hi and casting only at call sites can be more match-friendly than carrying pointer-typed locals throughout.",
+    "Do not leave known-wrong loop reconstructions in place just for partial matching; correcting the control structure can both improve semantic accuracy and raise the match percentage.",
+    "Small static inline wrappers are reusable for repeated status/type/id/handle transitions when the original compiler likely emitted identical inlined blocks.",
+    "For descriptor tables terminated by a sentinel entry, try pointer iteration over the descriptor struct before assuming the source used an index counter.",
+    "When editing a function that shares helpers or layout assumptions with a fully matched neighbor, run checkdiff on both functions."
+  ],
+  "naming_conventions": [
+    "New local types use the existing lbHeap_ prefix plus role names: lbHeap_HeapDesc and lbHeap_HeapOffsetView.",
+    "New helpers use lbHeap_ prefix and action-oriented names: lbHeap_ResetHeap, lbHeap_DestroyOffsetViewIfCreated, and lbHeap_CreateOffsetViewIfDestroyed.",
+    "Predicate helper names encode the heap status condition being handled with IfCreated and IfDestroyed.",
+    "Unknown globals kept address-based names, such as lbHeap_803BA380 and lbHeap_80431FA0, while newly introduced types/helpers documented their inferred role.",
+    "Loop and pointer locals were renamed by phase or role, including destroy_i, bounds_i, create_i, destroy_view, create_view, bounds_heap, main_heap, and aram_heap."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use a padded overlay struct to reach a struct Heap at a fixed offset from lbHeap_80431FA0: struct lbHeap_HeapOffsetView { u8 pad[0x10]; struct Heap heap; }.",
+    "Use a byte-offset macro, lbHeap_GetHeapOffsetView(offset), with heap_offset initialized to 0x38 and incremented by sizeof(struct Heap) in create/destroy loops.",
+    "Use static inline helpers for reset/create/destroy blocks so the C stays structured while preserving inlined codegen opportunities.",
+    "Unroll six lbHeap_ResetHeap calls in lbHeap_80015F3C instead of using the previous for loop.",
+    "Process heap bounds in pairs by assigning bounds_heap = &heap_array[bounds_i * 2 - 2], handling it, then incrementing bounds_heap once to handle the adjacent heap.",
+    "Walk lbHeap_803BA380 with a struct lbHeap_HeapDesc* desc and a sentinel condition while ((curr_idx = desc->idx) != 6)."
+  ],
+  "review_feedback": [
+    "No human review comments or reviews were present in the provided slice.",
+    "The decomp.dev bot reported GALE01 matched code at 67.00%, +0.01% and +544 bytes for this PR.",
+    "Bot report: main/melee/lb/lbheap lbHeap_80015F3C became a new full match, +21 bytes, 96.29% -> 100.00%.",
+    "Bot report: main/melee/lb/lbheap lbHeap_80015900 improved by +107 bytes, 81.08% -> 96.48%.",
+    "The PR was closed without merge in the provided GitHub metadata, and the slice does not explain why."
+  ],
+  "searchable_terms": [
+    "pr-2497",
+    "lbheap",
+    "lbHeap_80015900",
+    "lbHeap_80015F3C",
+    "src/melee/lb/lbheap.c",
+    "lbHeap_803BA380",
+    "lbHeap_80431FA0",
+    "lbHeap_HeapDesc",
+    "lbHeap_HeapOffsetView",
+    "lbHeap_GetHeapOffsetView",
+    "lbHeap_ResetHeap",
+    "lbHeap_DestroyOffsetViewIfCreated",
+    "lbHeap_CreateOffsetViewIfDestroyed",
+    "HSD_CreateMainHeap",
+    "HSD_GetNextArena",
+    "OSCreateHeap",
+    "OSDestroyHeap",
+    "lbMemory_80014EEC",
+    "lbMemory_80014E24",
+    "lbMemory_800154D4",
+    "lbMemory_800155A4",
+    "lbMemory_800154BC",
+    "heap bounds scan",
+    "heaps 2-5",
+    "transient heap",
+    "arena_lo",
+    "arena_hi",
+    "aram_lo",
+    "aram_hi",
+    "checkdiff",
+    "GALE01",
+    "matched bytes"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that touched src/melee/lb/lbheap.c after closed-unmerged PR #2497 to see whether this lbheap matching work was superseded or merged differently.",
+    "Search current master for lbHeap_HeapOffsetView, lbHeap_GetHeapOffsetView, and lbHeap_ResetHeap to see whether the offset-view/helper tactic survived.",
+    "Inspect subsequent history of lbHeap_80015900 for final matching strategy and whether the heaps 2-5 bounds scan remained.",
+    "Look for PRs mentioning lbHeap_80015F3C 100% match or lbHeap_803BA380 descriptor iteration.",
+    "Compare later checkdiff reports for main/melee/lb/lbheap to validate whether the bot-reported gains persisted."
+  ],
+  "confidence": 0.87
+}

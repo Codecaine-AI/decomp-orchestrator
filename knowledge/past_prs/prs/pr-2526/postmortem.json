@@ -1,0 +1,140 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2526",
+  "pr": {
+    "number": 2526,
+    "title": "Jj/ftcpuattack",
+    "url": "https://github.com/doldecomp/melee/pull/2526",
+    "state": "MERGED",
+    "author": "jurrejelle",
+    "created_at": "2026-05-23T18:52:58Z",
+    "merged_at": "2026-05-25T15:49:43Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large ftcpuattack decomp slice for fighter CPU attack selection. It replaced four nonmatching stubs with C for ftCo_800B4AB0, ftCo_800B52AC, ftCo_800B5AB0, and ftCo_800B77E8, reconstructed local attack/object structs, and adjusted the ftCo_800B5AB0 call signature plus Fighter_x1A88_t::x50 typing. decomp.dev reported seven improvements in main/melee/ft/ftcpuattack, with the new functions reaching roughly 88-94% rather than full match; there was no human PR body or review feedback in the slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-reconstruction",
+      "cpu-ai",
+      "partial-match"
+    ],
+    "systems": [
+      "fighter",
+      "ftcpuattack",
+      "CPU attack selection",
+      "fighter common",
+      "item hit/collision avoidance"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/ftcpuattack.c",
+      "role": "Primary implementation file; added local structs and C bodies for ftCo_800B4AB0, ftCo_800B52AC, ftCo_800B5AB0, ftCo_800B77E8, plus matching-oriented edits in ftCo_800B8A9C and ftCo_800BB220."
+    },
+    {
+      "path": "src/melee/ft/ftcpuattack.h",
+      "role": "Updated ftCo_800B5AB0 prototype from two parameters to three: Fighter*, void*, void*."
+    },
+    {
+      "path": "src/melee/ft/types.h",
+      "role": "Changed Fighter_x1A88_t::x50 from int to u32, matching its new use as a raw value passed to ftCo_800B5AB0."
+    }
+  ],
+  "what_changed": [
+    "Added #include <math_ppc.h> in ftcpuattack.c, apparently to use the PPC inline sqrtf behavior in the new physics/prediction code.",
+    "Expanded ftCo_AttackEntry from mostly padding into observed fields: cmd at +0x00, x04, x08, x0C, x10, x14, weight at +0x18, x1C, and x20.",
+    "Added local placeholder structs ftCo_x50_attr and ftCo_x50_t with offset-based fields used by ftCo_800B5AB0.",
+    "Implemented ftCo_800B4AB0: filters attack entries by CPU level and blocked commands, predicts relative fighter/target positions, range-tests entries, then uses HSD_Randf and entry weights to choose a command while filling cpu->x6C and cpu->x74 bounds.",
+    "Implemented ftCo_800B52AC as a close variant of ftCo_800B4AB0 with an extra reach parameter affecting horizontal/vertical range checks.",
+    "Implemented ftCo_800B5AB0 for the cpu->x50-related target object path: it reads ftCo_x50_t/ftCo_x50_attr fields, performs similar prediction/range/weight filtering, and returns a selected command.",
+    "Implemented ftCo_800B77E8 as character-specific CPU command exclusion/insertion logic. It appends command IDs into cpu->xCC_array while keeping cpu->xEC below 8 and uses mpCheckAll/ftCo_800A0FB0 probes for several character cases.",
+    "Updated ftCo_800B8A9C so the cpu->x50 branch calls ftCo_800B5AB0(fp, (void*) cpu->x50, ((void**) Fighter_804D64FC->x14)[fp->kind]) instead of the old two-argument call.",
+    "Adjusted ftCo_800B8A9C literals from 5.0f/1000.0f to 5.0/1000.0 in one ftCo_800A0FB0 call, consistent with matching/sdata2-sensitive tuning.",
+    "Refactored ftCo_800BB220 for matching: initialized temp_r31 at declaration, replaced an item-kind if/else with a switch over It_Kind_Star and It_Kind_Unk4, and introduced dx/dy/dz temporaries for projected hit capsule vectors."
+  ],
+  "smart_moves": [
+    "The PR first reconstructed the shared ftCo_AttackEntry layout, which let three separate CPU attack-selection functions use the same table semantics instead of opaque byte padding.",
+    "Uncertain layouts were kept local and offset-named as ftCo_x50_t/ftCo_x50_attr rather than prematurely promoting weak semantic names into global headers.",
+    "The three attack-selection functions preserve a repeated shape: stack array of 32 candidate entries, sentinel list traversal until cmd == 0, level/recent-command filtering, range tests, weighted random selection, and an assert-only impossible fallthrough.",
+    "The implementation uses explicit near-zero checks with +/-0.00001f and unsuffixed double constants/f64 casts in prediction math, which is the kind of small source-shape control often needed for Metrowerks PPC matches.",
+    "ftCo_800B77E8 deliberately keeps repeated per-character blocks and separate p/L/f/n locals instead of abstracting them, likely preserving stack/register layout for decomp progress.",
+    "ftCo_800BB220 shows a common matching tactic: readability-neutral rewrites such as dx/dy/dz temporaries and switch-vs-if changes can move an already-decompiled function closer to the target."
+  ],
+  "decomp_lessons": [
+    "For ftcpuattack attack tables, do not treat ftCo_AttackEntry as opaque padding: the diff evidences active fields at +0x04/+0x08/+0x0C/+0x10/+0x14/+0x18/+0x1C/+0x20, with weight at +0x18, x20 used as a CPU level gate, and x1C used in a cpu->x80 modulo check.",
+    "cpu->xCC_array and cpu->xEC are central to CPU command suppression/selection; ftCo_800B77E8 repeatedly checks cpu->xEC < 8 before appending command IDs.",
+    "The CPU selection code combines fighter position, pos_delta, co_attrs.grav, co_attrs.terminal_vel, facing_dir, x34_scale.y, and GA_Air/GA_Ground to predict whether a move entry can reach a target.",
+    "ftCo_800B5AB0 requires two opaque arguments after Fighter*: one for the x50 object/state and one for the per-kind attack table from Fighter_804D64FC->x14.",
+    "Changing Fighter_x1A88_t::x50 from signed int to u32 is evidence that this field is still semantically uncertain; future work should avoid over-naming it until more x50 uses are understood.",
+    "Automated progress was substantial but partial: decomp.dev reported ftCo_800B77E8 at 88.33%, ftCo_800B4AB0 at 91.73%, ftCo_800B52AC at 91.12%, and ftCo_800B5AB0 at 93.60%, so later PRs may still need cleanup for exact matches."
+  ],
+  "naming_conventions": [
+    "Address-based names were retained for unknown common fighter functions: ftCo_800B4AB0, ftCo_800B52AC, ftCo_800B5AB0, ftCo_800B77E8, ftCo_800B8A9C, ftCo_800BB220.",
+    "Placeholder struct and field names use offset notation when semantics are not proven: ftCo_x50_t, ftCo_x50_attr, x40, x44, x4C, x50, xC0, xCC, xC1C, xC20, xC24, xC28.",
+    "Known project enum/style names were used where available: FTKIND_MARIO, FTKIND_FOX, FTKIND_FALCO, FTKIND_CAPTAIN, FTKIND_GANON, FTKIND_KOOPA, FTKIND_GKOOPS, GA_Air, GA_Ground, It_Kind_Star.",
+    "Stack-local candidate arrays kept stack-offset-style names such as sp3C, sp40, and sp34, useful for matching and search.",
+    "Project typedefs f32, f64, s32, u32, bool, Fighter, Item, Vec3, and HitCapsule were used consistently."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use <math_ppc.h> when the target appears to need the Metrowerks/PPC inline sqrtf sequence rather than a generic libm declaration.",
+    "Preserve explicit f64 casts and unsuffixed double constants such as 0.5, 1.0, 5.0, and 1000.0 when sdata2/codegen is sensitive.",
+    "Manual epsilon checks like value < 0.00001f && value > -0.00001f may match better than abstracting to fabsf or helper calls.",
+    "For switch-heavy AI logic, repeated local groups such as u32 fN, int LN, Vec3 nN, Vec3 pN can be necessary to preserve stack layout.",
+    "Small expression-shaping changes matter: the ftCo_800BB220 projection code introduced dx/dy/dz locals before assigning sp94/sp60/sp2C.",
+    "Weighted selection loops used a pointer variable sel alongside indexed stack-array reads, plus __assert(\"ftcpuattack.c\", line, \"0\") for unreachable fallthroughs."
+  ],
+  "review_feedback": [
+    "No human review comments or reviews were present in the PR slice.",
+    "The only captured feedback was decomp.dev's GALE01 report showing seven improvements in main/melee/ft/ftcpuattack.",
+    "decomp.dev reported new partial matches/improvements: ftCo_800B77E8 0.00% -> 88.33%, ftCo_800B4AB0 0.00% -> 91.73%, ftCo_800B52AC 0.00% -> 91.12%, ftCo_800B5AB0 0.00% -> 93.60%, ftCo_800BB220 77.50% -> 93.90%, .sdata2 79.89% -> 91.88%, and ftCo_800B8A9C 84.77% -> 87.29%."
+  ],
+  "searchable_terms": [
+    "pr-2526",
+    "Jj/ftcpuattack",
+    "jurrejelle",
+    "jj/ftcpuattack",
+    "src/melee/ft/ftcpuattack.c",
+    "src/melee/ft/ftcpuattack.h",
+    "src/melee/ft/types.h",
+    "ftCo_800B4AB0",
+    "ftCo_800B52AC",
+    "ftCo_800B5AB0",
+    "ftCo_800B77E8",
+    "ftCo_800B8A9C",
+    "ftCo_800BB220",
+    "ftCo_AttackEntry",
+    "ftCo_x50_t",
+    "ftCo_x50_attr",
+    "Fighter_x1A88_t",
+    "xCC_array",
+    "xA8_array",
+    "xEC",
+    "xC8",
+    "x50",
+    "x570",
+    "x568",
+    "HSD_Randf",
+    "math_ppc",
+    "sqrtf",
+    "mpCheckAll",
+    "ftCo_800A0FB0",
+    "Fighter_804D64FC",
+    "GA_Air",
+    "GA_Ground",
+    "It_Kind_Star",
+    "It_Kind_Unk4",
+    "HitCapsule",
+    "sdata2"
+  ],
+  "follow_up_queries": [
+    "ftcpuattack ftCo_800B4AB0 ftCo_800B52AC weighted HSD_Randf attack table matching",
+    "ftCo_800B5AB0 cpu->x50 ftCo_x50_t Fighter_804D64FC x14 attack table",
+    "ftCo_800B77E8 xCC_array xEC character-specific CPU command suppression",
+    "math_ppc sqrtf f64 casts unsuffixed double constants sdata2 ftcpuattack",
+    "ftCo_800BB220 dx dy dz HitCapsule item collision matching"
+  ],
+  "confidence": 0.84
+}

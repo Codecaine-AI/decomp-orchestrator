@@ -1,0 +1,164 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2535",
+  "pr": {
+    "number": 2535,
+    "title": "Jj/mndiagram",
+    "url": "https://github.com/doldecomp/melee/pull/2535",
+    "state": "MERGED",
+    "author": "jurrejelle",
+    "created_at": "2026-05-25T11:01:22Z",
+    "merged_at": "2026-05-31T11:10:33Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matching-oriented pass over the mnDiagram menu/stat screens. The PR reworked main diagram input/navigation, popup animation/text placement, stat-detail screens, and static data headers using typed overlays instead of raw address arithmetic. decomp.dev reported +184 matched bytes, one new full match for `mnDiagram_PopupAnimProc`, and major unmatched-item improvements, especially `fn_802461BC` and `mnDiagram_InputProc`; it also reported one broken match in `mnDiagram3_80247008`.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "menu-navigation",
+      "data-structuring",
+      "assertion-cleanup"
+    ],
+    "systems": [
+      "melee/mn/mndiagram",
+      "melee/mn/mndiagram2",
+      "melee/mn/mndiagram3",
+      "menu statistics diagram"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/mn/mndiagram.c",
+      "role": "Primary main diagram matching pass",
+      "evidence": "+852/-233; added `mnDiagram_AnimTable`, rewrote `mnDiagram_InputProc`, improved popup/cursor/header code, and bot reported `mnDiagram_PopupAnimProc` at 100%."
+    },
+    {
+      "path": "src/melee/mn/mndiagram3.c",
+      "role": "Ranked/stat detail screen matching pass",
+      "evidence": "+259/-88; added `fn_802461BC`, fake JObj translate inlines, typed table access, and detail navigation cleanup."
+    },
+    {
+      "path": "src/melee/mn/mndiagram2.c",
+      "role": "Secondary stat row/detail screen cleanup",
+      "evidence": "+40/-50; switched to `HSD_ASSERT`, typed anim loop access, and cleaned user_data allocation/row spacing code."
+    },
+    {
+      "path": "src/melee/mn/mndiagram3.static.h",
+      "role": "Static data typing",
+      "evidence": "Added `mnDiagram3_PosTable` and `mnDiagram3_StatTable`; converted raw `u8` extern blobs to typed structs."
+    },
+    {
+      "path": "src/melee/mn/mndiagram2.static.h",
+      "role": "Static header correction",
+      "evidence": "Changed `mnDiagram2_803EEB60` to `AnimLoopSettings[2]` and removed unused assert string externs."
+    }
+  ],
+  "what_changed": [
+    "Added a typed `mnDiagram_AnimTable` overlay over `mnDiagram_803EE728` so popup/cursor code can access `Point3d` entries and trailing `AnimLoopSettings` fields at fixed offsets without raw `char*` arithmetic.",
+    "Expanded `mnDiagram_InputProc` from simple placeholder-like D-pad handling into detailed fighter/name-mode navigation: clamps `mn_804A04F0.hovered_selection`, skips locked fighters and null name entries, updates scroll arrows, routes to popups and detail screens, and stores cursor state in `gmMainLib_8015CC34()`.",
+    "Improved sorted fighter/name computations in `mnDiagram_8023FA6C` and `mnDiagram_8023FC28` with explicit `u8` casts, typed `mnDiagram_Assets*` access, adjusted stack padding, and expanded comparison predicates.",
+    "Reworked popup creation/animation functions (`mnDiagram_PopupAnimProc`, `mnDiagram_80240D94`, `mnDiagram_80241310`) to use typed table fields, scoped float temporaries, `HSD_ASSERTREPORT`, and explicit text/user_data initialization.",
+    "Changed grid header/icon creation (`mnDiagram_802427B4`, `mnDiagram_80242C0C`) to traverse `sorted_names` and `sorted_fighters` while skipping invalid entries, rather than directly indexing visible rows/columns.",
+    "Converted several direct `jobj->translate` reads to `HSD_JObjGetTranslationX/Y/Z` and several direct writes to setter-style calls or local fake setter inlines to match codegen.",
+    "Added `fn_802461BC` in `mndiagram3.c`, implementing input handling for the ranked/stat detail screen: back/menu transitions, mode toggling, popup movement, scroll offset changes, row label rebuilding, and detail refresh calls.",
+    "Introduced `mnDiagram3_PosTable` and `mnDiagram3_StatTable` in `mndiagram3.static.h`, giving names to position vectors and stat-index data previously represented as raw byte arrays.",
+    "Replaced manual `OSReport`/`__assert` string patterns in touched code with `HSD_ASSERT` or `HSD_ASSERTREPORT`, requiring `baselib/debug.h` includes."
+  ],
+  "smart_moves": [
+    "Used overlay structs with explicit padding (`pad_24`, `pad_4C`, `x40`, `x58`, `x64`) to preserve exact data offsets while making call sites more type-safe and more matchable.",
+    "Kept hard-to-name data fields address/offset-based rather than inventing semantics, e.g. `x40`, `x58`, `x64`, `x0`, `xC`, `x18`, and `indices`.",
+    "Mirrored original control flow in `mnDiagram_InputProc` with labels such as `nc_outer`, `dn_n_find`, `rt_f_inner`, and sentinel values `0x19`/`0x78`, which is often necessary for menu traversal matches.",
+    "Used explicit `u8` casts for persistent data indexes (`fighter_kos[(u8) j]`, `vs_kos[(u8) arg1]`) where the original code likely used byte-sized IDs.",
+    "Created local fake `HSD_JObjSetTranslateX/Y/Z` inlines under `#define __FILE__ \"jobj.h\"` with specific assert line numbers, then reset `__FILE__`, to match inlined JObj setter behavior without changing global headers.",
+    "Replaced raw base-pointer arithmetic with typed `mnDiagram_Assets* assets` access for `sorted_fighters`, `sorted_names`, and archive data, making later decomp work easier to audit.",
+    "Used decomp.dev feedback to target high-value unmatched functions: the bot reported `fn_802461BC` from 0.00% to 85.31% and `mnDiagram_InputProc` from 22.71% to 89.53%."
+  ],
+  "decomp_lessons": [
+    "When a static data symbol is really a blob containing vectors, animation-loop settings, strings, or tables, introduce an overlay struct with padding instead of leaving repeated `(char*) base + offset` casts.",
+    "For menu grids that display filtered lists, matching code may need to reproduce original skip loops over sorted arrays, not just index `base + visible_index`; preserve locked-fighter and null-name checks.",
+    "Small integer casts matter in persistent-stat code: fighter/name IDs stored as bytes should often be cast to `u8` before array indexing.",
+    "Standard project assertion helpers (`HSD_ASSERT`, `HSD_ASSERTREPORT`) can remove ad-hoc string externs and produce better matches when line numbers and strings line up.",
+    "Direct JObj field access versus `HSD_JObjGetTranslation*` or inlined setter behavior changes codegen; choose the form that matches the original, even if that means a local fake inline.",
+    "Stack padding remains a matching lever: this PR changed examples like `PAD_STACK(8)` to `PAD_STACK(16)` and `mnDiagram_CursorProc` to `PAD_STACK(8)`.",
+    "decomp.dev match reports should be checked for regressions as well as wins; this PR gained a full `mnDiagram_PopupAnimProc` match but broke `mnDiagram3_80247008` from 100% to 97.22%."
+  ],
+  "naming_conventions": [
+    "`mnDiagram_AnimTable` names a typed overlay for address-backed static data while retaining offset-like fields for unknown members.",
+    "`mnDiagram3_PosTable` and `mnDiagram3_StatTable` use module prefixes and describe the layout role without over-naming unknown trailing bytes.",
+    "Padding fields use offset-based names such as `pad_24` and `pad_4C`; unknown struct members use `x40`, `x58`, `x64`, `x50`, `x68`, `x78`.",
+    "Locals like `assets` and `user_data` clarify former raw pointer arithmetic without changing public symbol names.",
+    "Address-style function names such as `fn_802461BC`, `mnDiagram_80241310`, and `mnDiagram3_8024714C` were retained where no semantic name was evidenced."
+  ],
+  "assembly_or_matching_tactics": [
+    "Typed overlays over raw data blobs: `mnDiagram_AnimTable`, `mnDiagram3_PosTable`, `mnDiagram3_StatTable`, and `AnimLoopSettings mnDiagram2_803EEB60[2]`.",
+    "Goto-shaped loops and explicit labels in `mnDiagram_InputProc` to mirror original branch structure.",
+    "Sentinel IDs `0x19` for fighters and `0x78` for names when filtered traversal runs off the table.",
+    "Explicit `PAD_STACK` tuning in sorting, popup, input, and cursor functions.",
+    "Scoped float temporaries (`y`, `z`, `new_var`) around text-position assignments to influence load/store order.",
+    "Use of `HSD_ASSERTREPORT(line, ptr, \"Can't get user_data\\n\")` and `HSD_ASSERT(line, jobj)` instead of manual `OSReport`/`__assert` blocks.",
+    "Local fake JObj translate setters with `#undef __FILE__`, `#define __FILE__ \"jobj.h\"`, exact assert lines 932/947/962, and `ftCo_800C6AFC` dirty handling.",
+    "Repeated count recomputation and inline unlocked-fighter loops where helper calls such as `mnDiagram_CountUnlockedFighters()` did not match."
+  ],
+  "review_feedback": [
+    "No human review comments or PR body text were present in the slice; evidence is from the diff and decomp.dev bot report.",
+    "decomp.dev reported matched code 69.13% with +184 bytes.",
+    "decomp.dev reported one new full match: `main/melee/mn/mndiagram` `mnDiagram_PopupAnimProc`, 74.29% to 100.00%, +131 bytes.",
+    "decomp.dev reported major unmatched improvements including `fn_802461BC` 0.00% to 85.31%, `mnDiagram_InputProc` 22.71% to 89.53%, `mnDiagram_80242C0C` 60.00% to 92.70%, and `mnDiagram_802427B4` 35.50% to 81.61%.",
+    "decomp.dev also reported one broken match: `main/melee/mn/mndiagram3` `mnDiagram3_80247008`, 100.00% to 97.22%, plus several unmatched regressions in `mndiagram2` and `mndiagram3`."
+  ],
+  "searchable_terms": [
+    "pr-2535",
+    "Jj/mndiagram",
+    "jurrejelle",
+    "mnDiagram",
+    "mndiagram.c",
+    "mndiagram2.c",
+    "mndiagram3.c",
+    "mnDiagram_AnimTable",
+    "mnDiagram_InputProc",
+    "mnDiagram_PopupAnimProc",
+    "mnDiagram_80240D94",
+    "mnDiagram_80241310",
+    "mnDiagram_802417D0",
+    "mnDiagram_8024227C",
+    "mnDiagram_802427B4",
+    "mnDiagram_80242C0C",
+    "mnDiagram_CursorProc",
+    "mnDiagram_80243434",
+    "mnDiagram2_CreateStatRow",
+    "mnDiagram2_UpdateScrollArrows",
+    "mnDiagram2_Create",
+    "mnDiagram2_803EEB60",
+    "mnDiagram3_80245BA4",
+    "mnDiagram3_80247008",
+    "mnDiagram3_8024714C",
+    "fn_802461BC",
+    "mnDiagram3_PosTable",
+    "mnDiagram3_StatTable",
+    "HSD_ASSERTREPORT",
+    "HSD_JObjSetTranslateX_Fake",
+    "HSD_JObjSetTranslateY_Fake",
+    "HSD_JObjSetTranslateZ_Fake",
+    "sorted_fighters",
+    "sorted_names",
+    "GetNameCount",
+    "mn_IsFighterUnlocked",
+    "GetPersistentFighterData",
+    "GetPersistentNameData",
+    "hovered_selection",
+    "row_labels",
+    "scroll_offset",
+    "GALE01"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that restore or improve `mnDiagram3_80247008` after the 97.22% regression.",
+    "Search for later semantic naming of `fn_802461BC` and the `mnDiagram3` ranked-stat input proc.",
+    "Search for reuse of the fake `HSD_JObjSetTranslateX_Fake` / `__FILE__ \"jobj.h\"` matching tactic.",
+    "Find PRs that further type or rename `mnDiagram_AnimTable` fields `x40`, `x58`, and `x64`.",
+    "Find later work on `mnDiagram2_CreateStatRow` and `mnDiagram2_UpdateScrollArrows` regressions from this bot report.",
+    "Search for additional `mnDiagram_Assets.sorted_names` / `sorted_fighters` filtering loop cleanups."
+  ],
+  "confidence": 0.86
+}

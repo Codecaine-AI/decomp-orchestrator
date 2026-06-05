@@ -1,0 +1,98 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2571",
+  "pr": {
+    "number": 2571,
+    "title": "Matched HSD_SynthSFXGroupDataReaddress by rewriting the loop and pulling allocations out of the loop",
+    "url": "https://github.com/doldecomp/melee/pull/2571",
+    "state": "MERGED",
+    "author": "DavidWeaverAudio",
+    "created_at": "2026-06-02T15:38:10Z",
+    "merged_at": "2026-06-02T16:49:21Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched HSD_SynthSFXGroupDataReaddress in src/sysdolphin/baselib/synth.c by reshaping the inner readdress loop and moving loop temporaries to outer scope. The patch replaced a count-decrementing do/while guarded by count > 0 with a for loop using a separate j index, kept count alive after the loop for p advancement, and changed one pointer increment into uintptr_t-based integer address arithmetic.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "loop-rewrite",
+      "codegen-tuning"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "synth",
+      "audio"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/sysdolphin/baselib/synth.c",
+      "role": "Only changed file; contains HSD_SynthSFXGroupDataReaddress loop and pointer arithmetic adjustments."
+    }
+  ],
+  "what_changed": [
+    "In HSD_SynthSFXGroupDataReaddress, added outer-scope int count and int j declarations.",
+    "Changed count from a loop-local declaration inside while (i < arg0->priority) to assignment into the outer-scope count variable.",
+    "Replaced the inner if (count > 0) do { ... } while (--count != 0) with for (j = 0; j < count; j++) { ... }.",
+    "Preserved the per-entry updates: conditional addition of delta to *(u32*)(q + 0x14) when *(u16*)(q + 0x10) is nonzero, unconditional delta additions to q + 0x18 and q + 0x1C, and q += 0x40 per entry.",
+    "Changed p advancement from p += (count << 6) to p = (u8*) ((count << 6) + (uintptr_t) p), followed by the existing p += 0x10."
+  ],
+  "smart_moves": [
+    "Used a separate loop index j so count remains unchanged after the inner loop, allowing the later p advancement to use the original count value directly.",
+    "Moved temporaries out of the loop body, which can influence register allocation and lifetime in ways needed for matching.",
+    "Rewrote pointer advancement through uintptr_t, a targeted way to force integer-style address arithmetic when direct pointer addition does not produce matching codegen.",
+    "Kept the semantic behavior of the readdressing loop intact while changing source shape for compiler output."
+  ],
+  "decomp_lessons": [
+    "For matching, a decrementing do/while over count and an index-based for loop can compile differently even when they express similar traversal logic.",
+    "If a value is needed after iteration, avoiding mutation of that value inside the loop can be important for both clarity and matching.",
+    "Variable scope can materially affect generated code; pulling declarations out of nested loops is a valid matching tactic, not necessarily a semantic change.",
+    "Pointer arithmetic sometimes needs an explicit integer cast such as uintptr_t to match the original instruction selection or register flow.",
+    "This PR had no body text or review comments in the provided slice, so the matching rationale is inferred from the title and diff only."
+  ],
+  "naming_conventions": [
+    "Preserved the existing HSD-style function name HSD_SynthSFXGroupDataReaddress.",
+    "Used short local names already typical in low-level decomp code: p and q for byte pointers, i and j for loop indices, count for entry count, delta for callback address delta."
+  ],
+  "assembly_or_matching_tactics": [
+    "Convert guarded do/while (--count != 0) loops into for (j = 0; j < count; j++) when the original binary appears to keep count stable.",
+    "Move local declarations such as count and j to outer scope to alter register allocation/lifetime.",
+    "Use uintptr_t in address calculations to coerce pointer arithmetic into integer arithmetic for matching.",
+    "Keep pointer stride constants visible: q += 0x40 for each entry and p += count << 6 plus 0x10 for each priority group."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "No issue/comment body was provided beyond the PR title, so reviewer intent and discussion are not available."
+  ],
+  "searchable_terms": [
+    "HSD_SynthSFXGroupDataReaddress",
+    "synth.c",
+    "src/sysdolphin/baselib/synth.c",
+    "sysdolphin",
+    "baselib",
+    "synth",
+    "AXVPB",
+    "callback",
+    "sfxGroupDataReaddressCounter",
+    "delta",
+    "uintptr_t",
+    "loop rewrite",
+    "for loop",
+    "do while",
+    "register allocation",
+    "pointer arithmetic",
+    "q += 0x40",
+    "count << 6",
+    "audio",
+    "decomp matching"
+  ],
+  "follow_up_queries": [
+    "Find other HSD synth matching PRs that use uintptr_t casts for pointer arithmetic.",
+    "Find PRs that moved local declarations out of loops to affect register allocation.",
+    "Search for remaining unmatched functions in src/sysdolphin/baselib/synth.c.",
+    "Compare other loop rewrites from do/while to for loops in audio or baselib code."
+  ],
+  "confidence": 0.86
+}

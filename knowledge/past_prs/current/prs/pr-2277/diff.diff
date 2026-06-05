@@ -1,0 +1,2207 @@
+diff --git a/.gitignore b/.gitignore
+index 1c87df7fb5..67fc92e91e 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -174,3 +174,4 @@ fabric.properties
+ 
+ # Android studio 3.1+ serialized cache file
+ .idea/caches/build_file_checksums.ser
++scripts/logs/
+diff --git a/CLAUDE.md b/CLAUDE.md
+new file mode 100644
+index 0000000000..f34a221d09
+--- /dev/null
++++ b/CLAUDE.md
+@@ -0,0 +1,141 @@
++# CLAUDE.md
++
++This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
++
++## Project Overview
++
++WIP decompilation of Super Smash Bros. Melee (NTSC 1.02, GALE01). The goal is to write C code that compiles to binary-identical PowerPC assembly as the original game. Success = 100% match with the original DOL.
++
++## Build Commands
++
++```bash
++python3 configure.py    # Generate build.ninja and objdiff.json
++ninja                   # Build main.dol
++ninja diff              # Show differences vs original
++```
++
++Dependencies: Python 3.11+, Ninja, Metrowerks CodeWarrior compiler (in container), Wine Crossover (macOS), Wine/WiBo (Linux).
++
++### macOS Setup
++
++```bash
++brew install ninja
++brew install --cask --no-quarantine gcenx/wine/wine-crossover
++```
++
++After OS upgrades, re-unquarantine Wine: `sudo xattr -rd com.apple.quarantine '/Applications/Wine Crossover.app'`
++
++### Python Tools
++
++```bash
++python -m venv --upgrade-deps .venv
++. .venv/bin/activate
++pip install -r reqs/decomp.txt
++python tools/decomp.py function_name    # Decompile a function (use -h for options)
++```
++
++## Code Style
++
++Enforced by `.clang-format`. Run `git clang-format` on staged files before committing.
++
++- 4 spaces, 79 column limit, LF line endings
++- Left-aligned pointers: `int* ptr`
++- Explicit NULL checks: `if (ptr != NULL)` not `if (!ptr)`
++- Literals: `123U` (u32), `1.23F` (f32), `1.23L` (f64), `0xABC` (hex)
++- Empty stubs: `{}` not `{ return; }`
++- Struct members prefixed with hex offset: `/* 0x10 */ u8 x10_thing;`
++
++### Naming
++
++Functions are prefixed with their file name: `ftCo_Attack100_Enter`, `lbVector_sin`, `ftFox_LaserOnDeath`. File names use lowerCamelCase, function names use UpperCamelCase. Standard library reimplementations use lowercase.
++
++### Module Prefixes
++
++- `ft` = fighter, `it` = item, `gr` = ground/stage, `gm` = game, `lb` = library
++- `cm` = camera, `db` = debug, `ef` = effect, `if` = interface, `mn` = menu
++- `mp` = map/collision, `pl` = player, `sc` = scene, `ty` = trophy, `vi` = visual
++
++### Common Abbreviations
++
++accel, atk (attack), cb (callback), coll (collision), dmg (damage), dst (destination), ecb (environmental collision box), ev (entity variables), grav (gravity), idx (index), kb (knockback), lr (left/right facing), mag (magnitude), mv (motion variables), phys (physics), pos (position), sfx (sound effect), spd (speed), vel (velocity), unk (unknown)
++
++## Architecture
++
++```
++src/
++├── melee/           # Game code
++│   ├── ft/          # Fighter system (largest subsystem)
++│   │   └── chara/   # Character-specific code (ftCommon/, ftFox/, etc.)
++│   ├── gr/          # Stage code
++│   ├── it/          # Items
++│   ├── gm/          # Game loop
++│   ├── lb/          # Utility library
++│   ├── sc/          # Scene/game mode management
++│   └── ...
++├── sysdolphin/baselib/  # HAL's core library (GObj, HSD framework)
++├── dolphin/             # Dolphin SDK
++├── MSL/                 # Metrowerks Standard Library
++└── Runtime/             # Gekko hardware runtime
++```
++
++Key config files:
++- `config/GALE01/symbols.txt` — All 34k+ symbols and addresses
++- `config/GALE01/splits.txt` — Object file section mappings
++- `configure.py` — Build configuration and object matching status
++
++## Decompilation Workflow
++
++1. Find target function address in `config/GALE01/symbols.txt`
++2. Decompile assembly to C (using `python tools/decomp.py`, m2c, or decomp.me)
++3. Iterate until `objdiff` shows 100% match
++4. Run `ninja` to verify no regressions
++
++### Diffing with objdiff
++
++After building, `objdiff.json` is generated. Use [objdiff](https://github.com/encounter/objdiff) to visually compare objects. Enable "Relax relocation diffs" in Diff Options. Auto-rebuilds on source changes.
++
++### Game Files
++
++Extract `main.dol` from a GALE01 ISO (via Dolphin Emulator) to `orig/GALE01/`.
++
++## Notes on Making Matches
++
++- Aim for **true matches** (code the developer would have written, e.g. `var->x3[i*2] = 3`) over **fake matches** (technically matching slop, e.g. `*(s16*) var+x3+i*2 = 3`).
++- Avoid raw pointer arithmetic — the original devs most likely didn't use it.
++- Convert `i=0; do { ...; i++; } while (i<10)` into `for (i=0; i<10; i++) { ... }`.
++- Avoid `goto`/labels — use control flow (`if`, `for`, `while`) instead.
++- For struct fields, label with local hex offset: `struct { /* 0x00 */ u16 x00; /* 0x02 */ u16 x02; }`. Optionally add global offset if relevant.
++- **Ignore register swaps** — if all instances of a register in the target map to a different register in our code, count it as matched (solved later via permuter).
++- When the stack is off by `n` bytes, use `PAD_STACK(n);` at the end of the stack.
++- Use `ABS(n)` for `x=n; if(x>0) x=-x` patterns.
++- Use `MIN(n,m)` / `MAX(n,m)` for clamping patterns.
++- New structs should be proper structs (not `extern u8[]`). Follow the naming scheme above and use `u8 pad_xx[n]` for padding.
++- To access fields inside `pad[...]`, split the pad: `pad_xx[n], var_to_use, pad_yy[m]`.
++
++## Fighter Character Codes
++
++Mr (Mario), Lg (Luigi), Kb (Kirby), Pk (Pikachu), Ss (Samus), Lk (Link), Fx (Fox), Dk (Donkey Kong), Kp (Bowser), Pe (Peach), Ys (Yoshi), Fc (Falco), Ms (Marth), Gn (Ganondorf), Mt (Mewtwo), Zd (Zelda), Sk (Sheik), Pr (Jigglypuff), Cl (Young Link), Dr (Dr. Mario), Fe (Roy), Ca (Captain Falcon), Ns (Ness), Pc (Pichu)
++
++## Decomp Permuter
++
++[decomp-permuter](https://github.com/simonlindholm/decomp-permuter) automatically permutes C source to find better matches. Supports PowerPC.
++
++```bash
++# Setup (in permuter repo)
++python3 -m pip install pynacl toml Levenshtein
++
++# For ninja-based projects, create permuter_settings.toml at project root:
++# build_system = "ninja"
++
++# Import a function to permute
++./import.py <path/to/file.c> <path/to/file.s>
++
++# Run (use -j for multithreaded)
++./permuter.py -j directory/
++```
++
++Score of 0 = perfect match. Use `PERM_GENERAL(a, b, ...)` macros in source to test specific alternatives. `PERM_RANDOMIZE(code)` enables random variations in a region. Best when only regalloc differences remain — pick sensible suggestions from results.
++
++## CI
++
++GitHub Actions builds in `ghcr.io/doldecomp/build-melee:main` container. Validates both "link" mode (compiles and links) and "diff" mode (no regressions vs base branch).
+diff --git a/scripts/decomp_helpers.py b/scripts/decomp_helpers.py
+new file mode 100755
+index 0000000000..aaf5cbad46
+--- /dev/null
++++ b/scripts/decomp_helpers.py
+@@ -0,0 +1,443 @@
++#!/usr/bin/env python3
++"""Helper subcommands for decomp_overnight.sh.
++
++Extracts inline python into testable, debuggable functions.
++
++Usage:
++    python3 scripts/decomp_helpers.py <subcommand> [args...]
++
++Subcommands:
++    ninja-progress              Read ninja stdout, show progress bar
++    stream-monitor <log> <pid>  Poll stream JSON, print live summaries
++    parse-result <log>          Parse stream JSON result event
++    token-usage <log>           Sum token usage from stream JSON
++    extract-log <stream> <out>  Extract readable log from stream JSON
++    filter-stubs                Filter stubs and pick next target (reads JSON from stdin)
++    extract-asm <file> <func>   Extract function assembly from .s file
++    cutoff-epoch <hour>         Print cutoff epoch timestamp
++    progress-save <file> <func> <status>  Append to progress JSON
++    progress-check <file> <func>          Check if function already tried
++    parse-rate-limit <log> <backoff>      Parse rate limit reset time
++"""
++
++import json
++import os
++import re
++import signal
++import sys
++import time
++from datetime import datetime, timedelta
++from pathlib import Path
++
++
++def cmd_ninja_progress():
++    """Read ninja output from stdin, display progress bar."""
++    signal.signal(signal.SIGINT, lambda *a: sys.exit(0))
++    signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))
++    for line in sys.stdin:
++        m = re.match(r"\[(\d+)/(\d+)\]", line)
++        if m:
++            cur, total = int(m.group(1)), int(m.group(2))
++            pct = cur * 100 // total
++            filled = pct * 30 // 100
++            bar = "\u2588" * filled + "\u2591" * (30 - filled)
++            print(f"\r  [{bar}] {cur}/{total} ({pct}%)", end="", flush=True)
++    print()
++
++
++def cmd_stream_monitor(log_file, pid_str, done_flag=None):
++    """Poll stream JSON log, print live summaries, exit when PID dies.
++
++    If done_flag path is given, writes to it when a result event is seen.
++    """
++    signal.signal(signal.SIGINT, lambda *a: sys.exit(0))
++    signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))
++    pid = int(pid_str)
++    pos = 0
++    while True:
++        try:
++            if os.path.exists(log_file):
++                with open(log_file) as f:
++                    f.seek(pos)
++                    for line in f:
++                        try:
++                            d = json.loads(line)
++                            t = d.get("type", "")
++                            if t == "assistant":
++                                for c in d.get("message", {}).get("content", []):
++                                    if c.get("type") == "text" and c["text"].strip():
++                                        print(
++                                            f"  [claude] {c['text'][:120]}",
++                                            flush=True,
++                                        )
++                                    elif c.get("type") == "tool_use":
++                                        inp = c.get("input", {})
++                                        name = c["name"]
++                                        desc = (
++                                            inp.get("description", "")
++                                            or inp.get("pattern", "")
++                                            or inp.get("file_path", "")
++                                            or ""
++                                        )
++                                        print(
++                                            f"  [{name}] {desc[:100]}", flush=True
++                                        )
++                            elif t == "result":
++                                s = d.get("subtype", "")
++                                print(f"  [result] {s}", flush=True)
++                                if done_flag:
++                                    Path(done_flag).write_text(s)
++                        except (json.JSONDecodeError, KeyError):
++                            pass
++                    pos = f.tell()
++            os.kill(pid, 0)
++            time.sleep(0.5)
++        except ProcessLookupError:
++            break
++        except OSError:
++            break
++
++
++def cmd_parse_result(log_file):
++    """Parse stream JSON for the result event. Prints structured output.
++
++    Output format:
++        status=success
++        status=failure best=XX.X
++        status=error
++
++    Uses the `type: "result"` event's `subtype` and `result` fields,
++    NOT grep-based text matching on conversational output.
++    """
++    result_event = None
++    try:
++        for line in open(log_file):
++            try:
++                d = json.loads(line)
++                if d.get("type") == "result":
++                    result_event = d
++            except (json.JSONDecodeError, KeyError):
++                pass
++    except FileNotFoundError:
++        print("status=error")
++        sys.exit(1)
++
++    if result_event is None:
++        print("status=error")
++        sys.exit(1)
++
++    subtype = result_event.get("subtype", "")
++    result_text = result_event.get("result", "")
++    is_error = result_event.get("is_error", False)
++
++    if is_error or subtype == "error":
++        print("status=error")
++        sys.exit(0)
++
++    # Check the result text for SUCCESS/FAILURE markers
++    # The result field contains the last assistant message text
++    if re.search(r"\bSUCCESS\b", result_text):
++        print("status=success")
++    elif re.search(r"\bFAILURE\b", result_text):
++        best = "?"
++        m = re.search(r"best=([0-9.]+)", result_text)
++        if m:
++            best = m.group(1)
++        print(f"status=failure best={best}")
++    else:
++        # Subtype from the result event itself
++        if subtype == "success":
++            print("status=success")
++        else:
++            print(f"status=failure best=?")
++
++
++def cmd_token_usage(log_file):
++    """Sum token usage across all assistant messages in stream JSON."""
++    input_t = output_t = cache_create = cache_read = 0
++    try:
++        for line in open(log_file):
++            try:
++                d = json.loads(line)
++                if d.get("type") == "assistant":
++                    u = d.get("message", {}).get("usage", {})
++                    input_t += u.get("input_tokens", 0)
++                    output_t += u.get("output_tokens", 0)
++                    cache_create += u.get("cache_creation_input_tokens", 0)
++                    cache_read += u.get("cache_read_input_tokens", 0)
++            except (json.JSONDecodeError, KeyError):
++                pass
++    except FileNotFoundError:
++        print("tokens=unknown")
++        return
++
++    total = input_t + output_t + cache_create + cache_read
++
++    def fmt(n):
++        return f"{n / 1000:.1f}k" if n >= 1000 else str(n)
++
++    print(
++        f"total={fmt(total)} in={fmt(input_t)} out={fmt(output_t)} "
++        f"cache_create={fmt(cache_create)} cache_read={fmt(cache_read)}"
++    )
++
++
++def cmd_extract_log(stream_log, output_log):
++    """Extract readable log from stream JSON."""
++    try:
++        with open(output_log, "w") as out:
++            for line in open(stream_log):
++                try:
++                    d = json.loads(line)
++                    if d.get("type") == "assistant":
++                        for c in d.get("message", {}).get("content", []):
++                            if c.get("type") == "text":
++                                out.write(c["text"] + "\n")
++                            elif c.get("type") == "tool_use":
++                                v = list(c["input"].values())
++                                out.write(
++                                    f">> {c['name']}({str(v[0])[:80] if v else ''})\n"
++                                )
++                except (json.JSONDecodeError, KeyError):
++                    pass
++    except FileNotFoundError:
++        pass
++
++
++def cmd_filter_stubs(excluded_json, branch_funcs_str, progress_file, batch_size="1"):
++    """Filter stubs from stdin JSON, remove excluded/tried/branched.
++
++    Reads stubs JSON array from stdin.
++    If batch_size > 1, picks up to that many small functions from the same file.
++    Prints JSON array of targets.
++    """
++    batch_size = int(batch_size)
++    stubs = json.load(sys.stdin)
++    excluded = set(x.lower() for x in json.loads(excluded_json))
++
++    progress = []
++    if os.path.exists(progress_file) and os.path.getsize(progress_file) > 0:
++        with open(progress_file) as f:
++            progress = json.load(f)
++    already_tried = set(e["name"] for e in progress)
++
++    branch_funcs = set(
++        line for line in branch_funcs_str.strip().splitlines() if line
++    )
++
++    targets = [
++        s
++        for s in stubs
++        if s["name"].lower() not in excluded
++        and s["name"] not in already_tried
++        and s["name"] not in branch_funcs
++        and s["size"] > 0
++    ]
++    targets.sort(key=lambda s: s["size"])
++
++    if batch_size <= 1 or not targets:
++        print(json.dumps(targets[:1]))
++        return
++
++    # Batch: pick up to batch_size small functions from the same file as the smallest
++    first = targets[0]
++    same_file = [s for s in targets if s["file"] == first["file"]]
++    # Only batch functions that are small (< 200 bytes)
++    batch = [s for s in same_file if s["size"] < 200][:batch_size]
++    if not batch:
++        batch = [first]
++    print(json.dumps(batch))
++
++
++def cmd_trim_context(c_file, *func_names):
++    """Print trimmed source context: stubs + nearby implemented functions for reference.
++
++    Shows each stub with surrounding context, plus up to 3 nearby implemented
++    functions as style examples. Much smaller than dumping the entire file.
++    """
++    try:
++        lines = Path(c_file).read_text().splitlines()
++    except FileNotFoundError:
++        print("(file not found)")
++        return
++
++    total = len(lines)
++    func_set = set(func_names)
++    include = set()
++
++    # Find stub locations and include ±5 lines around each
++    for i, line in enumerate(lines):
++        m = re.match(r"^/// #(\w+)\s*$", line)
++        if m and m.group(1) in func_set:
++            for j in range(max(0, i - 5), min(total, i + 6)):
++                include.add(j)
++
++    # Find implemented functions near the stubs as style examples
++    # Look for function definitions (type + name + open paren at start of line)
++    func_defs = []
++    for i, line in enumerate(lines):
++        if re.match(r"^\w[\w\s\*]*\w+\s*\(", line) and "{" in "\n".join(lines[i:i+3]):
++            # Find end of function (matching closing brace)
++            depth = 0
++            end = i
++            for j in range(i, min(total, i + 200)):
++                depth += lines[j].count("{") - lines[j].count("}")
++                if depth <= 0 and j > i:
++                    end = j
++                    break
++            func_defs.append((i, end))
++
++    # Pick up to 3 implemented functions closest to any stub
++    stub_lines = []
++    for i, line in enumerate(lines):
++        m = re.match(r"^/// #(\w+)\s*$", line)
++        if m and m.group(1) in func_set:
++            stub_lines.append(i)
++
++    if stub_lines and func_defs:
++        def dist_to_stubs(fd):
++            return min(abs(fd[0] - s) for s in stub_lines)
++        nearby = sorted(func_defs, key=dist_to_stubs)[:3]
++        for start, end in nearby:
++            for j in range(start, min(total, end + 1)):
++                include.add(j)
++
++    # Always include file header (includes, typedefs) — first 40 lines
++    for j in range(min(40, total)):
++        include.add(j)
++
++    # Print with ellipsis for gaps
++    sorted_lines = sorted(include)
++    prev = -2
++    for i in sorted_lines:
++        if i > prev + 1:
++            print(f"... (lines {prev + 2}-{i} omitted)")
++        print(f"{i + 1:4d}: {lines[i]}")
++        prev = i
++    if prev < total - 1:
++        print(f"... (lines {prev + 2}-{total} omitted)")
++
++
++def cmd_extract_asm(asm_file, func_name):
++    """Extract a function's assembly from a .s file."""
++    try:
++        text = Path(asm_file).read_text()
++    except FileNotFoundError:
++        print("(asm file not found)")
++        return
++
++    # Try .fn/.endfn format first
++    pattern = rf"(\.fn {re.escape(func_name)}.*?\.endfn {re.escape(func_name)})"
++    m = re.search(pattern, text, re.DOTALL)
++    if m:
++        print(m.group(1))
++        return
++
++    # Fallback: glabel to next glabel
++    pattern = rf"(glabel {re.escape(func_name)}\b.*?)(?=\nglabel |\Z)"
++    m = re.search(pattern, text, re.DOTALL)
++    if m:
++        print(m.group(1))
++        return
++
++    print("(function not found in asm)")
++
++
++def cmd_cutoff_epoch(hour_str):
++    """Print cutoff epoch timestamp for given hour (handles midnight wrap)."""
++    hour = int(hour_str)
++    now = datetime.now()
++    cutoff = now.replace(hour=hour, minute=0, second=0, microsecond=0)
++    if cutoff <= now:
++        cutoff += timedelta(days=1)
++    print(int(cutoff.timestamp()))
++
++
++def cmd_progress_save(progress_file, func_name, status):
++    """Append an entry to the progress JSON file."""
++    data = []
++    if os.path.exists(progress_file):
++        with open(progress_file) as f:
++            data = json.load(f)
++    data.append(
++        {"name": func_name, "status": status, "time": time.strftime("%H:%M:%S")}
++    )
++    with open(progress_file, "w") as f:
++        json.dump(data, f, indent=2)
++
++
++def cmd_progress_check(progress_file, func_name):
++    """Exit 0 if function was already tried (success or failure), else exit 1."""
++    if not os.path.exists(progress_file):
++        sys.exit(1)
++    with open(progress_file) as f:
++        entries = json.load(f)
++    if any(
++        e["name"] == func_name and e["status"] in ("success", "failure")
++        for e in entries
++    ):
++        sys.exit(0)
++    sys.exit(1)
++
++
++def cmd_parse_rate_limit(log_file, backoff_str):
++    """Parse rate limit reset time from log. Prints seconds to wait."""
++    backoff = int(backoff_str)
++    try:
++        text = Path(log_file).read_text()
++    except FileNotFoundError:
++        print(backoff)
++        return
++
++    m = re.search(r"resets (\d+)(am|pm)", text, re.I)
++    if m:
++        hour = int(m.group(1))
++        if m.group(2).lower() == "pm" and hour != 12:
++            hour += 12
++        elif m.group(2).lower() == "am" and hour == 12:
++            hour = 0
++        now = datetime.now()
++        reset = now.replace(hour=hour, minute=1, second=0, microsecond=0)
++        if reset <= now:
++            reset += timedelta(days=1)
++        wait = int((reset - now).total_seconds())
++        print(max(60, min(wait, 7200)))
++    else:
++        print(backoff)
++
++
++SUBCOMMANDS = {
++    "ninja-progress": (cmd_ninja_progress, 0),
++    "stream-monitor": (cmd_stream_monitor, 2),  # optional 3rd arg: done_flag
++    "parse-result": (cmd_parse_result, 1),
++    "token-usage": (cmd_token_usage, 1),
++    "extract-log": (cmd_extract_log, 2),
++    "filter-stubs": (cmd_filter_stubs, 3),
++    "trim-context": (cmd_trim_context, 1),  # additional args: func names
++    "extract-asm": (cmd_extract_asm, 2),
++    "cutoff-epoch": (cmd_cutoff_epoch, 1),
++    "progress-save": (cmd_progress_save, 3),
++    "progress-check": (cmd_progress_check, 2),
++    "parse-rate-limit": (cmd_parse_rate_limit, 2),
++}
++
++
++def main():
++    if len(sys.argv) < 2 or sys.argv[1] not in SUBCOMMANDS:
++        print(f"Usage: {sys.argv[0]} <subcommand> [args...]", file=sys.stderr)
++        print(f"Subcommands: {', '.join(SUBCOMMANDS)}", file=sys.stderr)
++        sys.exit(1)
++
++    cmd_name = sys.argv[1]
++    func, nargs = SUBCOMMANDS[cmd_name]
++    args = sys.argv[2:]
++
++    if len(args) < nargs:
++        print(f"Error: {cmd_name} requires {nargs} arguments, got {len(args)}", file=sys.stderr)
++        sys.exit(1)
++
++    func(*args)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/scripts/decomp_overnight.sh b/scripts/decomp_overnight.sh
+new file mode 100755
+index 0000000000..336d4be206
+--- /dev/null
++++ b/scripts/decomp_overnight.sh
+@@ -0,0 +1,610 @@
++#!/bin/bash
++# Overnight autonomous decompilation runner.
++#
++# Finds undecompiled function stubs, checks GitHub for conflicts,
++# then spawns Claude Code sessions to decompile each one.
++# Each function gets its own worktree branch and PR.
++#
++# Usage:
++#   ./scripts/decomp_overnight.sh                    # scan default files
++#   ./scripts/decomp_overnight.sh src/melee/ft/*.c   # scan specific files
++#   MODEL=sonnet ./scripts/decomp_overnight.sh                  # use a different model
++#   CONTINUOUS=true CUTOFF_HOUR=8 ./scripts/decomp_overnight.sh # loop until 8 AM
++#
++# Prerequisites:
++#   - `claude` CLI authenticated
++#   - `gh` CLI authenticated
++#   - `ninja` builds successfully on current master
++#   - Wine Crossover installed (macOS)
++#   - m2c installed: pip install "m2c @ git+https://github.com/matt-kempster/m2c.git"
++
++set -euo pipefail
++
++CHILD_PIDS=()
++track_pid() { CHILD_PIDS+=("$1"); }
++kill_children() {
++    for pid in "${CHILD_PIDS[@]+"${CHILD_PIDS[@]}"}"; do
++        kill "$pid" 2>/dev/null || true
++        pkill -P "$pid" 2>/dev/null || true
++    done
++    CHILD_PIDS=()
++}
++cleanup() {
++    trap - INT TERM EXIT
++    kill_children
++    pkill -P $$ 2>/dev/null || true
++    # Wait for killed children to actually exit
++    wait 2>/dev/null || true
++    exit 1
++}
++trap cleanup INT TERM EXIT
++
++REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
++cd "$REPO_ROOT"
++HELPERS="$REPO_ROOT/scripts/decomp_helpers.py"
++
++LOG_DIR="$REPO_ROOT/scripts/logs"
++mkdir -p "$LOG_DIR"
++
++TIMESTAMP=$(date +%Y%m%d_%H%M%S)
++MAIN_LOG="$LOG_DIR/overnight_$TIMESTAMP.log"
++
++REPO="doldecomp/melee"
++MODEL=${MODEL:-opus}
++# Set to "all" to scan all files with stubs, or pass files as args
++SCAN_MODE=${SCAN_MODE:-default}
++CONTINUOUS=${CONTINUOUS:-false}
++CUTOFF_HOUR=${CUTOFF_HOUR:-8}
++AUTO_PUSH=${AUTO_PUSH:-false}
++BATCH_SIZE=${BATCH_SIZE:-5}
++PROGRESS_FILE="$LOG_DIR/progress_$(date +%Y%m%d).json"
++
++log() {
++    echo "[$(date '+%H:%M:%S')] $*" | tee -a "$MAIN_LOG"
++}
++
++# Abort if worktree is dirty (instead of the old git stash approach)
++check_worktree_clean() {
++    if ! git diff --quiet HEAD 2>/dev/null; then
++        log "ERROR: Working tree is dirty. Commit or stash changes before running."
++        log "  (This script no longer auto-stashes to avoid reverting its own edits.)"
++        exit 1
++    fi
++}
++
++CUTOFF_EPOCH=$(python3 "$HELPERS" cutoff-epoch "$CUTOFF_HOUR")
++
++past_cutoff() {
++    [ "$(date +%s)" -ge "$CUTOFF_EPOCH" ]
++}
++
++# Resolve OAuth token (same logic as statusline.sh)
++get_oauth_token() {
++    if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
++        echo "${CLAUDE_CODE_OAUTH_TOKEN:-}"
++        return 0
++    fi
++    if command -v security >/dev/null 2>&1; then
++        local blob
++        blob=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
++        if [ -n "$blob" ]; then
++            local token
++            token=$(echo "$blob" | jq -r '.claudeAiOauth.accessToken // empty' 2>/dev/null)
++            if [ -n "$token" ] && [ "$token" != "null" ]; then
++                echo "$token"
++                return 0
++            fi
++        fi
++    fi
++    local creds_file="${HOME}/.claude/.credentials.json"
++    if [ -f "$creds_file" ]; then
++        local token
++        token=$(jq -r '.claudeAiOauth.accessToken // empty' "$creds_file" 2>/dev/null)
++        if [ -n "$token" ] && [ "$token" != "null" ]; then
++            echo "$token"
++            return 0
++        fi
++    fi
++    echo ""
++}
++
++# Fetch and log usage from the OAuth API. Sets USAGE_WEEKLY_PCT.
++USAGE_WEEKLY_PCT=0
++check_usage() {
++    local token
++    token=$(get_oauth_token)
++    if [ -z "$token" ] || [ "$token" = "null" ]; then
++        log "  [usage] Could not resolve OAuth token"
++        return
++    fi
++    local response
++    response=$(curl -s --max-time 5 \
++        -H "Accept: application/json" \
++        -H "Content-Type: application/json" \
++        -H "Authorization: Bearer $token" \
++        -H "anthropic-beta: oauth-2025-04-20" \
++        -H "User-Agent: claude-code/2.1.34" \
++        "https://api.anthropic.com/api/oauth/usage" 2>/dev/null)
++    if [ -z "$response" ] || ! echo "$response" | jq -e '.five_hour' >/dev/null 2>&1; then
++        log "  [usage] Failed to fetch usage data"
++        return
++    fi
++    local five_pct seven_pct five_reset seven_reset
++    five_pct=$(echo "$response" | jq -r '.five_hour.utilization // 0' | awk '{printf "%.0f", $1}')
++    seven_pct=$(echo "$response" | jq -r '.seven_day.utilization // 0' | awk '{printf "%.0f", $1}')
++    five_reset=$(echo "$response" | jq -r '.five_hour.resets_at // "?"')
++    seven_reset=$(echo "$response" | jq -r '.seven_day.resets_at // "?"')
++    USAGE_WEEKLY_PCT=$seven_pct
++    log "  [usage] current: ${five_pct}% (resets ${five_reset}) | weekly: ${seven_pct}% (resets ${seven_reset})"
++}
++
++progress_save() {
++    python3 "$HELPERS" progress-save "$PROGRESS_FILE" "$1" "$2"
++}
++
++progress_already_tried() {
++    [ -f "$PROGRESS_FILE" ] && python3 "$HELPERS" progress-check "$PROGRESS_FILE" "$1" 2>/dev/null
++}
++
++cleanup_worktree() {
++    local branch_name="$1"
++    local wt_path
++    wt_path=$(git worktree list --porcelain 2>/dev/null | grep "$branch_name" | head -1 | sed 's/worktree //')
++    if [ -n "$wt_path" ] && [ -d "$wt_path" ]; then
++        git worktree remove "$wt_path" --force 2>/dev/null || true
++    fi
++}
++
++cleanup_stale_worktrees() {
++    log "Cleaning up stale worktrees..."
++    for wt in $(git worktree list --porcelain 2>/dev/null | grep '^worktree ' | sed 's/worktree //' | grep -v "^$REPO_ROOT$"); do
++        if [ ! -d "$wt" ]; then
++            continue
++        fi
++        wt_branch=$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
++        if [[ "$wt_branch" == decomp-* ]] || [[ "$wt_branch" == worktree-decomp-* ]]; then
++            ahead=$(git rev-list --count master.."$wt_branch" 2>/dev/null || echo 0)
++            if [ "$ahead" -eq 0 ]; then
++                log "  Removing stale worktree: $wt ($wt_branch)"
++                git worktree remove "$wt" --force 2>/dev/null || true
++            else
++                log "  Keeping worktree with commits: $wt ($wt_branch, $ahead ahead)"
++            fi
++        fi
++    done
++    git worktree prune 2>/dev/null || true
++}
++
++# Collect source files to scan
++if [ $# -gt 0 ]; then
++    SOURCE_FILES=("$@")
++elif [ "$SCAN_MODE" = "all" ]; then
++    SOURCE_FILES=()
++    while IFS= read -r f; do SOURCE_FILES+=("$f"); done < <(grep -rl '/// #' src/melee/ --include='*.c' 2>/dev/null)
++else
++    SOURCE_FILES=(src/melee/ft/chara/ftCommon/ftCo_Attack100.c)
++fi
++
++log "=== Overnight Decomp Runner ==="
++log "Scanning ${#SOURCE_FILES[@]} files"
++log "Model: $MODEL"
++if [ "$CONTINUOUS" = "true" ]; then
++    log "Continuous mode: ON (cutoff: $(date -r "$CUTOFF_EPOCH" '+%H:%M' 2>/dev/null || date -d "@$CUTOFF_EPOCH" '+%H:%M' 2>/dev/null || echo "$CUTOFF_HOUR:00"))"
++fi
++
++check_worktree_clean
++cleanup_stale_worktrees
++
++# Seed build cache if already built — avoids unnecessary full rebuild on first iteration
++if [ -f "$REPO_ROOT/build.ninja" ]; then
++    NINJA_DRY=$(ninja -n 2>&1 || true)
++    if echo "$NINJA_DRY" | grep -q "no work to do"; then
++        LAST_BUILT_HEAD=$(git rev-parse HEAD)
++        log "Build already clean, seeded cache at $LAST_BUILT_HEAD"
++    fi
++fi
++
++TOTAL_SUCCESSES=0
++TOTAL_FAILURES=0
++
++while true; do
++    if past_cutoff; then
++        log "Past cutoff time, stopping."
++        break
++    fi
++
++    # 1. Ensure we're on a clean master, synced with upstream
++    log "Updating master..."
++    git checkout master 2>/dev/null || git checkout main 2>/dev/null
++    git pull --ff-only 2>/dev/null || true
++    if git remote get-url upstream >/dev/null 2>&1; then
++        log "Fetching upstream..."
++        git fetch upstream 2>/dev/null || true
++        git rebase upstream/master 2>&1 | tee -a "$MAIN_LOG" || {
++            log "WARNING: upstream rebase failed, continuing with current master"
++            git rebase --abort 2>/dev/null || true
++        }
++    fi
++
++    # 2. Build to make sure master is clean
++    log "Building master to verify clean state..."
++    CURRENT_HEAD=$(git rev-parse HEAD)
++    if [ "$CURRENT_HEAD" != "${LAST_BUILT_HEAD:-}" ]; then
++        # Check if any source files changed (skip rebuild for script-only changes)
++        SOURCE_CHANGED=true
++        if [ -n "${LAST_BUILT_HEAD:-}" ]; then
++            if ! git diff --name-only "$LAST_BUILT_HEAD" "$CURRENT_HEAD" | grep -qE '\.(c|h|cpp|hpp)$'; then
++                SOURCE_CHANGED=false
++            fi
++        fi
++        if [ "$SOURCE_CHANGED" = "true" ]; then
++            log "  Running configure.py..."
++            python3 configure.py --wrapper wine 2>&1 >> "$MAIN_LOG"
++            log "  Running ninja..."
++            set +o pipefail
++            ninja 2>&1 | python3 -u "$HELPERS" ninja-progress
++            NINJA_EXIT=${PIPESTATUS[0]}
++            set -o pipefail
++            if [ "$NINJA_EXIT" -ne 0 ]; then
++                log "ERROR: Master doesn't build clean. Aborting."; exit 1
++            fi
++            log "Master builds OK"
++        else
++            log "  Only non-source files changed, skipping rebuild"
++        fi
++        LAST_BUILT_HEAD=$CURRENT_HEAD
++    else
++        log "Master unchanged, skipping rebuild"
++    fi
++
++    # 3. Find stubs
++    log "Finding stubs..."
++    STUBS_JSON=$(python3 scripts/find_stubs.py "${SOURCE_FILES[@]}") || {
++        log "ERROR: find_stubs.py failed (exit code $?)"
++        log "  Output: $STUBS_JSON"
++        exit 1
++    }
++    STUB_COUNT=$(echo "$STUBS_JSON" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))")
++    log "Found $STUB_COUNT stubs total"
++
++    # 4. Check GitHub for open PRs and issues to avoid conflicts
++    log "Checking GitHub for existing work..."
++    EXCLUDED=$(python3 -c "
++import json, re, subprocess
++try:
++    prs = json.loads(subprocess.run(
++        ['gh', 'pr', 'list', '--repo', '$REPO', '--state', 'open', '--limit', '100', '--json', 'title,body'],
++        capture_output=True, text=True).stdout or '[]')
++    issues = json.loads(subprocess.run(
++        ['gh', 'issue', 'list', '--repo', '$REPO', '--state', 'open', '--limit', '100', '--json', 'title,body'],
++        capture_output=True, text=True).stdout or '[]')
++except Exception:
++    prs, issues = [], []
++names = set()
++for item in prs + issues:
++    text = (item.get('title','') + ' ' + item.get('body','')).lower()
++    for m in re.finditer(r'\b(fn_[0-9a-f]{6,}|ft[A-Z]\w*_\w+|gr\w+_\w+|it_\w+|gm\w+_\w+)\b', text, re.I):
++        names.add(m.group(1).lower())
++print(json.dumps(list(names)))
++")
++    log "Excluded $(echo "$EXCLUDED" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))") functions from open PRs/issues"
++
++    # Collect functions that already have decomp branches (with or without worktree- prefix)
++    BRANCH_FUNCS=$(git branch --list 'decomp-*' 'worktree-decomp-*' 2>/dev/null | sed 's/^[* ]*//' | sed 's/^worktree-//' | sed 's/^decomp-//' | sort -u)
++
++    # 5. Filter stubs: remove excluded, enforce size limit, exclude already-attempted
++    TARGETS=$(echo "$STUBS_JSON" | python3 "$HELPERS" filter-stubs "$EXCLUDED" "$BRANCH_FUNCS" "$PROGRESS_FILE" "$BATCH_SIZE")
++
++    # 6. Pick the next target(s) to decompile
++    BATCH=$(echo "$TARGETS" | python3 -c "
++import json, sys
++targets = json.load(sys.stdin)
++if not targets:
++    sys.exit(1)
++print(json.dumps(targets))
++" 2>/dev/null) || {
++        log "No targets to decompile."
++        break
++    }
++
++    BATCH_COUNT=$(echo "$BATCH" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))")
++    FIRST_NAME=$(echo "$BATCH" | python3 -c "import json,sys; print(json.load(sys.stdin)[0]['name'])")
++    FUNC_FILE=$(echo "$BATCH" | python3 -c "import json,sys; print(json.load(sys.stdin)[0]['file'])")
++
++    # Derive paths from the file
++    ASM_FILE="build/GALE01/asm/${FUNC_FILE#src/}"
++    ASM_FILE="${ASM_FILE%.c}.s"
++    OBJ_FILE="build/GALE01/${FUNC_FILE%.c}.o"
++    COMMIT_PREFIX=$(echo "${FUNC_FILE#src/melee/}" | sed 's|/|_|g' | sed 's|\.c||')
++    HEADER_FILE="${FUNC_FILE%.c}.h"
++
++    BRANCH_NAME="decomp-$FIRST_NAME"
++    FUNC_LOG="$LOG_DIR/${FIRST_NAME}_$TIMESTAMP.log"
++
++    # Build batch summary for logging
++    BATCH_NAMES=$(echo "$BATCH" | python3 -c "import json,sys; [print(f['name'],f['size']) for f in json.load(sys.stdin)]")
++    log ""
++    if [ "$BATCH_COUNT" -gt 1 ]; then
++        log "━━━ Batch of $BATCH_COUNT functions from $(basename "$FUNC_FILE") ━━━"
++    fi
++    echo "$BATCH_NAMES" | while read -r bname bsize; do
++        log "  $bname (${bsize} bytes)"
++    done
++
++    # Check if branch already exists (local or remote)
++    if git rev-parse --verify "$BRANCH_NAME" >/dev/null 2>&1 || \
++       git ls-remote --heads origin "$BRANCH_NAME" 2>/dev/null | grep -q "$BRANCH_NAME"; then
++        log "  Branch $BRANCH_NAME already exists, skipping"
++        progress_save "$FIRST_NAME" "skipped"
++        continue
++    fi
++
++    # Build trimmed context (stubs + nearby examples) instead of full file
++    ALL_FUNC_NAMES=$(echo "$BATCH" | python3 -c "import json,sys; print(' '.join(f['name'] for f in json.load(sys.stdin)))")
++    CONTEXT_C=$(python3 "$HELPERS" trim-context "$FUNC_FILE" $ALL_FUNC_NAMES 2>/dev/null || cat "$FUNC_FILE" 2>/dev/null || echo "(file not found)")
++    CONTEXT_H=$(cat "$HEADER_FILE" 2>/dev/null || echo "(no header)")
++
++    # Build per-function context (asm + m2c for each target)
++    FUNC_SECTIONS=""
++    while IFS= read -r func_json; do
++        fname=$(echo "$func_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['name'])")
++        fsize=$(echo "$func_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['size'])")
++        fline=$(echo "$func_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['line'])")
++
++        func_asm=$(python3 "$HELPERS" extract-asm "$ASM_FILE" "$fname" 2>/dev/null || echo "(asm extraction failed)")
++        func_m2c=$(python3 -m m2c.main --target ppc-mwcc-c \
++            --context "$REPO_ROOT/build/ctx.c" \
++            --function "$fname" \
++            "$REPO_ROOT/$ASM_FILE" 2>/dev/null || echo "(m2c failed)")
++
++        FUNC_SECTIONS="${FUNC_SECTIONS}
++--- $fname ($fsize bytes, stub at line $fline) ---
++
++ASSEMBLY:
++$func_asm
++
++m2c DECOMPILATION:
++$func_m2c
++"
++    done < <(echo "$BATCH" | python3 -c "import json,sys; [print(json.dumps(f)) for f in json.load(sys.stdin)]")
++
++    # Build the list of all function names for the prompt
++    ALL_NAMES_LIST=$(echo "$BATCH" | python3 -c "
++import json, sys
++for f in json.load(sys.stdin):
++    print(f'  - {f[\"name\"]} ({f[\"size\"]} bytes, stub marker /// #{f[\"name\"]} at line {f[\"line\"]})')
++")
++
++    PROMPT="You are autonomously decompiling functions for the Melee decompilation project.
++You must work completely autonomously — no human will intervene.
++
++TARGETS (decompile ALL of these):
++$ALL_NAMES_LIST
++FILE: $FUNC_FILE
++OBJ: $OBJ_FILE
++
++=== SOURCE FILE (trimmed context with stubs and nearby examples) ===
++$CONTEXT_C
++
++=== HEADER FILE ($HEADER_FILE) ===
++$CONTEXT_H
++
++=== PER-FUNCTION ASSEMBLY AND m2c OUTPUT ===
++$FUNC_SECTIONS
++
++WORKFLOW:
++
++0. WORKTREE SETUP: You are in a git worktree. First, replace dirs with symlinks:
++   rm -rf orig build tools .venv
++   ln -s $REPO_ROOT/orig orig
++   ln -s $REPO_ROOT/build build
++   ln -s $REPO_ROOT/tools tools
++   ln -s $REPO_ROOT/.venv .venv
++   cp $REPO_ROOT/build.ninja build.ninja
++   cp $REPO_ROOT/objdiff.json objdiff.json 2>/dev/null || true
++   DO NOT run configure.py — it is already done. Just use ninja to compile after editing.
++
++1. FOR EACH FUNCTION, clean up the m2c output using patterns from the source context:
++   - Use gobj->user_data style (not GET_FIGHTER) when nearby functions do
++   - Replace hex motion state IDs with ftCo_MS_* enums — BUT VERIFY THE NUMERIC VALUE.
++     Count from ftCo_MS_DeadDown=0 in ftCommon/forward.h. A wrong enum is a guaranteed mismatch.
++   - Replace unk fields with named fields from ft/types.h
++   - Use the correct mv.co.UNION.field (check ftCommon/types.h)
++   - m2c \"&~1\" on a byte means clear LSB. In PPC bitfield order, LSB = x_b7 (NOT x_b0!)
++   - Check if PAD_STACK(8) is needed by comparing frame sizes in the asm
++
++2. IMPLEMENT: Replace EACH \"/// #FUNC_NAME\" stub marker with your code.
++   Update header declarations if they use UNK_RET/UNK_PARAMS.
++
++3. BUILD just the target object: ninja $OBJ_FILE 2>&1 | tail -10
++   Do NOT run a bare 'ninja' — it will rebuild everything due to worktree timestamps.
++   The build MUST succeed (ninja exit code 0).
++
++4. CHECK MATCH for each function (use absolute path to report.json since build/ is a symlink):
++   python3 -c \"import json; [print(fn) for u in json.load(open('$REPO_ROOT/build/GALE01/report.json'))['units'] for fn in u.get('functions',[]) if fn.get('name') in {$(echo "$BATCH" | python3 -c "import json,sys; print(','.join(repr(f['name']) for f in json.load(sys.stdin)))")}]\"
++
++5. IF NOT 100%: Compare compiled vs original bytes to find exact differences.
++   Use pyelftools to extract compiled bytes from $OBJ_FILE.
++   Compare instruction-by-instruction with the original asm.
++   Common fixes: wrong enum value, wrong bitfield bit, missing PAD_STACK, wrong inline usage.
++
++6. ITERATE up to 5 times per function. If still not 100%, revert ONLY that function's changes.
++
++7. FOR EACH FUNCTION AT 100% MATCH:
++   - Run: git clang-format
++   - Stage and commit EACH matched function separately:
++     git add $FUNC_FILE \${FUNC_FILE%.c}.h
++     git commit -m \"$COMMIT_PREFIX: decompile FUNC_NAME
++
++Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\"
++
++8. FOR FUNCTIONS NOT AT 100%: Revert their changes:
++   git checkout -- .
++
++9. OUTPUT on the very last line of your response, a summary like:
++   RESULTS: func1=SUCCESS func2=FAILURE(best=XX.X%) func3=SUCCESS"
++
++    check_usage
++
++    log "  Spawning Claude session..."
++    FUNC_STREAM_LOG="$LOG_DIR/${FIRST_NAME}_${TIMESTAMP}_stream.jsonl"
++
++    MAX_RETRIES=5
++    RETRY=0
++    BACKOFF=120  # start at 2 minutes
++    RATE_LIMITED=false
++
++    while true; do
++        set +e
++        log "  Claude session started..."
++
++        # Run claude in background so Ctrl+C reaches the script
++        DONE_FLAG=$(mktemp /tmp/decomp_done.XXXXXX)
++        rm -f "$DONE_FLAG"
++        env -u CLAUDECODE -u ANTHROPIC_API_KEY claude -p \
++            --model "$MODEL" \
++            --permission-mode bypassPermissions \
++            --verbose --output-format stream-json \
++            -w "$BRANCH_NAME" \
++            "$PROMPT" > "$FUNC_STREAM_LOG" 2>&1 &
++        CLAUDE_PID=$!
++        track_pid $CLAUDE_PID
++
++        # Stream live summaries while claude runs; writes done flag on result event
++        python3 -u "$HELPERS" stream-monitor "$FUNC_STREAM_LOG" "$CLAUDE_PID" "$DONE_FLAG" &
++        MONITOR_PID=$!
++        track_pid $MONITOR_PID
++
++        # Wait for claude, but kill it if result event arrives and it keeps running
++        while kill -0 $CLAUDE_PID 2>/dev/null; do
++            if [ -f "$DONE_FLAG" ]; then
++                log "  Result received, giving Claude 10s to finish..."
++                sleep 10
++                if kill -0 $CLAUDE_PID 2>/dev/null; then
++                    log "  Killing Claude (still running after result)"
++                    kill $CLAUDE_PID 2>/dev/null
++                    pkill -P $CLAUDE_PID 2>/dev/null
++                fi
++                break
++            fi
++            sleep 1
++        done
++        wait $CLAUDE_PID 2>/dev/null
++        CLAUDE_EXIT=$?
++        kill $MONITOR_PID 2>/dev/null; wait $MONITOR_PID 2>/dev/null
++        rm -f "$DONE_FLAG"
++        set -e
++        log "  Claude session exited (code: $CLAUDE_EXIT)"
++
++        # Check for rate limit in output (exclude normal status:"allowed" events)
++        if grep -v '"status":"allowed"' "$FUNC_STREAM_LOG" 2>/dev/null | grep -qi "hit your limit\|rate.limit\|resets [0-9]"; then
++            RETRY=$((RETRY + 1))
++            if [ "$RETRY" -gt "$MAX_RETRIES" ]; then
++                log "  Rate limited $MAX_RETRIES times, giving up"
++                RATE_LIMITED=true
++                break
++            fi
++            RESET_WAIT=$(python3 "$HELPERS" parse-rate-limit "$FUNC_STREAM_LOG" "$BACKOFF" 2>/dev/null || echo "$BACKOFF")
++            log "  Rate limited (attempt $RETRY/$MAX_RETRIES). Sleeping ${RESET_WAIT}s until reset..."
++            sleep "$RESET_WAIT"
++            BACKOFF=$((BACKOFF * 2))
++            # Clean up failed worktree before retry
++            cleanup_worktree "$BRANCH_NAME"
++            git branch -D "$BRANCH_NAME" 2>/dev/null || true
++            git branch -D "worktree-$BRANCH_NAME" 2>/dev/null || true
++            continue
++        fi
++        break
++    done
++
++    # Extract readable log from stream
++    python3 "$HELPERS" extract-log "$FUNC_STREAM_LOG" "$FUNC_LOG" 2>/dev/null || true
++
++    # Sum token usage
++    FUNC_TOKENS=$(python3 "$HELPERS" token-usage "$FUNC_STREAM_LOG" 2>/dev/null || echo "tokens=unknown")
++    log "  [tokens] $FUNC_TOKENS"
++
++    # Skip result parsing if we were rate limited — don't save progress so it's retried
++    if [ "$RATE_LIMITED" = "true" ]; then
++        log "  Skipped (rate limited), will retry next run"
++        TOTAL_FAILURES=$((TOTAL_FAILURES + 1))
++        continue
++    fi
++
++    # Parse result from stream JSON result event
++    RESULT_LINE=$(python3 "$HELPERS" parse-result "$FUNC_STREAM_LOG" 2>/dev/null || echo "status=error")
++    RESULT_STATUS=$(echo "$RESULT_LINE" | sed -n 's/^status=//p' | head -1)
++
++    if [ "$RESULT_STATUS" = "success" ]; then
++        log "  ✓ SUCCESS!"
++
++        # Find the worktree branch (claude --worktree prefixes with "worktree-")
++        WT_BRANCH=$(git branch --list "*${BRANCH_NAME}*" 2>/dev/null | grep -v '^\*' | head -1 | tr -d ' ' || echo "$BRANCH_NAME")
++        if [ -n "$WT_BRANCH" ] && [ "$AUTO_PUSH" = "true" ]; then
++            log "  Pushing branch $WT_BRANCH..."
++            git push -u origin "$WT_BRANCH" 2>&1 | tail -2 | tee -a "$MAIN_LOG"
++
++            # Derive PR title from file path
++            FILE_PREFIX=$(echo "${FUNC_FILE#src/melee/}" | sed 's|/.*||')
++            if [ "$BATCH_COUNT" -gt 1 ]; then
++                PR_TITLE="$FILE_PREFIX: decompile $BATCH_COUNT functions"
++                PR_FUNCS=$(echo "$BATCH" | python3 -c "import json,sys; print('\n'.join(f'- \`{f[\"name\"]}\` ({f[\"size\"]} bytes)' for f in json.load(sys.stdin)))")
++            else
++                PR_TITLE="$FILE_PREFIX: decompile $FIRST_NAME"
++                PR_FUNCS="- Decompile \`$FIRST_NAME\` — 100% match"
++            fi
++
++            log "  Creating PR..."
++            PR_URL=$(gh pr create \
++                --repo "$REPO" \
++                --head "$WT_BRANCH" \
++                --title "$PR_TITLE" \
++                --body "$(cat <<EOF
++## Summary
++$PR_FUNCS
++
++## Verification
++- \`main.dol: OK\` (SHA1 verified)
++- \`fuzzy_match_percent: 100.0\`
++
++🤖 Generated with [Claude Code](https://claude.ai/claude-code)
++EOF
++)" 2>&1) || PR_URL="(PR creation failed)"
++            log "  PR: $PR_URL"
++        elif [ -n "$WT_BRANCH" ]; then
++            log "  Branch ready: $WT_BRANCH (push with: git push -u origin $WT_BRANCH)"
++        fi
++        # Clean up worktree (branch with commit persists)
++        cleanup_worktree "$BRANCH_NAME"
++        TOTAL_SUCCESSES=$((TOTAL_SUCCESSES + BATCH_COUNT))
++        echo "$BATCH" | python3 -c "import json,sys; [None for f in json.load(sys.stdin)]" 2>/dev/null  # validate
++        while IFS= read -r fname; do
++            progress_save "$fname" "success"
++        done < <(echo "$BATCH" | python3 -c "import json,sys; [print(f['name']) for f in json.load(sys.stdin)]")
++    else
++        BEST=$(echo "$RESULT_LINE" | sed -n 's/.*best=//p' || echo "?")
++        log "  ✗ FAILED (best: ${BEST}%)"
++        # Clean up worktree and branch
++        cleanup_worktree "$BRANCH_NAME"
++        git branch -D "$BRANCH_NAME" 2>/dev/null || true
++        TOTAL_FAILURES=$((TOTAL_FAILURES + BATCH_COUNT))
++        while IFS= read -r fname; do
++            progress_save "$fname" "failure"
++        done < <(echo "$BATCH" | python3 -c "import json,sys; [print(f['name']) for f in json.load(sys.stdin)]")
++    fi
++
++    log "  Log: $FUNC_LOG"
++
++    # Kill any lingering child processes before next iteration
++    kill_children
++
++    if [ "$CONTINUOUS" != "true" ]; then
++        break
++    fi
++done
++
++log ""
++log "━━━━━━━━━━━━━━━━━━━━━"
++log "TOTAL RESULTS: $TOTAL_SUCCESSES succeeded, $TOTAL_FAILURES failed"
++log "Progress file: $PROGRESS_FILE"
++log "Log dir: $LOG_DIR"
+diff --git a/scripts/find_all_stubs.sh b/scripts/find_all_stubs.sh
+new file mode 100755
+index 0000000000..bff9f15027
+--- /dev/null
++++ b/scripts/find_all_stubs.sh
+@@ -0,0 +1,16 @@
++#!/bin/bash
++# Find all C files with /// # stub markers and run find_stubs.py on them.
++# Outputs combined JSON sorted by size.
++
++REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
++cd "$REPO_ROOT"
++
++# Find all .c files containing stub markers
++FILES=$(grep -rl '/// #' src/melee/ --include='*.c' 2>/dev/null || true)
++
++if [ -z "$FILES" ]; then
++    echo "[]"
++    exit 0
++fi
++
++python3 scripts/find_stubs.py $FILES
+diff --git a/scripts/find_stubs.py b/scripts/find_stubs.py
+new file mode 100644
+index 0000000000..9824a57494
+--- /dev/null
++++ b/scripts/find_stubs.py
+@@ -0,0 +1,78 @@
++#!/usr/bin/env python3
++"""Find undecompiled function stubs in a C source file.
++
++Scans for `/// #function_name` markers where the next non-blank line
++is NOT the function definition (meaning it's still a stub).
++
++Outputs JSON array of {name, size, file, line} sorted by size ascending.
++"""
++
++import json
++import re
++import sys
++from pathlib import Path
++
++SYMBOLS_FILE = Path("config/GALE01/symbols.txt")
++
++
++def get_symbol_sizes():
++    """Parse symbols.txt to get function sizes."""
++    sizes = {}
++    for line in SYMBOLS_FILE.read_text().splitlines():
++        m = re.match(
++            r"(\w+)\s*=\s*\.text:0x[0-9A-Fa-f]+;\s*//\s*type:function\s+size:0x([0-9A-Fa-f]+)",
++            line,
++        )
++        if m:
++            sizes[m.group(1)] = int(m.group(2), 16)
++    return sizes
++
++
++def find_stubs(c_file):
++    """Find stub markers where no implementation follows."""
++    text = Path(c_file).read_text()
++    lines = text.splitlines()
++    stubs = []
++    for i, line in enumerate(lines):
++        m = re.match(r"^/// #(\w+)\s*$", line)
++        if not m:
++            continue
++        func_name = m.group(1)
++        # Check if function is defined (not just declared) anywhere in the file
++        # A definition looks like: `type func_name(` at the start of a line
++        defn_pattern = re.compile(
++            rf"^\w[\w\s\*]*\b{re.escape(func_name)}\s*\(", re.MULTILINE
++        )
++        has_impl = False
++        for m2 in defn_pattern.finditer(text):
++            line_no = text[:m2.start()].count("\n")
++            if line_no == i:
++                continue
++            # Verify it has { within next few lines (definition, not declaration)
++            snippet = "\n".join(lines[line_no : line_no + 3])
++            if "{" in snippet:
++                has_impl = True
++                break
++        if not has_impl:
++            stubs.append({"name": func_name, "line": i + 1, "file": str(c_file)})
++    return stubs
++
++
++def main():
++    if len(sys.argv) < 2:
++        print("Usage: find_stubs.py <file.c> [<file2.c> ...]", file=sys.stderr)
++        sys.exit(1)
++
++    sizes = get_symbol_sizes()
++    all_stubs = []
++    for f in sys.argv[1:]:
++        for stub in find_stubs(f):
++            stub["size"] = sizes.get(stub["name"], 0)
++            all_stubs.append(stub)
++
++    all_stubs.sort(key=lambda s: s["size"])
++    print(json.dumps(all_stubs, indent=2))
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/scripts/schedule_overnight.sh b/scripts/schedule_overnight.sh
+new file mode 100755
+index 0000000000..20225697f9
+--- /dev/null
++++ b/scripts/schedule_overnight.sh
+@@ -0,0 +1,111 @@
++#!/bin/bash
++# Set up or remove the overnight decomp schedule using launchd (macOS).
++#
++# Usage:
++#   ./scripts/schedule_overnight.sh install   # Schedule for 2 AM daily
++#   ./scripts/schedule_overnight.sh remove    # Remove schedule
++#   ./scripts/schedule_overnight.sh status    # Check if scheduled
++#   ./scripts/schedule_overnight.sh run       # Run immediately (foreground)
++
++set -euo pipefail
++
++REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
++LABEL="com.melee.decomp-overnight"
++PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
++SCRIPT="$REPO_ROOT/scripts/decomp_overnight.sh"
++
++case "${1:-help}" in
++    install)
++        # Default: 2 AM, scan all files, attempt up to 10 functions
++        HOUR=${HOUR:-2}
++        cat > "$PLIST" <<EOF
++<?xml version="1.0" encoding="UTF-8"?>
++<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
++<plist version="1.0">
++<dict>
++    <key>Label</key>
++    <string>$LABEL</string>
++    <key>ProgramArguments</key>
++    <array>
++        <string>/bin/bash</string>
++        <string>$SCRIPT</string>
++    </array>
++    <key>WorkingDirectory</key>
++    <string>$REPO_ROOT</string>
++    <key>StartCalendarInterval</key>
++    <dict>
++        <key>Hour</key>
++        <integer>$HOUR</integer>
++        <key>Minute</key>
++        <integer>0</integer>
++    </dict>
++    <key>EnvironmentVariables</key>
++    <dict>
++        <key>PATH</key>
++        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:$HOME/.local/bin:$HOME/miniconda3/bin</string>
++        <key>HOME</key>
++        <string>$HOME</string>
++        <key>SCAN_MODE</key>
++        <string>all</string>
++        <key>MAX_FUNCTIONS</key>
++        <string>10</string>
++        <key>MAX_SIZE</key>
++        <string>400</string>
++        <key>CONTINUOUS</key>
++        <string>true</string>
++        <key>CUTOFF_HOUR</key>
++        <string>8</string>
++    </dict>
++    <key>StandardOutPath</key>
++    <string>$REPO_ROOT/scripts/logs/launchd_stdout.log</string>
++    <key>StandardErrorPath</key>
++    <string>$REPO_ROOT/scripts/logs/launchd_stderr.log</string>
++</dict>
++</plist>
++EOF
++        launchctl load "$PLIST"
++        echo "Scheduled overnight decomp at ${HOUR}:00 AM daily"
++        echo "Plist: $PLIST"
++        echo "To change time: HOUR=3 $0 install"
++        ;;
++
++    remove)
++        if [ -f "$PLIST" ]; then
++            launchctl unload "$PLIST" 2>/dev/null || true
++            rm "$PLIST"
++            echo "Removed overnight schedule"
++        else
++            echo "Not currently scheduled"
++        fi
++        ;;
++
++    status)
++        if launchctl list | grep -q "$LABEL"; then
++            echo "Active: overnight decomp is scheduled"
++            echo "Plist: $PLIST"
++            launchctl list "$LABEL" 2>/dev/null || true
++        else
++            echo "Not scheduled"
++        fi
++        ;;
++
++    run)
++        echo "Running overnight decomp now (foreground)..."
++        export CONTINUOUS=${CONTINUOUS:-false}
++        export CUTOFF_HOUR=${CUTOFF_HOUR:-8}
++        exec "$SCRIPT"
++        ;;
++
++    *)
++        echo "Usage: $0 {install|remove|status|run}"
++        echo ""
++        echo "Environment variables:"
++        echo "  HOUR=2          Hour to run (24h, default: 2)"
++        echo "  MAX_FUNCTIONS=10 Max functions per run"
++        echo "  MAX_SIZE=400     Max function size in bytes"
++        echo "  MAX_BUDGET=5.00  Max API spend per function"
++        echo "  SCAN_MODE=all    Scan all files (default: ftCo_Attack100.c only)"
++        echo "  CONTINUOUS=true  Loop until cutoff hour (default: false)"
++        echo "  CUTOFF_HOUR=8    Stop after this hour, 24h (default: 8)"
++        ;;
++esac
+diff --git a/src/melee/it/itCommonItems.h b/src/melee/it/itCommonItems.h
+index 18593dab03..9dc18578b9 100644
+--- a/src/melee/it/itCommonItems.h
++++ b/src/melee/it/itCommonItems.h
+@@ -189,6 +189,8 @@ typedef struct itLugiaAttributes {
+     /* +08 */ f32 x8;
+     /* +0C */ f32 xC;
+     /* +10 */ f32 x10;
++    /* +14 */ f32 x14;
++    /* +18 */ f32 x18;
+ } itLugiaAttributes;
+ 
+ /// Box/Crate item attributes loaded from .dat file
+@@ -208,7 +210,7 @@ typedef struct itDosei_ItemVars {
+     s32 xDD4;
+     s32 xDD8;
+     f32 xDDC;
+-    s32 xDE0;
++    f32 xDE0;
+     Vec3 xDE4;
+     f32 xDF0;
+     f32 xDF4;
+@@ -516,6 +518,12 @@ typedef struct itTincle_ItemVars {
+     /* +5C ip+E30 */ f32 x5C;
+ } itTincle_ItemVars;
+ 
++typedef struct itTincleAttributes {
++    /* 0x00 */ u8 pad[0x44];
++    /* 0x44 */ f32 x44;
++    /* 0x48 */ f32 x48;
++} itTincleAttributes;
++
+ typedef struct {
+     /* ip+DD4 */ float xDD4;
+     /* ip+DD8 */ float xDD8;
+@@ -627,14 +635,24 @@ typedef struct itPokemonAttributes {
+ typedef struct {
+     s16 x0;
+     u8 padding[0xE34 - 0xDD8];
+-    s32 timer;
+-    int x64;
+-    int x68;
++    union {
++        s32 timer;
++        f32 timer_f;
++    };
++    union {
++        int x64;
++        f32 x64_f;
++    };
++    union {
++        int x68;
++        f32 x68_f;
++    };
+     int x6C;
+     union {
+         f32 xE44;
+         s32 xE44_s32;
+     };
++    s32 xE48;
+ } itPokemon_ItemVars;
+ 
+ typedef struct itHitodeman_ItemVars {
+@@ -1228,12 +1246,14 @@ typedef struct itWhiteBea_ItemVars {
+     /* +2C ip+E00 */ char pad_2C[0x10];
+     /* +3C ip+E10 */ s32 x3C;
+     /* +40 ip+E14 */ s32 x40;
++    /* +44 ip+E18 */ s32 x44;
+ } itWhiteBea_ItemVars;
+ 
+ typedef struct itWhiteBeaAttributes {
+     /* +0 */ s32* x0;
+     /* +4 */ f32 x4;
+-    /* +8 */ char pad_x8[0xC];
++    /* +8 */ char pad_x8[0x8];
++    /* +10 */ f32 x10;
+     /* +14 */ s16 x14;
+ } itWhiteBeaAttributes;
+ 
+diff --git a/src/melee/it/items/itdosei.c b/src/melee/it/items/itdosei.c
+index c3398791b8..5d5a480115 100644
+--- a/src/melee/it/items/itdosei.c
++++ b/src/melee/it/items/itdosei.c
+@@ -14,6 +14,8 @@
+ 
+ /* 282DE4 */ static void it_80282DE4(Item_GObj* gobj);
+ 
++extern s32 it_803F56B8[];
++
+ /// #it_3F14_Logic7_Spawned
+ 
+ void fn_80281390(Item_GObj* gobj)
+@@ -211,7 +213,26 @@ void itDosei_UnkMotion4_Phys(Item_GObj* gobj) {}
+ 
+ /// #it_3F14_Logic7_Dropped
+ 
+-/// #it_3F14_Logic7_Thrown
++void it_3F14_Logic7_Thrown(Item_GObj* gobj)
++{
++    Item* ip = gobj->user_data;
++    HSD_JObj* jobj = gobj->hsd_obj;
++    itDoseiAttributes* attr = ip->xC4_article_data->x4_specialAttributes;
++
++    if (ip->msid != 5) {
++        it_8026B390(gobj);
++        HSD_JObjClearFlagsAll(HSD_JObjGetChild(jobj), JOBJ_HIDDEN);
++        Item_80268E5C(gobj, 5, 6);
++        {
++            f32 speed = attr->unk0;
++            ip->x5D0_animFrameSpeed = speed;
++            lb_8000BA0C(jobj, speed);
++        }
++    } else {
++        Item_80268E5C(gobj, 5, 6);
++    }
++    it_80274484(gobj, jobj, ip->xDD4_itemVar.dosei.xDE0);
++}
+ 
+ bool itDosei_UnkMotion5_Anim(Item_GObj* gobj)
+ {
+@@ -386,7 +407,16 @@ bool itDosei_UnkMotion11_Coll(Item_GObj* gobj)
+     return false;
+ }
+ 
+-/// #it_3F14_Logic7_DmgDealt
++bool it_3F14_Logic7_DmgDealt(Item_GObj* gobj)
++{
++    Item* ip = gobj->user_data;
++    Item_8026AF0C(ip, it_803F56B8[HSD_Randi(3)], 127, 64);
++    if (ip->msid == 5) {
++        itColl_BounceOffVictim(gobj);
++        it_802725D4(gobj);
++    }
++    return false;
++}
+ 
+ bool itDosei_Logic7_Reflected(Item_GObj* gobj)
+ {
+diff --git a/src/melee/it/items/itgreatfoxlaser.c b/src/melee/it/items/itgreatfoxlaser.c
+index 4a3781d0ba..70677bac5b 100644
+--- a/src/melee/it/items/itgreatfoxlaser.c
++++ b/src/melee/it/items/itgreatfoxlaser.c
+@@ -37,7 +37,19 @@ void it_802EB268(Item_GObj* gobj)
+ 
+ /// #itGreatfoxlaser_UnkMotion1_Anim
+ 
+-/// #itGreatfoxlaser_UnkMotion1_Phys
++void itGreatfoxlaser_UnkMotion1_Phys(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    if (ip->xDD4_itemVar.greatfoxlaser.x34 != 0) {
++        ip->facing_dir = -ip->facing_dir;
++        it_8027C56C(gobj, ip->facing_dir);
++        ip = GET_ITEM(gobj);
++        it_8026B3A8(gobj);
++        ip->xDD4_itemVar.greatfoxlaser.x36 = 60;
++        ip->xDD4_itemVar.greatfoxlaser.x34 = 0;
++        Item_80268E5C(gobj, 1, ITEM_ANIM_UPDATE);
++    }
++}
+ 
+ bool itGreatFoxLaser_Logic27_DmgDealt(Item_GObj* item_gobj)
+ {
+diff --git a/src/melee/it/items/itkabigon.c b/src/melee/it/items/itkabigon.c
+index 4b8f5d1309..e91b1d6109 100644
+--- a/src/melee/it/items/itkabigon.c
++++ b/src/melee/it/items/itkabigon.c
+@@ -1,19 +1,49 @@
+ #include "itkabigon.h"
+ 
+-#include "it/itCommonItems.h"
+-
+ #include <placeholder.h>
+ #include <platform.h>
+ 
+ #include "cm/camera.h"
+ #include "ef/eflib.h"
++#include "ef/efsync.h"
++#include "gr/stage.h"
+ #include "it/inlines.h"
+ #include "it/it_266F.h"
+ #include "it/it_26B1.h"
+ #include "it/it_2725.h"
++#include "it/itCommonItems.h"
+ #include "it/item.h"
+ 
+-/// #it_802C9D40
++#include <baselib/random.h>
++
++typedef struct itKabigonAttributes {
++    f32 x0;
++    f32 x4;
++    f32 x8;
++    f32 xC;
++    s32 x10;
++    s32 x14;
++    f32 x18;
++} itKabigonAttributes;
++
++void it_802C9D40(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    itKabigonAttributes* attrs = ip->xC4_article_data->x4_specialAttributes;
++    ip->xDD4_itemVar.pokemon.timer_f = attrs->x4;
++    ip->xDD4_itemVar.pokemon.x64_f = attrs->x8;
++    ip->xDD4_itemVar.pokemon.x68_f = attrs->xC;
++    ip->xDD4_itemVar.pokemon.x6C = attrs->x10;
++    ip->xDD4_itemVar.pokemon.xE44_s32 = attrs->x14;
++    ip->xDD4_itemVar.pokemon.xE48 = (s32) attrs->x18;
++    ip->xDCC_flag.b3 = 1;
++    ip->xDAC_itcmd_var0 = 0;
++    ip->xDB0_itcmd_var1 = 0;
++    ip->xDB4_itcmd_var2 = 1;
++    it_80279CDC(gobj, attrs->x0);
++    Item_8026AE84(ip, 0x2723, 0x7F, 0x40);
++    it_802CA324(gobj);
++}
+ 
+ void it_802C9DFC(Item_GObj* gobj) {}
+ 
+@@ -45,7 +75,24 @@ void it_802C9E8C(Item_GObj* gobj)
+     Camera_80030E44(3, NULL);
+ }
+ 
+-/// #itKabigon_UnkMotion0_Anim
++bool itKabigon_UnkMotion0_Anim(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++
++    if (ip->xDB0_itcmd_var1 != 0) {
++        ip->x40_vel.y = ip->xDD4_itemVar.pokemon.timer_f;
++        it_802762BC(ip);
++        if (ip->xDB4_itcmd_var2 != 0) {
++            ip->xDB4_itcmd_var2 = 0;
++        }
++    }
++
++    if (ip->pos.y > Stage_GetBlastZoneTopOffset()) {
++        it_802CA074(gobj);
++    }
++
++    return false;
++}
+ 
+ void itKabigon_UnkMotion0_Phys(Item_GObj* gobj)
+ {
+@@ -124,4 +171,17 @@ bool itKabigon_UnkMotion2_Coll(Item_GObj* gobj)
+     return it_8027A118(gobj, (void (*)(HSD_GObj*)) it_802C9E44);
+ }
+ 
+-/// #it_802CA3F4
++void it_802CA3F4(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    itKabigonAttributes* attr = ip->xC4_article_data->x4_specialAttributes;
++    Vec3 pos = ip->pos;
++    f32 r;
++
++    r = HSD_Randf();
++    pos.x += 2.0F * attr->x18 * r - attr->x18;
++    r = HSD_Randf();
++    pos.y += 2.0F * attr->x18 * r - attr->x18;
++
++    efSync_Spawn(0x405, gobj, &pos);
++}
+diff --git a/src/melee/it/items/itkabigon.h b/src/melee/it/items/itkabigon.h
+index fefb89e850..637a6e6b9d 100644
+--- a/src/melee/it/items/itkabigon.h
++++ b/src/melee/it/items/itkabigon.h
+@@ -15,7 +15,7 @@
+ /* 2C9F74 */ void itKabigon_UnkMotion0_Phys(Item_GObj* gobj);
+ /* 2C9FBC */ bool itKabigon_UnkMotion0_Coll(Item_GObj* gobj);
+ /* 2CA014 */ void it_802CA014(Item_GObj* gobj);
+-/* 2CA074 */ UNK_RET it_802CA074(UNK_PARAMS);
++/* 2CA074 */ void it_802CA074(Item_GObj* gobj);
+ /* 2CA198 */ bool itKabigon_UnkMotion1_Anim(Item_GObj* gobj);
+ /* 2CA318 */ void itKabigon_UnkMotion1_Phys(Item_GObj* gobj);
+ /* 2CA31C */ bool itKabigon_UnkMotion1_Coll(Item_GObj* gobj);
+diff --git a/src/melee/it/items/itlugia.c b/src/melee/it/items/itlugia.c
+index 2cfd4bac67..ac85aabef0 100644
+--- a/src/melee/it/items/itlugia.c
++++ b/src/melee/it/items/itlugia.c
+@@ -155,7 +155,18 @@ bool itLugia_UnkMotion4_Anim(Item_GObj* gobj)
+     return false;
+ }
+ 
+-/// #itLugia_UnkMotion4_Phys
++void itLugia_UnkMotion4_Phys(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    itLugiaAttributes* attrs = ip->xC4_article_data->x4_specialAttributes;
++    it_8027A344(gobj);
++    ip->xDD4_itemVar.lugia.xE50.x += attrs->x18;
++    ip->x40_vel.y = ip->xDD4_itemVar.lugia.xE50.x;
++    if (ip->x40_vel.y > it_804DD450) {
++        ip->x40_vel.y = it_804DD450;
++        it_802D1A44(gobj);
++    }
++}
+ 
+ bool itLugia_UnkMotion4_Coll(Item_GObj* gobj)
+ {
+diff --git a/src/melee/it/items/itlugia.h b/src/melee/it/items/itlugia.h
+index 86b63e45a7..94986ad0e1 100644
+--- a/src/melee/it/items/itlugia.h
++++ b/src/melee/it/items/itlugia.h
+@@ -25,7 +25,7 @@
+ /* 2D1930 */ bool itLugia_UnkMotion4_Anim(Item_GObj* gobj);
+ /* 2D19C0 */ void itLugia_UnkMotion4_Phys(Item_GObj* gobj);
+ /* 2D1A3C */ bool itLugia_UnkMotion4_Coll(Item_GObj* gobj);
+-/* 2D1A44 */ UNK_RET it_802D1A44(UNK_PARAMS);
++/* 2D1A44 */ void it_802D1A44(Item_GObj* gobj);
+ /* 2D1B30 */ bool itLugia_UnkMotion5_Anim(Item_GObj* gobj);
+ /* 2D1B94 */ void itLugia_UnkMotion5_Phys(Item_GObj* gobj);
+ /* 2D1BB4 */ bool itLugia_UnkMotion5_Coll(Item_GObj* gobj);
+@@ -48,6 +48,7 @@
+ /* 3F7EE8 */ extern ItemStateTable it_803F7EE8[];
+ /* 3F7F48 */ extern ItemStateTable it_803F7F48[];
+ 
++extern f32 it_804DD450;
+ extern f32 it_804DD490;
+ 
+ #endif
+diff --git a/src/melee/it/items/itnesspkflush.c b/src/melee/it/items/itnesspkflush.c
+index 89246e0cec..39715274b5 100644
+--- a/src/melee/it/items/itnesspkflush.c
++++ b/src/melee/it/items/itnesspkflush.c
+@@ -2,11 +2,15 @@
+ 
+ #include "math.h"
+ 
++#include "ft/chara/ftKirby/ftKb_Init.h"
++#include "ft/chara/ftNess/ftNs_SpecialN.h"
++
+ #include "it/forward.h"
+ 
+ #include "it/inlines.h"
+ #include "it/it_266F.h"
+ #include "it/it_26B1.h"
++#include "it/it_2725.h"
+ 
+ #include <baselib/jobj.h>
+ 
+@@ -51,7 +55,27 @@ bool it_802AA810(Item_GObj* gobj, CollData* cd)
+ 
+ /// #it_802AA8C0
+ 
+-/// #it_2725_Logic102_Destroyed
++void it_2725_Logic102_Destroyed(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    it_802725D4(gobj);
++    if (ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner != NULL) {
++        if (ip->owner == ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner) {
++            switch (ip->kind) {
++            case It_Kind_Ness_PKFlush:
++                ftNs_SpecialN_SetNULL(
++                    ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner);
++                break;
++            case It_Kind_Kirby_NessPKFlush:
++                ftKb_SpecialNNs_800FECBC(
++                    ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner);
++                break;
++            }
++        }
++        ip->xDD4_itemVar.pkflush.xDE0_PKFlash_Owner = NULL;
++    }
++    ip->xDC8_word.flags.x13 = 0;
++}
+ 
+ void it_802AAA50(Item_GObj* gobj)
+ {
+diff --git a/src/melee/it/items/itnesspkthundertrail.c b/src/melee/it/items/itnesspkthundertrail.c
+index 4d6d08f212..7df88154a1 100644
+--- a/src/melee/it/items/itnesspkthundertrail.c
++++ b/src/melee/it/items/itnesspkthundertrail.c
+@@ -7,6 +7,8 @@
+ #include "it/it_2725.h"
+ #include "it/item.h"
+ 
++#include <baselib/jobj.h>
++
+ /// #it_802AC43C
+ 
+ void it_802AC58C(Item_GObj* gobj)
+@@ -47,7 +49,25 @@ void it_802AC604(Item_GObj* gobj)
+     Item_80268E5C((HSD_GObj*) gobj, 0, ITEM_ANIM_UPDATE);
+ }
+ 
+-/// #itNesspkthundertrail_UnkMotion0_Anim
++bool itNesspkthundertrail_UnkMotion0_Anim(Item_GObj* gobj)
++{
++    Item* ip = gobj->user_data;
++    HSD_JObj* child = HSD_JObjGetChild(gobj->hsd_obj);
++
++    if (ip->xDD4_itemVar.bombhei.xDDC & 1) {
++        HSD_JObjSetFlagsAll(child, JOBJ_HIDDEN);
++    } else {
++        HSD_JObjClearFlagsAll(child, JOBJ_HIDDEN);
++    }
++
++    ip->xDD4_itemVar.bombhei.xDDC += 1;
++
++    if ((u32) ip->xDD4_itemVar.bombhei.xDD4 == 0U) {
++        return true;
++    }
++    return false;
++    PAD_STACK(8);
++}
+ 
+ /// #itNesspkthundertrail_UnkMotion0_Phys
+ 
+diff --git a/src/melee/it/items/itnessyoyo.c b/src/melee/it/items/itnessyoyo.c
+index 80c0b8237d..1e9a6b1b61 100644
+--- a/src/melee/it/items/itnessyoyo.c
++++ b/src/melee/it/items/itnessyoyo.c
+@@ -1,10 +1,14 @@
+ #include "itnessyoyo.h"
+ 
+ #include <placeholder.h>
++#include <baselib/gobjplink.h>
+ 
++#include "ft/chara/ftNess/ftNs_AttackHi4.h"
+ #include "it/inlines.h"
+ #include "it/it_26B1.h"
++#include "it/itYoyo.h"
+ #include "it/item.h"
++#include "lb/lb_00B0.h"
+ 
+ void it_802BE598(Item_GObj* gobj)
+ {
+@@ -16,11 +20,45 @@ void it_802BE5B8(Item_GObj* gobj)
+     it_8026B73C(gobj);
+ }
+ 
+-/// #it_802BE5D8
++void it_802BE5D8(void* arg, float frame)
++{
++    HSD_GObj* gobj = arg;
++    Item* ip = gobj->user_data;
++    itYoyoAttributes* attrs = ip->xC4_article_data->x4_specialAttributes;
++    HSD_JObj* jobj = ip->xDD4_itemVar.flipper.xDEC;
++    HSD_JObjRemoveAnimAll(jobj);
++    HSD_JObjAddAnimAll(jobj, NULL,
++                        (HSD_MatAnimJoint*) attrs->x58_UNK6, NULL);
++    lb_8000BA0C(jobj, 1.0F);
++    HSD_JObjReqAnimAll(jobj, frame);
++    HSD_JObjAnimAll(jobj);
++}
+ 
+ /// #it_802BE65C
+ 
+-/// #it_802BE958
++void it_802BE958(void* gobj)
++{
++    Item* ip = ((HSD_GObj*) gobj)->user_data;
++    if (ip != NULL) {
++        if (gobj != NULL) {
++            if (ip->owner != NULL) {
++                ftNs_AttackHi4_YoyoItemSetFlag(ip->owner);
++            }
++            ip->owner = NULL;
++            {
++                ItemLink* link =
++                    (ItemLink*) ip->xDD4_itemVar.samusgrapple.x8;
++                while (link != NULL) {
++                    HSD_GObj* tmp = link->gobj;
++                    link = link->next;
++                    HSD_GObjPLink_80390228(tmp);
++                }
++            }
++        }
++        Item_8026A8EC(gobj);
++    }
++    PAD_STACK(8);
++}
+ 
+ /// #it_802BE9D8
+ 
+diff --git a/src/melee/it/items/itoldottosea.c b/src/melee/it/items/itoldottosea.c
+index d040c03085..111089c60d 100644
+--- a/src/melee/it/items/itoldottosea.c
++++ b/src/melee/it/items/itoldottosea.c
+@@ -173,7 +173,18 @@ bool itOldottosea_UnkMotion7_Anim(Item_GObj* gobj)
+ 
+ /// #itOldottosea_UnkMotion7_Phys
+ 
+-/// #itOldottosea_UnkMotion7_Coll
++bool itOldottosea_UnkMotion7_Coll(Item_GObj* gobj)
++{
++    Item* ip = gobj->user_data;
++    PAD_STACK(8);
++    it_8026D62C(gobj, it_802E2BC0);
++    if (ip->x40_vel.x != 0.0f) {
++        if (it_80276308(gobj) != 0) {
++            it_802E3098(gobj);
++        }
++    }
++    return it_802E35CC(gobj);
++}
+ 
+ void it_802E3098(Item_GObj* gobj)
+ {
+diff --git a/src/melee/it/items/itpatapata.c b/src/melee/it/items/itpatapata.c
+index 198f1739dd..197584ff74 100644
+--- a/src/melee/it/items/itpatapata.c
++++ b/src/melee/it/items/itpatapata.c
+@@ -87,7 +87,23 @@ bool itPatapata_UnkMotion2_Anim(Item_GObj* gobj)
+ 
+ /// #itPatapata_UnkMotion3_Coll
+ 
+-/// #it_802E0D9C
++void it_802E0D9C(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    itPatapataAttributes* attrs =
++        ip->xC4_article_data->x4_specialAttributes;
++    switch (ip->xDD4_itemVar.patapata.x40) {
++    case 0:
++        ip->x40_vel.x = -ip->facing_dir * attrs->x0->x4;
++        break;
++    case 1:
++    case 2:
++    default:
++        break;
++    }
++    it_802E1648(gobj, 3, 2);
++    ip->facing_dir = -ip->facing_dir;
++}
+ 
+ /// #itPatapata_UnkMotion3_Anim
+ 
+diff --git a/src/melee/it/items/itpatapata.h b/src/melee/it/items/itpatapata.h
+index 26564c85e8..7a24436004 100644
+--- a/src/melee/it/items/itpatapata.h
++++ b/src/melee/it/items/itpatapata.h
+@@ -14,7 +14,7 @@
+ /* 2E0974 */ bool itPatapata_UnkMotion2_Anim(Item_GObj* gobj);
+ /* 2E09BC */ void itPatapata_UnkMotion3_Phys(Item_GObj* gobj);
+ /* 2E0B78 */ bool itPatapata_UnkMotion3_Coll(Item_GObj* gobj);
+-/* 2E0D9C */ UNK_RET it_802E0D9C(UNK_PARAMS);
++/* 2E0D9C */ void it_802E0D9C(Item_GObj* gobj);
+ /* 2E0E10 */ bool itPatapata_UnkMotion3_Anim(Item_GObj* gobj);
+ /* 2E0EE0 */ bool it_2725_Logic4_DmgReceived(Item_GObj*);
+ /* 2E0F1C */ bool it_802E0F1C(Item_GObj*);
+diff --git a/src/melee/it/items/itpikachutjoltair.c b/src/melee/it/items/itpikachutjoltair.c
+index 581db60cd2..fab7404294 100644
+--- a/src/melee/it/items/itpikachutjoltair.c
++++ b/src/melee/it/items/itpikachutjoltair.c
+@@ -1,5 +1,7 @@
+ #include "itpikachutjoltair.h"
+ 
++#include "db/db.h"
++#include "it/item.h"
+ #include "lb/lb_00B0.h"
+ 
+ #include <placeholder.h>
+@@ -58,7 +60,16 @@ void it_802B43B0(Item_GObj* gobj)
+     }
+ }
+ 
+-/// #it_802B43D0
++void it_802B43D0(Item_GObj* gobj, HSD_GObj* arg1)
++{
++    Item* ip = GET_ITEM(gobj);
++    it_8026B3A8(gobj);
++    ip->xDC8_word.flags.x13 = 0;
++    it_80272940(gobj);
++    Item_80268E5C((HSD_GObj*) gobj, 0, 2);
++    Item_802694CC((HSD_GObj*) gobj);
++    db_80225DD8(gobj, arg1);
++}
+ 
+ /// #itPikachutjoltair_UnkMotion0_Anim
+ 
+diff --git a/src/melee/it/items/itpikachutjoltair.h b/src/melee/it/items/itpikachutjoltair.h
+index 3d3d773c34..fe1be88cdd 100644
+--- a/src/melee/it/items/itpikachutjoltair.h
++++ b/src/melee/it/items/itpikachutjoltair.h
+@@ -16,7 +16,7 @@
+ /* 2B4224 */ Item_GObj* it_802B4224(HSD_GObj* owner, Item_GObj* gobj,
+                                     Vec3* pos, s32 kind, f32 facing_dir);
+ /* 2B43B0 */ void it_802B43B0(Item_GObj* gobj);
+-/* 2B43D0 */ UNK_RET it_802B43D0(UNK_PARAMS);
++/* 2B43D0 */ void it_802B43D0(Item_GObj* gobj, HSD_GObj* arg1);
+ /* 2B4450 */ bool itPikachutjoltair_UnkMotion0_Anim(Item_GObj* gobj);
+ /* 2B45D0 */ void itPikachutjoltair_UnkMotion0_Phys(Item_GObj*);
+ /* 2B45F0 */ bool it_2725_Logic107_DmgDealt(Item_GObj*);
+diff --git a/src/melee/it/items/ittincle.c b/src/melee/it/items/ittincle.c
+index fb020e8148..0509c1d3f9 100644
+--- a/src/melee/it/items/ittincle.c
++++ b/src/melee/it/items/ittincle.c
+@@ -126,7 +126,24 @@ bool itTincle_UnkMotion4_Anim(Item_GObj* gobj)
+     return false;
+ }
+ 
+-/// #itTincle_UnkMotion4_Phys
++void itTincle_UnkMotion4_Phys(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    itTincleAttributes* sa = ip->xC4_article_data->x4_specialAttributes;
++    if (ip->xDD4_itemVar.tincle.x20 == 0) {
++        f32 dist;
++        ip->x40_vel.y = -sa->x48;
++        dist = ip->xDD4_itemVar.tincle.x4C - ip->pos.y;
++        if (dist < 0) {
++            dist = -dist;
++        }
++        if (dist > sa->x44) {
++            it_802EC18C(gobj);
++        }
++    } else {
++        ip->xDD4_itemVar.tincle.x20 -= 1;
++    }
++}
+ 
+ bool itTincle_UnkMotion4_Coll(Item_GObj* gobj)
+ {
+@@ -193,7 +210,19 @@ void it_802EC1F4(Item_GObj* gobj)
+ 
+ void itTincle_UnkMotion7_Phys(Item_GObj* gobj) {}
+ 
+-/// #itTincle_UnkMotion7_Coll
++bool itTincle_UnkMotion7_Coll(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    if (ip->ground_or_air == GA_Air) {
++        it_8026E414(gobj, it_802EC3F4);
++    } else {
++        if (ip->xDD4_itemVar.tincle.x20 < 0) {
++            it_802EC3F4(gobj);
++        }
++        it_8026D6F4(gobj, it_802EC35C);
++    }
++    return false;
++}
+ 
+ void it_802EC35C(Item_GObj* gobj)
+ {
+diff --git a/src/melee/it/items/itwhitebea.c b/src/melee/it/items/itwhitebea.c
+index 25cad9f3a9..8f84a297a6 100644
+--- a/src/melee/it/items/itwhitebea.c
++++ b/src/melee/it/items/itwhitebea.c
+@@ -8,6 +8,8 @@
+ #include "it/item.h"
+ #include "it/items/itfreeze.h"
+ #include "it/types.h"
++#include "mp/mpcoll.h"
++#include "mp/mplib.h"
+ #include "sysdolphin/baselib/random.h"
+ 
+ void it_802E31F8(Item_GObj* gobj)
+@@ -218,7 +220,27 @@ bool itWhitebea_UnkMotion0_Coll(Item_GObj* gobj)
+ 
+ /// #it_802E3AC8
+ 
+-/// #itWhitebea_UnkMotion1_Anim
++bool itWhitebea_UnkMotion1_Anim(Item_GObj* gobj)
++{
++    Item* ip = GET_ITEM(gobj);
++    PAD_STACK(8);
++    if (!it_80272C6C(gobj)) {
++        Item_80268E5C(gobj, 1, ITEM_ANIM_UPDATE | ITEM_HIT_PRESERVE);
++    }
++    if (ip->xDD4_itemVar.whitebea.x44 <= 0) {
++        int local;
++        int* sfx;
++        sfx = mpLib_80056A1C(mpLineGetFlags(ip->xC30), &local);
++        ip->xDD4_itemVar.whitebea.x44 = 14;
++        Item_8026AE84(ip, 0x13C, 0x7F, 0x40);
++        if (*sfx != -1) {
++            Item_8026AE84(ip, *sfx, 0x7F, 0x40);
++        }
++    } else {
++        ip->xDD4_itemVar.whitebea.x44--;
++    }
++    return false;
++}
+ 
+ /// #itWhitebea_UnkMotion1_Phys
+ 
+@@ -235,7 +257,28 @@ bool itWhitebea_UnkMotion1_Coll(Item_GObj* gobj)
+     return it_8027C794(gobj);
+ }
+ 
+-/// #it_802E3DA0
++void it_802E3DA0(Item_GObj* gobj)
++{
++    Item* ip = gobj->user_data;
++    itWhiteBeaAttributes* attrs =
++        ip->xC4_article_data->x4_specialAttributes;
++    PAD_STACK(8);
++    ip->xDD4_itemVar.whitebea.x40 = 0;
++    ip->x40_vel.x *= attrs->x4;
++    if ((ip->facing_dir > 0.0f && ip->x70_nudge.x < 0.0f) ||
++        (ip->facing_dir < 0.0f && ip->x70_nudge.x > 0.0f))
++    {
++        int int_dir;
++        ip->facing_dir = -ip->facing_dir;
++        if (-1.0f == ip->facing_dir) {
++            int_dir = -1;
++        } else {
++            int_dir = 1;
++        }
++        mpCollSetFacingDir(&ip->x378_itemColl, int_dir);
++    }
++    Item_80268E5C(gobj, 3, ITEM_ANIM_UPDATE);
++}
+ 
+ bool itWhitebea_UnkMotion3_Anim(Item_GObj* gobj)
+ {
+@@ -339,7 +382,18 @@ bool itWhitebea_UnkMotion5_Coll(Item_GObj* gobj)
+     return it_8027C794(gobj);
+ }
+ 
+-/// #it_802E4464
++void it_802E4464(Item_GObj* gobj)
++{
++    Item* ip = gobj->user_data;
++    itWhiteBeaAttributes* attrs =
++        ip->xC4_article_data->x4_specialAttributes;
++    PAD_STACK(8);
++    it_802762BC(ip);
++    ip->x40_vel.y = attrs->x10;
++    it_80275258(gobj);
++    Item_8026AE84(ip, 0x4A, 0x7F, 0x40);
++    Item_80268E5C(gobj, 6, ITEM_ANIM_UPDATE);
++}
+ 
+ bool itWhitebea_UnkMotion6_Anim(Item_GObj* gobj)
+ {
+@@ -410,7 +464,30 @@ bool itWhitebea_UnkMotion8_Anim(Item_GObj* gobj)
+ 
+ void itWhitebea_UnkMotion8_Phys(Item_GObj* gobj) {}
+ 
+-/// #it_2725_Logic9_Dropped
++void it_2725_Logic9_Dropped(Item_GObj* gobj)
++{
++    Item* ip;
++    itWhiteBeaAttributes* attrs;
++    PAD_STACK(8);
++    it_8027CBA4(gobj);
++    ip = GET_ITEM(gobj);
++    attrs = ip->xC4_article_data->x4_specialAttributes;
++    ip->xDD4_itemVar.whitebea.x40 = 0;
++    ip->x40_vel.x *= attrs->x4;
++    if ((ip->facing_dir > 0.0f && ip->x70_nudge.x < 0.0f) ||
++        (ip->facing_dir < 0.0f && ip->x70_nudge.x > 0.0f))
++    {
++        int int_dir;
++        ip->facing_dir = -ip->facing_dir;
++        if (-1.0f == ip->facing_dir) {
++            int_dir = -1;
++        } else {
++            int_dir = 1;
++        }
++        mpCollSetFacingDir(&ip->x378_itemColl, int_dir);
++    }
++    Item_80268E5C(gobj, 3, ITEM_ANIM_UPDATE);
++}
+ 
+ void it_2725_Logic9_Thrown(Item_GObj* gobj)
+ {

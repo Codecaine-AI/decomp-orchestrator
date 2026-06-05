@@ -1,0 +1,1759 @@
+diff --git a/configure.py b/configure.py
+index 662b14e1af..ab82a62f3b 100755
+--- a/configure.py
++++ b/configure.py
+@@ -1023,7 +1023,7 @@ def MatchingFor(*versions):
+             Object(Matching, "melee/gr/grbattle.c"),
+             Object(Matching, "melee/gr/grlast.c"),
+             Object(NonMatching, "melee/gr/grhomerun.c"),
+-            Object(NonMatching, "melee/gr/grheal.c"),
++            Object(Matching, "melee/gr/grheal.c"),
+             # Break the Targets stages
+             Object(Matching, "melee/gr/grtmario.c"),
+             Object(Matching, "melee/gr/grtcaptain.c"),
+diff --git a/src/melee/gr/grheal.c b/src/melee/gr/grheal.c
+index c5f8a0808f..ccf4083f57 100644
+--- a/src/melee/gr/grheal.c
++++ b/src/melee/gr/grheal.c
+@@ -19,17 +19,40 @@
+ #include "gr/grzakogenerator.h"
+ #include "gr/inlines.h"
+ #include "gr/stage.h"
++#include "if/textlib.h"
+ #include "it/it_26B1.h"
++#include "it/items/itcoin.h"
+ #include "it/types.h"
+ #include "lb/lb_00B0.h"
+ #include "lb/lb_00F9.h"
+-
+-struct {
+-    int x0;
+-    int x4;
+-}* yaku;
+-
+-static s32 grHeal_803E83B8[0x27] = {
++#include "mp/mplib.h"
++
++typedef struct grHeal_UnkVec4 {
++    Vec3 pos;
++    s32 unused;
++} grHeal_UnkVec4;
++
++typedef struct grHeal_DataBlock {
++    s16 player_model_joint_ids[0x1A];
++    s32 next_player_character_ids[0x1A];
++    StageCallbacks callbacks[5];
++    char stage_filename[0xC];
++    StageData stage_data;
++    char report_fmt_get_gobj[0x24];
++    char assert_filename[0xC];
++    char report_fmt_not_found_next_player[0x20];
++} grHeal_DataBlock;
++STATIC_ASSERT(sizeof(grHeal_DataBlock) == 0x190);
++
++typedef struct grHeal_StageData {
++    StageData stage_data;
++    char report_fmt_get_gobj[0x24];
++} grHeal_StageData;
++STATIC_ASSERT(sizeof(grHeal_StageData) == 0x58);
++
++const grHeal_UnkVec4 grHeal_803B84A8 = { { 0.0F, 40.0F, 0.0F }, 0 };
++
++s32 grHeal_803E83B8[0x27] = {
+     0x1D001E, 0x1F0020, 0x210022, 0x230024, 0x250026, 0x270028, 0x29002A,
+     0x2B002C, 0x2D002E, 0x2F0030, 0x310032, 0x330034, 0x350036, 0,
+     0x15,     1,        0x16,     0x14,     2,        0x19,     3,
+@@ -38,7 +61,7 @@ static s32 grHeal_803E83B8[0x27] = {
+     0x11,     0x12,     0x17,     -1,
+ };
+ 
+-static StageCallbacks grHeal_803E8454[] = {
++StageCallbacks grHeal_803E8454[] = {
+     {
+         grHeal_8021F0D8,
+         grHeal_8021F170,
+@@ -76,37 +99,38 @@ static StageCallbacks grHeal_803E8454[] = {
+     },
+ };
+ 
+-static StageData grHeal_803E84C4 = {
+-    HEAL,
+-    grHeal_803E8454,
+-    "/GrHe.dat",
+-    grHeal_8021EF3C,
+-    grHeal_8021EF38,
+-    grHeal_8021EFBC,
+-    grHeal_8021EFC0,
+-    grHeal_8021EFE4,
+-    grHeal_8021F830,
+-    grHeal_8021F838,
+-    1,
+-    0,
+-    0,
++grHeal_StageData grHeal_803E84C4 = {
++    {
++        HEAL,
++        grHeal_803E8454,
++        "/GrHe.dat",
++        grHeal_8021EF3C,
++        grHeal_8021EF38,
++        grHeal_8021EFBC,
++        grHeal_8021EFC0,
++        grHeal_8021EFE4,
++        grHeal_8021F830,
++        grHeal_8021F838,
++        1,
++        0,
++        0,
++    },
++    "%s:%d: couldn t get gobj(id=%d)\n",
+ };
+ 
+-static char grHeal_803E851C[0x2C] = {
+-    0x67, 0x72, 0x68, 0x65, 0x61, 0x6C, 0x2E, 0x63, 0,    0,    0,
+-    0,    0x2A, 0x2A, 0x2A, 0x20, 0x4E, 0x6F, 0x74, 0x20, 0x66, 0x6F,
+-    0x75, 0x6E, 0x64, 0x20, 0x4E, 0x65, 0x78, 0x74, 0x20, 0x50, 0x6C,
+-    0x61, 0x79, 0x65, 0x72, 0x21, 0x28, 0x25, 0x64, 0x29, 0xA,  0,
+-};
++char grHeal_803E851C[0x2C] =
++    "grheal.c\0\0\0\0*** Not found Next Player!(%d)\n";
++
++s16 grHeal_804D49D8[4] = { 7, 8, 9, 0 };
++SDATA char grHeal_804D49E0[] = "gobj";
+ 
+-extern struct yaku* grHeal_804D6AF0;
+-extern s16 grHeal_804D49D8[4];
++grHeal_UnkData* grHeal_804D6AF0[2];
+ 
+ void grHeal_8021EF38(bool arg0) {}
+ 
+ void grHeal_8021EF3C(void)
+ {
+-    grHeal_804D6AF0 = Ground_801C49F8();
++    grHeal_804D6AF0[0] = Ground_801C49F8();
+     stage_info.unk8C.b4 = false;
+     stage_info.unk8C.b5 = true;
+ 
+@@ -133,7 +157,8 @@ bool grHeal_8021EFE4(void)
+ Ground_GObj* grHeal_8021EFEC(u32 idx)
+ {
+     HSD_GObj* gobj;
+-    StageCallbacks* callbacks = &grHeal_803E8454[idx];
++    StageCallbacks* callbacks =
++        (StageCallbacks*) ((char*) grHeal_803E83B8 + 0x9C) + idx;
+ 
+     gobj = Ground_GetStageGObj(idx);
+ 
+@@ -156,7 +181,8 @@ Ground_GObj* grHeal_8021EFEC(u32 idx)
+         }
+ 
+     } else {
+-        OSReport("%s:%d: couldn t get gobj(id=%d)\n", __FILE__, 273, idx);
++        OSReport(grHeal_803E84C4.report_fmt_get_gobj, grHeal_803E851C, 273,
++                 idx);
+     }
+ 
+     return gobj;
+@@ -169,7 +195,7 @@ void grHeal_8021F0D8(Ground_GObj* gobj)
+ 
+     grAnime_801C8138(gobj, gp->map_id, 0);
+ 
+-    for (i = 0; i < *(s32*) grHeal_804D6AF0; i++) {
++    for (i = 0; i < grHeal_804D6AF0[0]->x0; i++) {
+         if ((int) gm_80473A18.x90[i] != 0) {
+             grHeal_8021F79C(8, grHeal_804D49D8[i], i);
+         }
+@@ -185,7 +211,60 @@ void grHeal_8021F178(Ground_GObj* gobj) {}
+ 
+ void grHeal_8021F17C(Ground_GObj* gobj) {}
+ 
+-/// #grHeal_8021F180
++void grHeal_8021F180(Ground_GObj* gobj)
++{
++    grHeal_UnkVec4 coin_pos;
++    u8 next_players[4];
++    HSD_JObj* next_jobjs[3];
++    UNUSED HSD_JObj* reserved_next_jobj;
++    HSD_JObj* player_jobjs[0x1A];
++    UNUSED HSD_JObj* reserved_player_jobj;
++    s32 next_count;
++    s32 line_id;
++    s32 next_idx;
++    u32 i;
++    Ground* gp;
++
++    gp = GET_GROUND(gobj);
++    grAnime_801C8138(gobj, gp->map_id, 0);
++
++    if (gm_80473A18._94[0] % grHeal_804D6AF0[0]->x4 == 0) {
++        coin_pos.pos = grHeal_803B84A8.pos;
++        Ground_801C2D24(0xDC, &coin_pos.pos);
++        line_id = Ground_801C5840();
++        if (line_id != -1) {
++            it_802F2094(NULL, &coin_pos.pos, line_id, 0);
++            un_80304A58(line_id);
++        }
++    }
++
++    for (next_count = 0; next_count < (s32) gm_80473A18._94[1]; next_count++) {
++        next_players[next_count] = gm_80473A18._94[next_count + 2];
++    }
++
++    next_jobjs[0] = Ground_801C3FA4(gobj, 0x3A);
++    next_jobjs[1] = Ground_801C3FA4(gobj, 0x3B);
++    next_jobjs[2] = Ground_801C3FA4(gobj, 0x3C);
++
++    for (next_idx = 0; next_idx < next_count; next_idx++) {
++        grHeal_8021F4E8(grHeal_8021F70C(next_players[next_idx]),
++                        next_jobjs[next_idx]);
++    }
++
++    for (i = 0; i < 0x1A; i++) {
++        player_jobjs[i] = Ground_801C3FA4(gobj, ((s16*) grHeal_803E83B8)[i]);
++    }
++
++    for (i = 0; i < 0x1A; i++) {
++        u32 character_id = gm_80473A18.x76[i];
++        if ((s32) character_id != 0x21) {
++            grHeal_8021F628(grHeal_8021F70C(character_id), player_jobjs[i]);
++        }
++    }
++
++    mpJointSetCb1(0, gp, (mpLib_Callback) fn_8021F4C0);
++    gp->gv.flatzone2.xC4 = 0;
++}
+ 
+ bool grHeal_8021F41C(Ground_GObj* gobj)
+ {
+@@ -212,7 +291,7 @@ void grHeal_8021F474(Ground_GObj* ground)
+     Ground* gp;
+ 
+     gp = ground->user_data;
+-    Ground_801C3D44(fn_8021F424, 10.0f, 20.0f);
++    Ground_801C3D44(fn_8021F424, 10.0F, 20.0F);
+     lb_800115F4();
+     gp->gv.flatzone2.xC4 = 0;
+ }
+@@ -236,10 +315,10 @@ void grHeal_8021F4E8(s32 arg0, HSD_JObj* parent_jobj)
+ 
+     ground = grHeal_8021EFEC(4U);
+     if (ground == NULL) {
+-        __assert(grHeal_803E851C, 0x1B8U, "gobj");
++        __assert(grHeal_803E851C, 0x1B8U, grHeal_804D49E0);
+     }
+     grAnime_801C8138(ground, 4, 0);
+-    grAnime_801C7FF8(ground, 0, 7, 0, (f32) arg0, 0.0f);
++    grAnime_801C7FF8(ground, 0, 7, 0, (f32) arg0, 0.0F);
+     jobj = GET_JOBJ(ground);
+     child = HSD_JObjGetChild(jobj);
+     HSD_JObjReparent(child, parent_jobj);
+@@ -284,10 +363,10 @@ void grHeal_8021F628(s32 arg0, HSD_JObj* jobj_parent)
+ 
+     ground = grHeal_8021EFEC(2U);
+     if (ground == NULL) {
+-        __assert(grHeal_803E851C, 0x201U, "gobj");
++        __assert(grHeal_803E851C, 0x201U, grHeal_804D49E0);
+     }
+     grAnime_801C8138(ground, 2, 0);
+-    grAnime_801C7FF8(ground, 0, 7, 0, (f32) arg0, 0.0f);
++    grAnime_801C7FF8(ground, 0, 7, 0, (f32) arg0, 0.0F);
+     jobj = GET_JOBJ(ground);
+     child = HSD_JObjGetChild(jobj);
+     HSD_JObjReparent(child, jobj_parent);
+@@ -307,25 +386,43 @@ void grHeal_8021F708(Ground_GObj* gobj) {}
+ 
+ u32 grHeal_8021F70C(u32 character_id)
+ {
++    s32* base;
+     s32* entry;
++    s32 value;
+     int frame;
+ 
++    base = grHeal_803E83B8;
+     frame = 0;
+-    if ((s32) character_id == 0x13) {
+-        character_id = 0x12;
+-    }
+ 
+-    entry = (s32*) &grHeal_803E851C[0xD];
++    if ((s32) character_id != 0x13) {
++        goto loop_start;
++    }
++    character_id = 0x12;
++    goto loop_start;
+ 
+-    while (entry[frame] != -1 && entry[frame] != character_id) {
+-        frame++;
++loop_compare:
++    if ((s32) character_id == value) {
++        goto loop_done;
++    }
++    entry++;
++    frame++;
++loop_check:
++    value = *entry;
++    if (value != -1) {
++        goto loop_compare;
+     }
+ 
+-    if (grHeal_803E83B8[frame] == -1) {
+-        OSReport("*** Not found Next Player!(%d)\n", frame);
++loop_done:
++    if (base[frame + 0xD] == -1) {
++        OSReport(((grHeal_DataBlock*) base)->report_fmt_not_found_next_player,
++                 character_id);
+         frame = 0;
+     }
+     return frame;
++
++loop_start:
++    entry = base + 0xD;
++    goto loop_check;
+ }
+ 
+ void grHeal_8021F79C(s32 arg0, s32 idx, s32 arg2)
+diff --git a/src/melee/gr/grheal.h b/src/melee/gr/grheal.h
+index a478eff5c5..2bb35603bf 100644
+--- a/src/melee/gr/grheal.h
++++ b/src/melee/gr/grheal.h
+@@ -8,6 +8,11 @@
+ #include "gr/forward.h"
+ #include "lb/forward.h"
+ 
++typedef struct grHeal_UnkData {
++    s32 x0;
++    s32 x4;
++} grHeal_UnkData;
++
+ /* 21EF38 */ void grHeal_8021EF38(bool);
+ /* 21EF3C */ void grHeal_8021EF3C(void);
+ /* 21EFBC */ void grHeal_8021EFBC(void);
+@@ -43,4 +48,6 @@
+ /* 21F830 */ DynamicsDesc* grHeal_8021F830(enum_t);
+ /* 21F838 */ bool grHeal_8021F838(Vec3*, int, HSD_JObj*);
+ 
++/* 4D6AF0 */ extern grHeal_UnkData* grHeal_804D6AF0[2];
++
+ #endif
+diff --git a/src/melee/gr/grzebesroute.c b/src/melee/gr/grzebesroute.c
+index 92f925de09..c6823cb560 100644
+--- a/src/melee/gr/grzebesroute.c
++++ b/src/melee/gr/grzebesroute.c
+@@ -2,6 +2,7 @@
+ 
+ #include <platform.h>
+ 
++#include "baselib/debug.h"
+ #include "cm/camera.h"
+ #include "ft/ftlib.h"
+ #include "gr/grdisplay.h"
+@@ -14,8 +15,24 @@
+ #include <baselib/gobj.h>
+ #include <baselib/gobjgxlink.h>
+ #include <baselib/gobjproc.h>
++#include <baselib/lobj.h>
+ #include <baselib/random.h>
+ 
++typedef struct grZebesRoute_LightData {
++    Vec3 player_pos;
++    Vec3 spot_pos;
++    Vec3 spot_interest;
++    Vec3 upper_point_pos;
++    Vec3 lower_point_pos;
++    f32 pad;
++} grZebesRoute_LightData;
++
++const grZebesRoute_LightData grZe_Route_803B83A0 = {
++    { 0.0F, 0.0F, 0.0F },     { 0.0F, -30.0F, 50.0F },
++    { 0.0F, 680.0F, -20.0F }, { -5.0F, 980.0F, 5.0F },
++    { 0.0F, 215.0F, -50.0F }, 0.0F,
++};
++
+ StageCallbacks grZe_Route_803E5DB0[] = {
+     { grZebesRoute_8020B348, grZebesRoute_8020B374, grZebesRoute_8020B37C,
+       grZebesRoute_8020B380, 0 },
+@@ -26,12 +43,62 @@ StageCallbacks grZe_Route_803E5DB0[] = {
+     { NULL, NULL, NULL, NULL, 0 },
+ };
+ 
++char grZe_Route_803E5E00[] = "/GrNZr.dat";
++
++struct {
++    u32 internal_stage_id;
++    StageCallbacks* callbacks;
++    char* data1;
++    void (*OnInit)(void);
++    void (*OnDemoInit)(int);
++    void (*OnLoad)(void);
++    void (*OnStart)(void);
++    bool (*callback4)(void);
++    DynamicsDesc* (*callback5)(enum_t);
++    bool (*callback6)(Vec3*, int, HSD_JObj*);
++    u32 flags2;
++    S16Vec3* x2C;
++    size_t x30;
++    char fmt[0x24];
++} grZe_Route_803E5E0C = {
++    ZEBESROUTE,
++    grZe_Route_803E5DB0,
++    grZe_Route_803E5E00,
++    grZebesRoute_8020B164,
++    (void (*)(int)) grZebesRoute_8020B160,
++    grZebesRoute_8020B1D4,
++    grZebesRoute_8020B1F4,
++    grZebesRoute_8020B258,
++    grZebesRoute_8020B854,
++    grZebesRoute_8020B85C,
++    1,
++    NULL,
++    0,
++    "%s:%d: couldn t get gobj(id=%d)\n",
++};
++
++char grZe_Route_803E5E64[] = "grzebesroute.c";
++
++SDATA char grZe_Route_804D4840[] = "gobj";
++SDATA char grZe_Route_804D4848[] = "0";
++
+ static struct {
+     int x0;
+     int x4;
+ }* grZe_Route_804D6A60;
+ 
+-extern Vec3 grZe_Route_803B83A0;
++const f32 grZe_Route_804DB918 = -50.0F;
++const f32 grZe_Route_804DB91C = 0.0F;
++const GXColor grZe_Route_804DB920 = { 0xFF, 0xFF, 0xCC, 0xFF };
++const GXColor grZe_Route_804DB924 = { 0xFD, 0xFD, 0xBF, 0xFF };
++const GXColor grZe_Route_804DB928 = { 0x00, 0x00, 0xF7, 0xFF };
++const f32 grZe_Route_804DB92C = 600.0F;
++const f32 grZe_Route_804DB930 = 1000.0F;
++const f32 grZe_Route_804DB934 = 400.0F;
++const f32 grZe_Route_804DB938 = 45.0F;
++const f32 grZe_Route_804DB93C = 0.99F;
++const f32 grZe_Route_804DB940 = 500.0F;
++const f32 grZe_Route_804DB944 = 0.03F;
+ 
+ void grZebesRoute_8020B160(bool arg) {}
+ 
+@@ -95,7 +162,7 @@ HSD_GObj* grZebesRoute_8020B260(int gobj_id)
+             HSD_GObj_SetupProc(gobj, callbacks->callback2, 4);
+         }
+     } else {
+-        OSReport("%s:%d: couldn t get gobj(id=%d)\n", __FILE__, 197, gobj_id);
++        OSReport(grZe_Route_803E5E0C.fmt, grZe_Route_803E5E64, 0xC5, gobj_id);
+     }
+ 
+     return gobj;
+@@ -149,17 +216,17 @@ bool grZebesRoute_8020B424(Ground_GObj* arg)
+ void grZebesRoute_8020B42C(Ground_GObj* gobj)
+ {
+     Ground* gp = GET_GROUND(gobj);
+-    Vec3 pos = grZe_Route_803B83A0;
++    Vec3 pos = grZe_Route_803B83A0.player_pos;
+     HSD_GObj* fighter;
+     s32 timer;
+ 
+     fighter = Ground_801C57A4();
+     if (fighter != NULL) {
+         ftLib_80086644(fighter, &pos);
+-        if (pos.y < -50.0f) {
+-            pos.y = -50.0f;
++        if (pos.y < grZe_Route_804DB918) {
++            pos.y = grZe_Route_804DB918;
+         }
+-        pos.x = 0.0f;
++        pos.x = grZe_Route_804DB91C;
+         Ground_801C38BC(pos.x, pos.y);
+     }
+ 
+@@ -189,6 +256,86 @@ void fn_8020B4D8(Ground* gp, s32 arg1, CollData* coll, s32 arg3,
+ }
+ 
+ /// #grZebesRoute_8020B548
++void grZebesRoute_8020B548(void)
++{
++    HSD_GObj* light_gobj = HSD_GObjGXLinkHead[4];
++    HSD_LObj* first_lobj;
++    HSD_LObj* lobj;
++    f32 scale;
++    f32 spot_ref_dist;
++    f32 upper_ref_dist;
++    f32 lower_ref_dist;
++    f32 split_y;
++    s32 i;
++
++    if (light_gobj == NULL) {
++        __assert(grZe_Route_803E5E64, 0x169U, grZe_Route_804D4840);
++    }
++
++    first_lobj = light_gobj->hsd_obj;
++    scale = Ground_801C0498();
++    lobj = HSD_LObjGetNext(first_lobj);
++    spot_ref_dist = grZe_Route_804DB92C * scale;
++    upper_ref_dist = grZe_Route_804DB930 * scale;
++    lower_ref_dist = grZe_Route_804DB934 * scale;
++    split_y = grZe_Route_804DB940;
++
++    i = 0;
++    while (i < 3 && lobj != NULL) {
++        Vec3 current_pos;
++        u32 light_type;
++
++        if (!HSD_LObjGetPosition(lobj, &current_pos)) {
++            __assert(grZe_Route_803E5E64, 0x174U, grZe_Route_804D4848);
++        }
++
++        light_type = lobj->flags & LOBJ_TYPE_MASK;
++        if (light_type == LOBJ_SPOT) {
++            GXColor color;
++            Vec3 pos = grZe_Route_803B83A0.spot_pos;
++            Vec3 interest = grZe_Route_803B83A0.spot_interest;
++
++            color = grZe_Route_804DB920;
++            HSD_LObjSetColor(lobj, color);
++            pos.x *= scale;
++            pos.y *= scale;
++            pos.z *= scale;
++            HSD_LObjSetPosition(lobj, &pos);
++            interest.x *= scale;
++            interest.y *= scale;
++            interest.z *= scale;
++            HSD_LObjSetInterest(lobj, &interest);
++            HSD_LObjSetSpot(lobj, grZe_Route_804DB938, 3);
++            HSD_LObjSetDistAttn(lobj, spot_ref_dist, grZe_Route_804DB93C, 3);
++        } else if (light_type == LOBJ_POINT && current_pos.y > split_y) {
++            GXColor color;
++            Vec3 pos = grZe_Route_803B83A0.upper_point_pos;
++
++            color = grZe_Route_804DB924;
++            HSD_LObjSetColor(lobj, color);
++            pos.x *= scale;
++            pos.y *= scale;
++            pos.z *= scale;
++            HSD_LObjSetPosition(lobj, &pos);
++            HSD_LObjSetDistAttn(lobj, upper_ref_dist, grZe_Route_804DB944, 3);
++        } else if (light_type == LOBJ_POINT && current_pos.y < split_y) {
++            GXColor color;
++            Vec3 pos = grZe_Route_803B83A0.lower_point_pos;
++            int pad[3];
++
++            color = grZe_Route_804DB928;
++            HSD_LObjSetColor(lobj, color);
++            pos.x *= scale;
++            pos.y *= scale;
++            pos.z *= scale;
++            HSD_LObjSetPosition(lobj, &pos);
++            HSD_LObjSetDistAttn(lobj, lower_ref_dist, grZe_Route_804DB944, 3);
++        }
++
++        i++;
++        lobj = HSD_LObjGetNext(lobj);
++    }
++}
+ 
+ DynamicsDesc* grZebesRoute_8020B854(enum_t arg)
+ {
+diff --git a/src/melee/lb/lbarq.c b/src/melee/lb/lbarq.c
+index e6a048e15e..0efd9ab75c 100644
+--- a/src/melee/lb/lbarq.c
++++ b/src/melee/lb/lbarq.c
+@@ -3,10 +3,13 @@
+ #include <dolphin/os.h>
+ #include <baselib/debug.h>
+ 
+-u32 lbArq_80014ABC(lbArqNode* arg0)
++#pragma push
++#pragma dont_inline on
++lbArqState lbArq_80014ABC(lbArqNode* arg0)
+ {
+     return arg0->state;
+ }
++#pragma pop
+ 
+ void lbArq_80014AC4(lbArqHandle* handle)
+ {
+@@ -25,14 +28,14 @@ void lbArq_80014AC4(lbArqHandle* handle)
+     }
+     *prev = node->next;
+ 
+-    /* Add to done list (list[2]) */
+-    tail = &global->list[2];
++    /* Add to done list */
++    tail = &global->list[LB_ARQ_STATE_DONE];
+     while (*tail != NULL) {
+         tail = &(*tail)->next;
+     }
+     *tail = node;
+     node->next = NULL;
+-    node->state = 2;
++    node->state = LB_ARQ_STATE_DONE;
+ 
+     OSRestoreInterrupts(intr);
+ 
+@@ -49,14 +52,14 @@ void lbArq_80014AC4(lbArqHandle* handle)
+         }
+         *prev = node->next;
+ 
+-        /* Add to free list (list[0]) */
+-        tail = &global->list[0];
++        /* Add to free list */
++        tail = &global->list[LB_ARQ_STATE_FREE];
+         while (*tail != NULL) {
+             tail = &(*tail)->next;
+         }
+         *tail = node;
+         node->next = NULL;
+-        node->state = 0;
++        node->state = LB_ARQ_STATE_FREE;
+ 
+         OSRestoreInterrupts(intr);
+     }
+@@ -71,29 +74,30 @@ void lbArq_80014BD0(u32 source, void* dest, size_t length,
+     lbArqNode** free_head;
+     BOOL intr;
+ 
++    PAD_STACK(16);
+     DCInvalidateRange(dest, length);
+     intr = OSDisableInterrupts();
+-    rp = global->list[0];
+-    free_head = &global->list[0];
++    rp = global->list[LB_ARQ_STATE_FREE];
++    free_head = &global->list[LB_ARQ_STATE_FREE];
+     HSD_ASSERT(0x67, rp);
+     *free_head = rp->next;
+     rp->callback = callback;
+     rp->callback_arg = callback_arg;
+ 
+-    tail = &global->list[1];
++    tail = &global->list[LB_ARQ_STATE_PENDING];
+     while (*tail != NULL) {
+         tail = &(*tail)->next;
+     }
+     *tail = rp;
+     rp->next = NULL;
+-    rp->state = 1;
++    rp->state = LB_ARQ_STATE_PENDING;
+ 
+     ARQPostRequest(&rp->arq, (u32) rp, 1, 0, source, (u32) dest, length,
+                    (ARQCallback) lbArq_80014AC4);
+ 
+     if (rp->callback == NULL) {
+         OSRestoreInterrupts(intr);
+-        while (lbArq_80014ABC(rp) != 2) {
++        while (lbArq_80014ABC(rp) != LB_ARQ_STATE_DONE) {
+         }
+         intr = OSDisableInterrupts();
+         tail = &global->list[rp->state];
+@@ -106,7 +110,7 @@ void lbArq_80014BD0(u32 source, void* dest, size_t length,
+         }
+         *free_head = rp;
+         rp->next = NULL;
+-        rp->state = 0;
++        rp->state = LB_ARQ_STATE_FREE;
+     }
+     OSRestoreInterrupts(intr);
+ }
+@@ -114,22 +118,22 @@ void lbArq_80014BD0(u32 source, void* dest, size_t length,
+ void lbArq_80014D2C(void)
+ {
+     lbArqGlobal* global = &lbArq_804316C0;
+-    lbArqNode* nodes = (lbArqNode*) global;
++    lbArqNode* nodes = global->nodes;
+     lbArqNode* node;
+     int i;
+ 
+-    global->list[0] = NULL;
+-    global->list[1] = NULL;
+-    global->list[2] = NULL;
+-    global->list[0] = nodes;
++    global->list[LB_ARQ_STATE_FREE] = NULL;
++    global->list[LB_ARQ_STATE_PENDING] = NULL;
++    global->list[LB_ARQ_STATE_DONE] = NULL;
++    global->list[LB_ARQ_STATE_FREE] = nodes;
+ 
+     for (i = 0; i < 9; i++) {
+         node = &nodes[i];
+         node->next = node + 1;
+-        node->state = 0;
++        node->state = LB_ARQ_STATE_FREE;
+     }
+     node->next = NULL;
+-    node->state = 0;
++    node->state = LB_ARQ_STATE_FREE;
+ 
+     PAD_STACK(8);
+ }
+diff --git a/src/melee/lb/lbarq.h b/src/melee/lb/lbarq.h
+index 1ea78cfbaa..84c2cba797 100644
+--- a/src/melee/lb/lbarq.h
++++ b/src/melee/lb/lbarq.h
+@@ -8,16 +8,22 @@
+ 
+ typedef void (*lbArqCallback)(void* arg);
+ 
++typedef enum lbArqState {
++    LB_ARQ_STATE_FREE = 0,
++    LB_ARQ_STATE_PENDING = 1,
++    LB_ARQ_STATE_DONE = 2,
++} lbArqState;
++
+ typedef struct lbArqNode {
+     /* 0x00 */ struct lbArqNode* next;
+-    /* 0x04 */ u32 state;
++    /* 0x04 */ lbArqState state;
+     /* 0x08 */ ARQRequest arq;
+     /* 0x28 */ lbArqCallback callback;
+     /* 0x2C */ void* callback_arg;
+ } lbArqNode;
+ 
+ typedef struct lbArqGlobal {
+-    /* 0x000 */ u8 pad[0x1E0];
++    /* 0x000 */ lbArqNode nodes[10];
+     /* 0x1E0 */ lbArqNode* list[3];
+ } lbArqGlobal;
+ 
+@@ -28,7 +34,7 @@ typedef struct lbArqHandle {
+ 
+ extern lbArqGlobal lbArq_804316C0;
+ 
+-/* 014ABC */ u32 lbArq_80014ABC(lbArqNode* arg0);
++/* 014ABC */ lbArqState lbArq_80014ABC(lbArqNode* arg0);
+ /* 014AC4 */ void lbArq_80014AC4(lbArqHandle* handle);
+ /* 014BD0 */ void lbArq_80014BD0(u32, void*, size_t, lbArqCallback, void*);
+ /* 014D2C */ void lbArq_80014D2C(void);
+diff --git a/src/melee/lb/lbcardnew.c b/src/melee/lb/lbcardnew.c
+index ed68a5088f..d74099ab99 100644
+--- a/src/melee/lb/lbcardnew.c
++++ b/src/melee/lb/lbcardnew.c
+@@ -642,7 +642,6 @@ int lb_8001B14C(void)
+     int count;
+     int i;
+     struct SnapshotNode** scan;
+-    lbCardNew_SnapshotEntry* snapshot_entries;
+ 
+     head = NULL;
+     disk_id = DVDGetCurrentDiskID();
+@@ -655,7 +654,6 @@ int lb_8001B14C(void)
+     }
+     nodes = HSD_MemAlloc(0x5F4);
+     node = nodes;
+-    snapshot_entries = lb_80432A68.snapshot_entries;
+     company = (char*) stat[0].company;
+     game = (char*) stat[0].gameName;
+     count = 0;
+@@ -684,14 +682,14 @@ int lb_8001B14C(void)
+ 
+         copy_scan = &head;
+         for (j = 0; j < count; j++) {
+-            snapshot_entries[j].time = (*copy_scan)->time;
+-            snapshot_entries[j].file_no = (*copy_scan)->file_no;
+-            snapshot_entries[j].blocks = (*copy_scan)->blocks;
++            lb_80432A68.snapshot_entries[j].time = (*copy_scan)->time;
++            lb_80432A68.snapshot_entries[j].file_no = (*copy_scan)->file_no;
++            lb_80432A68.snapshot_entries[j].blocks = (*copy_scan)->blocks;
+             copy_scan = &(*copy_scan)->next;
+         }
+     }
+     for (i = count; i < 0x7F; i++) {
+-        snapshot_entries[i].file_no = -1;
++        lb_80432A68.snapshot_entries[i].file_no = -1;
+     }
+     HSD_Free(nodes);
+     lb_80432A68.unk_34 = 0;
+diff --git a/src/melee/lb/lbheap.c b/src/melee/lb/lbheap.c
+index c50ccf8740..f18375eb4b 100644
+--- a/src/melee/lb/lbheap.c
++++ b/src/melee/lb/lbheap.c
+@@ -9,16 +9,71 @@
+ #include <baselib/memory.h>
+ #include <melee/lb/lbmemory.h>
+ 
+-struct {
++struct lbHeap_HeapDesc {
+     u32 idx;
+     u32 type;
+     u32 prev_idx;
+     u32 size;
+-} lbHeap_803BA380[5] = {
++};
++
++struct lbHeap_HeapOffsetView {
++    u8 pad[0x10];
++    struct Heap heap;
++};
++
++struct lbHeap_HeapDesc lbHeap_803BA380[5] = {
+     { 2, 1, 6, 0x800 },    { 3, 1, 2, 0x4F8800 }, { 4, 2, 6, 0x64B400 },
+     { 5, 4, 6, 0x96C800 }, { 6, 0, 0, 0 },
+ };
+ 
++#define lbHeap_GetHeapOffsetView(offset)                                      \
++    ((struct lbHeap_HeapOffsetView*) ((u32) (&lbHeap_80431FA0) + (offset)))
++
++static inline void lbHeap_ResetHeap(struct Heap* heap)
++{
++    heap->id = -1;
++    heap->handle = (Handle*) -1;
++    heap->start = 0;
++    heap->size = 0;
++    heap->type = 1;
++    heap->transient = 1;
++    heap->status = 1;
++}
++
++static inline void
++lbHeap_DestroyOffsetViewIfCreated(struct lbHeap_HeapOffsetView* view)
++{
++    struct Heap* heap = &view->heap;
++
++    if (view->heap.status == 0) {
++        if (heap->type == 0) {
++            OSDestroyHeap(heap->id);
++            heap->id = -1;
++        } else {
++            lbMemory_80014EEC(heap->handle);
++            heap->handle = (Handle*) -1;
++        }
++        heap->status = 1;
++    }
++}
++
++static inline void
++lbHeap_CreateOffsetViewIfDestroyed(struct lbHeap_HeapOffsetView* view)
++{
++    struct Heap* heap = &view->heap;
++
++    if (view->heap.status == 1) {
++        if (heap->type == 0) {
++            heap->id = OSCreateHeap((void*) heap->start,
++                                    (void*) (heap->start + heap->size));
++        } else {
++            heap->handle = lbMemory_80014E24(
++                (void*) heap->start, (void*) (heap->start + heap->size));
++        }
++        heap->status = 0;
++    }
++}
++
+ void lbHeap_800158D0(int arg0, int arg1)
+ {
+     lbHeap_80431FA0.heap_array[arg0].transient = arg1;
+@@ -32,127 +87,109 @@ int lbHeap_800158E8(int arg0)
+ void lbHeap_80015900(void)
+ {
+     s32 temp_r0;
+-    s32 i;
+-    u32* aram_hi;
+-    u32* aram_lo;
+-    u32* arena_hi;
+-    u32* arena_lo;
++    struct lbHeap_HeapOffsetView* destroy_view;
++    struct Heap* bounds_heap;
++    struct lbHeap_HeapOffsetView* create_view;
++    s32 destroy_i;
++    s32 heap_offset;
++    s32 bounds_i;
++    s32 create_i;
++    u32 arena_lo;
++    u32 aram_lo;
++    u32 aram_hi;
++    u32 arena_hi;
++    struct Heap* main_heap;
++    struct Heap* aram_heap;
+ 
+     /// @remarks 0 and 1 are reserved for HSD and ARAM
+-    for (i = 2; i < 6; i++) {
+-        if (lbHeap_80431FA0.heap_array[i].transient == 1) {
+-            if (lbHeap_80431FA0.heap_array[i].status == 0) {
+-                if (lbHeap_80431FA0.heap_array[i].type == 0) {
+-                    OSDestroyHeap(lbHeap_80431FA0.heap_array[i].id);
+-                    lbHeap_80431FA0.heap_array[i].id = -1;
+-                } else {
+-                    lbMemory_80014EEC(lbHeap_80431FA0.heap_array[i].handle);
+-                    lbHeap_80431FA0.heap_array[i].handle = (Handle*) -1;
+-                }
+-            }
++    for (destroy_i = 2, heap_offset = 0x38; destroy_i < 6;
++         destroy_i++, heap_offset += sizeof(struct Heap))
++    {
++        if (lbHeap_80431FA0.heap_array[destroy_i].transient == 1) {
++            destroy_view = lbHeap_GetHeapOffsetView(heap_offset);
++            lbHeap_DestroyOffsetViewIfCreated(destroy_view);
+         }
+     }
+ 
+-    arena_lo = lbHeap_80431FA0.arena_lo;
+-    arena_hi = lbHeap_80431FA0.arena_hi;
+-    aram_lo = (u32*) lbHeap_80431FA0.aram_lo;
+-    aram_hi = (u32*) lbHeap_80431FA0.aram_hi;
+-
+-    /// @todo this loop isnt entirely right, its purpose is to calculate where
+-    // the main heap can be allocated. This currently checks heaps 2 and 3,
+-    // then 2 and 1... checking 2 twice.
+-    for (i = 2; i > 0; i--) {
+-        if (lbHeap_80431FA0.heap_array[i].transient == 0) {
+-            if (lbHeap_80431FA0.heap_array[i].type != 3) {
+-                switch (lbHeap_80431FA0.heap_array[i].type) {
+-                case 1:
+-                    temp_r0 = lbHeap_80431FA0.heap_array[i].start +
+-                              lbHeap_80431FA0.heap_array[i].size;
+-                    if (arena_lo < (u32*) temp_r0) {
+-                        arena_lo = (u32*) temp_r0;
+-                    }
+-                    break;
+-
+-                case 2:
+-                    if (arena_hi > (u32*) lbHeap_80431FA0.heap_array[i].start)
+-                    {
+-                        arena_hi = (u32*) lbHeap_80431FA0.heap_array[i].start;
+-                    }
+-                    break;
+-
+-                case 4:
+-                    temp_r0 = lbHeap_80431FA0.heap_array[i].start +
+-                              lbHeap_80431FA0.heap_array[i].size;
+-                    if (aram_lo < (u32*) temp_r0) {
+-                        aram_lo = (u32*) temp_r0;
+-                    }
+-                    break;
++    arena_lo = (u32) lbHeap_80431FA0.arena_lo;
++    arena_hi = (u32) lbHeap_80431FA0.arena_hi;
++    aram_lo = lbHeap_80431FA0.aram_lo;
++    aram_hi = lbHeap_80431FA0.aram_hi;
++
++    for (bounds_i = 2; bounds_i < 4; bounds_i++) {
++        bounds_heap = &lbHeap_80431FA0.heap_array[bounds_i * 2 - 2];
++        if (bounds_heap->transient == 0) {
++            switch (bounds_heap->type) {
++            case 1:
++                temp_r0 = bounds_heap->start + bounds_heap->size;
++                if (arena_lo < temp_r0) {
++                    arena_lo = temp_r0;
+                 }
++                break;
++
++            case 2:
++                if (arena_hi > bounds_heap->start) {
++                    arena_hi = bounds_heap->start;
++                }
++                break;
++
++            case 4:
++                temp_r0 = bounds_heap->start + bounds_heap->size;
++                if (aram_lo < temp_r0) {
++                    aram_lo = temp_r0;
++                }
++                break;
+             }
+         }
+ 
+-        if (lbHeap_80431FA0.heap_array[i + 1].transient == 0) {
+-            if (lbHeap_80431FA0.heap_array[i + 1].type != 3) {
+-                switch (lbHeap_80431FA0.heap_array[i + 1].type) {
+-                case 1:
+-                    temp_r0 = lbHeap_80431FA0.heap_array[i + 1].start +
+-                              lbHeap_80431FA0.heap_array[i + 1].size;
+-                    if (arena_lo < (u32*) temp_r0) {
+-                        arena_lo = (u32*) temp_r0;
+-                    }
+-                    break;
+-
+-                case 2:
+-                    if (arena_hi >
+-                        (u32*) lbHeap_80431FA0.heap_array[i + 1].start)
+-                    {
+-                        arena_hi =
+-                            (u32*) lbHeap_80431FA0.heap_array[i + 1].start;
+-                    }
+-                    break;
+-
+-                case 4:
+-                    temp_r0 = lbHeap_80431FA0.heap_array[i + 1].start +
+-                              lbHeap_80431FA0.heap_array[i + 1].size;
+-                    if (aram_lo < (u32*) temp_r0) {
+-                        aram_lo = (u32*) temp_r0;
+-                    }
+-                    break;
++        bounds_heap++;
++        if (bounds_heap->transient == 0) {
++            switch (bounds_heap->type) {
++            case 1:
++                temp_r0 = bounds_heap->start + bounds_heap->size;
++                if (arena_lo < temp_r0) {
++                    arena_lo = temp_r0;
+                 }
++                break;
++
++            case 2:
++                if (arena_hi > bounds_heap->start) {
++                    arena_hi = bounds_heap->start;
++                }
++                break;
++
++            case 4:
++                temp_r0 = bounds_heap->start + bounds_heap->size;
++                if (aram_lo < temp_r0) {
++                    aram_lo = temp_r0;
++                }
++                break;
+             }
+         }
+     }
+ 
+-    lbHeap_80431FA0.heap_array[0].id = HSD_CreateMainHeap(arena_lo, arena_hi);
+-    lbHeap_80431FA0.heap_array[0].start = *arena_lo;
+-    lbHeap_80431FA0.heap_array[0].size = *arena_hi - *arena_lo;
+-    lbHeap_80431FA0.heap_array[0].status = 0;
+-    lbHeap_80431FA0.heap_array[0].type = 0;
++    main_heap = &lbHeap_80431FA0.heap_array[0];
++    main_heap->id = HSD_CreateMainHeap((void*) arena_lo, (void*) arena_hi);
++    main_heap->start = arena_lo;
++    aram_heap = &lbHeap_80431FA0.heap_array[1];
++    main_heap->size = arena_hi - arena_lo;
++    main_heap->status = 0;
++    main_heap->type = 0;
+ 
+     lbMemory_800155A4();
+ 
+-    lbHeap_80431FA0.heap_array[1].handle = lbMemory_800154D4(aram_lo, aram_hi);
+-    lbHeap_80431FA0.heap_array[1].start = *aram_lo;
+-    lbHeap_80431FA0.heap_array[1].size = *aram_hi - *aram_lo;
+-    lbHeap_80431FA0.heap_array[1].status = 0;
+-    lbHeap_80431FA0.heap_array[1].type = 3;
+-
+-    for (i = 2; i < 6; i++) {
+-        if (lbHeap_80431FA0.heap_array[i].transient == 0) {
+-            if (lbHeap_80431FA0.heap_array[i].status == 1) {
+-                if (lbHeap_80431FA0.heap_array[i].type == 0) {
+-                    lbHeap_80431FA0.heap_array[i].id = OSCreateHeap(
+-                        (void*) lbHeap_80431FA0.heap_array[i].start,
+-                        (void*) (lbHeap_80431FA0.heap_array[i].start +
+-                                 lbHeap_80431FA0.heap_array[i].size));
+-                } else {
+-                    lbHeap_80431FA0.heap_array[i].handle = lbMemory_80014E24(
+-                        (void*) lbHeap_80431FA0.heap_array[i].start,
+-                        (void*) (lbHeap_80431FA0.heap_array[i].start +
+-                                 lbHeap_80431FA0.heap_array[i].size));
+-                }
+-                lbHeap_80431FA0.heap_array[i].status = 0;
+-            }
++    aram_heap->handle = lbMemory_800154D4((void*) aram_lo, (void*) aram_hi);
++    aram_heap->start = aram_lo;
++    aram_heap->size = aram_hi - aram_lo;
++    aram_heap->status = 0;
++    aram_heap->type = 3;
++
++    for (create_i = 2, heap_offset = 0x38; create_i < 6;
++         create_i++, heap_offset += sizeof(struct Heap))
++    {
++        if (lbHeap_80431FA0.heap_array[create_i].transient == 0) {
++            create_view = lbHeap_GetHeapOffsetView(heap_offset);
++            lbHeap_CreateOffsetViewIfDestroyed(create_view);
+         }
+     }
+ }
+@@ -263,28 +300,25 @@ void lbHeap_80015F3C(void)
+     int prev_idx;
+     struct Heap* curr_heap;
+     struct Heap* prev_heap;
+-    int i;
++    struct lbHeap_HeapDesc* desc;
+ 
+     HSD_GetNextArena(&lbHeap_80431FA0.arena_lo, &lbHeap_80431FA0.arena_hi);
+     lbMemory_800154BC(&lbHeap_80431FA0.aram_lo, &lbHeap_80431FA0.aram_hi);
+ 
+-    for (i = 0; i < 6; i++) {
+-        lbHeap_80431FA0.heap_array[i].id = -1;
+-        lbHeap_80431FA0.heap_array[i].handle = (Handle*) -1;
+-        lbHeap_80431FA0.heap_array[i].start = 0;
+-        lbHeap_80431FA0.heap_array[i].size = 0;
+-        lbHeap_80431FA0.heap_array[i].type = 1;
+-        lbHeap_80431FA0.heap_array[i].transient = 1;
+-        lbHeap_80431FA0.heap_array[i].status = 1;
+-    }
++    lbHeap_ResetHeap(&lbHeap_80431FA0.heap_array[0]);
++    lbHeap_ResetHeap(&lbHeap_80431FA0.heap_array[1]);
++    lbHeap_ResetHeap(&lbHeap_80431FA0.heap_array[2]);
++    lbHeap_ResetHeap(&lbHeap_80431FA0.heap_array[3]);
++    lbHeap_ResetHeap(&lbHeap_80431FA0.heap_array[4]);
++    lbHeap_ResetHeap(&lbHeap_80431FA0.heap_array[5]);
+ 
+-    i = 0;
+-    while ((curr_idx = lbHeap_803BA380[i].idx) != 6) {
++    desc = lbHeap_803BA380;
++    while ((curr_idx = desc->idx) != 6) {
+         curr_heap = &lbHeap_80431FA0.heap_array[curr_idx];
+ 
+-        curr_heap->type = lbHeap_803BA380[i].type;
+-        curr_heap->size = lbHeap_803BA380[i].size;
+-        prev_idx = lbHeap_803BA380[i].prev_idx;
++        curr_heap->type = desc->type;
++        curr_heap->size = desc->size;
++        prev_idx = desc->prev_idx;
+         if (prev_idx == 6) {
+             switch (curr_heap->type) {
+             case 3:
+@@ -316,6 +350,6 @@ void lbHeap_80015F3C(void)
+                 break;
+             }
+         }
+-        i++;
++        desc++;
+     }
+ }
+diff --git a/src/melee/lb/lbmemory.c b/src/melee/lb/lbmemory.c
+index 9c098ec153..882fd6b8d6 100644
+--- a/src/melee/lb/lbmemory.c
++++ b/src/melee/lb/lbmemory.c
+@@ -2,32 +2,50 @@
+ 
+ #include <platform.h>
+ 
++#include <dolphin/ar.h>
+ #include <baselib/debug.h>
++#include <baselib/devcom.h>
++
++struct MemEntry {
++    struct MemEntry* x0_next;
++    void* x4_lo;
++    void* x8_hi;
++};
++
++struct LBMgr {
++    OSAlarm alarm;                  // 0x00
++    u8* src;                        // 0x28
++    u8* dst;                        // 0x2C
++    u32 size;                       // 0x30
++    u32 offset;                     // 0x34
++    u32 cb_arg;                     // 0x38
++    void (*cb)(u32, u32, u32, u32); // 0x3C
++};
+ 
+ struct Allocator {
+     void* x0_arenaLo;
+     void* x4_arenaHi;
+-    u8 x8[0x62C - 0x8];
++    struct MemEntry x8_mem[0x83];
+     Handle* x62C_free_mem;
+     s32 x630_num_allocs;
+     s32 x634_max_num_allocs;
+-    u8 x638[0x698 - 0x638];
++    Handle x638_heap[6];
+     Handle* x698_free_heap;
+     Handle* x69C;
+-    u8 x6A0[0x6E0 - 0x6A0];
++    struct LBMgr x6A0_mgr;
+     u32 x6E0;
+     void* x6E4;
+     void* x6E8;
+     u8 x6EC[0x6F0 - 0x6EC];
+ };
+ 
+-/* 015320 */ static void lbMemory_80015320(int, Handle*, int, int);
++/* 015320 */ void lbMemory_80015320(int, Handle*, int, int);
+ 
+-/// lbMemory_804318B0
+-static struct Allocator g_alloc;
+-STATIC_ASSERT(sizeof(g_alloc) == 0x6F0);
++struct Allocator lbMemory_804318B0;
++#define g_alloc lbMemory_804318B0
++STATIC_ASSERT(sizeof(struct MemEntry) == 0xC);
++STATIC_ASSERT(sizeof(lbMemory_804318B0) == 0x6F0);
+ 
+-/// might need to change to take lvalue instead of pointer if codegen is bad
+ #define PUSH_HANDLE(list, handle)                                             \
+     do {                                                                      \
+         handle->x0_next = *list;                                              \
+@@ -39,12 +57,25 @@ STATIC_ASSERT(sizeof(g_alloc) == 0x6F0);
+         *list = handle->x0_next;                                              \
+     } while (0)
+ 
+-/// pops handle from freelist and sets the popped regions's bounds
++static char lbl_803BA2C0[0xB] = "lbmemory.c";
++static char lbl_803BA2CC[0xE] = "_p(free_heap)";
++static char lbl_803BA2DC[0x49] =
++    "(u32)arenaLo >= (u32)_p(a_arenaLo) && (u32)arenaHi <= "
++    "(u32)_p(a_arenaHi)";
++static char lbl_803BA328[0xD] = "_p(free_mem)";
++static char lbl_803BA338[0xB] = "memp_kouho";
++static char lbl_803BA344[0x24] = "[LbMem] Error: lbMemFreeToHeap %x.\n";
++static char lbl_803BA368[0x18] = "!p->size\0\0\0\0!cancelflag";
++
++SDATA char lbMemory_804D3788[7] = "handle";
++SDATA char lbMemory_804D3790[2] = "0";
++SDATA char lbMemory_804D3794[8] = "p->size";
++
+ static inline Handle* new_handle(void* arenaLo, void* arenaHi)
+ {
+     Handle* h;
+     if (g_alloc.x698_free_heap == NULL) {
+-        __assert(__FILE__, 0x7BU, "_p(free_heap)");
++        __assert(lbl_803BA2C0, 0x7BU, lbl_803BA2CC);
+     }
+     // assert_arena_in_bounds(arenaLo, arenaHi);
+ 
+@@ -56,9 +87,7 @@ static inline Handle* new_handle(void* arenaLo, void* arenaHi)
+             ok = 1;
+         }
+         if (ok == 0) {
+-            __assert(__FILE__, 0x80U,
+-                     "(u32)arenaLo >= (u32)_p(a_arenaLo) && (u32)arenaHi <= "
+-                     "(u32)_p(a_arenaHi)");
++            __assert(lbl_803BA2C0, 0x80U, lbl_803BA2DC);
+         }
+     }
+ 
+@@ -75,15 +104,12 @@ Handle* lbMemory_80014E24(void* arenaLo, void* arenaHi)
+     return new_handle(arenaLo, arenaHi);
+ }
+ 
+-/// moves a list of handles into x62C
+-/// then pushes the head to free_heap
+-/// why does it start at handle->xC_prev?
+ void lbMemory_80014EEC(Handle* handle)
+ {
+     Handle* iter;
+     Handle* tmp_next;
+     if (handle == NULL) {
+-        __assert(__FILE__, 0x95U, "handle");
++        __assert(lbl_803BA2C0, 0x95U, lbMemory_804D3788);
+     }
+     for (iter = handle->xC_prev; iter != NULL;) {
+         tmp_next = iter->x0_next;
+@@ -98,9 +124,6 @@ u32 lbMemory_80014F7C(Handle* h)
+ {
+     u32 r0;
+     u32 r4 = (u32) h->x4_lo;
+-    // this is weird.. i'm missing something
+-    // &h->xC_prev should be a Handle**,
+-    // and h->x0_prev looks the same as *h
+     Handle* iter = (Handle*) &h->xC_prev;
+     u32 sum = 0;
+ 
+@@ -115,7 +138,6 @@ u32 lbMemory_80014F7C(Handle* h)
+     return sum;
+ }
+ 
+-/// malloc
+ Handle* lbMemory_80014FC8(Handle* arg0, u32 size)
+ {
+     void* lo;
+@@ -130,18 +152,14 @@ Handle* lbMemory_80014FC8(Handle* arg0, u32 size)
+ 
+     least_leftover = 0x40000000U;
+     if (g_alloc.x62C_free_mem == NULL) {
+-        __assert(__FILE__, 0xCCU, "_p(free_mem)");
++        __assert(lbl_803BA2C0, 0xCCU, lbl_803BA328);
+     }
+     start = arg0->x4_lo;
+-    // 32 byte alignment
+     aligned_size = ((size + 0x1F) & 0xFFFFFFE0);
+     iter = (Handle*) &arg0->xC_prev;
+     memp_candidate = NULL;
+ 
+     while (1) {
+-        // iter = var_r5->x0_next;
+-        // we look at iter each iteration,
+-        // until the last iteration, we check arg0
+         end = (iter->x0_next != NULL) ? iter->x0_next->x4_lo : arg0->x8_hi;
+         available_space = (u32) end - (u32) start;
+         if (available_space >= aligned_size) {
+@@ -160,8 +178,7 @@ Handle* lbMemory_80014FC8(Handle* arg0, u32 size)
+         }
+     }
+     if (memp_candidate == NULL) {
+-        // oom
+-        __assert(__FILE__, 0xE9U, "memp_kouho");
++        __assert(lbl_803BA2C0, 0xE9U, lbl_803BA338);
+     }
+     {
+         Handle* result;
+@@ -195,23 +212,10 @@ void lbMemory_800150F0(Handle* h, void* arg1)
+         r6 = handle;
+         handle = handle->x0_next;
+     }
+-    OSReport("[LbMem] Error: lbMemFreeToHeap %x.\n", arg1);
+-    __assert("lbmemory.c", 283, "0");
++    OSReport(lbl_803BA344, arg1);
++    __assert(lbl_803BA2C0, 283, lbMemory_804D3790);
+ }
+ 
+-static s8 lbl_803BA2C0[0xB] = "lbmemory.c";
+-static s8 lbMemory_804D3794[8] = "p->size";
+-
+-struct LBMgr {
+-    OSAlarm alarm;                  // 0x00
+-    u8* src;                        // 0x28
+-    u8* dst;                        // 0x2C
+-    u32 size;                       // 0x30
+-    u32 offset;                     // 0x34
+-    u32 cb_arg;                     // 0x38
+-    void (*cb)(u32, u32, u32, u32); // 0x3C
+-};
+-
+ void fn_80015184(OSAlarm* alarm, OSContext* context)
+ {
+     struct LBMgr* temp_r3;
+@@ -219,9 +223,9 @@ void fn_80015184(OSAlarm* alarm, OSContext* context)
+     u32 temp_r6;
+     u32 var_r30;
+ 
+-    temp_r3 = (struct LBMgr*) ((u8*) &g_alloc + 0x6A0);
++    temp_r3 = &g_alloc.x6A0_mgr;
+     if ((u32) temp_r3->size == 0U) {
+-        __assert("lbmemory.c", 0x127U, "p->size");
++        __assert(lbl_803BA2C0, 0x127U, lbMemory_804D3794);
+     }
+     temp_r6 = temp_r3->offset;
+     temp_r3_2 = temp_r3->size - temp_r6;
+@@ -237,7 +241,7 @@ void fn_80015184(OSAlarm* alarm, OSContext* context)
+         return;
+     }
+     OSCreateAlarm(&temp_r3->alarm);
+-    OSSetAlarm(&temp_r3->alarm, 0x10624DD3, NULL);
++    OSSetAlarm(&temp_r3->alarm, OSMillisecondsToTicks(3), fn_80015184);
+ }
+ 
+ u32 lbMemory_8001529C(Handle* h, void* arg1, u32 arg2)
+@@ -263,14 +267,72 @@ u32 lbMemory_8001529C(Handle* h, void* arg1, u32 arg2)
+     return 0;
+ }
+ 
+-/// getArenaBounds
++void lbMemory_80015320(int arg0, Handle* handle, int arg2, int cancelflag)
++{
++    struct Allocator* alloc;
++    struct LBMgr* mgr;
++    int enabled;
++    void** currentp;
++    u32 size;
++    u32 current;
++    u32 old;
++    Handle* next;
++
++    alloc = &g_alloc;
++    currentp = &alloc->x6E4;
++    current = (u32) alloc->x6E4;
++
++    if (cancelflag != 0) {
++        __assert(lbl_803BA2C0, 0x188U, &lbl_803BA368[0xC]);
++    }
++
++    if (handle != NULL) {
++        if ((old = (u32) handle->x4_lo) != current) {
++            handle->x4_lo = (void*) current;
++            *currentp = (void*) ((u32) handle->x4_lo + (u32) handle->x8_hi);
++
++            if ((u32) handle->x4_lo < 0x80000000U) {
++                HSD_DevComRequest(
++                    0, old, current, ((u32) handle->x8_hi + 0x1F) & 0xFFFFFFE0,
++                    0x1B, 1, (HSD_DevComCallback) lbMemory_80015320,
++                    handle->x0_next);
++                return;
++            } else {
++                mgr = &alloc->x6A0_mgr;
++                next = handle->x0_next;
++                size = ((u32) handle->x8_hi + 0x1F) & 0xFFFFFFE0;
++                enabled = OSDisableInterrupts();
++
++                if (mgr->size != 0) {
++                    __assert(lbl_803BA2C0, 0x14FU, lbl_803BA368);
++                }
++                mgr->src = (u8*) old;
++                mgr->dst = (u8*) current;
++                mgr->size = size;
++                mgr->offset = 0;
++                mgr->cb_arg = (u32) next;
++                mgr->cb = (void (*)(u32, u32, u32, u32)) lbMemory_80015320;
++                OSRestoreInterrupts(enabled);
++                OSCreateAlarm(&mgr->alarm);
++                OSSetAlarm(&mgr->alarm, OSMillisecondsToTicks(3), fn_80015184);
++                return;
++            }
++        }
++
++        *currentp = (void*) ((u32) old + (u32) handle->x8_hi);
++        lbMemory_80015320(0, handle->x0_next, 0, 0);
++        return;
++    }
++
++    ((void (*)(u32)) alloc->x6E8)(alloc->x6E0);
++}
++
+ void lbMemory_800154BC(uintptr_t* arenaLo, uintptr_t* arenaHi)
+ {
+     *arenaLo = (uintptr_t) g_alloc.x0_arenaLo;
+     *arenaHi = (uintptr_t) g_alloc.x4_arenaHi;
+ }
+ 
+-/// same as lbMemory_80014E24, but sets to x69C to the popped handle
+ Handle* lbMemory_800154D4(void* arenaLo, void* arenaHi)
+ {
+     g_alloc.x69C = new_handle(arenaLo, arenaHi);
+@@ -284,7 +346,9 @@ void lbMemory_800155A4(void)
+ 
+     Handle** r5;
+ 
+-    HSD_ASSERT(149, handle);
++    if (handle == NULL) {
++        __assert(lbl_803BA2C0, 149, lbMemory_804D3788);
++    }
+     r5 = &g_alloc.x62C_free_mem;
+     for (iter = handle->xC_prev; iter != NULL;) {
+         Handle* tmp_next = iter->x0_next;
+@@ -295,3 +359,41 @@ void lbMemory_800155A4(void)
+     PUSH_HANDLE(&g_alloc.x698_free_heap, handle);
+     g_alloc.x69C = NULL;
+ }
++
++#pragma push
++#pragma dont_inline on
++void lbMemory_8001564C(void)
++{
++    u32 size[3];
++    int i;
++    u8* base = (u8*) &g_alloc;
++
++    g_alloc.x0_arenaLo = (void*) ARAlloc(0x20);
++    ARFree(&size[2]);
++    g_alloc.x4_arenaHi =
++        (void*) ((ARGetSize() > 0x01000000U) ? 0x01000000U : ARGetSize());
++
++    g_alloc.x62C_free_mem = (Handle*) &g_alloc.x8_mem[0];
++    for (i = 0; i < 0x82; i++) {
++        g_alloc.x8_mem[i].x0_next = &g_alloc.x8_mem[i + 1];
++    }
++    g_alloc.x8_mem[i].x0_next = NULL;
++
++    g_alloc.x634_max_num_allocs = 0;
++    g_alloc.x630_num_allocs = 0;
++    g_alloc.x698_free_heap = (Handle*) (base + 0x638);
++    *(void**) (base + 0x638) = base + 0x648;
++    *(void**) (base + 0x648) = base + 0x658;
++    *(void**) (base + 0x658) = base + 0x668;
++    *(void**) (base + 0x668) = base + 0x678;
++    *(void**) (base + 0x678) = base + 0x688;
++    *(void**) (base + 0x688) = NULL;
++    g_alloc.x69C = NULL;
++    {
++        void* hi = g_alloc.x4_arenaHi;
++        void* lo = g_alloc.x0_arenaLo;
++        g_alloc.x69C = lbMemory_80014E24(lo, hi);
++    }
++    *(u32*) (base + 0x6D0) = 0;
++}
++#pragma pop
+diff --git a/src/melee/lb/lbmemory.h b/src/melee/lb/lbmemory.h
+index 714c410444..4de5c2d56d 100644
+--- a/src/melee/lb/lbmemory.h
++++ b/src/melee/lb/lbmemory.h
+@@ -10,7 +10,7 @@
+ typedef struct _Handle {
+     struct _Handle* x0_next;
+     void* x4_lo;
+-    // is this hi or size?
++    // Arena high bound for heap handles; allocation size for child handles.
+     void* x8_hi;
+     struct _Handle* xC_prev;
+ } Handle;
+diff --git a/src/melee/lb/lbsnap.c b/src/melee/lb/lbsnap.c
+index 4f2f57d43d..3a37c7104c 100644
+--- a/src/melee/lb/lbsnap.c
++++ b/src/melee/lb/lbsnap.c
+@@ -104,30 +104,35 @@ void lbSnap_8001D4A4(int chan, char* arg1)
+     sprintf(arg1, "%u", time);
+ }
+ 
++static inline void lbSnap_ClearText(char* text)
++{
++    int i;
++
++    for (i = 0; i < 0x21; i++) {
++        text[i] = '\0';
++    }
++}
++
+ int lbSnap_8001D5FC(int chan, int index)
+ {
+     struct Unk80433380_48* ptr = &lbSnap_80433380.x48[chan];
+     char text[0x21];
+-    int i;
++    int ret;
+     PAD_STACK(8);
+ 
+     if (ptr->card_result == 0 && lbSnap_80433380.x54_stateChanged[chan] != 0) {
+         ptr->card_result = 8;
+     }
+-    if (ptr->card_result == 0) {
++    ret = ptr->card_result;
++    if (ret == 0) {
+         HSD_ASSERTMSG(410, index < lbSnap_80433380.x48[chan].num,
+                       "index < _p(slot)[chan].num");
+-        i = 0;
+-        while (i < 0x21) {
+-            text[i] = '\0';
+-            i++;
+-        }
++        lbSnap_ClearText(text);
+         sprintf(text, "%u", lbSnap_80433380.x48[chan].entries[index].time);
+         lbSnap_80433380.x48[chan].card_result = 8;
+-        return lb_8001B99C(chan, text, 0);
+-    } else {
+-        return ptr->card_result;
++        ret = lb_8001B99C(chan, text, 0);
+     }
++    return ret;
+ }
+ 
+ int lbSnap_8001D7B0(int chan, int index, int jndex)
+@@ -136,35 +141,27 @@ int lbSnap_8001D7B0(int chan, int index, int jndex)
+     char text1[0x21];
+     char text2[0x21];
+     char text3[0x21];
+-    int i;
++    int ret;
+     PAD_STACK(8);
+ 
+     if (ptr->card_result == 0 && lbSnap_80433380.x54_stateChanged[chan] != 0) {
+         ptr->card_result = 8;
+     }
+-    if (ptr->card_result == 0) {
++    ret = ptr->card_result;
++    if (ret == 0) {
+         HSD_ASSERTMSG(410, index < lbSnap_80433380.x48[chan].num,
+                       "index < _p(slot)[chan].num");
+-        i = 0;
+-        while (i < 0x21) {
+-            text1[i] = '\0';
+-            i++;
+-        }
++        lbSnap_ClearText(text1);
+         sprintf(text1, "%u", lbSnap_80433380.x48[chan].entries[index].time);
+         HSD_ASSERTMSG(410, jndex < lbSnap_80433380.x48[chan].num,
+                       "index < _p(slot)[chan].num");
+-        i = 0;
+-        while (i < 0x21) {
+-            text2[i] = '\0';
+-            i++;
+-        }
++        lbSnap_ClearText(text2);
+         sprintf(text2, "%u", lbSnap_80433380.x48[chan].entries[jndex].time);
+         lbSnap_8001D4A4(chan, text3);
+         lbSnap_80433380.x48[chan].card_result = 8;
+-        return lb_8001C0F4(chan, text1, text2, text3, 0);
+-    } else {
+-        return ptr->card_result;
++        ret = lb_8001C0F4(chan, text1, text2, text3, 0);
+     }
++    return ret;
+ }
+ 
+ /// RGB5A3:  A RRRRR GGGGG BBBBB
+@@ -183,53 +180,53 @@ int lbSnap_8001D7B0(int chan, int index, int jndex)
+     (((x) & RGB5A3_MASK_B) | (((x) >> 1) & (RGB5A3_MASK_R | RGB5A3_MASK_G)) | \
+      RGB5A3_MASK_A)
+ 
++static inline int lbSnap_GetTiledRGBOffset(int x, int y, int tile_stride)
++{
++    return ((((x / 4) * tile_stride) + (y / 4)) << 5) + ((x % 4) * 8) +
++           ((y % 4) * 2);
++}
++
++static inline int lbSnap_GetTiledYOff(int tile_column, int y)
++{
++    return (((y / 4) + tile_column) << 5) + ((y % 4) * 2);
++}
++
+ void lbSnap_8001DA5C(int arg0)
+ {
+-    int r4, r5, r6, r7, r9, r10, r25, r27, r28, ctr;
+-    PAD_STACK(16);
+-
+-    r7 = 0;
+-    for (r10 = 0; r10 < 32; r10++) {
+-        r4 = r7 / 32;
+-        r6 = r10 / 4 * 24;
+-        r27 = (r4 + 138) / 4 * 160;
+-        r5 = lbSnap_80433380.x44_LbMcSnap_MemSnapIconData[(r10 % 4) * 2];
+-        r9 = 0;
+-        r4 = 0;
++    u8* dst = (u8*) lbSnap_80433380.x44_LbMcSnap_MemSnapIconData[0];
++    int dst_x;
++    int ctr;
++    PAD_STACK(8);
++
++    for (dst_x = 0; dst_x < 32; dst_x++) {
++        int src_x = (dst_x * 204 / 32) + 138;
++        u8* dst_col = dst + ((dst_x % 4) * 8);
++        int tile_column = (dst_x / 4) * 24;
++        int dst_y = 0;
++        int src_y_accum = 0;
++        u16 pixel;
+         for (ctr = 0; ctr < 32; ctr++) {
+-            // converting r25 from RGB565 to RGB5A3
+-            // keep B where it is
+-            // rightshift R and G, discarding the bottom bit of G
+-            // A is fixed fully opaque
+-
+-            r28 = r4 / 64;
+-            r25 = *(unsigned short*) (arg0 + (((((r28 + 96) / 4) + r27) << 5) +
+-                                              (((r4 + 138) % 4) * 8) +
+-                                              (((r28 + 96) % 4) * 2)));
+-            *(unsigned short*) (r5 + (((((r9 + 16) / 4) + r6) << 5) +
+-                                      (((r9 + 16) % 4) * 2))) =
+-                RGB565_TO_RGB5A3(r25);
+-            r4 += 448; // height in pixels?
+-
+-            r28 = r4 / 64;
+-            r25 = *(unsigned short*) (arg0 + (((((r28 + 96) / 4) + r27) << 5) +
+-                                              (((r4 + 138) % 4) * 8) +
+-                                              (((r28 + 96) % 4) * 2)));
+-            *(unsigned short*) (r5 + (((((r9 + 17) / 4) + r6) << 5) +
+-                                      (((r9 + 17) % 4) * 2))) =
+-                RGB565_TO_RGB5A3(r25);
+-            r4 += 448;
+-
+-            r9 += 2;
++            pixel = *(u16*) &((u8*) arg0)[lbSnap_GetTiledRGBOffset(
++                src_x, src_y_accum / 64 + 96, 160)];
++            *(u16*) &dst_col[lbSnap_GetTiledYOff(tile_column, dst_y + 16)] =
++                RGB565_TO_RGB5A3(pixel);
++            src_y_accum += 448;
++
++            pixel = *(u16*) &((u8*) arg0)[lbSnap_GetTiledRGBOffset(
++                src_x, src_y_accum / 64 + 96, 160)];
++            *(u16*) &dst_col[lbSnap_GetTiledYOff(tile_column, dst_y + 17)] =
++                RGB565_TO_RGB5A3(pixel);
++            src_y_accum += 448;
++
++            dst_y += 2;
+         }
+-        r7 += 204;
+     }
+ }
+ 
+ int lbSnap_8001DC0C(int arg0)
+ {
+     OSTime ticks;
+-    OSTime seconds;
++    u32 seconds;
+     OSCalendarTime time;
+     u32 i;
+     char* text;
+@@ -252,8 +249,7 @@ int lbSnap_8001DC0C(int arg0)
+     lbSnap_8001DA5C(arg0);
+     ticks = OSGetTime();
+     seconds = OSTicksToSeconds(ticks);
+-    ticks = OSSecondsToTicks(seconds);
+-    OSTicksToCalendarTime(ticks, &time);
++    OSTicksToCalendarTime(OSSecondsToTicks((u64) seconds), &time);
+     for (i = 0; i < sizeof(lbSnap_80433380.x4_string); i++) {
+         lbSnap_80433380.x4_string[i] = 0;
+     }
+@@ -282,14 +278,17 @@ int lbSnap_8001DE8C(void* arg0)
+     return ret;
+ }
+ 
++static inline int lbSnap_GetSaveDataOffset(struct Unk80433380_0* snap)
++{
++    return snap->xC + ((int) &snap->x38 - (int) snap);
++}
++
+ int lbSnap_8001DF20(void)
+ {
+-    // This is probably an offsetof call, but I don't know what pointer is in
+-    // xC
+-    lbSnap_803BACC8.x14 =
+-        lbSnap_80433380.x0->xC +
+-        ((int) &lbSnap_80433380.x0->x38 - (int) &lbSnap_80433380.x0->x0);
+-    lbSnap_803BACC8.x1C = lbSnap_80433380.x0;
++    struct Unk80433380_0* snap = lbSnap_80433380.x0;
++
++    lbSnap_803BACC8.x14 = lbSnap_GetSaveDataOffset(snap);
++    lbSnap_803BACC8.x1C = snap;
+     return lb_8001C4A8(&lbSnap_803BACC8.x14, &lbSnap_803BACC8);
+ }
+ 
+@@ -298,22 +297,19 @@ int lbSnap_8001DF6C(int chan)
+     struct Unk80433380_48* ptr = &lbSnap_80433380.x48[chan];
+     char text[0x21];
+     int ret;
+-    PAD_STACK(8);
+ 
+     if (ptr->card_result == 0 && lbSnap_80433380.x54_stateChanged[chan] != 0) {
+         ptr->card_result = 8;
+     }
+     ret = ptr->card_result;
+     if (ret == 0) {
++        struct Unk803BACC8* desc = &lbSnap_803BACC8;
++        int chan_arg = chan;
+         lbSnap_80433380.x48[chan].card_result = 8;
+-        lbSnap_8001D4A4(chan, text);
+-        // This is probably an offsetof call, but I don't know what pointer is
+-        // in xC
+-        lbSnap_803BACC8.x14 =
+-            lbSnap_80433380.x0->xC +
+-            ((int) &lbSnap_80433380.x0->x38 - (int) &lbSnap_80433380.x0->x0);
+-        lbSnap_803BACC8.x1C = lbSnap_80433380.x0;
+-        ret = lb_8001BB48(chan, text, &lbSnap_803BACC8.x14, &lbSnap_803BACC8,
++        lbSnap_8001D4A4(chan_arg, text);
++        desc->x14 = lbSnap_GetSaveDataOffset(lbSnap_80433380.x0);
++        desc->x1C = lbSnap_80433380.x0;
++        ret = lb_8001BB48(chan, text, &desc->x14, desc,
+                           lbSnap_80433380.x4_string,
+                           lbSnap_80433380.x44_LbMcSnap_MemSnapIconData[0],
+                           lbSnap_80433380.x44_LbMcSnap_MemSnapIconData[1], 0);
+@@ -324,30 +320,26 @@ int lbSnap_8001DF6C(int chan)
+ int lbSnap_8001E058(int chan, int index)
+ {
+     struct Unk80433380_48* ptr = &lbSnap_80433380.x48[chan];
+-    int i;
++    int ret;
+     char text[0x21];
+     PAD_STACK(8);
+ 
+     if (ptr->card_result == 0 && lbSnap_80433380.x54_stateChanged[chan] != 0) {
+         ptr->card_result = 8;
+     }
+-    if (ptr->card_result == 0) {
++    ret = ptr->card_result;
++    if (ret == 0) {
+         HSD_ASSERTMSG(410, index < lbSnap_80433380.x48[chan].num,
+                       "index < _p(slot)[chan].num");
+-        i = 0;
+-        while (i < 0x21) {
+-            text[i] = '\0';
+-            i++;
+-        }
++        lbSnap_ClearText(text);
+         sprintf(text, "%u", lbSnap_80433380.x48[chan].entries[index].time);
+         lbSnap_803BACC8.x1C = lbSnap_80433380.x0;
+-        return lb_8001BF04(chan, text, &lbSnap_803BACC8.x14,
+-                           lbSnap_80433380.x4_string,
+-                           lbSnap_80433380.x44_LbMcSnap_MemSnapIconData[0],
+-                           lbSnap_80433380.x44_LbMcSnap_MemSnapIconData[1], 0);
+-    } else {
+-        return ptr->card_result;
++        ret = lb_8001BF04(chan, text, &lbSnap_803BACC8.x14,
++                          lbSnap_80433380.x4_string,
++                          lbSnap_80433380.x44_LbMcSnap_MemSnapIconData[0],
++                          lbSnap_80433380.x44_LbMcSnap_MemSnapIconData[1], 0);
+     }
++    return ret;
+ }
+ 
+ int lbSnap_8001E204(void)
+diff --git a/src/melee/lb/lbsnap.h b/src/melee/lb/lbsnap.h
+index ed392d167f..270f027c5b 100644
+--- a/src/melee/lb/lbsnap.h
++++ b/src/melee/lb/lbsnap.h
+@@ -26,7 +26,7 @@
+ /* 01E204 */ int lbSnap_8001E204(void);
+ /* 01E210 */ int lbSnap_8001E210(void);
+ /* 01E218 */ void lbSnap_8001E218(void* arg0, Unk80433380_48* arg1);
+-/* 01E27C */ UNK_RET lbSnap_8001E27C(UNK_PARAMS);
++/* 01E27C */ void lbSnap_8001E27C(void);
+ /* 01E290 */ void lbSnap_8001E290(void);
+ 
+ #endif

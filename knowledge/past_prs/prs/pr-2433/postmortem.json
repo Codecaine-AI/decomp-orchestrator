@@ -1,0 +1,170 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2433",
+  "pr": {
+    "number": 2433,
+    "title": "mnsnap: decompile fn_802545C4 (99.37%)",
+    "url": "https://github.com/doldecomp/melee/pull/2433",
+    "state": "MERGED",
+    "author": "malvarezcastillo",
+    "created_at": "2026-04-26T08:11:53Z",
+    "merged_at": "2026-04-26T11:08:08Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Decompiled/high-matched the Snap menu per-frame update `fn_802545C4`, a large `mnSnap_804A0A10.state` switch covering slot selection, photo browsing, dialogs, and copy/move/delete/printer/view operations. The PR body reports 99.373% match, while the decomp-dev bot slice reports GALE01 `main/melee/mn/mnsnap` `fn_802545C4` improving from 80.82% to 98.94%. It also corrected the `mnSnap_8025409C` API from a fake `HSD_JObj*` flag to `s32 dlg_type`. Review pushed back on assert/string SDATA hacks; the author reverted them as unnecessary.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "function-decompilation",
+      "decomp-matching",
+      "menu-state-machine",
+      "headers",
+      "types-structs",
+      "review-cleanup"
+    ],
+    "systems": [
+      "melee-core",
+      "mn/mnsnap",
+      "Snap menu",
+      "memory-card snapshot/photo UI",
+      "HSD JObj/SisLib UI"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/mn/mnsnap.c",
+      "role": "Main decomp/matching work for `fn_802545C4`; added `mnSnap_InitDialogText`, used `PAD_STACK(336)`, direct `mnSnap_804A0A10` accesses, scoped temporaries, `#pragma dont_inline` around `mnSnap_80254014`, and updated `mnSnap_8025409C` callers to integer dialog types."
+    },
+    {
+      "path": "src/melee/mn/mnsnap.h",
+      "role": "Header prototype fix: `mnSnap_8025409C(HSD_JObj* jobj_flag)` became `mnSnap_8025409C(s32 dlg_type)`."
+    }
+  ],
+  "what_changed": [
+    "Reworked `fn_802545C4` into a high-match C implementation of the Snap menu's main per-frame state machine, with cases visible for states 0, 2-6, 10-17, and 20-23.",
+    "Handled Snap menu flows described in the PR body: slot/card selection, photo browsing, dialog confirmations, and card/photo operations including copy, move, delete/erase, printer, and full-view behavior.",
+    "Changed `fn_802545C4` input button storage to `u64 buttons` and assigns `mn_804A04F0.buttons = mn_80229624(4)`.",
+    "Replaced much of the local `mnSnap_State* snap` usage in `fn_802545C4` with direct `mnSnap_804A0A10` global accesses, likely for register/codegen matching.",
+    "Added `PAD_STACK(336)` and many short-lived scoped locals such as `cs0`, `cs`, `other_slot`, `thumb_img`, `next_state`, and `short card_status` to shape generated code.",
+    "Introduced `static inline void mnSnap_InitDialogText(void)` to perform repeated dialog text setup: freeing an existing `dlg_text`, allocating with `HSD_SisLib_803A5ACC`, and setting alignment, kerning, and 0.03 font size.",
+    "Marked `mnSnap_80254014` with `#pragma dont_inline on` / `#pragma dont_inline reset`.",
+    "Changed `mnSnap_8025409C` from a pointer-like `HSD_JObj* jobj_flag` parameter to `s32 dlg_type`; callers now pass `0`, `1`, or `2` instead of casts like `(HSD_JObj*) 1`.",
+    "Kept format strings such as `\"%03d\"` and `\"%d\"` as inline literals in the final diff rather than introducing named SDATA symbols.",
+    "Final header diff only visibly changes `mnSnap_8025409C`; the PR body also mentions a `mnSnap_8025441C` return-type fix, but this slice's final header hunk already shows `s32 mnSnap_8025441C(u64 buttons)` with no visible change."
+  ],
+  "smart_moves": [
+    "Correcting `mnSnap_8025409C` to `s32 dlg_type` removed misleading pointer casts and made the dialog selector's real type clearer without losing matching progress.",
+    "Using a `static inline` helper for dialog text initialization reduced repeated SisLib setup while preserving inline expansion opportunities needed for matching.",
+    "Direct global-state access to `mnSnap_804A0A10` and carefully scoped locals are useful MWCC matching levers for very large state machines where a stable `snap` pointer may allocate differently.",
+    "`PAD_STACK(336)` explicitly documents a stack-padding requirement instead of hiding it in unrelated logic.",
+    "`#pragma dont_inline` around `mnSnap_80254014` is a targeted codegen control for a helper that must remain a call boundary.",
+    "After review, the PR avoided hand-expanded assert/string data hacks and returned to project-style `HSD_ASSERT`/literal-string usage where appropriate."
+  ],
+  "decomp_lessons": [
+    "Do not introduce named SDATA strings for asserts or format strings just to chase matching unless the data evidence is strong; reviewer feedback here said to use `HSD_ASSERT` with implicit strings and treat format strings as inline constants.",
+    "If a parameter is semantically an integer selector, fix the type and header rather than preserving a fake pointer type for casts; this PR's `dlg_type` change is the reusable example.",
+    "Large menu state machines may match better with direct global struct references, narrow/scoped temporaries, and block-local variables, even if the result is less idiomatic C.",
+    "Repeated UI setup can be factored into a `static inline` helper when the helper is intentionally inlined and matches callsite codegen.",
+    "Use `#pragma dont_inline` sparingly and locally around the specific helper that must not inline.",
+    "Review comments can invalidate PR-body claims; compare the final diff before recording claims such as added SDATA declarations or prototype fixes."
+  ],
+  "naming_conventions": [
+    "`mnSnap_8025409C(s32 dlg_type)` is preferred over `mnSnap_8025409C(HSD_JObj* jobj_flag)` because values `0`, `1`, and `2` are dialog-type selectors, not JObj pointers.",
+    "`mnSnap_InitDialogText` is a descriptive local helper name used alongside address-based symbols in `mnsnap.c`.",
+    "`fn_802545C4` remained address-named; the evidence only supports describing it as the Snap menu main per-frame update, not assigning a final semantic symbol name.",
+    "Field names exposed in this work include `active_slot`, `photo_count`, `card_status`, `dlg_active`, `dlg_timer`, `dlg_text`, `btn_idx`, `cursor_idx`, `cur_page`, `pending_loads`, `move_idx`, and `menu_sel`."
+  ],
+  "assembly_or_matching_tactics": [
+    "`PAD_STACK(336)` in `fn_802545C4`.",
+    "`#pragma dont_inline on` / `reset` around `mnSnap_80254014`.",
+    "Direct references to `mnSnap_804A0A10` instead of caching `mnSnap_State* snap` inside `fn_802545C4`.",
+    "Scoped locals and narrowed types to influence register allocation, including `s32 cs0`, `s32 cs`, block-local `other_slot`, `void* thumb_img`, block-local `next_state`, and `short card_status`.",
+    "Some nested menu `switch` logic was reshaped into `if`/`else if` chains, consistent with codegen-matching pressure in the diff.",
+    "Retained inline constants for SisLib format strings (`\"%03d\"`, `\"%d\"`) instead of forcing SDATA symbols.",
+    "Review-endorsed tactic: prefer project macros such as `HSD_ASSERT` over hand-expanded `__assert` blocks with custom string symbols unless the original code requires explicit expansion."
+  ],
+  "review_feedback": [
+    {
+      "author": "jellejurre",
+      "file": "src/melee/mn/mnsnap.c",
+      "feedback": "Asked to revert hand-expanded assert blocks and use `HSD_ASSERT` with implicit strings."
+    },
+    {
+      "author": "jellejurre",
+      "file": "src/melee/mn/mnsnap.c",
+      "feedback": "Repeated the same concern for a second assert block in thumbnail/blank-image handling."
+    },
+    {
+      "author": "jellejurre",
+      "file": "src/melee/mn/mnsnap.c",
+      "feedback": "Said format strings likely were inline constants, not variables that had been inlined."
+    },
+    {
+      "author": "jellejurre",
+      "file": "src/melee/mn/mnsnap.c",
+      "feedback": "Questioned the need for added SDATA string declarations such as `\"jobj\"`, `\"jobj.h\"`, `\"%03d\"`, and `\"%d\"`."
+    },
+    {
+      "author": "malvarezcastillo",
+      "file": "src/melee/mn/mnsnap.c",
+      "feedback": "Author replied that the hack was reverted as unnecessary."
+    }
+  ],
+  "searchable_terms": [
+    "pr-2433",
+    "malvarezcastillo",
+    "mnsnap",
+    "Snap menu",
+    "fn_802545C4",
+    "mnSnap_8025409C",
+    "dlg_type",
+    "mnSnap_8025441C",
+    "mnSnap_InitDialogText",
+    "mnSnap_80254014",
+    "dont_inline",
+    "PAD_STACK(336)",
+    "mnSnap_804A0A10",
+    "mnSnap_State",
+    "HSD_SisLib_803A5ACC",
+    "HSD_SisLib_803A5CC4",
+    "HSD_SisLib_803A6368",
+    "HSD_SisLib_803A6B98",
+    "HSD_ASSERT",
+    "__assert",
+    "jobj.h",
+    "jobj",
+    "HSD_JObjSetTranslate",
+    "HSD_JObjReqAnim",
+    "HSD_JObjAnim",
+    "HSD_JObjAnimAll",
+    "HSD_JObjSetFlagsAll",
+    "lbSnap_8001D338",
+    "lbSnap_8001D350",
+    "lbSnap_8001D5FC",
+    "lbSnap_8001D7B0",
+    "lbAudioAx_80024030",
+    "mn_80229624",
+    "mn_804A04F0",
+    "active_slot",
+    "photo_count",
+    "card_status",
+    "thumb_labels",
+    "count_texts",
+    "cursor_idx",
+    "cur_page",
+    "pending_loads",
+    "dlg_timer",
+    "dlg_active",
+    "dlg_text",
+    "copy move delete photo",
+    "memory card snapshot"
+  ],
+  "follow_up_queries": [
+    "Find remaining `mnsnap` functions or headers where integer selectors are typed as pointers or cast through `HSD_JObj*`.",
+    "Compare the final `fn_802545C4` match after merge against the PR title/body and the decomp-dev bot's 98.94% report to identify the remaining mismatch.",
+    "Audit whether `mnSnap_8025441C` had a return-type fix in an earlier commit; the supplied final header diff does not show it.",
+    "Search other menu files for repeated `HSD_SisLib_803A5ACC` dialog text initialization that could reuse the same static-inline matching pattern.",
+    "Search for manually declared assert or format-string SDATA symbols in menu decomp work and verify whether they should be reverted to `HSD_ASSERT` or inline literals."
+  ],
+  "confidence": 0.88
+}
