@@ -1,5 +1,35 @@
 # Known PR Fixes And Changes
 
+## PR #2582: Match and improve several source functions
+
+Status: agent_completed
+Type: decomp-matching
+Systems: extern-dolphin-thp;sysdolphin-baselib-particle;stage-ice-mountain;fighter;menu-count
+
+Open PR batching several independent decomp matching/source-shaping improvements. The decomp.dev report recorded +844 matched bytes overall, with new 100% matches for `hsd_80398C04` in baselib particle code and `__THPRestartDefinition` in Dolphin THP, plus near-match improvements for Ice Mountain, menu count, and fighter item handling. Review focused on reusing the existing `GET_GROUND()` convention instead of a local user-data helper; the author fixed that and received approval, though the slice shows the PR still open.
+
+Postmortem JSON: `pr-2582/postmortem.json`
+
+## PR #2581: Improve matching in Melee source files
+
+Status: agent_completed
+Type: decomp-matching
+Systems: effect;fighter;game-mode;stage;interface;menu;library;map-collision;trophy-toy;melee-core
+
+Open broad matching PR touching 57 `src/melee` C files across effect, fighter, game, stage, interface, menu, library, map, and toy code. The PR body reports a saved-baseline result of matched code 70.39% (+0.24%, +9176 bytes) and matched data 41.33% (+0.06%, +712 bytes), with 13 new matches, 123 unmatched-item improvements, and no reported broken matches or unmatched regressions. Review requested changes: avoid pragma/fake-match shortcuts, convert repeated code to loops, replace pointer math/M2C artifacts with typed structs/fields, and recognize `jobj.h` assert blocks as likely inlined HSD JObj helper calls.
+
+Postmortem JSON: `pr-2581/postmortem.json`
+
+## PR #2580: Match and improve hsd_3AA7, quatlib, and ftCo functions
+
+Status: agent_completed
+Type: decomp-matching
+Systems: sysdolphin/baselib/card;sysdolphin/baselib/quatlib;melee/ft/chara/ftCommon
+
+Merged matching-focused rewrites across baselib CARD/save code, quaternion conversion, and one ftCommon shouldered function. The PR produced 7 new 100% matches and 13 measured improvements, with the largest work in `src/sysdolphin/baselib/hsd_3AA7.c`; the decomp.dev GALE01 report showed matched code +0.06% / +2332 bytes.
+
+Postmortem JSON: `pr-2580/postmortem.json`
+
 ## PR #2579: permuter-driven fixes
 
 Status: agent_failed_scaffold_written

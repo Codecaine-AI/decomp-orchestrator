@@ -23,6 +23,11 @@ The core metaphor is Sudoku: a worker may discover a fact or negative result
 that does not finish its current target, but still constrains the board enough
 to make a different target the right next move.
 
+The runtime can also be wrapped by a guardian process for long-running
+development runs. That guardian watches system health events, records incidents,
+recovers failed or expired leases, and restarts the decomp system process. It
+does not become a second director.
+
 ## Principles
 
 - Board-level reasoning belongs to the director.
@@ -32,6 +37,8 @@ to make a different target the right next move.
   workers.
 - Every handoff is durable: events, reports, facts, leases, prompts, and
   artifacts survive process exits.
+- Long-running process health belongs to a guardian wrapper, not hidden
+  always-on agent memory.
 - Workers pursue evidence-backed hypotheses. Experimental search is bounded and
   opt-in.
 - Write safety is a first-class runtime concern, enforced by leases and file
@@ -55,7 +62,9 @@ an operator intentionally points the state directory there.
 The package has a production-shaped vertical slice: it can initialize a run,
 queue fixture targets, run a dry-run director cycle, lease one worker target,
 write reports, recover interrupted leases, run a global regression-check
-wrapper, and run a trigger-agent supervisor loop. The supervisor wakes the
-director on durable events, fills worker slots from queued work, and rests when
-the board is quiet. PR refresh, stale-lease recovery, and end-to-end score
-integration remain explicit operator steps.
+wrapper, run a trigger-agent loop, and run a guardian wrapper around that loop.
+The trigger actor wakes the director on durable events, fills worker slots from
+queued work, and rests when the board is quiet. The guardian wrapper wakes on
+process-health incidents and restarts the decomp system process when policy
+allows. PR refresh and end-to-end score integration remain explicit operator
+steps.

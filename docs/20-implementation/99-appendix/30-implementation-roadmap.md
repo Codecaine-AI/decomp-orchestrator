@@ -23,6 +23,7 @@ artifact while naming the current package status.
 | 7 | One locked worker | Present through `worker` and trigger-agent subprocess workers. |
 | 8 | Score integration dry run | Partially represented by `regression-check`; full patch accept/reject integration is future work. |
 | 9 | Event-driven refill loop | Present through `trigger-agent` / `bootstrap`. |
+| 9.5 | Process guardian wrapper | Present through `babysit`, guardian incident artifacts, worker-id lease recovery, and child restart policy. |
 | 10 | Fact-aware loop | Facts are represented in state and reports; reducer/fact promotion is future work. |
 | 11 | Human dashboard | Future work. |
 | 12 | Run summary artifact | Future work beyond smoke summary and regression report artifacts. |
@@ -31,7 +32,9 @@ artifact while naming the current package status.
 
 - The system lives under top-level `decomp-orchestrator/`.
 - It is not a Codex plugin and is not hidden under `tools/` as a side utility.
-- The primary objective is global `matched_code_percent`.
+- The primary objective is global `matched_code_percent`; each run's
+  `goal_value` is a checkpoint/pause threshold inside the long-term movement
+  toward `100%`.
 - Runs are the progress boundary; files, symbols, workers, and leases are work
   units, not PR units.
 - Central SQLite leases and file locks are mandatory.
@@ -43,8 +46,9 @@ artifact while naming the current package status.
   future target packets.
 - Build/report generation is serialized in v1 through one global validation
   path.
-- Crash recovery is restart-from-state: canonical checkout plus SQLite and
-  artifacts. Worker Pi sessions are not resumed in v1.
+- Crash recovery is restart-from-state: canonical checkout plus SQLite,
+  artifacts, and guardian incident packets. Worker Pi sessions are not resumed
+  in v1.
 - Worker prompting is standardized through shared system prompts plus
   target-specific initial user context.
 - Initial score integration is serial and evidence-producing; auto-apply should

@@ -1,6 +1,12 @@
 # Matching Tactics
 
-Use this reference when actively trying to improve objdiff/checkdiff output for `doldecomp/melee`.
+Use this reference when actively trying to improve objdiff/checkdiff output for
+`doldecomp/melee`.
+
+Before using last-mile matching tactics, read
+[`source-standardizations.md`](source-standardizations.md). Loop recovery,
+typed field/accessor use, `jobj.h` inline recognition, and project assert macros
+are first-class source standards, not merely tricks to try when stuck.
 
 ## Contents
 
@@ -35,6 +41,7 @@ Good target-finding examples:
 
 MWCC codegen is sensitive to loop and branch shape. Try these before accepting awkward code:
 
+- recovering natural loops from repeated generated blocks
 - `for` vs `while` vs `do while`
 - pulling allocation/setup out of loops
 - replacing helper traversal with direct equivalent control flow
@@ -114,6 +121,10 @@ Prefer source that improves type knowledge:
 5. raw pointer arithmetic only when no better type is known
 
 Use `GET_GROUND`, `GET_ITEM`, `GET_FIGHTER`, `GET_JOBJ`, and domain-specific `GObj` typedefs when available.
+
+For the first-class pointer-arithmetic cleanup policy, see
+[`source-standardizations.md`](source-standardizations.md). Raw offset arithmetic
+is a diagnostic fallback, not the normal destination.
 
 Examples:
 

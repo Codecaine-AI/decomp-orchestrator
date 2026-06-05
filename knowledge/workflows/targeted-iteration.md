@@ -111,8 +111,10 @@ python3 decomp-orchestrator/knowledge/tools/decomp_context_lookup.py \
   --symbol itLinkbomb_UnkMotion3_Anim
 ```
 
-For naming, struct/data layout, architecture-reference, historical-PR, or
-large-sweep decisions, read
+For first-class source cleanup around loops, typed fields, header inlines, and
+assert macros, read [source-standardizations.md](../references/melee/source-standardizations.md)
+before using trickier codegen levers. For naming, struct/data layout,
+architecture-reference, historical-PR, or large-sweep decisions, read
 [resource-guided-research.md](resource-guided-research.md) before editing.
 
 ### Source And Neighbor Context
@@ -199,8 +201,13 @@ If `--write` is used, inspect the inserted body before committing to it:
 
 Treat generated source as a draft:
 
+- recover repeated generated blocks as loops when the index/counter/stride is
+  visible
 - replace raw offsets with fields or `M2C_FIELD`
 - use local accessors like `GET_ITEM`
+- map `jobj.h` assert line numbers back to existing header inlines
+- use `HSD_ASSERT`, `HSD_ASSERTMSG`, and `HSD_ASSERTREPORT` instead of expanded
+  `__assert` blocks when they express the source
 - remove guessed comments
 - use glossary-backed names
 - compare against sibling functions before changing global structs
@@ -223,6 +230,7 @@ build/tools/objdiff-cli diff -p . -u main/melee/it/items/itlinkbomb itLinkbomb_U
 
 Hand-iteration knobs:
 
+- apply source standardizations before accepting fake or trick-only source
 - change loop form
 - move locals into/out of branches
 - reorder local declarations

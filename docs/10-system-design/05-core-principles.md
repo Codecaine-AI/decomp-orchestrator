@@ -1,6 +1,6 @@
 ---
-covers: Core design principles, Sudoku metaphor, run boundaries, metrics, and former-skill mapping
-concepts: [principles, sudoku, run-boundary, matched-code-percent, skill-model]
+covers: Core design principles, Sudoku metaphor, run boundaries, metrics, process actors, and former-skill mapping
+concepts: [principles, sudoku, run-boundary, matched-code-percent, process-actors, skill-model]
 ---
 
 # Core Principles
@@ -32,6 +32,12 @@ a PR boundary. A run can target a checkpoint such as `+1.0% matched_code_percent
 or `+5.0% matched_code_percent` and keep integrating verified improvements until
 that target is reached or useful evidence runs out.
 
+Full decompilation remains the long-term objective: exact matched code should
+keep moving toward `100%`. The run goal is a checkpoint and stop condition, not
+a claim that the project is finished. When the checkpoint is reached, the system
+should pause the run, emit end-of-run output, and let the operator reallocate
+workers, raise the checkpoint, package a PR, or start the next run.
+
 ## North-Star Metric
 
 `matched_code_percent` is the north-star metric. It tracks exact matched code
@@ -62,3 +68,7 @@ The orchestrator itself is not the main reasoning agent. It is a thin stateful
 runner that stores facts, leases, events, prompts, and artifacts. It launches
 director and worker Pi sessions only when durable state says there is work to
 do.
+
+Trigger actors and guardian wrappers are process state machines, not hidden
+board agents. The trigger actor advances the decomp loop from durable events.
+The guardian wrapper preserves liveness from process-health events.

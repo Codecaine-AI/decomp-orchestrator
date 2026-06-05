@@ -30,6 +30,13 @@ The run should summarize accepted improvements, facts, rejected hypotheses,
 stalls, score movement, validation transcripts, and review risks. That summary
 is the bridge from autonomous work to human review.
 
+The configured run goal is the pause threshold for this summary. Reaching a
+`matched_code_percent` checkpoint should mark the run handoff-ready only after
+score integration and regression checks confirm the movement. It does not mean
+the whole decompilation effort is complete; it means this batch has reached the
+point where the system should stop, report what happened, and let the next
+allocation decision happen outside the worker loop.
+
 ## PR Boundary
 
 The orchestrator does not create one PR per file, worker, symbol, or lease.

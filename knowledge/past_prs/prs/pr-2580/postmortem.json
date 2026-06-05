@@ -1,0 +1,151 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2580",
+  "pr": {
+    "number": 2580,
+    "title": "Match and improve hsd_3AA7, quatlib, and ftCo functions",
+    "url": "https://github.com/doldecomp/melee/pull/2580",
+    "state": "MERGED",
+    "author": "itsgrimetime",
+    "created_at": "2026-06-05T01:44:19Z",
+    "merged_at": "2026-06-05T17:21:06Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Merged matching-focused rewrites across baselib CARD/save code, quaternion conversion, and one ftCommon shouldered function. The PR produced 7 new 100% matches and 13 measured improvements, with the largest work in `src/sysdolphin/baselib/hsd_3AA7.c`; the decomp.dev GALE01 report showed matched code +0.06% / +2332 bytes.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "control-flow-restructure",
+      "stack-local-lifetime",
+      "types-structs",
+      "math-decomp",
+      "fighter-behavior-fix"
+    ],
+    "systems": [
+      "sysdolphin/baselib/card",
+      "sysdolphin/baselib/quatlib",
+      "melee/ft/chara/ftCommon"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/sysdolphin/baselib/hsd_3AA7.c",
+      "role": "Main batch: 1653 added / 865 deleted across 94 hunks, matching several CARD command/save helper functions and improving the large dispatcher and builders."
+    },
+    {
+      "path": "src/sysdolphin/baselib/quatlib.c",
+      "role": "Improved `MatToQuat` from 95.55% to 99.92% by changing local layout, scalar temporaries, and expression shape; TODO notes stack frame still 8 bytes too large."
+    },
+    {
+      "path": "src/melee/ft/chara/ftCommon/ftCo_Shouldered.c",
+      "role": "Matched `ftCo_8009C744` by stack padding and restoring/reshaping collision and victim calls."
+    }
+  ],
+  "what_changed": [
+    "`ftCo_8009C744` reached 100.00%: replaced a dummy initialized stack byte array with `PAD_STACK(8)`, called `ftCo_800DC920(fp->victim_gobj, gobj)`, and restored `ftColl_80078710(vic_gobj, gobj, &fp->dmg.facing_dir_1)`.",
+    "`hsd_3AA7.c` added 100.00% matches for `fn_803ACF30`, `fn_803ADE4C`, `fn_803B21E8`, `fn_803B1F78`, `hsd_803B2374`, and `fn_803AC168`.",
+    "`hsd_803AAA48` was substantially reshaped from 28.60% to 77.68%: `hsd_804D7980` became `volatile s32`, command type is read as `cmd->type`, dispatch uses `switch ((u32) type)`, command cases were reordered/rebuilt, and completions now consistently clear `cmd->type = 0`.",
+    "The CARD dispatcher and helpers moved many accesses from cached locals such as `state` or `entry->x10` to direct `cmd->state` / `cmd->type` accesses, apparently to match aliasing and live-range behavior.",
+    "Several command builders stopped using compound literals or zero-initialized `s32 cmd[9] = { 0 }` arrays and instead used local command arrays with explicit field writes, affecting stack and initialization codegen.",
+    "Loop bound expression order was normalized in multiple places from `(state->x24 + state->x8 + 0x2F) / state->x8` to `(0x2F + state->x24 + state->x8) / state->x8`.",
+    "`fn_803AC168` now snapshots `hsd_804D7984` into `idx` before incrementing and copies the command buffer to `hsd_804D1148[idx]`, improving queue write codegen.",
+    "`fn_803ACB74` was changed to `inline`, and duplicated `blocks_before` logic in `fn_803AD16C` was replaced with `fn_803AC6B8(state, file_id)`.",
+    "`MatToQuat` improved to 99.92% by moving `q3` earlier in local declarations, replacing `sc0/sc1/sc2` with direct diagonal division expressions and one `scale` temporary, and adjusting parentheses around the square-root expression."
+  ],
+  "smart_moves": [
+    "The PR treated matching as source-shape work: it changed expression ordering, variable declaration order, local live ranges, and direct struct access patterns rather than inventing new abstractions.",
+    "Using `volatile` for `hsd_804D7980` is a precise type qualifier fix for a global command-queue index read/written around interrupt-sensitive code.",
+    "Replacing fake stack storage in `ftCo_8009C744` with `PAD_STACK(8)` kept the intended stack effect while removing misleading dummy data.",
+    "The dispatcher rewrite preserved CARD retry/error patterns while moving command-specific read/write/header-building paths into case shapes that match the original control flow better.",
+    "Queue rollback paths in `fn_803ADE4C`, `fn_803B1F78`, and `fn_803B21E8` used separate `snapN`/`savedN` locals and inline casts to `hsd_804D1138`, a useful live-range tactic for MWCC matching.",
+    "The author verified with `python configure.py --require-protos`, `ninja`, and decomp.dev GALE01 reports, giving measurable evidence for both new matches and partial improvements."
+  ],
+  "decomp_lessons": [
+    "For MWCC matching, mathematically equivalent arithmetic is not interchangeable; even additive order in loop bounds can affect generated code.",
+    "Avoid over-caching struct pointers when matching old code. Direct `cmd->state` accesses can produce different alias/lifetime codegen than a `CardState* state` temporary.",
+    "Stack padding should use project macros such as `PAD_STACK` once the needed pad size is understood, instead of dummy initialized arrays.",
+    "Command buffer construction is sensitive to initialization style. Compound literals and `{ 0 }` array initialization may generate extra stores or different stack lifetimes compared with explicit slot writes.",
+    "Inlining tiny comparison helpers can be a matching lever when a call boundary prevents the expected branch/control-flow shape.",
+    "Header/struct evidence is limited in this slice: no header files changed; the visible type lesson is the in-file extern qualifier change from `s32 hsd_804D7980` to `volatile s32 hsd_804D7980`.",
+    "`MatToQuat` shows that floating-point local ordering and temporary reuse can nearly finish a match while leaving only stack-frame size differences."
+  ],
+  "naming_conventions": [
+    "Unknown-address function names were preserved rather than speculatively renamed: `hsd_803AAA48`, `fn_803ACF30`, `fn_803ADE4C`, `fn_803B21E8`, `fn_803B1F78`, `hsd_803B2374`, `fn_803AC168`.",
+    "CARD/save structs continue to use known type names where available (`CardState`, `CardBufEntry`, `CardCmd`) while unresolved fields remain offset-style names such as `x0`, `x8`, `x10`, `x20`, `x24`, `x170`, and `x270`.",
+    "Fighter code keeps existing local naming style: `gobj`, `fp`, `vic_gobj`, `vic_fp`, and `victim_gobj`.",
+    "Local names such as `blocks_before`, `file_blocks`, `hdr_offset`, `rem`, `scale`, `q3`, `snap1`, and `saved1` encode either domain meaning or intentional live-range separation."
+  ],
+  "assembly_or_matching_tactics": [
+    "`PAD_STACK(8)`, `PAD_STACK(4)`, `PAD_STACK(12)`, and `PAD_STACK(16)` were used to control stack layout where necessary.",
+    "Changed `switch (type)` to `switch ((u32) type)` and added a `default: return result;` path in `hsd_803AAA48`.",
+    "Expanded boolean expressions such as `hsd_804D799C == 1` into explicit `if/else` assignment to force the desired code shape.",
+    "Used direct array indexed writes like `cmd->state->x0[hdr_offset + 0x10]` instead of a temporary pointer such as `u8* d`.",
+    "Snapshot queue indices before mutation, e.g. `s32 idx = hsd_804D7984; hsd_804D7984 = ...; memcpy(... hsd_804D1148[idx] ...)`.",
+    "Replaced cached `entries` usage in rollback loops with inline `((CardBufEntry*) hsd_804D1138)[saved].x10 = 0` casts where that matched better.",
+    "Reordered locals in `MatToQuat` and collapsed separate scale temporaries into one `scale` variable.",
+    "Removed zero initialization from several `s32 cmd[9]` locals and explicitly assigned only the fields needed by the command path."
+  ],
+  "review_feedback": [
+    "Human review feedback in the slice is minimal: jurrejelle approved the PR with an empty review body and there were no inline review comments.",
+    "Automated decomp.dev feedback reported 7 new matches and 13 unmatched-item improvements; `MatToQuat` remained just short of full match at 99.92%."
+  ],
+  "searchable_terms": [
+    "pr2580",
+    "itsgrimetime",
+    "hsd_3AA7.c",
+    "quatlib.c",
+    "ftCo_Shouldered.c",
+    "ftCo_8009C744",
+    "MatToQuat",
+    "hsd_803AAA48",
+    "fn_803AC168",
+    "fn_803ACF30",
+    "fn_803ADE4C",
+    "fn_803B21E8",
+    "fn_803B1F78",
+    "hsd_803B2374",
+    "fn_803AD16C",
+    "fn_803AE7F8",
+    "fn_803AF3F0",
+    "fn_803B0120",
+    "fn_803B0E9C",
+    "fn_803B1338",
+    "fn_803ADF90",
+    "fn_803ACD58",
+    "fn_803ACFC0",
+    "fn_803B26CC",
+    "CardState",
+    "CardCmd",
+    "CardBufEntry",
+    "hsd_804D7980",
+    "hsd_804D7984",
+    "hsd_804D7998",
+    "hsd_804D799C",
+    "CARDReadAsync",
+    "CARDWriteAsync",
+    "CARDFastOpen",
+    "CARDClose",
+    "CARDGetXferredBytes",
+    "CARDSetStatusAsync",
+    "CARDCreateAsync",
+    "PAD_STACK",
+    "volatile",
+    "switch((u32)type)",
+    "cmd->type",
+    "cmd->state",
+    "fn_803AC6B8",
+    "fn_803ACB74 inline",
+    "ftColl_80078710",
+    "ftCo_800DC920",
+    "MatToQuat stack frame"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that finish `MatToQuat` from 99.92% to 100% or resolve the remaining 8-byte stack-frame mismatch.",
+    "Search future `hsd_3AA7.c` work for `CardCmd` and `CardState` field naming improvements after these command-dispatch matches.",
+    "Compare other PRs that use `cmd[9]` command buffer construction to see when explicit field writes beat `{ 0 }` initialization.",
+    "Look for follow-up changes to `hsd_803AAA48` to confirm whether the dispatcher case order and `cmd->state` access pattern stayed stable.",
+    "Search `ftCo_8009C744` and `ftColl_80078710` in later fighter PRs to verify no semantic regression from restoring the collision call."
+  ],
+  "confidence": 0.92
+}

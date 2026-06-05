@@ -1,6 +1,9 @@
 # Review Standards
 
-Use this reference before opening a PR, reviewing generated code, or deciding whether a match is too fake for `doldecomp/melee`.
+Use this reference before opening a PR, reviewing generated code, or deciding
+whether a match is too fake for `doldecomp/melee`. For the first-pass source
+forms that should be normalized before review, read
+[`source-standardizations.md`](source-standardizations.md).
 
 ## Contents
 
@@ -44,6 +47,10 @@ Prefer:
 - per-item/per-stage union arms instead of one overloaded generic union arm
 - real struct padding when byte offsets prove it
 - names that describe purpose or source role
+
+Also normalize repeated generated blocks into natural loops, map `jobj.h` assert
+line numbers back to existing inlines, and use `HSD_ASSERT*` macros instead of
+manual `__assert` blocks when the macro expresses the source.
 
 ## Anti-Patterns
 

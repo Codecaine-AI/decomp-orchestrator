@@ -25,7 +25,7 @@ docs/
 - [Foundation overview](00-foundation/00-overview.md) explains what the
   orchestrator is for and what it should avoid becoming.
 - [System design overview](10-system-design/00-overview.md) maps the director,
-  workers, durable state, knowledge, and score gate.
+  workers, durable state, process guardians, knowledge, and score gate.
 - [Implementation overview](20-implementation/00-overview.md) maps the current
   TypeScript source tree and package-owned knowledge layout.
 - [Design coverage audit](20-implementation/99-appendix/40-design-coverage.md)
@@ -43,3 +43,5 @@ docs/
   resources, and past PRs. "Packs" are legacy language.
 - Treat experimental search as an opt-in worker capability, not the default
   worker posture.
+- Treat trigger actors and guardian processes as evented runtime actors, not
+  director/worker-style Pi agents.

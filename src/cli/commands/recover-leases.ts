@@ -18,10 +18,12 @@ export async function recoverLeases(globals: GlobalArgs, args: Map<string, strin
 
   const force = booleanArg(args, "--force");
   const leaseIdFilter = stringArg(args, "--lease-id", "");
+  const workerIdFilter = stringArg(args, "--worker-id", "");
   const reason = stringArg(args, "--reason", force ? "forced lease recovery after interrupted worker process" : "expired lease recovery");
   const activeLeases = activeLeasesForRun(store, runId);
   const selectedLeases = activeLeases.filter((lease) => {
     if (leaseIdFilter && lease.leaseId !== leaseIdFilter) return false;
+    if (workerIdFilter && lease.workerId !== workerIdFilter) return false;
     return force || leaseExpired(lease.ttl);
   });
   const skippedLeases = activeLeases.filter((lease) => !selectedLeases.some((selected) => selected.leaseId === lease.leaseId));
@@ -103,7 +105,14 @@ export async function recoverLeases(globals: GlobalArgs, args: Map<string, strin
           workerId: lease.workerId,
           ttl: lease.ttl,
           target: targetPacketTarget(lease.target),
-          reason: force ? "lease_id_filter" : "not_expired_without_force",
+          reason:
+            leaseIdFilter && lease.leaseId !== leaseIdFilter
+              ? "lease_id_filter"
+              : workerIdFilter && lease.workerId !== workerIdFilter
+                ? "worker_id_filter"
+                : force
+                  ? "filtered"
+                  : "not_expired_without_force",
         })),
       },
       null,

@@ -38,8 +38,8 @@ decomp-orchestrator/
 ### What This Section Owns
 
 - Source layout and package boundaries.
-- How the CLI, agents, state, board, shell helpers, and knowledge loader fit
-  together.
+- How the CLI, process guardians, agents, state, board, shell helpers, and
+  knowledge loader fit together.
 - Current implementation references for maintainers.
 
 ### What This Section Does Not Own

@@ -14,7 +14,7 @@ past PR evidence.
 
 | Type | Purpose |
 | --- | --- |
-| References | Durable guidance about scheduling, Melee decomp workflow, matching tactics, resources, and review standards |
+| References | Durable guidance about scheduling, Melee decomp workflow, source standardizations, matching tactics, resources, and review standards |
 | Workflows | Procedure-level playbooks such as targeted iteration or opt-in experimental search |
 | Tools | Scripts that rank targets, gather context, refresh PR data, or analyze experiment output |
 | Decomp resources | Local indexes, CSV exports, external reference notes, and acquisition manifests |
@@ -23,8 +23,9 @@ past PR evidence.
 ## Selection
 
 The director gets scheduling policy by default. Workers get Melee overview,
-targeted iteration, resource-guided research, matching tactics, and review
-standards by default. Capability hints add focused references or workflows.
+source standardizations, targeted iteration, resource-guided research, matching
+tactics, and review standards by default. Capability hints add focused
+references or workflows.
 
 This keeps the default worker posture careful and evidence-backed. Broader
 experimental search and permuter handoff enter only when a packet or capability

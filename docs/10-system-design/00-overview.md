@@ -1,6 +1,6 @@
 ---
 covers: D-Comp Orchestrator system design map
-concepts: [system-design, director, workers, durable-state, knowledge, score-gate]
+concepts: [system-design, director, workers, durable-state, process-guardians, knowledge, score-gate]
 ---
 
 # System Design Overview
@@ -8,6 +8,9 @@ concepts: [system-design, director, workers, durable-state, knowledge, score-gat
 D-Comp Orchestrator is an event-driven coordination system for decompilation
 work. A thin runner owns durable state transitions and agent invocation. Pi
 agents own reasoning. The board is the shared medium between those two worlds.
+An optional guardian process can wrap the decomp system process to handle
+operational health events, recovery, and restart without becoming a second
+board scheduler.
 
 ## Architecture Map
 
@@ -81,6 +84,32 @@ The important split is directional: the director reads a compact board and
 writes scheduling decisions; workers receive leases and return durable evidence;
 the state substrate is the only coordination surface between them.
 
+```text
+PROCESS HEALTH LOOP
+
++---------------------+
+| Guardian process    |
+| waits for incidents |
++----------+----------+
+           |
+           v
++---------------------+        process exit / worker error
+| Decomp system       |----------------------------------+
+| trigger actor,      |                                  |
+| director, workers   |                                  |
++----------+----------+                                  |
+           |                                             |
+           v                                             |
++---------------------+                                  |
+| Durable state       |<---------------------------------+
+| leases/events/logs  |    incident packet + recovery
++---------------------+
+```
+
+The process health loop is operational, not strategic. It preserves liveness
+around the decomp system while the director and workers continue to own
+decompilation decisions.
+
 ## Core Concepts
 
 - [Core principles](05-core-principles.md) covers the Sudoku metaphor,
@@ -91,6 +120,8 @@ the state substrate is the only coordination surface between them.
   and the director's scheduling prior.
 - [Agent model](20-agent-model.md) covers the director, worker, PR-review agent,
   and shared runtime boundary.
+- [Process guardians](25-process-guardians.md) covers the babysit wrapper,
+  health incidents, recovery policy, and restart boundary.
 - [Durable state and events](30-state-and-events.md) covers the board, leases,
   reports, facts, and wake handshake.
 - [Write safety](35-write-safety.md) covers write-set leases, file locks,

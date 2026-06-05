@@ -1,6 +1,6 @@
 ---
-covers: Centralized agent implementation layout
-concepts: [agents, prompt-builders, runtime, registry, vertical-slice]
+covers: Centralized agent implementation layout and boundary from trigger/guardian process actors
+concepts: [agents, prompt-builders, runtime, registry, process-actors, vertical-slice]
 code-ref: decomp-orchestrator/src/agents
 ---
 
@@ -10,6 +10,10 @@ Agent implementation is centralized under `src/agents/`. Each role owns its
 prompt builder, templates, schema or output parsing, and role-specific helpers.
 Shared Pi invocation, artifact writing, prompt rendering, and JSON-output
 salvage live in the runtime slice.
+
+Trigger and guardian process actors are not implemented in `src/agents/`
+because they are not Pi agent roles. They live in the CLI/runtime command
+surface and operate on process events and durable state.
 
 ## File Tree
 
@@ -54,6 +58,8 @@ src/agents/
 ### What This Section Does Not Own
 
 - SQLite state transitions after a parsed response.
+- Trigger loops, guardian wrappers, restart policy, and lease-recovery command
+  orchestration.
 - Board target ranking logic.
 - Knowledge file contents, except for selecting and rendering them into prompts.
 

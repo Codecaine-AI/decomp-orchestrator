@@ -1,3 +1,4 @@
+export { babysit } from "./babysit.js";
 export { initRun } from "./init-run.js";
 export { recoverLeases } from "./recover-leases.js";
 export { regressionCheck } from "./regression-check.js";

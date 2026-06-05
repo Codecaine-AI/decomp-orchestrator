@@ -52,9 +52,9 @@ src/knowledge/
 - `scripts`: helper scripts exposed to prompt builders and operators.
 
 The default director route includes scheduling policy. The default worker route
-includes Melee overview, targeted iteration, resource research, matching
-tactics, and review standards. `experimental_search` and `permuter_handoff`
-are opt-in capability routes.
+includes Melee overview, source standardizations, targeted iteration, resource
+research, matching tactics, and review standards. `experimental_search` and
+`permuter_handoff` are opt-in capability routes.
 
 ## Code Path
 

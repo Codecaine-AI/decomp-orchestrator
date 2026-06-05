@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { evaluateReplanDecision, workerOpenSlots } from "../src/cli/commands/trigger-agent.js";
 import { leaseNextQueuedTarget, openState } from "../src/state/index.js";
 
 type SqlBinding = string | number | bigint | boolean | null | Uint8Array;
@@ -58,6 +59,80 @@ function count(store: ReturnType<typeof openState>, sql: string, ...params: SqlB
 }
 
 async function main(): Promise<void> {
+  assertSmoke(
+    "worker slot math refills one completed local worker",
+    workerOpenSlots({ maxWorkers: 32, activeWorkers: 31, runningWorkers: 31, activeLocalWorkers: 31 }) === 1,
+  );
+  assertSmoke(
+    "worker slot math guards pending local startups",
+    workerOpenSlots({ maxWorkers: 32, activeWorkers: 0, runningWorkers: 32, activeLocalWorkers: 0 }) === 0,
+  );
+  assertSmoke(
+    "worker slot math accounts for external active workers plus local pending workers",
+    workerOpenSlots({ maxWorkers: 32, activeWorkers: 20, runningWorkers: 5, activeLocalWorkers: 0 }) === 7,
+  );
+  const replanPolicy = {
+    activeLowWatermark: 24,
+    blockedQueueReplan: true,
+    longTailReplanMs: 300_000,
+    queueLowWatermark: 32,
+    replanCooldownMs: 300_000,
+    replanIntervalMs: 0,
+    schedulableLowWatermark: 32,
+  };
+  const replanState = { lastPeriodicReplanMs: 0, lastReplanRequestMs: -1_000_000, longTailSinceMs: null, nowMs: 1_000_000 };
+  assertSmoke(
+    "replan policy wakes on blocked queue pressure",
+    evaluateReplanDecision(
+      {
+        activeWorkers: 7,
+        blockedQueuedTargets: 7,
+        candidateLimit: 128,
+        maxWorkers: 32,
+        openSlots: 25,
+        queuedTargets: 7,
+        runningWorkers: 7,
+        schedulableTargets: 0,
+      },
+      replanPolicy,
+      replanState,
+    )?.reason === "blocked_queue_pressure",
+  );
+  assertSmoke(
+    "replan policy wakes before the queued pool drains",
+    evaluateReplanDecision(
+      {
+        activeWorkers: 32,
+        blockedQueuedTargets: 0,
+        candidateLimit: 128,
+        maxWorkers: 32,
+        openSlots: 0,
+        queuedTargets: 16,
+        runningWorkers: 32,
+        schedulableTargets: 16,
+      },
+      replanPolicy,
+      replanState,
+    )?.reason === "queue_low_watermark",
+  );
+  assertSmoke(
+    "replan policy does not wake an idle empty run",
+    evaluateReplanDecision(
+      {
+        activeWorkers: 0,
+        blockedQueuedTargets: 0,
+        candidateLimit: 128,
+        maxWorkers: 32,
+        openSlots: 32,
+        queuedTargets: 0,
+        runningWorkers: 0,
+        schedulableTargets: 0,
+      },
+      replanPolicy,
+      replanState,
+    ) == null,
+  );
+
   stateDir = await mkdtemp(join(tmpdir(), "decomp-orchestrator-smoke-"));
   const commonFlags = ["--repo-root", fixtureRoot, "--state-dir", stateDir, "--dry-run-agents"];
 
@@ -213,17 +288,75 @@ async function main(): Promise<void> {
   const triggerStore = openState(triggerStateDir);
   try {
     assertSmoke("trigger-agent rests after bounded idle", triggerRun.stoppedReason === "idle");
-    assertSmoke("trigger-agent wakes director for run and worker event", triggerRun.directorTicks === 2);
+    assertSmoke("trigger-agent wakes director for run, low-pool, and worker events", triggerRun.directorTicks === 3);
     assertSmoke("trigger-agent starts one worker for fixture target", triggerRun.workersStarted === 1);
     assertSmoke("trigger-agent captures worker result", triggerRun.workerResults.length === 1);
     assertSmoke("trigger-agent has no worker errors", triggerRun.workerErrors.length === 0);
     assertSmoke("trigger-agent leaves no active workers", triggerRun.finalStatus.activeWorkers === 0);
     assertSmoke("trigger-agent drains unhandled events", triggerRun.finalStatus.unhandledEvents === 0);
-    assertSmoke("trigger-agent records two director cycles", count(triggerStore, "SELECT COUNT(*) AS count FROM director_cycles WHERE run_id = ?", triggerInit.run.id) === 2);
+    assertSmoke("trigger-agent records three director cycles", count(triggerStore, "SELECT COUNT(*) AS count FROM director_cycles WHERE run_id = ?", triggerInit.run.id) === 3);
     assertSmoke("trigger-agent records one worker report", count(triggerStore, "SELECT COUNT(*) AS count FROM worker_reports") === 1);
     assertSmoke("trigger-agent handled all wake events", count(triggerStore, "SELECT COUNT(*) AS count FROM events WHERE run_id = ? AND handled_at IS NULL", triggerInit.run.id) === 0);
   } finally {
     triggerStore.db.close();
+  }
+
+  const babysitStateDir = await mkdtemp(join(tmpdir(), "decomp-orchestrator-babysit-smoke-"));
+  const babysitFlags = ["--repo-root", fixtureRoot, "--state-dir", babysitStateDir, "--dry-run-agents"];
+  const babysitInit = parseJson<{ run: { id: string } }>(
+    await runCli([
+      ...babysitFlags,
+      "init-run",
+      "--desired-workers",
+      "1",
+      "--candidate-limit",
+      "8",
+      "--goal-kind",
+      "matched_code_percent",
+      "--goal-value",
+      "72",
+    ]),
+  );
+  const babysitRun = parseJson<{
+    stoppedReason: string;
+    incidents: number;
+    restarts: number;
+    systemRuns: Array<{ stdoutPath: string; stderrPath: string; resultPath: string; classification: string; reason: string }>;
+    finalStatus: { activeLeases: number; unhandledEvents: number; workerReports: number };
+  }>(
+    await runCli([
+      ...babysitFlags,
+      "babysit",
+      "--run-id",
+      babysitInit.run.id,
+      "--max-workers",
+      "1",
+      "--max-iterations",
+      "5",
+      "--max-idle-iterations",
+      "1",
+      "--idle-sleep-ms",
+      "1",
+      "--candidate-limit",
+      "8",
+    ]),
+  );
+  const babysitStore = openState(babysitStateDir);
+  try {
+    assertSmoke("babysit exits after clean bounded child", babysitRun.stoppedReason === "system_clean_exit");
+    assertSmoke("babysit records one system run", babysitRun.systemRuns.length === 1);
+    assertSmoke("babysit child run is clean", babysitRun.systemRuns[0]?.classification === "clean");
+    assertSmoke("babysit records no incidents", babysitRun.incidents === 0);
+    assertSmoke("babysit performs no incident restarts", babysitRun.restarts === 0);
+    assertSmoke("babysit leaves no active leases", babysitRun.finalStatus.activeLeases === 0);
+    assertSmoke("babysit drains wake events", babysitRun.finalStatus.unhandledEvents === 0);
+    assertSmoke("babysit records one worker report", babysitRun.finalStatus.workerReports === 1);
+    assertSmoke("babysit system stdout artifact exists", existsSync(babysitRun.systemRuns[0]?.stdoutPath ?? ""));
+    assertSmoke("babysit system stderr artifact exists", existsSync(babysitRun.systemRuns[0]?.stderrPath ?? ""));
+    assertSmoke("babysit system result artifact exists", existsSync(babysitRun.systemRuns[0]?.resultPath ?? ""));
+    assertSmoke("babysit records three director cycles", count(babysitStore, "SELECT COUNT(*) AS count FROM director_cycles WHERE run_id = ?", babysitInit.run.id) === 3);
+  } finally {
+    babysitStore.db.close();
   }
 
   const initialBoard = resolve(stateDir, "runs", init.run.id, "snapshots", "initial_board.json");

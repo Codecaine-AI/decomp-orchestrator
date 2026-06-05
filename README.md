@@ -29,12 +29,15 @@ The package now owns the runtime knowledge that the director and workers need:
 - `package.json` exposes the PR refresh/postmortem/sync utilities as package
   scripts.
 
-The package now has a trigger-agent supervisor command. `init-run` records
-`desired_workers`, queues initial targets, and writes run state; `trigger-agent`
-or its `bootstrap` alias wakes the director on durable events, fills worker
-slots up to the configured worker count, and rests when no event, queued work,
-or active worker remains. PR knowledge refreshes and global build/report
-refreshes remain explicit operator steps.
+The package now has both a trigger-agent loop and a guardian wrapper.
+`init-run` records `desired_workers`, queues initial targets, and writes run
+state; `trigger-agent` or its `bootstrap` alias wakes the director on durable
+events, fills worker slots up to the configured worker count, and rests when no
+event, queued work, or active worker remains. `babysit` is an outer process
+guardian for long-running development runs: it launches the decomp system
+process, captures process-health incidents, recovers failed or expired leases,
+and restarts according to policy. PR knowledge refreshes and global
+build/report refreshes remain explicit operator steps.
 
 ## Documentation
 
@@ -113,11 +116,14 @@ bun run smoke
 
 ## Run Model
 
-The CLI exposes single-step commands plus a trigger-agent supervisor:
+The CLI exposes single-step commands plus trigger and guardian process loops:
 
 - `init-run` creates the SQLite state, stores the goal and `desired_workers`,
   loads `objdiff.json` plus `build/GALE01/report.json`, queues the initial
-  candidate targets, and writes the initial board snapshot.
+  candidate targets, and writes the initial board snapshot. The goal is a run
+  checkpoint: `--goal-value 72` means pause and produce handoff output when the
+  verified score reaches that threshold, not that 72% is the final project
+  objective.
 - `tick` handles one unhandled wake event by launching one director Pi session.
   The director can return target packets, which the runner uses to update queue
   priorities.
@@ -131,7 +137,13 @@ The CLI exposes single-step commands plus a trigger-agent supervisor:
   unhandled event, wakes one director Pi session when needed, starts worker
   sessions until active leases reach `desired_workers` or `--max-workers`, and
   then sleeps for `--idle-sleep-ms` before checking state again. `bootstrap` is
-  an alias for this command.
+  an alias for this command. Pass `--worker-thinking-level` to run worker Pi
+  sessions at a different thinking level from the director.
+- `babysit` is the guardian wrapper around the decomp system process. It starts
+  `bootstrap` by default, passes through trigger flags, captures each child
+  run's stdout/stderr/result under `state_dir/guardian/`, treats worker-process
+  errors as health incidents, runs lease recovery, and restarts the child when
+  restart policy allows.
 - `recover-leases` writes synthetic stalled reports for interrupted or expired
   active leases after operator confirmation.
 - `regression-check` runs the repo's global match-regression gate, persists the
@@ -142,6 +154,11 @@ The CLI exposes single-step commands plus a trigger-agent supervisor:
 `desired_workers` is stored on the run and used by the trigger-agent loop as the
 default worker-pool target. Pass `--max-workers` to cap that target for a local
 run or smoke-style dry run.
+
+`--goal-kind matched_code_percent --goal-value <percent>` sets the checkpoint
+for this run. The long-term target remains `100%`; reaching a checkpoint should
+stop the current batch, preserve the run summary, and let you reallocate,
+increase the checkpoint, or package reviewable output.
 
 Manual fixture run:
 
@@ -185,6 +202,26 @@ bun run orch -- --repo-root "$FIXTURE_ROOT" --state-dir "$STATE_DIR" --dry-run-a
   --candidate-limit 8
 ```
 
+Bounded guardian fixture run:
+
+```sh
+STATE_DIR="$(mktemp -d)"
+FIXTURE_ROOT="$PWD/testdata/smoke_repo"
+
+bun run orch -- --repo-root "$FIXTURE_ROOT" --state-dir "$STATE_DIR" --dry-run-agents init-run \
+  --desired-workers 1 \
+  --candidate-limit 8 \
+  --goal-kind matched_code_percent \
+  --goal-value 72
+
+bun run orch -- --repo-root "$FIXTURE_ROOT" --state-dir "$STATE_DIR" --dry-run-agents babysit \
+  --max-workers 1 \
+  --max-iterations 5 \
+  --max-idle-iterations 1 \
+  --idle-sleep-ms 1 \
+  --candidate-limit 8
+```
+
 For real repo data, set `--repo-root` to the Melee checkout root and pass an
 explicit `--state-dir` while experimenting. If omitted, `--state-dir` defaults
 to `<repo-root>/.decomp-orchestrator-state/`, which is ignored by Git.
@@ -213,10 +250,11 @@ bun run --cwd decomp-orchestrator regression-check -- --repo-root "$PWD"
 ```
 
 The branch-side command wraps `ninja changes_all`, writes artifacts under
-`.decomp-orchestrator-state/regression_checks/`, and fails if `changes_fmt.py`
-finds any metric that moved backward. Running `ninja changes_all` directly is
-equivalent for the gate, but it will not preserve the orchestrator artifact
-summary.
+`.decomp-orchestrator-state/regression_checks/`, parses
+`build/GALE01/report_changes.json`, and fails if any metric moved backward or
+if the report contains broken matches or unmatched fuzzy regressions. Running
+`ninja changes_all` directly is useful for a raw report, but the enforced gate
+and PR Markdown report live in the orchestrator command.
 
 `regression-check` also generates a PR-style Markdown report at
 `<artifact-dir>/pr_report.md`. Use that report as the PR description under an
@@ -311,9 +349,10 @@ knowledge/
 `manifest.json` maps role defaults and worker capabilities to concrete
 references and optional workflows. `src/knowledge/` builds the selected
 knowledge references and resource map for agent prompt builders. The director
-gets scheduling policy by default; the worker gets targeted iteration, Melee
-matching tactics, resource research, and review standards. Experimental search
-and permuter handoff are opt-in capabilities, not the default worker posture.
+gets scheduling policy by default; the worker gets Melee overview, source
+standardizations, targeted iteration, matching tactics, resource research, and
+review standards. Experimental search and permuter handoff are opt-in
+capabilities, not the default worker posture.
 
 The decomp resource library and past-PR corpus are also package-owned:
 
@@ -358,6 +397,10 @@ State directory layout:
 ```text
 <state-dir>/
 +-- orchestrator.sqlite
++-- guardian/
+    +-- system_runs/<system_run>/stdout.txt
+    +-- incidents/<incident>.json
+    +-- recoveries/<recovery>/result.json
 +-- runs/
     +-- <run_id>/
         +-- snapshots/initial_board.json
@@ -378,18 +421,22 @@ The smoke command asserts row counts in `runs`, `targets`, `queue`, `events`,
 `worker_reports`. It also asserts the initial board snapshot, director output,
 director system/user prompts, worker output, worker system/user prompts, worker
 report, trigger-agent wake/refill behavior, and smoke summary artifacts.
+The guardian smoke path also asserts one bounded child system run and its
+captured stdout/stderr/result artifacts.
 
-`recover-leases` is the operator recovery path for interrupted workers. By
-default it recovers only expired active leases. Pass `--force` only after a
-process scan confirms the run's worker process is gone. Recovery writes a
-synthetic `stalled_no_useful_guess` report, releases the lease, preserves the
-worker report artifact, removes the transient file-lock row, and emits a
-`worker_stalled` wake event for the director.
+`recover-leases` is the operator and guardian recovery path for interrupted
+workers. By default it recovers only expired active leases. Pass `--force` only
+after a process scan confirms the run's worker process is gone, or pair
+`--force` with `--worker-id` when the guardian has captured the exact failed
+worker process. Recovery writes a synthetic `stalled_no_useful_guess` report,
+releases the lease, preserves the worker report artifact, removes the transient
+file-lock row, and emits a `worker_stalled` wake event for the director.
 
 ```sh
 bun run orch -- --repo-root "$REPO_ROOT" --state-dir "$STATE_DIR" recover-leases \
   --run-id "$RUN_ID" \
   --force \
+  --worker-id "$WORKER_ID" \
   --reason "operator-confirmed interrupted worker process"
 ```
 
@@ -412,9 +459,12 @@ report row after the Pi session; parsing a live worker's report is future work.
 
 - No Melee source files are edited by the smoke path.
 - No real build, objdiff, score gate, or patch integration runs in this slice.
+- Automatic checkpoint pause/status transition depends on the future score
+  integration path. Today `init-run` records the checkpoint and exposes it to
+  the run state/prompt flow.
 - The trigger-agent loop does not refresh PR knowledge, recover stale leases, or
-  serialize global build/report refreshes; run those as explicit maintenance or
-  gate commands.
+  serialize global build/report refreshes. Use `babysit` for process-health
+  wrapping and run PR/build/report maintenance as explicit gate commands.
 - The smoke gate exercises the trigger-agent loop with one worker; broad live
   multi-worker scheduling still depends on real Pi/toolchain runs.
 - File-lock rows are transient lease guards; worker reports and recovery remove
@@ -444,3 +494,21 @@ bun run orch -- --repo-root "$REPO_ROOT" --state-dir "$STATE_DIR" bootstrap \
 Use `--max-iterations`, `--max-idle-iterations`, and `--idle-sleep-ms` for
 bounded dry runs. Run PR refresh before starting a live run when fresh PR
 evidence matters.
+
+## Guardian Wrapper
+
+For multi-day development runs, put `babysit` around the decomp system process:
+
+```sh
+bun run orch -- --repo-root "$REPO_ROOT" --state-dir "$STATE_DIR" babysit \
+  --max-workers 16 \
+  --idle-sleep-ms 5000 \
+  --agent-timeout-seconds 7200 \
+  --worker-thinking-level low
+```
+
+`babysit` starts `bootstrap` by default and passes trigger flags through to the
+child process. It adds `--exit-on-worker-error` to the child so worker-process
+failures become process-health events. Clean bounded child exits stop the
+guardian by default; incident exits write `state_dir/guardian/incidents/`, run
+lease recovery, and restart unless `--max-restarts` says to stop.

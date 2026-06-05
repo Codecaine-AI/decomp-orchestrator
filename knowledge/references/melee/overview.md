@@ -17,8 +17,11 @@ Use this knowledge pack to behave like a careful `doldecomp/melee` contributor, 
 
 ## Core Workflow
 
-For a detailed one-symbol path from target selection through objdiff, cleanup,
-and final verification, read
+For first-class source rules around loops, typed fields, header inlines, asserts,
+and canonical source forms, read
+[`source-standardizations.md`](source-standardizations.md). For a detailed
+one-symbol path from target selection through objdiff, cleanup, and final
+verification, read
 [`workflows/targeted-iteration.md`](../../workflows/targeted-iteration.md).
 For naming, struct/data layout, architecture-reference, historical-PR, or broad
 strategy decisions, read [`resource-guided-research.md`](resource-guided-research.md).
@@ -32,6 +35,9 @@ strategy decisions, read [`resource-guided-research.md`](resource-guided-researc
 
 2. **Generate or adjust source shape**
    - Start from natural C and repo idioms.
+   - Apply source standardizations before matching tricks: loops over repeated
+     blocks, fields/accessors over offset math, `jobj.h` inlines over expanded
+     asserts, and project assert/report macros over raw `__assert`.
    - Change one dimension at a time: control flow, local order/lifetime, helper extraction, inline shape, pragmas, struct fields, or data declarations.
    - Prefer real types and named fields over offset math. Use `M2C_FIELD` or a temporary struct only as a bridge.
 
@@ -64,7 +70,11 @@ Use resources as evidence, not as replacements for verification:
 
 ## Matching Heuristics
 
-Read [`matching-tactics.md`](matching-tactics.md) when actively trying to close instruction, stack, register, literal, section-order, or TU-split mismatches.
+Read [`source-standardizations.md`](source-standardizations.md) first when the
+source still contains repeated generated blocks, raw offsets, hand-expanded
+asserts, or missing header inlines. Then read
+[`matching-tactics.md`](matching-tactics.md) when actively trying to close
+instruction, stack, register, literal, section-order, or TU-split mismatches.
 
 High-yield patterns:
 

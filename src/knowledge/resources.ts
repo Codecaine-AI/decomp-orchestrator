@@ -215,12 +215,8 @@ export function resourceMap(repoRoot: string, role: KnowledgeRole, capabilities:
         purpose: "operator-only final global regression gate after workers are idle; also writes pr_report.md for the Expected / local run PR description",
       },
       {
-        command: "python3 tools/changes_fmt.py --pr-report --report-title 'Report for GALE01 (<base> - <head>)' build/GALE01/report_changes.json -o <artifact_dir>/pr_report.md",
-        purpose: "manual fallback for regenerating the PR-style Markdown report from report_changes.json",
-      },
-      {
         command: "ninja changes_all",
-        purpose: "operator-only branch regression/progression report against the saved upstream baseline; fails on regressions",
+        purpose: "operator-only branch regression/progression report against the saved upstream baseline; use regression-check for the enforced gate and PR Markdown report",
       },
       {
         command: "ninja build/GALE01/<object>.o",

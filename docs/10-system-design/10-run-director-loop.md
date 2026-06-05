@@ -1,6 +1,6 @@
 ---
-covers: Run director responsibilities, cycle, wake conditions, and worker report contract
-concepts: [director, board, queue, target-packets, wake-events, reports]
+covers: Run director responsibilities, trigger actor semantics, cycle, wake conditions, and worker report contract
+concepts: [director, trigger-actor, board, queue, target-packets, wake-events, reports]
 ---
 
 # Run Director Loop
@@ -17,7 +17,7 @@ Each director cycle has four phases:
    accepted facts, rejected hypotheses, duplicate groups, and recent stalls.
 2. Prioritization: use helper scores and recent evidence to identify targets
    that can create useful information.
-3. Delegation: fill idle worker slots with bounded target packets.
+3. Delegation: emit bounded target packets and worker-slot intent.
 4. Sleep: write decisions and stop until a durable event wakes the director.
 
 The director's job is to choose the next valuable square on the board. Helper
@@ -53,10 +53,14 @@ The cycle is intentionally short. The director does one board read, writes one
 decision bundle, and exits. It is resumed by durable events rather than kept
 alive as a hidden strategic loop.
 
-The trigger-agent supervisor is the non-agent process that gives this a
+The trigger actor is the non-agent process component that gives this a
 resting-agent feel. It checks durable events, activates one director turn when a
-wake event exists, starts worker turns for open worker slots, and then sleeps
-without keeping a Pi director session alive.
+wake event exists, realizes worker-slot intent as worker processes, and then
+sleeps without keeping a Pi director session alive.
+
+The director does not directly own process spawning. It decides what should be
+worked next; the trigger/runtime layer makes that process work happen under
+leases.
 
 ## Wake Events
 
@@ -67,7 +71,7 @@ The director wakes when durable state says it should act:
 - A worker finishes, stalls, asks for a fact, or produces a score candidate.
 - New facts are accepted.
 - A score integration changes the board.
-- The target run goal is reached.
+- The run checkpoint goal is reached and the system should pause for handoff.
 
 Workers do not need the director to be live while they work. They write reports
 and events, then the runner invokes the director again when the next decision is

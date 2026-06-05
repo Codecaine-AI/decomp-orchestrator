@@ -26,7 +26,18 @@ export function nextUnhandledEvent(store: StateStore, runId: string): Record<str
     withBusyRetry(
       () =>
         store.db
-          .query("SELECT * FROM events WHERE run_id = ? AND handled_at IS NULL ORDER BY created_at ASC LIMIT 1")
+          .query(
+            `
+              SELECT *
+              FROM events
+              WHERE run_id = ?
+                AND handled_at IS NULL
+              ORDER BY
+                CASE WHEN event_type = 'pool_below_target' THEN 0 ELSE 1 END,
+                created_at ASC
+              LIMIT 1
+            `,
+          )
           .get(runId) as Record<string, unknown> | undefined,
     ) ?? null
   );

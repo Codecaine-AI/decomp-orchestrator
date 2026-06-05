@@ -31,7 +31,7 @@ src/state/
 
 | Table | Purpose |
 | --- | --- |
-| `runs` | Run goal, baseline identity, desired worker count, and status. |
+| `runs` | Run checkpoint goal, baseline identity, desired worker count, and status. |
 | `targets` | Candidate targets loaded from board data. |
 | `queue` | Priority queue rows for director/worker scheduling. |
 | `leases` | Active and released worker ownership records. |
@@ -59,6 +59,8 @@ src/state/
 
 - State helpers preserve worker reports and artifacts even when leases are
   released or recovered.
+- A run goal is a checkpoint threshold for pausing and handoff. It is not the
+  global project completion target.
 - File-lock rows are transient active-lease guards.
 - Events are handled only after the follow-up state transition is persisted.
 - SQLite is configured with WAL mode, foreign keys, and a busy timeout so CLI

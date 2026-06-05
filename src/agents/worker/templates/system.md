@@ -13,8 +13,11 @@
        or equivalent commands. Preserve pre-existing dirty work in the write
        set, even when it is not yours.
     5. Build an evidence packet before editing source.
-    6. Prefer real types, named fields, canonical macros, and local repo idioms
-       over raw pointer arithmetic or speculative names.
+    6. Treat Melee source standardizations as first-class rules, not optional
+       matching tricks: recover natural loops from repeated blocks, prefer real
+       types/named fields/accessors over raw pointer arithmetic, use existing
+       JObj/header inlines when assert line numbers identify them, and use
+       canonical assert/report macros and local repo idioms before fake shapes.
     7. Verify with the narrowest relevant build/objdiff command that exists.
     8. Maintain a local regression ledger while editing. Compare the leased
        target and any affected neighbor functions/sections before and after
@@ -34,6 +37,41 @@
     12. Stop before random guessing. If no evidence-backed next hypothesis
        remains, report `stalled_no_useful_guess`.
 </rules>
+
+<source_standardization_rules>
+    These rules are hard project policy for any function you touch. They are not
+    merely matching tricks, and they should be applied before preserving AI,
+    m2c, Ghidra, or permuter-shaped source:
+
+    1. Repeated code is often an unrolled loop. When a block repeats with only
+       an index, pointer, flag slot, or stride changing, try to recover a
+       natural `for` loop before keeping the repeated blocks. This applies even
+       when a few accesses are out of order; check whether the original source
+       likely used a loop plus special-case ordering.
+    2. Pointer math is bad source when a type can describe it. Replace `u8*`
+       casts, `base + offset`, `base + offset + index * stride`, and similar
+       forms with struct fields, union arms, accessors, or field arrays such as
+       `obj->field` and `obj->field_arr[i]`. `M2C_FIELD` is only a temporary
+       bridge when the real field cannot yet be proven; remove it when possible
+       in touched code.
+    3. Pragmas are usually not how the original source was written. Avoid
+       `#pragma global_optimizer off`, `dont_inline`, and similar codegen
+       switches unless natural source forms have failed and objdiff evidence
+       justifies the pragma. If a pragma remains, scope it tightly with
+       push/pop and verify affected neighbors.
+    4. Any `__assert("jobj.h", line, ...)` is usually an inline from
+       `src/sysdolphin/baselib/jobj.h`. Search `jobj.h` for that assert line,
+       identify the existing `HSD_JObj*` inline/helper, and use that source form
+       instead of manually expanding asserts or writing direct JObj fields.
+    5. Raw `__assert` blocks should generally become the project macros
+       `HSD_ASSERT`, `HSD_ASSERTMSG`, or `HSD_ASSERTREPORT` when the file, line,
+       condition, message, and optional `OSReport` behavior match the macro
+       expansion. Never redefine these macros to force a match.
+    6. For AI-assisted code, clean these issues in the functions you are already
+       touching even when the cleanup is not strictly required for a local fuzzy
+       improvement. The goal is the best reviewable source that can be verified,
+       not merely a plausible or fake byte match.
+</source_standardization_rules>
 
 <context>
     Melee decomp work is judged by reviewable source and verifier output, not by
@@ -115,7 +153,7 @@
             <steps>
                 1. Inspect target source, sibling functions, relevant headers,
                    local typedefs, macros, includes, asserts, report strings,
-                   and nearby matched functions.
+                   header inline line numbers, and nearby matched functions.
                 2. Check target metadata in `objdiff.json`,
                    `build/GALE01/report.json`, `config/GALE01/symbols.txt`, and
                    `config/GALE01/splits.txt` when those files exist.
@@ -142,10 +180,16 @@
                    scratch/history reconnaissance, isolated check loop,
                    duplicate adaptation, focused source editing, fact research,
                    sweep batches, permuter handoff, and review cleanup.
-                2. Change one dimension at a time: control flow, local
+                2. Apply source standardization checks before last-mile matching
+                   tricks: repeated code should be considered as a loop,
+                   pointer offsets should become fields, union arms, temporary
+                   structs, or `M2C_FIELD`, `jobj.h` assert line numbers should
+                   be mapped back to existing inlines, and raw `__assert` blocks
+                   should be checked against `HSD_ASSERT*` macros.
+                3. Change one dimension at a time: control flow, local
                    declaration order, temporary lifetime, inline/helper shape,
                    pragmas, struct fields, data declarations, or naming.
-                3. Reject hypotheses that depend on fake statics, unverified
+                4. Reject hypotheses that depend on fake statics, unverified
                    comments, broad semantic guesses, or raw offset math where a
                    typed local source exists.
             </steps>

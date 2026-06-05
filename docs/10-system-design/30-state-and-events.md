@@ -39,6 +39,14 @@ Wake events include:
 - `score_candidate`
 - `pool_below_target`
 
+`pool_below_target` is produced by the trigger actor when process-level queue
+shape shows that the run should ask the director for more work. It covers low
+queued work, low schedulable distinct-file work, blocked queued work behind
+active file locks, long-tail worker drain, and optional periodic replans. The
+state reader prioritizes unhandled `pool_below_target` events ahead of ordinary
+worker-report backlog so capacity-preserving replans are not delayed behind
+many older completion events.
+
 ## Leases And Locks
 
 A worker may only edit paths covered by its active lease. The state substrate
@@ -67,5 +75,6 @@ The design taxonomy names these fact classes:
 ## Artifacts
 
 Artifacts make the run inspectable. Board snapshots, rendered prompts, raw Pi
-output, worker reports, fact files, blockers, validation transcripts, and
-regression reports belong under the run state directory.
+output, worker reports, fact files, blockers, validation transcripts, regression
+reports, guardian system-run logs, and incident packets belong under the run
+state directory.
