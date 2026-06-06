@@ -1,0 +1,142 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1637",
+  "pr": {
+    "number": 1637,
+    "title": "dolphin vi matches",
+    "url": "https://github.com/doldecomp/melee/pull/1637",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-26T03:14:52Z",
+    "merged_at": "2025-06-26T03:20:43Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched more of the Dolphin VI implementation by correcting VI globals/layout, timing tables, current timing/state tracking, DTV status typing/implementation, and several VI register/state paths. The PR also updated a game caller to treat VIGetDTVStatus as an integer status and added the PAD/SIRefreshSamplingRate prototype needed by VI retrace handling.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "external-sdk",
+      "headers",
+      "types-structs",
+      "symbol-map-correction",
+      "cleanup"
+    ],
+    "systems": [
+      "dolphin-vi",
+      "dolphin-pad",
+      "config-symbols",
+      "game-mode"
+    ]
+  },
+  "key_files": [
+    "extern/dolphin/src/dolphin/vi/vi.c",
+    "config/GALE01/symbols.txt",
+    "extern/dolphin/include/dolphin/vi/vifuncs.h",
+    "extern/dolphin/include/dolphin/pad.h",
+    "src/melee/gm/gm_1A3F.c"
+  ],
+  "what_changed": [
+    "Reordered and resized VI .sbss symbols in config/GALE01/symbols.txt: shdwChangeMode moved to 0x804D7440, changed became the 8-byte object at 0x804D7448, changeMode moved to 0x804D7450, and shdwChanged became the 8-byte object at 0x804D7458.",
+    "In vi.c, introduced static volatile u32 shdwChangeMode and moved static volatile u32 changeMode to match the corrected symbol layout around the 64-bit changed and shdwChanged masks.",
+    "Expanded the static VITiming table from 7 to 8 entries, adjusted the NTSC progressive timing row, and added an additional progressive-style timing row used by mode 3.",
+    "Added CurrTiming and CurrTvMode globals and used them in VISetRegs, VIInit, getCurrentHalfLine, getCurrentFieldEvenOdd, VIGetCurrentLine, and VIGetTvFormat instead of repeatedly deriving timing from HorVer or hardware registers.",
+    "Added getTiming cases for raw mode values 20, 21, 3, 16, and 17, alongside the existing VI_TVMODE_* enum cases.",
+    "Updated __VIInit so mode 3 follows the progressive-register path like VI_TVMODE_NTSC_PROG.",
+    "Changed VIInit ordering so dspCfg/HorVer timing is imported and CurrTiming/CurrTvMode are initialized before setting display size/position; DispSizeY now comes from CurrTiming->acv << 1 & 0xFFFE and DispPosY is initialized to 0.",
+    "Changed setVerticalRegs black-screen vertical math to add actualAcv * 2 - 2 rather than dispSizeY - 2.",
+    "Changed VIFlush to merge shdwChangeMode into changeMode and clear shdwChangeMode before copying changed bits into shdwChanged.",
+    "Added SIRefreshSamplingRate() call after VISetRegs succeeds in __VIRetraceHandler, requiring inclusion of dolphin/pad.h and a new prototype in extern/dolphin/include/dolphin/pad.h.",
+    "Changed VIGetTvFormat to disable interrupts, map CurrTvMode to returned format values, and restore interrupts before return; the diff still shows the ASSERTMSGLINE using format before assignment, so the excerpt alone does not prove whether surrounding code/macros make that safe.",
+    "Implemented u32 VIGetDTVStatus(void) in vi.c by reading __VIRegs[55] & 3 under interrupt disable/restore and returning bit 0.",
+    "Changed the public declaration of VIGetDTVStatus from void* to u32 in vifuncs.h.",
+    "Updated gm_801A4510 in src/melee/gm/gm_1A3F.c to compare VIGetDTVStatus() against 0 instead of NULL."
+  ],
+  "smart_moves": [
+    "Fixing the symbol map and C static declaration order together addressed the likely root of .sbss layout mismatch instead of only forcing local code shape.",
+    "Using explicit 64-bit volatile masks for changed and shdwChanged preserved the MARK_CHANGED bitmask semantics and aligned the objects with their actual 8-byte symbol sizes.",
+    "Adding CurrTiming/CurrTvMode cached state simplified multiple query functions and avoided recomputing active timing from register reads in paths that need to match SDK behavior.",
+    "Changing VIGetDTVStatus to u32 and fixing the caller from NULL to 0 made the API reflect status-bit semantics rather than pointer semantics.",
+    "Calling SIRefreshSamplingRate only after VISetRegs succeeds placed controller sampling-rate refresh at the point where VI register changes are actually applied.",
+    "Adding raw numeric mode cases to getTiming allowed matching observed SDK/game mode values without inventing new enum names in the diff."
+  ],
+  "decomp_lessons": [
+    "For Dolphin SDK modules, .sbss symbol order and object size can reveal incorrect C declarations; a misplaced u32 before volatile u64 globals can cascade into wrong labels and artificial padding.",
+    "When a status API returns a hardware bit, prefer integer return types and integer comparisons; pointer-like prototypes can hide mismatches and produce misleading game-side code.",
+    "Cached current hardware mode/timing globals can be necessary for matching SDK VI behavior, especially when query functions must reflect the last applied VI mode rather than reconstructing state from several registers.",
+    "Mode aliases may appear as raw numeric cases in retail SDK code; preserving those numeric cases can be a better matching tactic than prematurely naming unsupported enum values.",
+    "Interrupt disable/restore patterns around VI state reads are part of the matching surface and should be preserved even for small getter functions.",
+    "Header fixes and caller fixes should travel with implementation matches when a prototype correction changes source-level comparisons or include requirements."
+  ],
+  "naming_conventions": [
+    "Existing SDK-style globals use mixed case names such as CurrTiming, CurrTvMode, FBSet, HorVer, PreCB, and PostCB.",
+    "Shadow-state VI globals use the shdw prefix, as in shdwChangeMode, shdwChanged, and shdwRegs.",
+    "Bit-mask macro naming uses all caps with an action phrase: MARK_CHANGED(index).",
+    "Public Dolphin functions retain SDK-style prefixes such as VIGetDTVStatus, VIGetTvFormat, VIFlush, VIInit, and SIRefreshSamplingRate.",
+    "The diff keeps unidentified timing mode aliases as numeric switch cases rather than introducing speculative names."
+  ],
+  "assembly_or_matching_tactics": [
+    "Matched .sbss by reordering static declarations and correcting 32-bit versus 64-bit object sizes for changeMode/shdwChangeMode and changed/shdwChanged.",
+    "Used volatile qualifiers on VI state touched by retrace/flush paths to preserve expected memory-access behavior.",
+    "Introduced CurrTiming and CurrTvMode to reduce register-derived recomputation and match getter code shape.",
+    "Used cntlzd-driven changed-bit copying in VIFlush while adding shdwChangeMode merge before shdwChanged propagation.",
+    "Added exact hardware-register bit extraction in VIGetDTVStatus: read __VIRegs[55] & 3, restore interrupts, return low bit.",
+    "Adjusted timing constants and table cardinality rather than compensating at call sites."
+  ],
+  "review_feedback": [
+    "No review comments were included in the provided slice.",
+    "The context reports one issue comment, but its body was not present in the excerpt, so no reviewer intent can be extracted."
+  ],
+  "searchable_terms": [
+    "PR1637",
+    "dolphin vi matches",
+    "r-burns",
+    "extern/dolphin/src/dolphin/vi/vi.c",
+    "config/GALE01/symbols.txt",
+    "VIGetDTVStatus",
+    "VIGetTvFormat",
+    "VIFlush",
+    "VIInit",
+    "__VIInit",
+    "__VIRetraceHandler",
+    "SIRefreshSamplingRate",
+    "shdwChangeMode",
+    "changeMode",
+    "changed",
+    "shdwChanged",
+    "CurrTiming",
+    "CurrTvMode",
+    "VITiming",
+    "getTiming",
+    "VI_TVMODE_NTSC_PROG",
+    "VI_TVMODE_NTSC_INT",
+    "VI_TVMODE_NTSC_DS",
+    "VI_TVMODE_PAL_INT",
+    "VI_TVMODE_PAL_DS",
+    "VI_TVMODE_MPAL_INT",
+    "VI_TVMODE_MPAL_DS",
+    "MARK_CHANGED",
+    "setVerticalRegs",
+    "getCurrentHalfLine",
+    "getCurrentFieldEvenOdd",
+    "gm_801A4510",
+    "DTV status",
+    "progressive mode",
+    "VI .sbss layout"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs touching VIGetTvFormat to see whether the ASSERTMSGLINE placement around format was further adjusted.",
+    "Search for additional Dolphin VI matching PRs that rename or formalize raw getTiming mode cases 3, 16, 17, 20, and 21.",
+    "Check whether symbols around 0x804D7440-0x804D7458 remained stable after this PR.",
+    "Search for SIRefreshSamplingRate callers to confirm whether VI retrace is the only SDK-matching call site added in this period."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

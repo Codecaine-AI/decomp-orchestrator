@@ -1,0 +1,135 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-844",
+  "pr": {
+    "number": 844,
+    "title": "Match `ftCo_Wait`",
+    "url": "https://github.com/doldecomp/melee/pull/844",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-12T14:26:41Z",
+    "merged_at": "2023-05-12T14:33:50Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common fighter Wait action callbacks by moving `ftCo_Wait_Anim`, `ftCo_Wait_IASA`, `ftCo_Wait_Phys`, and `ftCo_Wait_Coll` out of `asm/melee/ft/ft_0877.s` into a new C file under `src/melee/ft/chara/ftCommon/ftCo_Wait.c`. The PR also split the surrounding assembly into a new `asm/melee/ft/ft_08A4.s`, added headers for the new C and remaining asm helpers, adjusted `obj_files.mk` ordering, and refined `ftData` layout enough to expose `ft_data->x24` used by Wait animation logic. There were no review comments or body text in the provided slice, so intent beyond matching `ftCo_Wait` is inferred from the title and diff.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "asm-split",
+      "struct-layout"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "asm",
+      "build"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_Wait.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Wait.h",
+    "asm/melee/ft/ft_0877.s",
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/ft_08A4.h",
+    "src/melee/ft/ft_0877.h",
+    "src/melee/ft/types.h",
+    "obj_files.mk",
+    "src/melee/ft/chara/ftCommon/ftCo_Init.c",
+    "src/melee/ft/chara/ftDonkey/ftDk_HeavyJump.c"
+  ],
+  "what_changed": [
+    "Added `src/melee/ft/chara/ftCommon/ftCo_Wait.c` implementing the four Wait callbacks: `ftCo_Wait_Anim`, `ftCo_Wait_IASA`, `ftCo_Wait_Phys`, and `ftCo_Wait_Coll`.",
+    "`ftCo_Wait_Anim` now uses `GET_FIGHTER(gobj)`, checks `fp->x2224_flag.bits.b2`, calls `ft_800C8B74()` for that flagged path, otherwise calls `ft_8008A7A8(gobj, fp->ft_data->x24)`.",
+    "`ftCo_Wait_IASA` was expressed as a short-circuit chain of negated transition/input checks including `ft_80096540`, multiple `ft_800D*` and `ft_8008*` helpers, `ftFx_AppealS_CheckInput`, `ft_800DE9D8`, `ft_800D5FB0`, and others, returning only when no check succeeds.",
+    "`ftCo_Wait_Phys` was matched as sequential calls to `ft_80084F3C(gobj)` and `ftColl_8007AEE0(gobj)`.",
+    "`ftCo_Wait_Coll` was matched as a direct call to `ft_80084280(gobj)`.",
+    "Added `ftCo_Wait.h` with prototypes and address comments for the four callbacks, using an address-derived guard `GALE01_08A494`.",
+    "Removed the Wait callback declarations from `src/melee/ft/ft_0877.h`, moving them to the dedicated ftCommon header.",
+    "Added `src/melee/ft/ft_08A4.h` for remaining helpers used by the new C, including `ft_8008A7A8`, `ft_800C8B74`, `ft_800D5FB0`, and `ft_800DE9D8`.",
+    "Updated `obj_files.mk` to place `src/melee/ft/chara/ftCommon/ftCo_Wait.c.o` after `asm/melee/ft/ft_0877.s.o` and before the new `asm/melee/ft/ft_08A4.s.o`, preserving the original text layout while replacing only the matched Wait region.",
+    "Split the original large `ft_0877.s` assembly: the matched Wait functions were removed and the subsequent assembly was added as `asm/melee/ft/ft_08A4.s`.",
+    "Adjusted `src/melee/ft/types.h` layout annotations for `ftData` and replaced part of the previous filler with explicit fields including `/* +24 */ int x24`, which is used by `ftCo_Wait_Anim`.",
+    "Added includes of `ftCo_Wait.h` in `ftCo_Init.c` and `ftDk_HeavyJump.c` so users of the moved prototypes reference the dedicated header."
+  ],
+  "smart_moves": [
+    "Limited the C match to the small, high-confidence Wait callback quartet while moving the remaining unmatched assembly into a follow-on `ft_08A4.s` object instead of attempting an oversized conversion.",
+    "Preserved object ordering in `obj_files.mk`, which is critical for matching when replacing a small range in the middle of a large assembly translation unit.",
+    "Created a dedicated `ftCo_Wait.h` rather than leaving common-action declarations in the broad `ft_0877.h`, improving include locality for future ftCommon decomp work.",
+    "Exposed only the needed `ftData` member `x24` with offset comments instead of over-naming or over-typing the entire struct.",
+    "Used a single C short-circuit expression for the long IASA transition chain, matching the assembly pattern where many checks branch to the same exit label if any succeeds.",
+    "Added `.global` labels in the remaining assembly around split boundaries, which suggests care was taken to keep cross-object branch/call references resolvable after the asm split."
+  ],
+  "decomp_lessons": [
+    "When matching a function embedded in a large asm file, split the asm at the matched function boundary and add the new C object in exact link order; this allows incremental matching without disturbing later code addresses.",
+    "For common action callbacks, keep the canonical quartet naming pattern `Anim`, `IASA`, `Phys`, and `Coll`, and put the prototypes in an action-specific ftCommon header.",
+    "A long sequence of boolean transition checks can often match as a chained `&&` of negated calls when the original assembly exits on the first successful transition.",
+    "Struct layout improvements can be minimal and evidence-driven: exposing `ftData.x24` was enough to express the Wait animation path while retaining unknown ranges as `u8` filler.",
+    "Header cleanup matters during matching: moving declarations out of broad numeric headers helps subsequent files include the semantic action header and reduces dependency sprawl.",
+    "If a split assembly file still needs local labels or branch targets across object boundaries, label visibility may need to be adjusted with `.global` entries."
+  ],
+  "naming_conventions": [
+    "`ftCo_Wait_*` is used for common fighter Wait action callbacks.",
+    "The common action callback suffixes are `Anim`, `IASA`, `Phys`, and `Coll`.",
+    "Dedicated action header name mirrors the C file: `ftCo_Wait.c` and `ftCo_Wait.h`.",
+    "Address comments in headers preserve symbol provenance, e.g. `/* 08A494 */ void ftCo_Wait_Anim(...)`.",
+    "Unmatched helper declarations remain numeric-address style, e.g. `ft_8008A7A8`, `ft_800C8B74`, `ft_800D5FB0`, `ft_800DE9D8`.",
+    "The new asm/header split uses the address boundary naming pattern `ft_08A4.s` and `ft_08A4.h`.",
+    "The `ftData` struct kept offset-style member names such as `x24` where semantic names were not established."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced the exact assembly range beginning at `ftCo_Wait_Anim` with C and moved subsequent unmatched assembly into `asm/melee/ft/ft_08A4.s`.",
+    "Maintained link order by listing `ft_0877.s.o`, then `ftCo_Wait.c.o`, then `ft_08A4.s.o` in `obj_files.mk`.",
+    "Matched `ftCo_Wait_IASA` with a chained short-circuit conditional; this mirrors repeated `cmpwi`/branch checks converging on a shared function epilogue.",
+    "Matched the Wait animation path by recognizing the fighter flag bit access `fp->x2224_flag.bits.b2` and the `ft_data->x24` argument to `ft_8008A7A8`.",
+    "Added global labels such as `.L_800886D8`, `.L_80089118`, and `.L_8008A244` in the assembly diff, likely to support symbol resolution after splitting or after calls were renamed.",
+    "Renamed at least one assembly call target from a local label form `.L_800C8B74` to the function symbol `ft_800C8B74`, aligning the assembly reference with the new C prototype."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-844",
+    "Match ftCo_Wait",
+    "ribbanya",
+    "ftCo_Wait",
+    "ftCo_Wait_Anim",
+    "ftCo_Wait_IASA",
+    "ftCo_Wait_Phys",
+    "ftCo_Wait_Coll",
+    "ftCo_Wait.h",
+    "ftCo_Wait.c",
+    "ft_0877.s",
+    "ft_08A4.s",
+    "ft_08A4.h",
+    "obj_files.mk",
+    "ftData",
+    "ft_data->x24",
+    "x2224_flag.bits.b2",
+    "ft_8008A7A8",
+    "ft_800C8B74",
+    "ft_800D5FB0",
+    "ft_800DE9D8",
+    "ftFx_AppealS_CheckInput",
+    "ftColl_8007AEE0",
+    "ft_80084280",
+    "ft_80084F3C",
+    "asm split",
+    "common wait action",
+    "IASA chain"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or further decompile `ft_8008A7A8` and the remaining `ft_08A4.s` functions.",
+    "Look for PRs that give semantic names to `ftData.x24` or refine the surrounding `ftData` layout.",
+    "Search for later cleanup of `ft_800C8B74`, `ft_800D5FB0`, and `ft_800DE9D8` declarations after this temporary `ft_08A4.h` header.",
+    "Compare other ftCommon action matches that use the same `Anim`/`IASA`/`Phys`/`Coll` quartet pattern and object-order split tactic."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

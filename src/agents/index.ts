@@ -1,5 +1,6 @@
 export { agentRegistry, type RegisteredAgentId } from "./registry.js";
 export { directorPrompt, directorQueuedTargets, type DirectorPromptOptions } from "./director/index.js";
+export { knowledgeCuratorAgent, knowledgeCuratorPrompt, type KnowledgeCuratorPromptOptions } from "./knowledge-curator/index.js";
 export { prReviewAgent, prReviewPrompt, type PrReviewPromptOptions } from "./pr-review/index.js";
 export {
   enabledCapabilities,

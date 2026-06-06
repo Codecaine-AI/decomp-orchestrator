@@ -1,0 +1,129 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1340",
+  "pr": {
+    "number": 1340,
+    "title": "Match Gecko_setjmp",
+    "url": "https://github.com/doldecomp/melee/pull/1340",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-02-27T16:20:10Z",
+    "merged_at": "2024-02-27T16:30:04Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Runtime Gecko_setjmp unit by replacing the standalone asm file with MWERKS_GEKKO inline assembly in src/Runtime/Gecko_setjmp.c, defining a real __jmp_buf layout in Gecko_setjmp.h, and switching build metadata from asm/Runtime/Gecko_setjmp.s.o to src/Runtime/Gecko_setjmp.c.o. The PR also propagated the new __jmp_buf type into baselib globals, replacing a placeholder 0x828-byte unknown type for hsd_804D2648.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "inline-asm",
+      "headers",
+      "build-system",
+      "type-recovery"
+    ],
+    "systems": [
+      "Runtime",
+      "sysdolphin/baselib",
+      "asm",
+      "configure.py",
+      "obj_files.mk"
+    ]
+  },
+  "key_files": [
+    "src/Runtime/Gecko_setjmp.c",
+    "src/Runtime/Gecko_setjmp.h",
+    "asm/Runtime/Gecko_setjmp.s",
+    "configure.py",
+    "obj_files.mk",
+    "src/sysdolphin/baselib/hsd_3A94.h",
+    "src/sysdolphin/baselib/hsd_3B33.c"
+  ],
+  "what_changed": [
+    "Deleted asm/Runtime/Gecko_setjmp.s, which contained assembly implementations of __setjmp and longjmp.",
+    "Implemented __setjmp and longjmp in src/Runtime/Gecko_setjmp.c as MWERKS_GEKKO inline asm blocks using nofralloc and register-qualified __jmp_buf pointers.",
+    "Added non-MWERKS_GEKKO fallback stubs for __setjmp and longjmp that call NOT_IMPLEMENTED, requiring placeholder.h in the C file.",
+    "Changed Runtime/Gecko_setjmp.c from NonMatching to Matching in configure.py.",
+    "Changed obj_files.mk to build src/Runtime/Gecko_setjmp.c.o instead of asm/Runtime/Gecko_setjmp.s.o.",
+    "Replaced placeholder Gecko_setjmp.h contents with a concrete __jmp_buf struct containing saved PC, CR, SP, RTOC, a reserved word, GPR save area for r13-r31, FP registers fp14-fp31, and FPSCR.",
+    "Updated __setjmp and longjmp prototypes to take register __jmp_buf* arguments rather than void*/UNK_T placeholder signatures.",
+    "In src/sysdolphin/baselib/hsd_3A94.h, included Gecko_setjmp.h and changed hsd_804D2648 from a local placeholder __baselib_UnkType001 to __jmp_buf.",
+    "Removed a now-redundant Gecko_setjmp.h include from src/sysdolphin/baselib/hsd_3B33.c because hsd_3A94.h now provides it."
+  ],
+  "smart_moves": [
+    "Kept the exact register-save and restore logic visible in C source via MWERKS inline asm rather than leaving the object as a separate asm file.",
+    "Modeled the jump buffer with named fields matching the assembly offsets, letting inline asm use env->pc, env->cr, env->sp, env->rtoc, env->gprs, fp fields, and env->fpscr instead of raw numeric offsets.",
+    "Preserved the longjmp C library behavior where a requested return value of 0 becomes 1, matching the assembly sequence cmpwi/mr/mtfsf/bnelr/li.",
+    "Moved the recovered jump-buffer type into the Runtime header and reused it in baselib, reducing anonymous placeholder typing around hsd_804D2648.",
+    "Guarded compiler-specific inline assembly with MWERKS_GEKKO and supplied fallback stubs for other build contexts."
+  ],
+  "decomp_lessons": [
+    "For compiler/runtime routines that are inherently register-manipulating, matching can still be advanced by converting raw .s files into MWERKS inline asm inside the C source.",
+    "Recovering a struct layout from assembly offsets is useful even when the implementation remains inline asm; field names document offset meaning and prevent magic-offset drift.",
+    "When a placeholder global's size and usage correspond to a recovered runtime structure, replace the local unknown typedef with the shared real type in the owning header.",
+    "Build metadata must be updated in both configure.py and obj_files.mk when retiring an asm object in favor of a matched C object.",
+    "Keep non-target compiler behavior explicit for MWERKS-only inline asm, typically with conditional compilation and NOT_IMPLEMENTED fallbacks."
+  ],
+  "naming_conventions": [
+    "The recovered jump buffer type is named __jmp_buf, matching the Runtime/Gecko_setjmp context and C runtime convention.",
+    "Struct fields use short register/role names that mirror saved machine state: pc, cr, sp, rtoc, reserved, gprs, fp14 through fp31, and fpscr.",
+    "The public prototypes remain the runtime names __setjmp and longjmp.",
+    "The baselib global hsd_804D2648 keeps its address-derived name but now has type __jmp_buf instead of a baselib-specific unknown placeholder."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used MWERKS_GEKKO asm functions with nofralloc to avoid compiler-generated stack frame code for register context save/restore routines.",
+    "__setjmp saves LR via mflr, CR via mfcr, SP, RTOC, r13-r31 via stmw, FPSCR via mffs, and fp14-fp31/fpscr via stfd before returning 0.",
+    "longjmp restores LR, CR, SP, RTOC, r13-r31, fp14-fp31, and FPSCR, then returns val unless val is 0, in which case it returns 1.",
+    "Inline asm references C struct fields such as env->pc and env->fp31 to encode the required offsets through the recovered __jmp_buf layout.",
+    "The sequence preserves the original asm ordering, including loading fp0 from env->fpscr before fp31 and restoring FPSCR with mtfsf before returning."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR1340",
+    "Match Gecko_setjmp",
+    "PsiLupan",
+    "Gecko_setjmp",
+    "__setjmp",
+    "longjmp",
+    "__jmp_buf",
+    "MWERKS_GEKKO",
+    "nofralloc",
+    "inline asm",
+    "RTOC",
+    "FPSCR",
+    "mflr",
+    "mfcr",
+    "mtlr",
+    "mtcrf",
+    "stmw",
+    "lmw",
+    "mffs",
+    "mtfsf",
+    "fp14",
+    "fp31",
+    "Runtime/Gecko_setjmp.c",
+    "Runtime/Gecko_setjmp.h",
+    "asm/Runtime/Gecko_setjmp.s",
+    "hsd_804D2648",
+    "hsd_3A94.h",
+    "hsd_3B33.c",
+    "configure.py",
+    "obj_files.mk",
+    "Matching",
+    "NonMatching"
+  ],
+  "follow_up_queries": [
+    "Find other Runtime asm files that can be converted to MWERKS inline asm with recovered struct field offsets.",
+    "Search for remaining placeholder jump-buffer or setjmp-related types that should use __jmp_buf.",
+    "Check whether hsd_804D2648 uses now benefit from the concrete __jmp_buf layout.",
+    "Audit build metadata pairs when moving asm objects to src objects: configure.py and obj_files.mk."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

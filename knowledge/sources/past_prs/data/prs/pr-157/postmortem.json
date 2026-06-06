@@ -1,0 +1,150 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-157",
+  "pr": {
+    "number": 157,
+    "title": "Match HSD_CObjEraseScreen but mark NON_MATCHING for now",
+    "url": "https://github.com/doldecomp/melee/pull/157",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-09T00:06:04Z",
+    "merged_at": "2021-12-09T00:06:12Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added a C decompilation attempt for sysdolphin baselib camera object function HSD_CObjEraseScreen while retaining an inline-asm fallback because the C version did not yet match. The mismatch reason was explicitly documented as extern float constants causing swapped lfs ordering. The PR also renamed several discovered symbols used by the new C implementation, including tanf, HSD_CObjGetNear, HSD_CObjGetFar, HSD_CObjGetProjectionType, and HSD_EraseRect, and updated callsites/prototypes accordingly.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "non-matching-c-translation",
+      "symbol-renaming",
+      "headers",
+      "build-system"
+    ],
+    "systems": [
+      "sysdolphin/baselib",
+      "cobj",
+      "camera",
+      "projection",
+      "asm",
+      "include",
+      "MSL math"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/cobj.c",
+    "asm/sysdolphin/baselib/cobj.s",
+    "src/sysdolphin/baselib/cobj.h",
+    "include/functions.h",
+    "obj_files.mk",
+    "asm/MSL/math.s",
+    "asm/dolphin/mtx/mtx.s",
+    "asm/dolphin/mtx/mtx44.s",
+    "src/melee/lb/lbvector.c",
+    "asm/sysdolphin/baselib/shadow.s",
+    "asm/sysdolphin/baselib/fog.s"
+  ],
+  "what_changed": [
+    "Introduced new source file src/sysdolphin/baselib/cobj.c containing a C version of HSD_CObjEraseScreen guarded by NON_MATCHING and an inline-asm fallback under the opposite branch.",
+    "Removed the standalone HSD_CObjEraseScreen body from asm/sysdolphin/baselib/cobj.s and added src/sysdolphin/baselib/cobj.o to obj_files.mk before the remaining asm cobj object.",
+    "The C implementation computes a midpoint z value from HSD_CObjGetNear and HSD_CObjGetFar, branches on HSD_CObjGetProjectionType, derives erase rectangle bounds for PROJ_PERSPECTIVE, PROJ_FRUSTRUM, and PROJ_ORTHO, then calls HSD_EraseRect.",
+    "Added HSD_CObjEraseScreen prototype to src/sysdolphin/baselib/cobj.h and included global.h there so s32 is available.",
+    "Promoted func_803261BC to tanf in asm/MSL/math.s and updated numerous assembly callsites to use tanf.",
+    "Renamed camera-object accessors from anonymous func_* labels to HSD_CObjGetNear, HSD_CObjGetFar, and HSD_CObjGetProjectionType in assembly and include/functions.h.",
+    "Changed an lbvector.c switch from func_8036A12C(cobj) to HSD_CObjGetProjectionType(cobj), reflecting the newly identified projection-type getter."
+  ],
+  "smart_moves": [
+    "Kept the known-good assembly as an inline fallback instead of replacing it with a nonmatching C function, allowing the project to gain readable decompilation context without regressing matching builds.",
+    "Documented the concrete blocker directly above the function: extern float constants caused a swapped lfs operation, making the mismatch actionable for future cleanup.",
+    "Renamed supporting functions first, making the HSD_CObjEraseScreen C logic much clearer and avoiding a decomp full of opaque func_* calls.",
+    "Used known projection enum names and struct fields in the C translation, exposing the semantic split between perspective, frustrum, and ortho camera projections.",
+    "Renamed the math routine func_803261BC to tanf and propagated that name through assembly callsites, improving global searchability for trigonometric matching work."
+  ],
+  "decomp_lessons": [
+    "When a function is semantically understood but a small codegen issue remains, a NON_MATCHING C version plus inline asm fallback can preserve progress and document intent.",
+    "Extern float or double constants can perturb load ordering; if a match differs only by lfs/lfd ordering, inspect whether literals should be emitted locally, referenced through sdata, or expressed differently.",
+    "Before decompiling a caller-heavy function, identify and name small accessors such as get-near, get-far, and get-projection-type; semantic names reduce risk in larger control-flow reconstruction.",
+    "For camera projection code, the branch shape around projection type can be mapped directly to perspective/frustrum/ortho parameter unions in HSD_CObj.",
+    "Build integration for split decomp files may require adding a src object next to the residual asm object, with the decompiled function removed from the asm file to avoid duplicate symbols."
+  ],
+  "naming_conventions": [
+    {
+      "old": "func_803261BC",
+      "new": "tanf",
+      "reason": "MSL math routine identified as single-precision tangent; callsites in camera/projection math were updated."
+    },
+    {
+      "old": "func_80369F88",
+      "new": "HSD_CObjGetNear",
+      "reason": "Camera object near-plane getter used by HSD_CObjEraseScreen and other projection/shadow code."
+    },
+    {
+      "old": "func_80369FB0",
+      "new": "HSD_CObjGetFar",
+      "reason": "Camera object far-plane getter used in midpoint-z computation and other camera copying code."
+    },
+    {
+      "old": "func_8036A12C",
+      "new": "HSD_CObjGetProjectionType",
+      "reason": "Camera object projection-type getter used to switch among PROJ_PERSPECTIVE, PROJ_FRUSTRUM, and PROJ_ORTHO."
+    },
+    {
+      "old": "HSD_EraseRect unknown prototype",
+      "new": "void HSD_EraseRect()",
+      "reason": "Made callable from the new HSD_CObjEraseScreen translation, though the prototype remained untyped/weak in include/functions.h."
+    }
+  ],
+  "assembly_or_matching_tactics": [
+    "Used inline asm fallback inside src/sysdolphin/baselib/cobj.c to keep exact instruction bytes for HSD_CObjEraseScreen while housing the function in the new C source file.",
+    "Marked the readable C implementation NON_MATCHING because extern constants lbl_804DE468, lbl_804DE470, and lbl_804DE474 led to swapped lfs ordering.",
+    "Preserved assembly labels and instruction comments in the fallback, but replaced calls with newly named symbols such as HSD_CObjGetFar, HSD_CObjGetNear, HSD_CObjGetProjectionType, tanf, and HSD_EraseRect.",
+    "Converted assembly branch targets across many files from func_803261BC to tanf without changing instruction addresses/opcodes, making symbol names more accurate while preserving binary equivalence.",
+    "Added src/sysdolphin/baselib/cobj.o before asm/sysdolphin/baselib/cobj.o in obj_files.mk after removing the decompiled function from the asm object."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The PR body states the current C version does not match because externs lead to lfs ordering differences; this is the only explicit rationale captured."
+  ],
+  "searchable_terms": [
+    "HSD_CObjEraseScreen",
+    "NON_MATCHING",
+    "swapped lfs",
+    "extern float constants",
+    "lbl_804DE468",
+    "lbl_804DE470",
+    "lbl_804DE474",
+    "DegToRad",
+    "tanf",
+    "func_803261BC",
+    "HSD_CObjGetNear",
+    "func_80369F88",
+    "HSD_CObjGetFar",
+    "func_80369FB0",
+    "HSD_CObjGetProjectionType",
+    "func_8036A12C",
+    "HSD_EraseRect",
+    "PROJ_PERSPECTIVE",
+    "PROJ_FRUSTRUM",
+    "PROJ_ORTHO",
+    "projection_param",
+    "cobj.c",
+    "cobj.s",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that remove NON_MATCHING from HSD_CObjEraseScreen or resolve the extern constant lfs ordering issue.",
+    "Search for later changes that move HSD_CObjGetNear, HSD_CObjGetFar, or HSD_CObjGetProjectionType from assembly into C.",
+    "Search for PRs refining the HSD_EraseRect prototype from void HSD_EraseRect() to a typed signature.",
+    "Look for matching tactics involving lbl_804DE468, lbl_804DE470, lbl_804DE474, or local float constants versus extern sdata constants.",
+    "Find subsequent cobj.h or HSD_CObj struct updates that validate the projection_param union field names used here."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

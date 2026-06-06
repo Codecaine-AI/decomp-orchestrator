@@ -1,0 +1,135 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1934",
+  "pr": {
+    "number": 1934,
+    "title": "Fix splits for ftYoshi files",
+    "url": "https://github.com/doldecomp/melee/pull/1934",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-09-24T00:56:52Z",
+    "merged_at": "2025-09-24T06:51:15Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Corrected the Yoshi source/object splits so the tail end of ftYs_Init.c was reassigned to ftYs_Guard.c. This moved three ftYs_Init-addressed routines from Init into Guard, adjusted ftYoshi text/sdata/sdata2 ranges, moved their declarations from ftYs_Init.h to ftYs_Guard.h, and marked ftYs_Init.c as Matching in configure.py. The PR body states that ftYs_Init became fully matching and linking after these split fixes.",
+  "change_classification": {
+    "primary_type": "split-boundary-fix",
+    "categories": [
+      "decomp-matching",
+      "fix",
+      "headers",
+      "config"
+    ],
+    "systems": [
+      "fighter",
+      "ftYoshi",
+      "build-config",
+      "splits",
+      "symbols"
+    ]
+  },
+  "key_files": [
+    "config/GALE01/splits.txt",
+    "config/GALE01/symbols.txt",
+    "configure.py",
+    "src/melee/ft/chara/ftYoshi/ftYs_Init.c",
+    "src/melee/ft/chara/ftYoshi/ftYs_Guard.c",
+    "src/melee/ft/chara/ftYoshi/ftYs_Init.h",
+    "src/melee/ft/chara/ftYoshi/ftYs_Guard.h"
+  ],
+  "what_changed": [
+    "Changed ftYs_Init.c text split end from 0x8012C030 to 0x8012BDA0, shrinking Init to end at ftYs_Init_8012BDA0.",
+    "Changed ftYs_Guard.c text split start from 0x8012C030 to 0x8012BDA0, making Guard own the functions at 0x8012BDA0, 0x8012BE3C, and 0x8012BECC before ftYs_GuardOn_0_Anim at 0x8012C030.",
+    "Moved the implementations of ftYs_Init_8012BDA0, ftYs_Init_8012BE3C, ftYs_Init_8012BECC, plus helper static no-inline/sub functions, from ftYs_Init.c to ftYs_Guard.c.",
+    "Moved prototypes for ftYs_Init_8012BDA0, ftYs_Init_8012BE3C, and ftYs_Init_8012BECC from ftYs_Init.h to ftYs_Guard.h.",
+    "Adjusted ftYoshi sdata and sdata2 split ownership: ftYs_Init.sdata now ends at 0x804D3E58, ftYs_Guard.sdata owns 0x804D3E58-0x804D3E68, ftYs_SpecialS.sdata owns 0x804D3E68-0x804D3E80, ftYs_Init.sdata2 now ends at 0x804D9A28, and ftYs_Guard.sdata2 owns 0x804D9A28-0x804D9A38.",
+    "Changed the symbol metadata for ftYs_Init_804D9A30 at .sdata2:0x804D9A30 from data:double to data:8byte.",
+    "Updated configure.py so melee/ft/chara/ftYoshi/ftYs_Init.c is built as Object(Matching) instead of Object(NonMatching).",
+    "Added an include of ft/ft_0877.h to ftYs_Guard.c, presumably required by the moved guard/init routines."
+  ],
+  "smart_moves": [
+    "Fixed matching by moving code across source files rather than perturbing the function bodies, preserving the already working codegen while correcting object ownership.",
+    "Updated splits.txt, headers, source files, and configure.py together, which kept source organization, linker sections, and matching status consistent.",
+    "Used the actual address boundary 0x8012BDA0 as the split point, aligning the source split with the first moved routine instead of leaving ftYs_Init.c owning guard-related text.",
+    "Preserved matching-sensitive helper wrappers such as ftYs_Init_8012B8A4_no_inline_2 and ftYs_Init_8012B8A4_no_inline after the move, including PAD_STACK usage and the local padded Vec3 wrapper struct.",
+    "Recognized that non-text sections also had to be split, not just .text, by redistributing .sdata and .sdata2 ranges among ftYs_Init, ftYs_Guard, and ftYs_SpecialS.",
+    "Changed symbol data typing from double to 8byte for ftYs_Init_804D9A30, suggesting the matching issue was section/data-layout related rather than semantic floating-point usage."
+  ],
+  "decomp_lessons": [
+    "If a file only fails matching/linking near a source-file boundary, inspect the configured split ranges before changing C code.",
+    "Function names with an old file prefix, such as ftYs_Init_8012BECC, do not guarantee the routine belongs in that file after split correction; address ownership and object layout are stronger evidence.",
+    "When moving functions between character files, move public declarations to the header that corresponds to the new object owner so consumers include the correct module boundary.",
+    "Matching status in configure.py should only be upgraded after the split configuration and source ownership make the object fully matching and linking.",
+    "Small .sdata/.sdata2 ownership mistakes can prevent an otherwise matching C file from linking as Matching.",
+    "Do not discard matching scaffolding such as no-inline wrapper functions, PAD_STACK calls, or artificial padded locals when relocating code between objects."
+  ],
+  "naming_conventions": [
+    "Yoshi character files use the ftYs_ prefix, with module-style filenames such as ftYs_Init.c and ftYs_Guard.c.",
+    "Unknown or address-based functions retain address-suffixed names such as ftYs_Init_8012BDA0, ftYs_Init_8012BE3C, and ftYs_Init_8012BECC even after moving to ftYs_Guard.c.",
+    "Header prototypes are annotated with address comments, for example /* 12BDA0 */ void ftYs_Init_8012BDA0(Fighter_GObj* gobj);",
+    "Motion-state routines in Guard use descriptive state suffixes such as ftYs_GuardOn_0_Anim, ftYs_GuardOn_0_IASA, and ftYs_GuardOn_0_Phys.",
+    "Split config entries follow paths like melee/ft/chara/ftYoshi/ftYs_Guard.c with explicit .text, .data, .sdata, and .sdata2 start/end ranges."
+  ],
+  "assembly_or_matching_tactics": [
+    "Corrected object split boundaries in config/GALE01/splits.txt to move a contiguous text range 0x8012BDA0-0x8012C030 from ftYs_Init.c into ftYs_Guard.c.",
+    "Retained PAD_STACK(4 * 2), PAD_STACK(4 * 4), and PAD_STACK(8) in moved functions to preserve stack layout.",
+    "Kept static no-inline trampoline helpers around ftYs_Init_8012B8A4, indicating an inlining/codegen workaround needed for matching.",
+    "Used a padded local struct containing u8 _pad[4] and Vec3 v in ftYs_Init_8012BECC_sub, a matching tactic for local stack placement/alignment.",
+    "Adjusted .sdata2 symbol metadata for ftYs_Init_804D9A30 from double to 8byte, likely to avoid incorrect typed emission while preserving binary data layout.",
+    "After the split fix, changed configure.py from Object(NonMatching, \"melee/ft/chara/ftYoshi/ftYs_Init.c\") to Object(Matching, \"melee/ft/chara/ftYoshi/ftYs_Init.c\")."
+  ],
+  "review_feedback": [
+    "The PR body says the fixes came from a group session and that ftYs_Init is now fully matching and linking.",
+    "The author noted they would wait for PR #1933 and resolve conflicts before merging.",
+    "No review comments were present in the provided slice, so there is no direct reviewer feedback to extract."
+  ],
+  "searchable_terms": [
+    "pr-1934",
+    "Fix splits for ftYoshi files",
+    "r-burns",
+    "ftYoshi",
+    "Yoshi splits",
+    "ftYs_Init",
+    "ftYs_Guard",
+    "ftYs_Init.c matching",
+    "ftYs_Guard.c split",
+    "config/GALE01/splits.txt",
+    "config/GALE01/symbols.txt",
+    "configure.py",
+    "Object(Matching)",
+    "Object(NonMatching)",
+    "0x8012BDA0",
+    "0x8012C030",
+    "0x804D3E58",
+    "0x804D3E68",
+    "0x804D9A28",
+    "0x804D9A38",
+    "ftYs_Init_8012BDA0",
+    "ftYs_Init_8012BE3C",
+    "ftYs_Init_8012BECC",
+    "ftYs_Init_8012BECC_sub",
+    "ftYs_Init_8012B8A4_no_inline",
+    "ftYs_Init_804D9A30",
+    "data:8byte",
+    "PAD_STACK",
+    "HurtCapsule_Disabled",
+    "Fighter_ChangeMotionState",
+    "ftYs_MS_GuardOn_0"
+  ],
+  "follow_up_queries": [
+    "Check PR #1933 for conflicts or related ftYoshi split changes.",
+    "Search later PRs for ftYs_Guard.c becoming Matching after this split correction.",
+    "Audit nearby ftYoshi files for remaining .sdata/.sdata2 split ownership issues.",
+    "Search for other symbols typed as double that should be data:8byte in symbols.txt.",
+    "Inspect whether address-prefixed ftYs_Init_* functions in ftYs_Guard.c were later renamed to behavior-based guard names."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,139 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-834",
+  "pr": {
+    "number": 834,
+    "title": "Match more of `ftPe_SpecialLw`",
+    "url": "https://github.com/doldecomp/melee/pull/834",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-06T19:03:30Z",
+    "merged_at": "2023-05-06T19:10:51Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched more of Peach's down-special vegetable logic by replacing a large inline-assembly `pickVeg` implementation with C, giving the Peach dat attributes meaningful table fields for item chance selection, and refactoring vegetable spawning into smaller helpers. The key improvement was recognizing the data at ftPe_DatAttrs +0x10/+0x18 as a weighted item table containing `{ randi_max, kind }` entries rather than opaque x-fields.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-layout",
+      "refactor"
+    ],
+    "systems": [
+      "fighter",
+      "ftPeach",
+      "items"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/chara/ftPeach/ftPe_SpecialLw.c",
+      "role": "Replaced the inline-asm/M2C-style `pickVeg` with C, changed it to return `ItemKind`, and split vegetable spawning into `getKind` and `createVeg` helpers while preserving matching stack-padding notes."
+    },
+    {
+      "path": "src/melee/ft/chara/ftPeach/types.h",
+      "role": "Renamed Peach dat-attribute fields and modeled the down-special weighted item table as `speciallw_item_table_count` plus an inline `ftPe_ItemChance` array with `randi_max` and `ItemKind kind`."
+    }
+  ],
+  "what_changed": [
+    "`pickVeg(HSD_GObj*)` changed from returning `bool`/opaque integer-like data to returning `ItemKind`, matching its actual use as a selected vegetable/item kind.",
+    "A large `#if defined(MUST_MATCH) && !defined(WIP)` inline assembly block for `pickVeg` was removed and replaced with structured C.",
+    "`pickVeg` now sums `a->speciallw_item_table[idx].randi_max`, calls `HSD_Randi(odds)`, then walks the weighted table until the random value falls below the cumulative threshold and returns `a->speciallw_item_table[result].kind`.",
+    "The old M2C-style variables and fields such as `x10`, `x18`, `M2C_FIELD`, and manual pointer arithmetic were replaced with named struct accesses.",
+    "Vegetable creation was split from a former `getVeg` helper into `getKind` for deciding the `ItemKind` and `createVeg` for calling `it_802BD4AC` and installing fighter item/callback state.",
+    "`spawnVeg` now obtains the hand/part position via `lb_8000B1CC` and delegates item creation side effects to `createVeg`.",
+    "`types.h` now includes `it/forward.h` and `<placeholder.h>` to support `ItemKind` and placeholder-dependent declarations.",
+    "`ftPe_DatAttrs` renamed `x10` to `speciallw_item_table_count` and replaced opaque fields around +0x18/+0x1C with `speciallw_item_table[3]` entries containing `randi_max` and `kind`."
+  ],
+  "smart_moves": [
+    "Identified that the assembly loop was a weighted random selection over a table, allowing the code to become compact and understandable while still matching.",
+    "Changed the return type of `pickVeg` to `ItemKind`, aligning the function signature with the value actually passed into item creation.",
+    "Introduced a small named `ftPe_ItemChance` struct embedded in Peach dat attrs, which documents both the table stride and semantic meaning of the two words per entry.",
+    "Kept explicit `#ifdef MUST_MATCH` unused stack byte arrays with `@todo Unused stack` comments, preserving known matching artifacts without hiding them in logic.",
+    "Separated item-kind selection from item spawning side effects, making the random-selection logic easier to verify independently from callback/item ownership setup."
+  ],
+  "decomp_lessons": [
+    "When an M2C or asm block repeatedly loads pairs of words at a fixed stride, check whether the data is an array of small structs before preserving opaque pointer arithmetic.",
+    "Weighted random-selection routines often decompile into two passes: first sum all weights, then compare a random value against a cumulative running total.",
+    "Return types should be corrected once usage is understood; a function previously stubbed as `bool` may actually return an enum such as `ItemKind`.",
+    "Struct-field naming can directly unlock matching C: replacing `x10`, `x18`, and raw offsets with `speciallw_item_table_count`, `randi_max`, and `kind` made the logic expressible without `M2C_FIELD`.",
+    "Small inline helpers can help match and clarify code if they isolate decisions (`getKind`) from effectful setup (`createVeg`).",
+    "Preserve matching-only stack artifacts explicitly and locally with comments rather than entangling them with real control flow."
+  ],
+  "naming_conventions": [
+    {
+      "name": "speciallw_item_table_count",
+      "lesson": "Use action/system-specific prefixes for dat-attribute fields once their role is known; here the field counts Peach down-special item chance entries."
+    },
+    {
+      "name": "ftPe_ItemChance",
+      "lesson": "Name small embedded data-table entries after their gameplay meaning rather than their offset."
+    },
+    {
+      "name": "randi_max",
+      "lesson": "Use names that reflect how fields interact with `HSD_Randi`; this field is the weight/max contribution for random selection."
+    },
+    {
+      "name": "kind",
+      "lesson": "For item table entries, the selected result is an `ItemKind`, not a generic integer."
+    },
+    {
+      "name": "getKind",
+      "lesson": "A helper that only chooses the item kind should be named for selection, not spawning."
+    },
+    {
+      "name": "createVeg",
+      "lesson": "A helper that calls item creation and updates fighter item/callback state should have an effectful creation-oriented name."
+    }
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted an inline assembly implementation of `pickVeg` into C by recognizing the first loop as summing table weights and the second loop as selecting the first cumulative threshold hit.",
+    "Used `ssize_t` loop/index variables in `pickVeg`, likely to better match signed PowerPC compare/index behavior visible in the original assembly.",
+    "Kept `#ifdef MUST_MATCH` stack padding arrays in `pickVeg`, `createVeg`, and `spawnVeg` for unused stack space needed by matching.",
+    "Removed M2C artifacts such as `M2C_UNK`, `M2C_FIELD`, manual byte offset loads, and label/goto style loops in favor of typed arrays and normal `for` loops.",
+    "The replacement C still mirrors the assembly's two-phase weighted random algorithm: sum odds, call `HSD_Randi`, then accumulate weights until a result index is found."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR 834",
+    "ftPe_SpecialLw",
+    "Peach down special",
+    "Peach turnip",
+    "pickVeg",
+    "spawnVeg",
+    "getKind",
+    "createVeg",
+    "ftPe_DatAttrs",
+    "ftPe_ItemChance",
+    "speciallw_item_table_count",
+    "speciallw_item_table",
+    "randi_max",
+    "ItemKind",
+    "It_Kind_Peach_Turnip",
+    "HSD_Randi",
+    "it_802BD4AC",
+    "weighted random",
+    "MUST_MATCH unused stack",
+    "M2C_FIELD removal",
+    "inline asm removal",
+    "fighter",
+    "ftPeach",
+    "vegetable item table"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename `ftPe_DatAttrs.x14` in Peach down-special logic.",
+    "Check whether `speciallw_item_table[3]` was later resized or made dynamically sized based on `speciallw_item_table_count`.",
+    "Search for other fighters or item-spawn code using weighted random tables that can reuse the `randi_max` plus `kind` pattern.",
+    "Investigate whether the `@todo Unused stack` padding in `pickVeg`, `createVeg`, or `spawnVeg` was later eliminated by better struct typing or inlining."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

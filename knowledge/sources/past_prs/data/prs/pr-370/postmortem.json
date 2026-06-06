@@ -1,0 +1,149 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-370",
+  "pr": {
+    "number": 370,
+    "title": "More ftmario functions",
+    "url": "https://github.com/doldecomp/melee/pull/370",
+    "state": "MERGED",
+    "author": "nicolasrmerz",
+    "created_at": "2022-05-10T20:18:24Z",
+    "merged_at": "2022-05-10T21:05:44Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Ported a large block of Mario fighter behavior from asm/melee/ft/chara/ftmario.s into src/melee/ft/chara/ftmario.c, adding C implementations for func_800E111C through func_800E187C and deleting roughly 572 lines of assembly. The PR also expanded ftmario.h prototypes, refined ftMarioAttributes fields at offsets 0x04-0x10, and corrected Mario's x223C state field in fighter.h from u32 to HSD_GObj* so callback/item-object code could be typed as a pointer. There was no PR body or review discussion in the slice, so intent and review rationale are inferred from the diff only.",
+  "change_classification": {
+    "primary_type": "asm_to_c_decompilation",
+    "categories": [
+      "fighter_behavior",
+      "headers",
+      "struct_typing",
+      "callback_wiring",
+      "asm_reduction"
+    ],
+    "systems": [
+      "fighter",
+      "ftmario",
+      "asm",
+      "headers"
+    ]
+  },
+  "key_files": [
+    "asm/melee/ft/chara/ftmario.s",
+    "src/melee/ft/chara/ftmario.c",
+    "src/melee/ft/chara/ftmario.h",
+    "src/melee/ft/fighter.h"
+  ],
+  "what_changed": [
+    "Removed the assembly implementations for many Mario functions in the 0x800E111C-0x800E187C range from ftmario.s and replaced them with C in ftmario.c.",
+    "Added C implementations for state-transition helpers such as func_800E1178 and func_800E11E0, which call func_8007D5D4/func_8007D7FC, enter action states 0x158/0x157, and set x21BC_callback_Accessory4 to func_800E0EE0.",
+    "Added func_800E1248, func_800E132C, func_800E1368, func_800E13C8, and func_800E13F8 for managing ft->sa.mario.x223C, hitlag callbacks, damage/death callbacks, and cleanup via func_802B2560/func_802B2674/func_802B26C0/func_802B26E0.",
+    "Added action-state helpers for states 0x159 and 0x15A in func_800E1450 and func_800E14C8, initializing ftcmd vars, stateVar1, velocity, and accessory callback func_800E1248.",
+    "Added per-frame or physics-like routines func_800E15D0 and func_800E16E0 that react to ftcmd vars, compute bone coordinates with func_8007500C and func_8000B1CC, spawn an effect through func_800119DC, toggle x2340_stateVar1, update x2218_flag.bits.b3, and call movement helpers such as func_80084F3C, func_8007AEF8, func_8007D494, func_8007D4B8, and func_8007CE94.",
+    "Simplified earlier C functions by inlining temporary result variables in guard checks, e.g. if (func_8006F238(gobj) == 0).",
+    "Changed func_800E0A00 from void(void) to void(HSD_GObj*) so it can forward gobj to func_800E1368 and be assigned to fighter callbacks that receive a gobj.",
+    "Changed SpecialAttrs_Mario.x223C in fighter.h from u32 to HSD_GObj*, matching its use as an object pointer assigned from func_802B2560 and passed to func_802B2674/func_802B26C0/func_802B26E0.",
+    "Expanded ftMarioAttributes with f32 fields x04, x08, x0C, and x10 before x14, replacing a padding-only area with named float offsets used by the new code.",
+    "Updated remaining ftmario.s references from local labels lbl_800E13C8 and lbl_800E1248 to C symbols func_800E13C8 and func_800E1248."
+  ],
+  "smart_moves": [
+    "Retyping x223C as HSD_GObj* made the C code reflect real usage instead of preserving a raw u32 field; this improves callback and item/object cleanup readability.",
+    "The conversion kept function names address-based, avoiding unsupported semantic renames while still moving code out of assembly.",
+    "The author used callback field names such as x21BC_callback_Accessory4, x21D4_callback_EnterHitlag, x21D8_callback_ExitHitlag, x21E4_callback_OnDeath2, and x21DC_callback_OnTakeDamage to document behavior without inventing higher-level Mario-specific names.",
+    "The C port preserved the assembly's callback lifecycle: create object, store it in x223C and x1984_heldItemSpec, install hitlag/death/damage callbacks, then clear callbacks and object pointer during cleanup.",
+    "Adding concrete ftMarioAttributes float fields only where the new code dereferenced them reduced blind padding and made later Mario decomp work less offset-heavy.",
+    "Leaving unused padding arrays and temporaries in several functions appears to have been a matching tactic for stack layout while still providing maintainable C structure."
+  ],
+  "decomp_lessons": [
+    "When a fighter special-attributes or state field is repeatedly passed to HSD_GObj APIs, update the struct type to the pointer type rather than carrying a raw integer through the decomp.",
+    "Callback signatures matter: func_800E0A00 needed an HSD_GObj* parameter because it is stored in fighter callback slots and forwards to a gobj-dependent cleanup function.",
+    "For fighter callbacks that manage spawned child objects, model the full lifecycle in C: spawn/store object, mirror to heldItemSpec if present, set enter/exit hitlag callbacks, set death/damage cleanup callbacks, then clear all relevant fields on cleanup.",
+    "Existing callback field names can be strong evidence for function behavior even when all function names remain autogenerated.",
+    "Struct refinement can be safely incremental: replacing padding with named f32 fields at observed offsets x04/x08/x0C/x10 was enough to support func_800E16E0 without over-defining the rest of ftMarioAttributes.",
+    "Residual assembly that references newly decompiled internal labels must be updated to the exported C function symbols or linker references will continue to point at deleted labels.",
+    "Small control-flow cleanups such as direct condition calls can coexist with an asm-to-C port, but should be evidence-backed by matching output."
+  ],
+  "naming_conventions": [
+    "Unidentified functions retained address-based names such as func_800E1248, func_800E13C8, and func_800E16E0.",
+    "Local asm labels that became callable C functions were promoted from lbl_800E1248/lbl_800E13C8 to func_800E1248/func_800E13C8 in remaining assembly references.",
+    "Mario special attributes used offset-style names x04, x08, x0C, x10, and x14 rather than speculative semantic names.",
+    "Fighter state and callback fields used existing descriptive hybrid names such as x2200_ftcmd_var0, x2200_ftcmd_var1, x2200_ftcmd_var2, x2340_stateVar1, x1984_heldItemSpec, and x21BC_callback_Accessory4.",
+    "The code uses ft for Fighter* from gobj->user_data, sA or sa for ftMarioAttributes*, and gobj2 for a spawned/stored HSD_GObj*."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted a contiguous block of ftmario.s after matching equivalent C implementations, reducing hand-written assembly by hundreds of lines.",
+    "Used explicit unused variables and padding arrays such as u8 padding[8], u8 unused[16], u8 unused1[24], and u8 unused1[28], likely to preserve stack layout and register allocation.",
+    "Used casts such as (ftMarioAttributes*)ft->x2D4_specialAttributes, ((Vec3*)(ft->x2D4_specialAttributes))->x, and ((u32*)ft_2->x2D4_specialAttributes) to match known offsets while the attribute struct was still only partially understood.",
+    "Preserved immediate action-state IDs and flags from assembly: 0x157, 0x158, 0x159, 0x15A, 0x5000, bone indices 0x31 and 0x4, and effect/id value 0x78.",
+    "Matched callback function-pointer stores explicitly rather than abstracting them away, which keeps the generated code close to the original assembly side effects.",
+    "Included a decomp.me scratch link comment for func_800E1248, indicating scratch-based matching work for at least that function."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-370",
+    "More ftmario functions",
+    "nicolasrmerz",
+    "ftmario",
+    "asm/melee/ft/chara/ftmario.s",
+    "src/melee/ft/chara/ftmario.c",
+    "src/melee/ft/chara/ftmario.h",
+    "src/melee/ft/fighter.h",
+    "func_800E111C",
+    "func_800E113C",
+    "func_800E1178",
+    "func_800E11E0",
+    "func_800E1248",
+    "func_800E132C",
+    "func_800E1368",
+    "func_800E13C8",
+    "func_800E13F8",
+    "func_800E1428",
+    "func_800E1450",
+    "func_800E14C8",
+    "func_800E1550",
+    "func_800E158C",
+    "func_800E15C8",
+    "func_800E15CC",
+    "func_800E15D0",
+    "func_800E16E0",
+    "func_800E1840",
+    "func_800E187C",
+    "ftMarioAttributes",
+    "SpecialAttrs_Mario",
+    "x223C",
+    "HSD_GObj*",
+    "x21BC_callback_Accessory4",
+    "x21D4_callback_EnterHitlag",
+    "x21D8_callback_ExitHitlag",
+    "x21E4_callback_OnDeath2",
+    "x21DC_callback_OnTakeDamage",
+    "x1984_heldItemSpec",
+    "x2200_ftcmd_var0",
+    "x2200_ftcmd_var1",
+    "x2200_ftcmd_var2",
+    "x2340_stateVar1",
+    "Fighter_ActionStateChange_800693AC",
+    "func_802B2560",
+    "func_802B2674",
+    "func_802B26C0",
+    "func_802B26E0",
+    "lbl_800E1248",
+    "lbl_800E13C8"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that semantically renamed Mario funcs in the 0x800E111C-0x800E187C range.",
+    "Search for subsequent cleanup of duplicate func_800E13F8 prototype in ftmario.h.",
+    "Look for later refinement of ftMarioAttributes fields x04, x08, x0C, x10, and x14.",
+    "Find PRs that further type or rename SpecialAttrs_Mario.x223C and related Mario object callbacks.",
+    "Search for decompilation or naming of func_802B2560, func_802B2674, func_802B26C0, and func_802B26E0 to understand the spawned object managed by x223C."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

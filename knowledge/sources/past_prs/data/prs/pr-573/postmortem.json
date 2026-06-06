@@ -1,0 +1,136 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-573",
+  "pr": {
+    "number": 573,
+    "title": "More gx matches",
+    "url": "https://github.com/doldecomp/melee/pull/573",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-09-19T02:12:02Z",
+    "merged_at": "2022-09-19T03:26:12Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Converted several Dolphin GX routines from large inline assembly blocks into C or near-matching C, mainly in GXAttr, GXLight, and GXFrameBuf. The PR removed jump-table-heavy asm for GXSetVtxDesc and GXSetVtxAttrFmt, added C implementations for GXSetArray, GXSetNumTexGens, GXClearBoundingBox, GXSetChanAmbColor, and GXSetChanMatColor, improved scratch match percentages for some remaining asm, and adjusted GX context struct field types/offsets to support the new C code. There was no PR body or review discussion; evidence is from the diff and one approval.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "inline-asm-reduction",
+      "headers",
+      "struct-layout",
+      "hardware-register-writes"
+    ],
+    "systems": [
+      "src/dolphin/gx",
+      "GXAttr",
+      "GXLight",
+      "GXFrameBuf",
+      "GX context"
+    ]
+  },
+  "key_files": [
+    "src/dolphin/gx/GXAttr.c",
+    "src/dolphin/gx/GXLight.c",
+    "src/dolphin/gx/GXFrameBuf.c",
+    "src/dolphin/gx/__types.h"
+  ],
+  "what_changed": [
+    "Replaced the inline-asm GXSetVtxDesc implementation with a C switch over vertex descriptor IDs, using INSERT_FIELD on __GXContexts.main->x14 and x18 and preserving special handling for cases 10 and 25 via x41C, x41D, and x418.",
+    "Replaced inline-asm GXSetVtxAttrFmt with a C switch that writes VAT fields into x1C_data, x3C_data, and x5C_data, then sets x4F0_flags |= 0x10 and marks x4EE for the changed VAT index.",
+    "Added a C NON_MATCHING version of __GXSetVAT guarded by #ifdef NON_MATCHING, while retaining the matching asm version because the diff notes remaining regswaps and the scratch is still 80 bytes off.",
+    "Replaced inline-asm GXSetArray with C that writes CP register commands through WGPIPE, masks the base address with 0x3FFFFFFF, handles attr 0x19 as 0xA, and caches relevant array bases/strides in x88_data and x98_data.",
+    "Replaced inline-asm GXSetNumTexGens with C that updates x204 using INSERT_FIELD, writes XF register 0x103F through WGPIPE, and sets x4F0_flags |= 4.",
+    "Replaced inline-asm GXClearBoundingBox with C writing BP registers 0x550003FF and 0x560003FF through WGPIPE and clearing the context dirty flag via set_x2(GX_FALSE).",
+    "Replaced inline-asm GXSetChanAmbColor and GXSetChanMatColor with C switch implementations over GX channel IDs, packing GXColor components into cached u32 ambient/material color words and writing XF registers 0x100A/0x100B and 0x100C/0x100D.",
+    "Adjusted __types.h GX context fields: x88_data and x98_data became u32[4] instead of byte arrays, ambColors and matColors became u32[2] instead of GXColor[2], and x418 was exposed as a u32 before x41C/x41D.",
+    "Removed obsolete local label declarations and jump tables for C-converted GXAttr functions, while keeping jump tables still needed by remaining asm blocks."
+  ],
+  "smart_moves": [
+    "Used INSERT_FIELD to express repeated rlwinm/or bitfield updates, making many formerly label-heavy assembly paths readable without losing the hardware register bit layout.",
+    "Preserved behavior for the GXSetVtxDesc special cases 10 and 25 by modeling the context flags x41C/x41D and shared value x418 before recomputing bits 11-12 of x14.",
+    "Changed context cache fields to u32 where the C code naturally treats them as packed hardware register words, which made color packing and CP array cache writes cleaner and offset-consistent.",
+    "Kept __GXSetVAT asm as the active implementation and put the readable C version under NON_MATCHING, avoiding a forced nonmatching regression while documenting the intended high-level logic.",
+    "Centralized WGPIPE writes in C for simple register-write routines, showing direct correspondence between GX_LOAD_CP_REG, GX_LOAD_XF_REG, GX_LOAD_BP_REG and the original FIFO stores.",
+    "For channel color setters, reused cached context values when only RGB or alpha is being changed, matching the original partial-update behavior instead of overwriting unrelated color components."
+  ],
+  "decomp_lessons": [
+    "Large GX jump-table asm blocks can often become ordinary C switch statements when the switch discriminant and bitfield destinations are identified.",
+    "Before converting code that writes into context offsets, update the GX context struct to expose the true storage width; byte-array placeholders can hide that the code is caching packed u32 register values.",
+    "Hardware color structs passed as GXColor may still be cached internally as packed u32 register words; decomp should distinguish API-facing types from context storage types.",
+    "When a readable C translation is close but still has register allocation differences, use NON_MATCHING to keep the knowledge without sacrificing the matched build.",
+    "FIFO write routines are good candidates for C once command constants and register addresses are identified, because the original asm usually maps directly to WGPIPE writes.",
+    "Maintain dirty flags after context updates; this PR repeatedly sets x4F0_flags bits or calls set_x2 after updating GX state."
+  ],
+  "naming_conventions": [
+    "GX API functions keep official Dolphin names such as GXSetVtxDesc, GXSetVtxAttrFmt, GXSetArray, GXSetNumTexGens, GXClearBoundingBox, GXSetChanAmbColor, and GXSetChanMatColor.",
+    "Unknown GX context fields use offset-derived names such as x14, x18, x418, x41C, x41D, x4EE, and x4F0_flags.",
+    "Context arrays that correspond to offsets are named with offset prefixes, for example x1C_data, x3C_data, x5C_data, x88_data, and x98_data.",
+    "Semantically identified packed color caches use ambColors and matColors even though their element type is u32 rather than GXColor.",
+    "Remaining anonymous assembly labels and jump tables retain lbl_8033.... and jtbl_8040.... names when still referenced by asm."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced bctr jump-table assemblies with C switch statements while preserving sparse or special cases, notably GXSetVtxDesc case 25 and GXSetVtxAttrFmt cases 10/25.",
+    "Mapped repeated rlwinm/rlwimi patterns to INSERT_FIELD(destination, value, width, shift).",
+    "Modeled memory-mapped FIFO stores with WGPIPE.u8 and WGPIPE.u32 writes and GX_LOAD_CP_REG, GX_LOAD_XF_REG, GX_LOAD_BP_REG constants.",
+    "Used bit masks and explicit casts where the asm required exact byte/word behavior, such as arg1 & 0x3FFFFFFF in GXSetArray and (u8)(1 << (u8)arg0) for x4EE.",
+    "Left __GXSetVAT under asm for matching while documenting the C loop over 8 VAT entries that writes CP registers 0x70/0x80/0x90 plus the index.",
+    "Decomp scratch comments show improved matching status for some routines, including __GXXfVtxSpecs moving from 3435 bytes off to 95 bytes off and GXSetTexCoordGen2 from 3315 to 640 bytes off."
+  ],
+  "review_feedback": [
+    "No issue comments or review comments were present in the PR slice.",
+    "One collaborator review by ribbanya approved the PR without a written body."
+  ],
+  "searchable_terms": [
+    "PR573",
+    "More gx matches",
+    "r-burns",
+    "GXAttr.c",
+    "GXLight.c",
+    "GXFrameBuf.c",
+    "__types.h",
+    "GXSetVtxDesc",
+    "GXSetVtxAttrFmt",
+    "__GXSetVAT",
+    "GXSetArray",
+    "GXSetNumTexGens",
+    "GXClearBoundingBox",
+    "GXSetChanAmbColor",
+    "GXSetChanMatColor",
+    "__GXContexts.main",
+    "INSERT_FIELD",
+    "WGPIPE",
+    "GX_LOAD_CP_REG",
+    "GX_LOAD_XF_REG",
+    "GX_LOAD_BP_REG",
+    "x4F0_flags",
+    "x4EE",
+    "x418",
+    "x41C",
+    "x41D",
+    "ambColors",
+    "matColors",
+    "x88_data",
+    "x98_data",
+    "jtbl_804010F4",
+    "jtbl_80401110",
+    "NON_MATCHING",
+    "regswaps"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that finish matching __GXSetVAT and remove the NON_MATCHING-only C version.",
+    "Find later GX context struct cleanup that gives semantic names to x14, x18, x1C_data, x3C_data, x5C_data, x4EE, and x4F0_flags.",
+    "Search for PRs that further decompile GXSetTexCoordGen2 after scratch 9TphI remained 640 bytes off.",
+    "Search for other GX PRs that convert FIFO write asm to WGPIPE-based C.",
+    "Compare later color-channel decomp work to this packed u32 ambColors/matColors approach."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

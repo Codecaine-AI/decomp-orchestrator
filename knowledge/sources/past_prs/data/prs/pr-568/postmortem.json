@@ -1,0 +1,146 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-568",
+  "pr": {
+    "number": 568,
+    "title": "Match some ftyoshi functions",
+    "url": "https://github.com/doldecomp/melee/pull/568",
+    "state": "MERGED",
+    "author": "JohnnyUrosevic",
+    "created_at": "2022-09-17T01:20:37Z",
+    "merged_at": "2022-09-17T05:17:41Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Moved a block of Yoshi fighter code out of asm/melee/ft/chara/ftyoshi.s into C sources, adding matched C implementations for several ftyoshi routines/callback labels while keeping two difficult routines as inline asm inside ftyoshi.c. The PR also added missing global prototypes, split new Yoshi code into ftyoshi1.c in the build, expanded ftCommonData offsets x2A4 and x2B4, and centralized func_80074B0C in include/functions.h instead of a local Game & Watch extern.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "build-system",
+      "fighter-struct-layout",
+      "inline-asm-transition"
+    ],
+    "systems": [
+      "fighter",
+      "ftYoshi",
+      "ftGameWatch",
+      "include",
+      "asm",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "asm/melee/ft/chara/ftyoshi.s",
+    "src/melee/ft/chara/ftYoshi/ftyoshi.c",
+    "src/melee/ft/chara/ftYoshi/ftyoshi1.c",
+    "src/melee/ft/fighter.h",
+    "include/functions.h",
+    "obj_files.mk",
+    "src/melee/ft/chara/ftGameWatch/ftGameWatch_SpecialLw.c"
+  ],
+  "what_changed": [
+    "Deleted the asm definitions for func_8012BDA0, func_8012BE3C, func_8012BECC, lbl_8012C030, lbl_8012C114, lbl_8012C194, and lbl_8012C1B4 from asm/melee/ft/chara/ftyoshi.s, leaving later ftyoshi asm such as func_8012C1D4 in the asm file.",
+    "Added func_8012BE3C as C in src/melee/ft/chara/ftYoshi/ftyoshi.c. It obtains the Fighter from fighter_gobj->user_data, calls func_80074B0C and func_8007B0C0, resolves bone index 4 with func_8007500C, gets fp->x5E8_fighterBones[bone_idx].x0_jobj, and spawns effect 0x4CF with efAsync_Spawn using &fp->x60C and &fp->x110_attr.x1CC.",
+    "Kept func_8012BDA0 and func_8012BECC as inline asm blocks in ftyoshi.c under #pragma push/pop rather than fully translating them to C, preserving exact instruction order while moving them out of the standalone asm file.",
+    "Created src/melee/ft/chara/ftYoshi/ftyoshi1.c with C implementations for lbl_8012C030, lbl_8012C114, lbl_8012C194, and lbl_8012C1B4.",
+    "Implemented lbl_8012C030 in C as a Yoshi callback that increments fp->x2340_f32 by lbl_804D9A28, calls func_80092BCC, checks func_800925A4 to spawn the same 0x4CF effect path, otherwise transitions through func_800928CC when animation frames are done or calls func_8012B8A4 while frames remain.",
+    "Implemented lbl_8012C114 as a chain of early-condition checks using func_80093694, func_8009515C, func_80099794, func_8009917C, func_800D8990, and func_8009A080, returning only when all checks are false.",
+    "Implemented lbl_8012C194 and lbl_8012C1B4 as thin wrappers around func_80092870 and func_800928AC respectively.",
+    "Added ftyoshi1.c.o to TEXT_O_FILES before asm/melee/ft/chara/ftyoshi.s.o so the newly decompiled code participates in the text link order while remaining asm still builds after it.",
+    "Added global declarations in include/functions.h for func_80074B0C(HSD_GObj*, s32, s32), func_80093694, func_8009515C, and func_8009A080.",
+    "Removed a now-redundant local extern declaration of func_80074B0C from ftGameWatch_SpecialLw.c.",
+    "Expanded ftCommonData layout in fighter.h by replacing one filler range with explicit f32 fields x2A4 and x2B4 plus adjusted filler ranges."
+  ],
+  "smart_moves": [
+    "Used a partial migration tactic: fully matched simpler callbacks in C while embedding not-yet-decompiled routines as inline asm in the C translation unit, allowing deletion of a contiguous asm block without forcing all functions to be solved at once.",
+    "Preserved link/text ordering by adding ftyoshi1.c.o before the remaining ftyoshi.s.o in obj_files.mk rather than simply deleting the asm object.",
+    "Centralized func_80074B0C in include/functions.h and removed a duplicate local extern from ftGameWatch, reducing per-file prototype drift.",
+    "Translated repeated effect-spawn assembly into a clear C pattern using Fighter, x110_attr.x1CC, func_8007500C(fp, 4), x5E8_fighterBones[bone_idx].x0_jobj, and efAsync_Spawn(..., 0x4CF, ...), making the same idiom reusable in nearby fighter code.",
+    "Added ftCommonData field names at observed offsets x2A4 and x2B4 instead of continuing to rely on one large filler range, which prepares the struct for future decompilation of code referencing those offsets."
+  ],
+  "decomp_lessons": [
+    "For fighter action callbacks, small assembly labels can often be matched as normal C functions even when their original names are still lbl_-address symbols; do not wait for semantic names before migrating them.",
+    "When a contiguous asm region contains both easy and hard functions, moving hard functions as inline asm into the C file can unblock matching of neighboring functions while maintaining binary identity.",
+    "Repeated effect setup sequences are good candidates for direct C recovery: get Fighter from HSD_GObj, clear/update state with fighter utility calls, compute a bone index, fetch HSD_JObj from x5E8_fighterBones, then call efAsync_Spawn.",
+    "Header cleanup matters during decompilation: when a function becomes used across multiple fighter files, move its prototype to a common header and remove local externs.",
+    "Struct filler splits should be minimal and offset-evidenced. This PR only exposed ftCommonData x2A4 and x2B4 and adjusted surrounding filler ranges, rather than over-naming unknown data."
+  ],
+  "naming_conventions": [
+    "Unidentified functions remained address-based, e.g. func_8012BE3C, func_80074B0C, func_80093694, func_8009515C, and func_8009A080.",
+    "Unidentified callback labels retained lbl_ address names such as lbl_8012C030, lbl_8012C114, lbl_8012C194, and lbl_8012C1B4.",
+    "Fighter struct fields followed existing offset-style names, including x2340_f32, x110_attr.x1CC, x5E8_fighterBones, x60C, and ftCommonData x2A4/x2B4.",
+    "The new split source file followed the existing ftYoshi naming style as src/melee/ft/chara/ftYoshi/ftyoshi1.c."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed standalone asm for the decompiled/migrated block from asm/melee/ft/chara/ftyoshi.s while leaving later unmatched asm in the same file.",
+    "Used inline asm with #pragma push/pop and nofralloc for func_8012BDA0 and func_8012BECC, preserving exact instructions and labels where C was not yet matched.",
+    "Matched lbl_8012C194 and lbl_8012C1B4 as minimal wrapper functions, a useful tactic for eliminating tiny asm thunks.",
+    "Kept explicit externs for unresolved data labels such as lbl_804D9A28, lbl_804D9A2C, lbl_803B75C0, and assert strings, indicating that data recovery lagged behind text recovery.",
+    "Used unused local arrays such as u32 unused[4] in lbl_8012C030 to influence stack layout for matching."
+  ],
+  "review_feedback": [
+    "One collaborator review by PsiLupan approved the PR with no written body.",
+    "No issue comments or review comments were present in the provided PR slice, so there is no evidence of requested changes or reviewer rationale."
+  ],
+  "searchable_terms": [
+    "pr-568",
+    "Match some ftyoshi functions",
+    "JohnnyUrosevic",
+    "ftYoshi",
+    "ftyoshi.c",
+    "ftyoshi1.c",
+    "asm/melee/ft/chara/ftyoshi.s",
+    "func_8012BDA0",
+    "func_8012BE3C",
+    "func_8012BECC",
+    "lbl_8012C030",
+    "lbl_8012C114",
+    "lbl_8012C194",
+    "lbl_8012C1B4",
+    "func_80074B0C",
+    "func_8007B0C0",
+    "func_8007500C",
+    "efAsync_Spawn",
+    "0x4CF",
+    "func_80092BCC",
+    "func_800925A4",
+    "ftAnim_IsFramesRemaining",
+    "func_800928CC",
+    "func_8012B8A4",
+    "func_80093694",
+    "func_8009515C",
+    "func_80099794",
+    "func_8009917C",
+    "func_800D8990",
+    "func_8009A080",
+    "func_80092870",
+    "func_800928AC",
+    "x2340_f32",
+    "x110_attr.x1CC",
+    "x5E8_fighterBones",
+    "x60C",
+    "ftCommonData",
+    "x2A4",
+    "x2B4",
+    "inline asm",
+    "nofralloc",
+    "obj_files.mk",
+    "ftGameWatch_SpecialLw.c"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully decompile func_8012BDA0 or func_8012BECC from inline asm.",
+    "Search for semantic names later assigned to lbl_8012C030, lbl_8012C114, lbl_8012C194, and lbl_8012C1B4.",
+    "Search for later struct documentation of Fighter fields x2340_f32, x234C, x2350, x2360, and x2364 used by the inline asm in func_8012BECC.",
+    "Find other fighter PRs that use the efAsync_Spawn bone-index pattern with func_8007500C and x5E8_fighterBones."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

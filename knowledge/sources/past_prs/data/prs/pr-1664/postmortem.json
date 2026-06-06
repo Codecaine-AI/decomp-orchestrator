@@ -1,0 +1,151 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1664",
+  "pr": {
+    "number": 1664,
+    "title": "lbheap matches",
+    "url": "https://github.com/doldecomp/melee/pull/1664",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-07-04T05:16:06Z",
+    "merged_at": "2025-07-04T05:28:27Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched several lbHeap routines by replacing placeholders and a disabled prototype with typed C implementations, while moving lbMemory handle definitions into the public header so lbHeap could allocate, free, inspect, and initialize heap-backed memory correctly. The PR also split a large lbHeap data symbol into specific string/table symbols and adjusted function signatures to reflect observed behavior, including making lbHeap_80015DF8 return void.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-typing",
+      "symbol-map-cleanup",
+      "data-symbol-splitting"
+    ],
+    "systems": [
+      "lb",
+      "lbheap",
+      "lbmemory",
+      "config",
+      "game-mode"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/lbheap.c",
+    "src/melee/lb/lbheap.h",
+    "src/melee/lb/lbheap.static.h",
+    "src/melee/lb/lbmemory.c",
+    "src/melee/lb/lbmemory.h",
+    "src/melee/gm/gm_1A45.c",
+    "config/GALE01/symbols.txt"
+  ],
+  "what_changed": [
+    "Implemented previously placeholder or disabled lbHeap routines including lbHeap_80015BD0, lbHeap_80015CA8, lbHeap_80015D6C, lbHeap_80015DF8, and lbHeap_80015F3C.",
+    "Added the lbHeap_803BA380 heap layout/configuration table in lbheap.c with entries describing heap indices, allocation modes, parent/reference heaps, and sizes.",
+    "Added lbHeap_803BA448 string table used by lbHeap_80015DF8 for report labels such as Hsd, ARAM, Seq, Stay, AllM, and AllA.",
+    "Changed lbHeap_80015BB8 to read the newly named status field instead of unk_28.",
+    "Changed lbHeap_80015BD0 from returning HSD_Archive* to returning void*, with allocation routed either through HSD heap functions or lbMemory_80014FC8 depending on the heap mode.",
+    "Implemented lbHeap_80015CA8 to free memory through HSD_Free or lbMemory_800150F0 and assert that the heap status is the create state before freeing.",
+    "Implemented lbHeap_80015D6C as an interrupt-protected wrapper around lbMemory_8001529C for heap indices greater than 1.",
+    "Implemented lbHeap_80015DF8 as a reporting function that prints per-heap used/free/total values via OSReport, OSCheckHeap, and lbMemory_80014F7C, then reports MainRAM and ARAM totals.",
+    "Started implementing lbHeap_80015F3C heap initialization logic, including arena bound discovery through HSD_GetNextArena and lbMemory_800154BC, clearing default heap state, and deriving heap starts from lbHeap_803BA380.",
+    "Moved the Handle typedef from lbmemory.c into lbmemory.h so lbheap.static.h and lbheap.c can use typed lbMemory handles.",
+    "Expanded lbmemory.h prototypes for lbMemory_80014E24, lbMemory_80014EEC, lbMemory_80014F7C, lbMemory_80014FC8, lbMemory_800150F0, lbMemory_8001529C, lbMemory_800154D4, and lbMemory_800155A4.",
+    "Adjusted lbmemory.c signatures and field types to match the exported header, including lbMemory_800150F0 taking void*, lbMemory_8001529C taking a u32 third argument, and lbMemory_800154BC using uintptr_t output pointers.",
+    "Refined struct lbHeap_80431FA0_x10_t by typing unk_14 as Handle*, unk_1C as u32, and renaming unk_28 to status while preserving its 0x1C size assertion.",
+    "Updated gm_1A45.c to call lbHeap_80015DF8 without assigning its return value after the function was corrected to return void.",
+    "Updated config/GALE01/symbols.txt by replacing a single 0xCC lbHeap_803BA43C object with multiple smaller string symbols and the lbHeap_803BA448 table symbol."
+  ],
+  "smart_moves": [
+    "Publicly exposing the Handle struct in lbmemory.h avoided weak casts in lbHeap code and let lbHeap_80015BD0 correctly access Handle::x4_lo for the special p->unk_20 == 3 case.",
+    "The lbHeap status field was renamed from unk_28 to status exactly where behavior made its meaning clear, improving readability without over-naming the rest of the still-uncertain fields.",
+    "The implementations consistently wrapped heap/memory operations in OSDisableInterrupts and OSRestoreInterrupts, matching the expected critical-section pattern for heap state manipulation.",
+    "Function signatures were corrected based on actual use: lbHeap_80015DF8 became void because callers only need its reporting side effects, and lbHeap_80015BD0 became void* because it returns raw allocated memory rather than specifically an archive.",
+    "The data symbol split in symbols.txt separated report strings from the lbHeap_803BA448 pointer/string table, which is a useful tactic when matching functions that reference multiple literals in one former blob.",
+    "Static size assertions were retained for lbHeap structs while member types were refined, reducing the risk that type cleanup would silently alter layout."
+  ],
+  "decomp_lessons": [
+    "When a function returns an allocation result that may come from different allocator backends, prefer a neutral void* return type unless there is strong evidence for a domain-specific struct such as HSD_Archive.",
+    "If an internal memory handle type is needed across modules, move the typedef and prototypes into the relevant header rather than duplicating or casting through placeholder types.",
+    "Status-like fields can often be named from control-flow evidence: here p->status gates create/destroy behavior and is asserted against the create state during free.",
+    "Heap management matches often require preserving interrupt critical sections around both HSD heap calls and custom allocator calls.",
+    "Reporting functions should be typed by side effects and caller behavior; a discarded temp return in a caller can indicate the callee should actually return void.",
+    "Splitting large unknown data blobs into individual string symbols and tables can unlock cleaner C for OSReport-heavy functions.",
+    "Use uintptr_t for arena-bound outputs when the code performs address arithmetic or stores raw address bounds rather than ordinary typed object pointers.",
+    "Keep STATIC_ASSERTs in place while refining struct fields; matching depends on preserving layout even when semantics improve gradually."
+  ],
+  "naming_conventions": [
+    "Kept address-based names for still-unknown functions and globals: lbHeap_80015BD0, lbHeap_80015DF8, lbHeap_803BA380, lbHeap_803BA448, lbHeap_80431FA0.",
+    "Used a semantic field name only where behavior was clear: struct lbHeap_80431FA0_x10_t::status replaced unk_28.",
+    "Kept offset-style member names such as unk_10, unk_14, unk_18, unk_1C, unk_20, and unk_24 where semantics remained uncertain.",
+    "Used Handle as the public typedef for struct _Handle, with members named by offset and tentative meaning: x0_next, x4_lo, x8_hi, xC_prev.",
+    "Split data labels so unknown strings use lbl_803BA43C-style names, while the identified table keeps the lbHeap_803BA448 module prefix.",
+    "Header prototypes preserve address comments such as /* 015BD0 */ and /* 015DF8 */ for searchability and ordering."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced #if 0 pseudocode for lbHeap_80015BD0 with typed C that preserves register-sensitive structure through local variables such as p, result, enabled, and cur_heap.",
+    "Used OSDisableInterrupts/OSRestoreInterrupts locals around allocator code to match the interrupt-save/restore pattern.",
+    "Matched allocator switching by saving HSD_GetHeap, setting p->unk_10 as the active heap, calling HSD_MemAlloc or HSD_Free, and restoring the previous heap.",
+    "For the custom lbMemory path, typed p->unk_14 as Handle* and returned result->x4_lo when p->unk_20 == 3, avoiding opaque integer arithmetic.",
+    "Introduced exact string table data for lbHeap_80015DF8 so report-format relocations have named data targets.",
+    "Changed a caller in gm_1A45.c to drop a dead temp assignment after lbHeap_80015DF8 was matched as void.",
+    "Refined lbMemory prototypes and struct field types to reduce casts and make callsites in lbHeap compile in the expected form."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "The context reports one issue comment, but no comment body excerpt was included, so no reviewer intent or discussion can be extracted."
+  ],
+  "searchable_terms": [
+    "pr-1664",
+    "lbheap matches",
+    "r-burns",
+    "lbHeap_80015BD0",
+    "lbHeap_80015CA8",
+    "lbHeap_80015D6C",
+    "lbHeap_80015DF8",
+    "lbHeap_80015F3C",
+    "lbHeap_80015BB8",
+    "lbHeap_803BA380",
+    "lbHeap_803BA448",
+    "lbHeap_80431FA0",
+    "lbHeap_80431FA0_x10_t",
+    "status",
+    "Handle",
+    "lbMemory_80014FC8",
+    "lbMemory_800150F0",
+    "lbMemory_8001529C",
+    "lbMemory_800154BC",
+    "lbMemory_80014F7C",
+    "HSD_GetHeap",
+    "HSD_SetHeap",
+    "HSD_MemAlloc",
+    "HSD_Free",
+    "HSD_GetNextArena",
+    "OSDisableInterrupts",
+    "OSRestoreInterrupts",
+    "OSCheckHeap",
+    "OSReport",
+    "__assert",
+    "gm_801A4970",
+    "symbols.txt",
+    "lbl_803BA43C",
+    "lbl_803BA460",
+    "MainRAM Total",
+    "ARAM Total"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that finish or rename lbHeap_80015F3C and explain the heap configuration table semantics.",
+    "Search for subsequent renames of lbHeap_80431FA0_x10_t fields unk_10, unk_14, unk_18, unk_1C, unk_20, and unk_24.",
+    "Look for later PRs that convert lbHeap_803BA380 from an anonymous struct table to a named heap configuration type.",
+    "Search for follow-up changes to lbMemory Handle member names, especially x4_lo and x8_hi.",
+    "Check whether later PRs replace heap index constants 0 through 6 with an enum for Hsd, ARAM, Seq, Stay, AllM, and AllA."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

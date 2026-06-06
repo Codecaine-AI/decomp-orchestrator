@@ -1,0 +1,153 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-848",
+  "pr": {
+    "number": 848,
+    "title": "Match `ftCo_AttackS3`",
+    "url": "https://github.com/doldecomp/melee/pull/848",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-13T07:24:12Z",
+    "merged_at": "2023-05-13T07:31:14Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common side-tilt attack code by moving the `ftCo_AttackS3` routines out of `asm/melee/ft/ft_08A4.s` into a new C translation unit and header. The PR added `ftCo_AttackS3_8008B658`, the side-tilt motion selection helper, and the standard Anim/IASA/Phys/Coll callbacks, then rewired existing IASA call sites from the old `ft_8008B658` symbol to the new namespaced symbol. It also added minimal data declarations needed for matching, including `ftData_80085FD4` and several `ftCommonData` floats used as stick-angle thresholds.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-renaming",
+      "fighter-common-action",
+      "asm-to-c"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "attack",
+      "input",
+      "motion-state",
+      "items",
+      "asm",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_AttackS3.c",
+    "src/melee/ft/chara/ftCommon/ftCo_AttackS3.h",
+    "asm/melee/ft/ft_08A4.s",
+    "obj_files.mk",
+    "src/melee/ft/chara/ftCommon/ftCo_Wait.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Attack1.c",
+    "src/melee/ft/ftdata.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/chara/ftGameWatch/ftGw_AttackLw3.c",
+    "src/melee/ft/chara/ftSamus/ftSs_SpecialLw_0.c",
+    "src/melee/ft/ft_0877.h"
+  ],
+  "what_changed": [
+    "Created `src/melee/ft/chara/ftCommon/ftCo_AttackS3.c` with matched C for the removed assembly range `8008B658` through `8008B97C`.",
+    "Added `ftCo_AttackS3_8008B658`, which checks A-button input, forward stick threshold, vertical stick magnitude, held item state, and item kind before choosing between light throw, item attack, item throw, or side-tilt motion selection.",
+    "Added a static local helper `decideAngle` corresponding to address `8008B788`, selecting among `ftCo_MS_AttackS3Hi`, `ftCo_MS_AttackS3HiS`, `ftCo_MS_AttackS3S`, `ftCo_MS_AttackS3LwS`, and `ftCo_MS_AttackS3Lw` based on `ftCommon_8007D964(fp)`, common-data thresholds, and whether fighter motion data exists.",
+    "Implemented `ftCo_AttackS3_Anim`, `ftCo_AttackS3_IASA`, `ftCo_AttackS3_Phys`, and `ftCo_AttackS3_Coll` in C, forwarding to existing helpers such as `ftAnim_IsFramesRemaining`, `ft_8008A2BC`, `ftCo_Wait_IASA`, `ft_80084F3C`, and `ft_80084104`.",
+    "Added `src/melee/ft/chara/ftCommon/ftCo_AttackS3.h` with declarations for the new side-tilt functions.",
+    "Updated `obj_files.mk` so `ftCo_AttackS3.c.o` is built before the remaining `ft_08A4.s.o` assembly object.",
+    "Removed the old `ft_8008B658` declaration from `src/melee/ft/ft_0877.h` and updated C and assembly call sites to use `ftCo_AttackS3_8008B658`.",
+    "Changed remaining assembly references in `ft_08A4.s` from `ft_8008B658` to `ftCo_AttackS3_8008B658`, including IASA paths for low tilt, smash, guard off, ottotto, walk, turn, landing, squat, squat wait, squat reverse, and appeal.",
+    "Promoted a remaining assembly local label `.L_8008BA38` to global `lbl_8008BA38`, apparently so the partially decompiled assembly file can still branch/link cleanly after extracting the preceding C routines.",
+    "Added a declaration for `ftData_80085FD4(Fighter* fp, FtMotionId msid)` returning a small struct with an `x8` field, used to test whether a motion animation pointer/data entry exists.",
+    "Refined `ftCommonData` around offsets `0x98` to `0xA8`, replacing padding with named floats `x98_shieldHealthInit`, `x9C`, `xA0`, `xA4`, and `xA8` needed by the side-tilt angle thresholds."
+  ],
+  "smart_moves": [
+    "Kept the still-unknown entry function partially address-named as `ftCo_AttackS3_8008B658`, which improves subsystem locality without pretending the exact semantic name is known.",
+    "Used a static helper `decideAngle` for the former local label at `8008B788`, isolating the side-tilt variant selection logic from the input/item gatekeeper.",
+    "Preserved short-circuit IASA behavior by updating all callers to the new symbol instead of changing surrounding control flow.",
+    "Guarded side-tilt variant selection with `ftData_80085FD4(...)->x8 != NULL`, matching the assembly pattern that checks whether the fighter has data for a specific motion before selecting that variant.",
+    "Replaced hard-coded common-data padding with specific float fields only where the matched function needed them, avoiding a broad speculative struct expansion.",
+    "Left an explicit `@todo` on whether the custom `ABS` macro is standing in for a fake `fabs_inline`, signaling a matching workaround rather than presenting it as final style."
+  ],
+  "decomp_lessons": [
+    "When extracting one routine from a large assembly file, update every remaining assembly and C call site to the new symbol so the mixed C/asm boundary stays stable.",
+    "For common-action IASA helpers, preserve boolean-return short-circuit order exactly; many states call the same input check as part of long transition chains.",
+    "Motion selection code often needs both analog-stick thresholds from `p_ftCommonData` and per-fighter motion-data availability checks before choosing a variant.",
+    "Do not over-name uncertain helper functions: a subsystem prefix plus address suffix, as in `ftCo_AttackS3_8008B658`, is preferable to a misleading semantic name.",
+    "Small anonymous or placeholder struct declarations can unblock a match when only one field, here `x8` from `ftData_80085FD4`, is needed by the current decompilation.",
+    "Mixed C/assembly extraction may require promoting a local assembly label to a global `lbl_...` symbol if other code still needs a linkable branch target.",
+    "Common fighter action files should get their own `ftCo_ActionName.c` and `ftCo_ActionName.h` and be added to `obj_files.mk` near related ftCommon objects."
+  ],
+  "naming_conventions": [
+    "`ftCo_AttackS3.c` and `ftCo_AttackS3.h` follow the common fighter action file naming pattern.",
+    "Standard callbacks use the action suffix plus lifecycle names: `ftCo_AttackS3_Anim`, `ftCo_AttackS3_IASA`, `ftCo_AttackS3_Phys`, and `ftCo_AttackS3_Coll`.",
+    "Unresolved public helper names can combine the action namespace and original address, e.g. `ftCo_AttackS3_8008B658`.",
+    "Former local assembly labels that must become link-visible use `lbl_` plus address, e.g. `lbl_8008BA38`.",
+    "Header guard used the address-style convention `GALE01_08B8D4`.",
+    "Common-data fields were named by offset when semantics were not fully known, e.g. `x9C`, `xA0`, `xA4`, and `xA8`, while an existing known semantic field remained `x98_shieldHealthInit`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed about 253 lines of hand-written assembly for the matched side-tilt routines and replaced them with 106 lines of C plus a small header.",
+    "Used a macro `ABS(x) ((x) < 0 ? -(x) : (x))` with a `@todo` noting uncertainty about whether an inline fabs pattern was needed for exact codegen.",
+    "Kept `NULL` and `1.0f` constants generated from C by deleting the corresponding `.sdata2` labels `.L_804D8468` and `.L_804D846C` from assembly.",
+    "Matched branchy item logic by preserving the two-stage `it_8026B30C` behavior: a zero result or held LR triggers `ft_800957F4(..., ftCo_MS_LightThrowF)`, while item kinds `2` and `3` call `ftCo_Attack_800CCF58(gobj, 1)` and `ftCo_Attack_800CDD14(gobj)` respectively.",
+    "Matched side-tilt startup by clearing `fp->x2218_b0`, calling `Fighter_ChangeMotionState(gobj, msid, Ft_MF_None, NULL, 0, 1, 0)`, then `ftAnim_8006EBA4(gobj)`.",
+    "Preserved assembly file continuity by leaving later `ft_08A4.s` routines in place and only renaming their calls to the extracted C symbol."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "Because there was no human discussion in the slice, there is no direct evidence of reviewer rationale beyond the merged diff itself."
+  ],
+  "searchable_terms": [
+    "pr-848",
+    "ftCo_AttackS3",
+    "ftCo_AttackS3_8008B658",
+    "ft_8008B658",
+    "decideAngle",
+    "ftCo_AttackS3_Anim",
+    "ftCo_AttackS3_IASA",
+    "ftCo_AttackS3_Phys",
+    "ftCo_AttackS3_Coll",
+    "ft_08A4.s",
+    "ftCo_Wait_IASA",
+    "ftCo_Attack1_DecideMotion",
+    "ftData_80085FD4",
+    "p_ftCommonData",
+    "x98_shieldHealthInit",
+    "x9C",
+    "xA0",
+    "xA4",
+    "xA8",
+    "ftCommon_8007D964",
+    "Fighter_ChangeMotionState",
+    "ftAnim_8006EBA4",
+    "ftAnim_IsFramesRemaining",
+    "ft_8008A2BC",
+    "ft_80084F3C",
+    "ft_80084104",
+    "it_8026B30C",
+    "ftCo_MS_AttackS3Hi",
+    "ftCo_MS_AttackS3HiS",
+    "ftCo_MS_AttackS3S",
+    "ftCo_MS_AttackS3LwS",
+    "ftCo_MS_AttackS3Lw",
+    "ftCo_MS_LightThrowF",
+    "lbl_8008BA38",
+    "ABS macro",
+    "fabs_inline",
+    "IASA side tilt"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or further decompile `ftCo_AttackS3_8008B658` to a semantic helper name.",
+    "Find later PRs that replace the anonymous `ftData_80085FD4` return struct with a named motion-data type.",
+    "Find later PRs that resolve the `ABS`/`fabs_inline` todo in `ftCo_AttackS3.c`.",
+    "Search for later struct cleanup around `ftCommonData` offsets `0x9C`, `0xA0`, `0xA4`, and `0xA8`.",
+    "Search for PRs that remove or decompile the remaining `lbl_8008BA38` region from `ft_08A4.s`."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,144 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1701",
+  "pr": {
+    "number": 1701,
+    "title": "Match gmpause, tweak SceneDesc struct",
+    "url": "https://github.com/doldecomp/melee/pull/1701",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-07-18T02:07:10Z",
+    "merged_at": "2025-07-18T02:12:22Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched src/melee/gm/gmpause.c and updated shared scene/archive typing around SceneDesc and DynamicModelDesc so gmpause and several other scene-loading users access models, cameras, and fogs through typed descriptor fields instead of raw multi-pointer HSD_Joint/HSD_CObjDesc shapes. The PR also implemented gm_8016895C as a typed DynamicModelDesc animation helper and switched gmpause.c from NonMatching to Matching in configure.py.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "archive-scene-typing",
+      "cleanup"
+    ],
+    "systems": [
+      "game-mode",
+      "pause",
+      "scene",
+      "library",
+      "visualization",
+      "config"
+    ]
+  },
+  "key_files": [
+    "src/melee/gm/gmpause.c",
+    "configure.py",
+    "src/melee/sc/types.h",
+    "src/melee/gm/gm_1601.c",
+    "src/melee/gm/gm_1601.h",
+    "src/melee/gm/gm_1A4C.c",
+    "src/melee/gm/gm_1A4C.static.h",
+    "src/melee/gm/types.h",
+    "src/melee/vi/vi0102.c",
+    "src/melee/un/un_2FC9.c",
+    "src/melee/un/un_2FC9.static.h",
+    "src/melee/lb/lbcardgame.c",
+    "config/GALE01/symbols.txt"
+  ],
+  "what_changed": [
+    "Changed configure.py so Object(NonMatching, \"melee/gm/gmpause.c\") became Object(Matching, \"melee/gm/gmpause.c\").",
+    "Reworked gmpause.c includes and local data: removed placeholder-style include usage, moved PauseData out of gm/types.h into gmpause.c, and made lbl_804D6700/lbl_804D6704 static rather than extern in the shown diff.",
+    "Updated gmpause archive loading from raw HSD_Joint pointer chains to SceneDesc: lbArchive_80016DBC(\"GmPause\", &scene, \"ScGamPause_scene_data\", 0), HSD_JObjLoadJoint(scene->models[0]->joint), and gm_8016895C(jobj, scene->models[0], 0).",
+    "Adjusted pause analog stick animation math to use HSD_PadMasterStatus directly and deg_to_rad, with rotations applied to analog_stick for both X and Y in the excerpt.",
+    "Expanded SceneDesc in src/melee/sc/types.h so cameras are entries containing desc and anims, and fogs are entries containing desc and anims, instead of plain HSD_CObjDesc** and HSD_FogDesc**.",
+    "Implemented gm_8016895C(HSD_JObj*, DynamicModelDesc*, int idx) to null-check anims, matanims, and shapeanims arrays before passing selected entries to HSD_JObjAddAnimAll.",
+    "Updated gm_8016895C declaration in gm_1601.h to take DynamicModelDesc* and include sc/forward.h/sc/types.h where needed.",
+    "Removed a local gm_804D6840_t scene struct and local camera/fog wrapper structs from gm_1A4C.static.h, replacing them with SceneDesc* gm_804D6840 and DynamicModelDesc** gm_804D6844.",
+    "Converted multiple scene users to the refined SceneDesc layout: cameras[0].desc, cameras[0].anims[0], fogs[0].desc, fog animation access, models[i]->joint, and DynamicModelDesc* arguments to gm_8016895C.",
+    "Removed several casts to void** for lbArchive_80016DBC/lbArchive_LoadSymbols calls where typed output pointers now suffice.",
+    "Updated symbol sizes for lbl_803DA4B0 and lbl_803DA4D8 in config/GALE01/symbols.txt, shrinking the recorded string object sizes."
+  ],
+  "smart_moves": [
+    "Used a shared SceneDesc refinement instead of keeping one-off local structs in gm_1A4C.c and vi0102.c, reducing duplicated guesses about archive scene layout.",
+    "Typed DynamicModelDesc deeply enough to make common model animation setup reusable through gm_8016895C, including anim, material anim, and shape anim selection.",
+    "Preserved nullable archive animation array behavior in gm_8016895C with ternary null checks before indexing, which is safer and likely closer to source intent than unconditional pointer chasing.",
+    "Moved PauseData out of the broad gm/types.h header and into gmpause.c, reducing unnecessary public type exposure.",
+    "Changed archive access from expressions like HSD_JObjLoadJoint(***joint), gm_804D6840->models[1][0], and gm_804D6844[i][0] to readable field-based access such as scene->models[0]->joint and gm_804D6844[i]->joint.",
+    "Updated dependent files in the same PR after changing SceneDesc, preventing the type tweak from leaving stale camera/model pointer assumptions elsewhere."
+  ],
+  "decomp_lessons": [
+    "When archive symbol data appears as nested pointer chains, check whether it represents a common descriptor struct before preserving raw pointer syntax; typed SceneDesc/DynamicModelDesc access can unlock matching and improve readability.",
+    "A decomp match may require correcting shared headers and downstream users, not only editing the target C file.",
+    "For scene archives, cameras and fogs may be descriptor-plus-animation records rather than plain descriptor arrays; users should access cameras[slot].desc and cameras[slot].anims[index] when the refined SceneDesc type applies.",
+    "Model entries loaded from scene archives should often be treated as DynamicModelDesc* with a joint field and optional anim/matanim/shapeanim arrays.",
+    "If a helper like gm_8016895C is used across game mode and UI code, giving it the real descriptor type can simplify callsites and eliminate casts/double-dereference artifacts.",
+    "Local static structs that duplicate a likely project-wide archive format should be candidates for migration into shared headers once evidence appears in multiple files."
+  ],
+  "naming_conventions": [
+    "SceneDesc is the shared name for a rendered scene/archive descriptor containing models, cameras, lights, and fogs.",
+    "DynamicModelDesc is the shared name for model descriptors passed to gm_8016895C and used for model joint plus animation data.",
+    "PauseData was kept as a local struct name in gmpause.c rather than a global gm/types.h type.",
+    "Function names remain address-derived where no better semantic name is known, e.g. gm_8016895C, fn_801A1134, fn_801A0E34.",
+    "Scene archive symbol strings use names like ScGamPause_scene_data, ScGamRegStaffroll_scene_data, ScNtcCommon_scene_data, and visual0102Scene."
+  ],
+  "assembly_or_matching_tactics": [
+    "Marked gmpause.c as Matching only after structural and callsite cleanup made it match.",
+    "Used PAD_STACK in at least gm_801AC6D8_OnEnter and existing stack padding in pause-related code to satisfy stack/layout-sensitive matching.",
+    "Replaced raw nested pointer dereferences with typed field access, which can change generated code shape while also documenting the real memory layout.",
+    "Removed unnecessary casts such as (void**) &typed_pointer in archive-loading calls to let typed lvalues drive matching and cleaner code generation.",
+    "Used deg_to_rad instead of a local literal/static float for degree-to-radian conversion in pause analog stick rotation code.",
+    "Adjusted config symbol sizes for two .data strings, likely to align symbol boundaries with the matched object/data layout."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided excerpt, and the single issue comment body was not included, so there is no evidence-grounded reviewer feedback to extract."
+  ],
+  "searchable_terms": [
+    "gmpause",
+    "SceneDesc",
+    "DynamicModelDesc",
+    "PauseData",
+    "gm_8016895C",
+    "HSD_JObjAddAnimAll",
+    "HSD_JObjLoadJoint",
+    "HSD_CObjLoadDesc",
+    "HSD_CObjAddAnim",
+    "HSD_FogLoadDesc",
+    "lbArchive_80016DBC",
+    "lbArchive_LoadSymbols",
+    "ScGamPause_scene_data",
+    "GmPause",
+    "ScGamRegStaffroll_scene_data",
+    "ScNtcCommon_scene_data",
+    "visual0102Scene",
+    "cameras[0].desc",
+    "cameras[0].anims",
+    "fogs[0].desc",
+    "models[0]->joint",
+    "PAD_STACK",
+    "deg_to_rad",
+    "configure.py Matching",
+    "config/GALE01/symbols.txt",
+    "lbl_803DA4B0",
+    "lbl_803DA4D8",
+    "vi0102",
+    "un_2FC9",
+    "lbcardgame",
+    "gm_1A4C"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that further refine SceneDesc camera/fog animation element types, especially whether fog anims should be HSD_CameraAnim**, HSD_AObjDesc**, or another descriptor type.",
+    "Search for remaining HSD_Joint*** or HSD_Joint**** archive scene usages that could become DynamicModelDesc** or SceneDesc*.",
+    "Search for remaining raw cameras[0] calls on SceneDesc that should use cameras[0].desc after this layout change.",
+    "Check whether gm_8016895C eventually receives a semantic name describing model animation binding.",
+    "Look for other files still defining local scene archive structs duplicating SceneDesc."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

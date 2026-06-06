@@ -1,0 +1,216 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-667",
+  "pr": {
+    "number": 667,
+    "title": "Rework item.c matches",
+    "url": "https://github.com/doldecomp/melee/pull/667",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-01-12T03:42:08Z",
+    "merged_at": "2023-01-12T04:37:05Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large item.c cleanup and matching pass that de-externed several item .bss globals, removed the matching asm slice for code_80266F3C.s, simplified many item routines, tightened prototypes and types, and moved item allocation/counter state toward named C structs instead of anonymous aggregate access. Review focused on preserving matching-sensitive idioms, using clearer decomp types such as BOOL, ITKIND, NULL, and any_t, and documenting functions with Doxygen-style brief comments.",
+  "change_classification": {
+    "primary_type": "decomp-matching cleanup",
+    "categories": [
+      "decomp-matching",
+      "item-system",
+      "headers",
+      "types-structs",
+      "bss-deextern",
+      "code-cleanup"
+    ],
+    "systems": [
+      "item",
+      "asm",
+      "include",
+      "sysdolphin-baselib",
+      "gobj"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/it/item.c",
+      "role": "Main rework: item functions rewritten for cleaner matches, .bss globals defined in C, boolean/prototype cleanup, helper inlines, pointer/null cleanup, item counter and spawn logic simplification."
+    },
+    {
+      "path": "src/melee/it/item.h",
+      "role": "Header adjusted for item structs/types and declarations used by the reworked item.c; exact details are only partially visible in the provided slice."
+    },
+    {
+      "path": "asm/melee/it/code_80266F3C.s",
+      "role": "Removed .bss definitions now emitted from C, reducing assembly reliance for item.c data."
+    },
+    {
+      "path": "include/sysdolphin/baselib/gobj.h",
+      "role": "Added static inline HSD_GObjGetHSDObj to pair with existing HSD_GObjGetUserData and make GObj access clearer/more matchable."
+    },
+    {
+      "path": "include/sysdolphin/baselib/gobjuserdata.h",
+      "role": "Updated GObj_InitUserData callback prototype to use any_t after review pushed back on phasing any_t out too early."
+    },
+    {
+      "path": "src/melee/it/item2.c",
+      "role": "Minor one-line adjustment related to item changes; exact content not visible in the excerpt."
+    }
+  ],
+  "what_changed": [
+    "Converted func_80266F3C from s32 returning 0/1 to BOOL returning FALSE/TRUE, and reused it in func_80266F70 instead of recomputing the item-enabled check.",
+    "Changed literal boolean-like calls such as func_8027870C(0) to func_8027870C(FALSE).",
+    "De-externed item .bss data: labels such as lbl_804A0BE0, lbl_804A0C0C, lbl_804A0C38, lbl_804A0C64, lbl_804A0CCC, and lbl_804A0E24 are now defined in src/melee/it/item.c, while their old assembly .skip declarations were removed from asm/melee/it/code_80266F3C.s.",
+    "Reworked func_80266FCC item initialization to call HSD_ObjAllocInit with sizeof(Item), sizeof(DynamicBoneTable), and sizeof(ItemLink), then initialize named global structs directly instead of accessing a larger opaque HSD_ObjAllocUnkStruct wrapper.",
+    "Introduced helper inlines such as HSD_JObjSetFacingDirItem and ItUnkHoldKind to factor small repeated/awkward item setup patterns while preserving intent.",
+    "Added HSD_GObjGetHSDObj inline accessor in gobj.h and used HSD_GObjGetUserData/HSD_GObjGetHSDObj casts in item setup code.",
+    "Simplified many functions by removing redundant temporaries, gotos, casts, and explicit 0U comparisons; examples include item coordinate initialization, camera-box removal, hold-kind count increment/decrement, drop-item checks, and render/JObj setup.",
+    "Replaced integer/pointer ambiguity with NULL for pointer fields such as x518_ownerGObj, x520_cameraBox, and reviewed xBBC_dynamicBoneTable.",
+    "Used domain-specific enum-like types in reviewed spots, especially ITKIND for item id/index variables and GA_Air for ground/air state comparisons.",
+    "Reworked item article/logic table pointer selection in func_80267978 into direct category branches for common items, character items, Pokemon, and stage items, using calculated indices into lbl_804D6D24, lbl_804D6D38, lbl_804D6D30, lbl_804A0F60 and corresponding logic tables.",
+    "Changed GObj_InitUserData remove_func prototype to void (*remove_func)(any_t), retaining any_t per review rather than switching directly to void*.",
+    "Replaced older inline comments containing addresses/decomp.me scratch links with shorter Doxygen-style /// descriptions for several functions."
+  ],
+  "smart_moves": [
+    "De-externing .bss labels into C made item.c more self-contained and allowed the assembly file to shrink without changing the underlying storage layout.",
+    "Using sizeof(Item), sizeof(DynamicBoneTable), and sizeof(ItemLink) in allocation initialization captured struct knowledge and reduced magic constants such as 0xFCC, 0x190, and 0x1D8.",
+    "Directly naming the split global allocation/counter structures, for example lbl_804A0C64 and lbl_804A0CCC, avoided awkward nested accesses through an opaque aggregate and clarified which state each function mutates.",
+    "Booleanizing item-enabled/drop-item helpers made call sites clearer and enabled reuse of func_80266F3C in func_80266F70.",
+    "The HSD_GObjGetHSDObj inline mirrors HSD_GObjGetUserData and documents GObj field access without forcing every item routine to touch struct fields directly.",
+    "Factoring the facing-direction rotation and hold-kind damage-table update into small static inline helpers reduced noisy temps while keeping matching-sensitive code local to item.c.",
+    "Review preserved direct array indexing for article and item logic table selection because the reviewer noted that this matches HAL's style, avoiding over-abstraction that could harm matches."
+  ],
+  "decomp_lessons": [
+    "When moving .bss out of asm, define the exact C objects in the owning source file and remove only the corresponding .skip labels from assembly.",
+    "Prefer domain types like BOOL, ITKIND, and enum constants such as GA_Air when evidence supports them; this improves readability and often still matches.",
+    "Use NULL for pointer fields and FALSE/TRUE for booleans instead of 0, 0U, or 1 when the field/function semantics are known.",
+    "Allocation initialization should use sizeof(named_struct) once struct identity is known; it records layout understanding and reduces future constant drift.",
+    "Do not hide HAL-style direct array access behind unnecessary abstractions if the original pattern is simple indexed table lookup.",
+    "Small static inline helpers can improve readability in matching code, but keep them narrow and evidence-based so they do not obscure control flow.",
+    "For matching-only stack padding, guard unused arrays under MUST_MATCH rather than leaving unexplained filler in normal builds.",
+    "When a type migration like any_t to void* is not settled project-wide, follow the existing convention until there is a clear phasing procedure.",
+    "Function comments should be brief Doxygen-style descriptions or header docs; avoid preserving decomp.me scratch links and noisy address comments as primary documentation.",
+    "If a function is still messy but matching, mark it with a TODO instead of pretending the decomp is semantically polished."
+  ],
+  "naming_conventions": [
+    "Use BOOL return type with TRUE/FALSE for predicate-style functions such as func_80266F3C and func_8026784C.",
+    "Use ITKIND for item IDs and item-kind-derived indices when dealing with spawnItem->x8_item_id or item_data->x10_item_kind.",
+    "Use NULL for GObj, camera box, dynamic bone table, and other pointer fields.",
+    "Use Doxygen-style triple-slash comments such as /// Check if items are enabled, /// Remove Camera Box, and /// Store Item Pointers.",
+    "Prefer descriptive local names like item_data, spawnItem, item_gobj, jobj, idx, and result over compiler-like temporaries when they still match.",
+    "Keep legacy global labels such as lbl_804A0C64 when no better symbol name is established, but improve their field/struct typing."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed assembly .bss labels for item allocation globals after defining equivalent C globals with matching types and alignment expectations.",
+    "Replaced magic allocation sizes with sizeof calls, which can still match if the struct sizes are correct.",
+    "Simplified goto-heavy switch logic into a BOOL result variable plus break/return pattern for func_8026784C.",
+    "Used post-increment directly in func_802676F4 for func_80274EE8(lbl_804A0C64.x10++), preserving the old-use-then-increment behavior while reducing temps.",
+    "Used static inline wrappers for small codegen-sensitive operations such as GObj field access and item facing rotation.",
+    "Reviewer suggested wrapping artificial stack padding as #ifdef MUST_MATCH u8 unused[8];, showing a preferred pattern for unavoidable filler.",
+    "Preserved direct table indexing for item article data and logic tables because reviewer said that is what HAL does."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "file": "src/melee/it/item.c",
+      "feedback": "Function comments should ideally move to headers, but if kept in source they should at least be brief Doxygen-style comments, e.g. /// Check to load ItCo.dat/usd."
+    },
+    {
+      "author": "ribbanya",
+      "file": "include/sysdolphin/baselib/gobjuserdata.h",
+      "feedback": "Keep any_t in GObj_InitUserData callback signatures for now until the project has a procedure for phasing it out."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/melee/it/item.c",
+      "feedback": "Use ITKIND for item id/index variables, e.g. ITKIND ItemID = spawnItem->x8_item_id and ITKIND idx = spawnItem->x8_item_id - It_Kind_Kuriboh."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/melee/it/item.c",
+      "feedback": "Direct array accesses in item table selection are acceptable because that is what HAL does."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/melee/it/item.c",
+      "feedback": "For matching-only unused stack space, prefer #ifdef MUST_MATCH u8 unused[8];."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/melee/it/item.c",
+      "feedback": "Mark func_802682F0 with a TODO/brief noting it needs serious cleaning while retaining BOOL signature."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/melee/it/item.c",
+      "feedback": "Use NULL for pointer fields such as xBBC_dynamicBoneTable instead of integer 0."
+    }
+  ],
+  "searchable_terms": [
+    "Rework item.c matches",
+    "item.c",
+    "item.h",
+    "code_80266F3C.s",
+    "de-extern .bss",
+    "lbl_804A0BE0",
+    "lbl_804A0C0C",
+    "lbl_804A0C38",
+    "lbl_804A0C64",
+    "lbl_804A0CCC",
+    "lbl_804A0E24",
+    "HSD_ObjAllocInit",
+    "sizeof(Item)",
+    "DynamicBoneTable",
+    "ItemLink",
+    "S32Vec3",
+    "func_80266F3C",
+    "func_80266F70",
+    "func_80266FCC",
+    "func_80267130",
+    "func_80267454",
+    "func_802674AC",
+    "func_8026784C",
+    "func_80267978",
+    "func_802680CC",
+    "func_802682F0",
+    "func_8026862C",
+    "HSD_GObjGetUserData",
+    "HSD_GObjGetHSDObj",
+    "GObj_InitUserData",
+    "any_t",
+    "ITKIND",
+    "GA_Air",
+    "MUST_MATCH",
+    "ItUnkHoldKind",
+    "HSD_JObjSetFacingDirItem",
+    "ItCo.dat",
+    "ItCo.usd",
+    "Common items",
+    "Character items",
+    "Pokemon",
+    "Stage items",
+    "lbl_804D6D24",
+    "lbl_804D6D38",
+    "lbl_804D6D30",
+    "lbl_804A0F60",
+    "lbl_803F14C4",
+    "lbl_803F3100",
+    "lbl_803F23CC",
+    "lbl_803F4D20"
+  ],
+  "follow_up_queries": [
+    "Inspect src/melee/it/item.h in PR 667 for the exact struct/type changes that enabled sizeof(Item), DynamicBoneTable, ItemLink, and S32Vec3.",
+    "Search later PRs for any_t phase-out decisions after the GObj_InitUserData review comment.",
+    "Find subsequent cleanups of func_802682F0, especially whether the TODO about serious cleaning was resolved.",
+    "Check whether lbl_804A0C64, lbl_804A0CCC, and related item globals later received semantic names.",
+    "Search for later uses of HSD_GObjGetHSDObj to see whether the inline became a project-wide convention."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

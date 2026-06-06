@@ -1,0 +1,138 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-605",
+  "pr": {
+    "number": 605,
+    "title": "Match grdynamicattr",
+    "url": "https://github.com/doldecomp/melee/pull/605",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-12-10T07:23:05Z",
+    "merged_at": "2022-12-10T08:19:02Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the grdynamicattr translation unit by replacing asm/melee/gr/grdynamicattr.s with src/melee/gr/grdynamicattr.c and updating obj_files.mk to build the C object. The new C source reconstructs a small fixed-size pool/list manager for dynamic ground attributes, including initialization, allocation with an assert on floor_id, removal/free-list reinsertion, lifetime countdown, and a proximity query using sqrtf over X/Y distance after a floor-compatibility check.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "stage-ground-system",
+      "pool-list-management"
+    ],
+    "systems": [
+      "stage",
+      "ground",
+      "grdynamicattr",
+      "obj_files",
+      "asm"
+    ]
+  },
+  "key_files": [
+    "asm/melee/gr/grdynamicattr.s",
+    "src/melee/gr/grdynamicattr.c",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted the 253-line assembly file asm/melee/gr/grdynamicattr.s.",
+    "Added src/melee/gr/grdynamicattr.c with 116 lines of C matching the former assembly.",
+    "Changed obj_files.mk so TEXT_O_FILES uses $(BUILD_DIR)/src/melee/gr/grdynamicattr.c.o instead of $(BUILD_DIR)/asm/melee/gr/grdynamicattr.s.o.",
+    "Defined a local UnkStruct layout with next pointer, stored return/id field, Vec position, floor id, radius/distance threshold, lifetime/countdown field, and explicit padding to 0x24 bytes.",
+    "Recreated static storage corresponding to lbl_8049EFA0 as a four-element UnkStruct pool plus two static list-head pointers corresponding to lbl_804D6960 and lbl_804D6964.",
+    "Implemented func_801CA0B4 as initialization of active/free-list globals and construction of the four-entry free list.",
+    "Implemented func_801CA0F8 as allocation from the free list into the active list, copying a Vec3, storing floor_id, radius, and countdown, and asserting floor_id != GC_Id_None at source line 55.",
+    "Implemented func_801CA1C0 as removal from the active list followed by reinsertion into the free list, with a goto label used to match control flow.",
+    "Implemented func_801CA224 as an active-list update that decrements positive countdown values and frees entries whose countdown reaches zero.",
+    "Implemented func_801CA284 as a query over active entries that first calls func_80054F68(arg1, cur->unk14), then checks X/Y Euclidean distance against cur->unk18, returning cur->unk4 on match or 0 otherwise."
+  ],
+  "smart_moves": [
+    "Used a fixed-size static array of four structs to match the original .bss allocation size of 0x90 bytes, with each struct padded to 0x24 bytes.",
+    "Kept unknown labels and function names where semantic names were not established, avoiding unsupported renaming while still matching the code.",
+    "Introduced typedef Vec Vec3 so the decompiled source could use the existing Dolphin vector layout while preserving a local naming style seen in the reconstruction.",
+    "Represented the two global pointers as active-list and free-list heads, which cleanly explains the assembly pattern of moving nodes between lbl_804D6960 and lbl_804D6964.",
+    "Used assert_line(55, floor_id!=GC_Id_None) to reproduce the original __assert call using the string grdynamicattr.c and condition floor_id!=GC_Id_None.",
+    "Used a small inline do_sqrtf wrapper around sqrtf, likely to preserve the exact floating-point codegen needed for the distance calculation.",
+    "Preserved matching-oriented control flow in func_801CA1C0 with a goto insert label rather than forcing a more idiomatic but potentially nonmatching list-removal structure.",
+    "Included an unused local array u32 unused[2] in func_801CA0F8, likely to control stack layout and match the original frame."
+  ],
+  "decomp_lessons": [
+    "When a .bss blob is a fixed pool, derive struct size from the allocation size and observed pointer strides; here 0x90 bytes divided into four 0x24-byte entries.",
+    "List-head globals in small data can often represent an active list plus a free list; matching the pointer movement in assembly can make allocator-like code straightforward.",
+    "For decompilation matching, explicit padding fields such as x0_fill[0x24 - 0x20] are useful when field semantics are not fully known but struct size is clear.",
+    "Assert strings in assembly provide strong evidence for source filename, condition spelling, and assert line number; reproduce them with assert_line when available.",
+    "Distance calculations may require preserving sqrtf codegen details; a wrapper inline can help produce the same frsqrte/Newton iteration sequence as the target.",
+    "It is acceptable to leave names like UnkStruct, unk4, unk14, and unk1C when the PR evidence does not establish stronger semantic names.",
+    "When matching list removal, do not over-simplify control flow if the compiler needs a specific branch/goto structure.",
+    "Updating obj_files.mk from asm object to src object is the final integration step that marks the translation unit as matched."
+  ],
+  "naming_conventions": [
+    "The new C file kept original placeholder symbol names for unidentified globals and functions: func_801CA0B4, func_801CA0F8, func_801CA1C0, func_801CA224, func_801CA284, lbl_8049EFA0, lbl_804D6960, and lbl_804D6964.",
+    "Unknown struct and field names used placeholder forms: UnkStruct, unk4, unk8, unk14, unk18, unk1C.",
+    "Padding was named x0_fill, reflecting an explicit filler field rather than a semantic member.",
+    "The local constant was named GC_Id_None and assigned -1, matching the assert condition floor_id!=GC_Id_None.",
+    "A typedef Vec Vec3 was introduced for local readability while relying on Dolphin's existing Vec layout."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted the assembly source only after adding a matching C translation unit and switching obj_files.mk to the C object.",
+    "Matched the bss pool by defining static UnkStruct lbl_8049EFA0[4], corresponding to the removed .bss .skip 0x90.",
+    "Matched small-data globals by using static UnkStruct* list heads corresponding to lbl_804D6960 and lbl_804D6964.",
+    "Used assert_line(55, floor_id!=GC_Id_None) to match the __assert call with line 0x37 and the original condition string.",
+    "Used u32 unused[2] in func_801CA0F8 to influence stack layout.",
+    "Used goto insert in func_801CA1C0 to preserve branch structure for removing and freeing nodes.",
+    "Used inline f32 do_sqrtf(f32 x) { return sqrtf(x); } to match the emitted sqrt path in func_801CA284.",
+    "Computed dx, dy, dx2, and dy2 as separate locals before sqrtf, reflecting the assembly's explicit arithmetic sequence."
+  ],
+  "review_feedback": [
+    "No issue comments or review comments were present in the provided PR slice.",
+    "The PR had one review recorded, but the provided excerpt contains no reviewer text or actionable feedback."
+  ],
+  "searchable_terms": [
+    "pr-605",
+    "Match grdynamicattr",
+    "grdynamicattr",
+    "asm/melee/gr/grdynamicattr.s",
+    "src/melee/gr/grdynamicattr.c",
+    "obj_files.mk",
+    "func_801CA0B4",
+    "func_801CA0F8",
+    "func_801CA1C0",
+    "func_801CA224",
+    "func_801CA284",
+    "lbl_8049EFA0",
+    "lbl_804D6960",
+    "lbl_804D6964",
+    "UnkStruct",
+    "Vec3",
+    "GC_Id_None",
+    "floor_id",
+    "assert_line",
+    "floor_id!=GC_Id_None",
+    "func_80054F68",
+    "sqrtf",
+    "do_sqrtf",
+    "free list",
+    "active list",
+    "fixed pool",
+    "x0_fill",
+    "unk1C",
+    "stage",
+    "ground",
+    "r-burns"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that renamed grdynamicattr functions or UnkStruct fields.",
+    "Search for func_801CA0F8 callsites to infer semantic names for arg0, floor_id, radius, and lifetime/countdown.",
+    "Search for func_801CA284 callsites to determine what dynamic attribute id it returns and how arg1 is used with func_80054F68.",
+    "Look for other stage/ground modules using fixed-size pools and active/free list heads for comparable matching patterns.",
+    "Check whether GC_Id_None is defined elsewhere in the project and whether this local static const was later replaced by a shared enum or header."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

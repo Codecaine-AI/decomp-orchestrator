@@ -1,0 +1,139 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-572",
+  "pr": {
+    "number": 572,
+    "title": "More gx matches & cleanup",
+    "url": "https://github.com/doldecomp/melee/pull/572",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-09-18T08:07:20Z",
+    "merged_at": "2022-09-18T20:25:44Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "GX cleanup and matching PR focused on replacing hand-written mask/or bitfield expressions and several inline-assembly stubs with C implementations using INSERT_FIELD and named GX FIFO command constants. It touched GXTransform, GXTev, GXFrameBuf, GXBump, GXTexture, and the GX private header, with the PR body explicitly stating: \"Refactor to prefer INSERT_FIELD macro.\"",
+  "change_classification": {
+    "primary_type": "decomp-matching-cleanup",
+    "categories": [
+      "cleanup",
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "bitfield-refactor",
+      "asm-to-c"
+    ],
+    "systems": [
+      "dolphin/gx",
+      "src"
+    ]
+  },
+  "key_files": [
+    "src/dolphin/gx/GXTransform.c",
+    "src/dolphin/gx/GXTev.c",
+    "src/dolphin/gx/GXFrameBuf.c",
+    "src/dolphin/gx/GXBump.c",
+    "src/dolphin/gx/GXTexture.c",
+    "src/dolphin/gx/__GX_unknown_001.h"
+  ],
+  "what_changed": [
+    "Replaced many manual bitfield updates of the form mask-and-or with INSERT_FIELD calls in GXFrameBuf.c, GXTexture.c, GXTransform.c, and GXTev.c.",
+    "Converted GXSetTevColor from a NON_MATCHING C block plus an inline assembly fallback into a C implementation that builds two BP register words with INSERT_FIELD and writes them through WGPIPE.",
+    "Converted GXSetAlphaCompare from inline assembly into C using INSERT_FIELD for ref0, ref1, comp0, comp1, op, and register id 0xF3 before writing a GX_LOAD_BP_REG command.",
+    "Converted GXSetNumTevStages from inline assembly into C that updates the relevant context word and sets x4F0_flags |= 4.",
+    "Converted GXSetViewportJitter from inline assembly into C, preserving the field==0 half-pixel top adjustment, viewport_v context updates, optional __GXSetRange call, XF register FIFO writes, and set_x2(GX_TRUE).",
+    "Converted GXSetScissorBoxOffset from inline assembly into C and updated its private header prototype from UNK_FUNC(GXSetScissorBoxOffset) to void GXSetScissorBoxOffset(u32 x_off, u32 y_off).",
+    "Simplified GXSetCurrentMtx and GXSetScissor to use INSERT_FIELD rather than explicit masks.",
+    "Replaced raw FIFO command literal 8 in __GXSetMatrixIndex with GX_LOAD_CP_REG.",
+    "Removed local named float constants such as lbl_804DE2F0, lbl_804DE2F4, lbl_804DE2F8, lbl_804DE308, and lbl_804DE30C from GXTransform.c and used literal float operands in assembly comments or C code.",
+    "Cleaned up context member access in places: examples include moving from x100_data indexing to x1D0 or x204 in GXFrameBuf/GXBump excerpts, although the exact struct-field correctness is only evidenced by the diff slice."
+  ],
+  "smart_moves": [
+    "Used INSERT_FIELD to express GX BP/XF register packing declaratively; this makes field width and shift visible and reduces error-prone hexadecimal masks.",
+    "Kept some stubborn expressions as explicit mask/or where likely needed for codegen, e.g. parts of GXSetTexCopySrc and GXSetScissorBoxOffset, rather than forcing every bitfield update through the macro.",
+    "Replaced anonymous or raw command values with GX_LOAD_BP_REG, GX_LOAD_XF_REG, and GX_LOAD_CP_REG where shown, improving readability without changing FIFO write ordering.",
+    "Matched assembly behavior by preserving duplicated writes in GXSetTevColor: after writing the first color word, the C version writes the second word three times as shown by the removed assembly.",
+    "Updated the header prototype when GXSetScissorBoxOffset became known C, capturing parameter types and names instead of leaving it as UNK_FUNC.",
+    "Removed redundant temporary GXContext variables in small setters and wrote directly through __GXContexts.main, reducing local-noise once the access pattern was understood."
+  ],
+  "decomp_lessons": [
+    "For GX register builders, prefer INSERT_FIELD(dest, value, width, shift) over open-coded masks when it still matches; it encodes intent and avoids recalculating mask constants.",
+    "When replacing inline assembly that writes WGPIPE, preserve not just the final register value but the exact sequence of command bytes and data writes.",
+    "Header cleanup should accompany asm-to-C work: once a function signature is known, replace UNK_FUNC with a typed prototype.",
+    "Context arrays and callbacks may be temporary stand-ins for better-identified struct fields; use evidence from offsets such as x1D0, x204, x4F0_flags, viewport_v, and projection_v to improve field names gradually.",
+    "Named constants produced only to satisfy assembly labels can sometimes be removed once literals are accepted or the function is rewritten, reducing artificial rodata clutter.",
+    "C implementations can still intentionally keep compiler-friendly temporary names like temp_f31 or temp_f29 when those help preserve floating-point register allocation for matching."
+  ],
+  "naming_conventions": [
+    "Known GX API functions use official-style names such as GXSetTevColor, GXSetAlphaCompare, GXSetNumTevStages, GXSetViewportJitter, GXSetScissorBoxOffset, GXSetCurrentMtx, and GXInitTlutRegion.",
+    "GX command constants are preferred over magic command bytes where available: GX_LOAD_BP_REG, GX_LOAD_XF_REG, GX_LOAD_CP_REG, GX_LOAD_INDX_C, and GX_CMD_CALL_DL.",
+    "Private or still-unknown context members in this slice retain offset-style names such as x80, x84, x1D0, x204, x4F0_flags, x454_pad, and x458.",
+    "Header parameter names can be descriptive once known; GXSetScissorBoxOffset was declared as void GXSetScissorBoxOffset(u32 x_off, u32 y_off)."
+  ],
+  "assembly_or_matching_tactics": [
+    "Inline assembly stubs were removed for GXSetTevColor, GXSetAlphaCompare, GXSetNumTevStages, GXSetViewportJitter, and GXSetScissorBoxOffset where C could reproduce behavior.",
+    "INSERT_FIELD was the main matching tactic for rlwimi-style bit insertion into BP register words.",
+    "WGPIPE writes were modeled with typed accesses such as WGPIPE.u8, WGPIPE.u32, and WGPIPE.f32 to match FIFO command/data order.",
+    "GXSetViewportJitter used explicit floating temporaries and half-width/half-height computations to reproduce FPR-sensitive codegen.",
+    "Some asm annotations in GXProject were adjusted to show literal loads such as 0.0F, 1.0F, and 0.5F after removing local lbl_ rodata symbols.",
+    "State dirty flags were preserved after register/context mutations, including x4F0_flags |= 6 in GXSetNumIndStages and x4F0_flags |= 4 in GXSetNumTevStages.",
+    "set_x2(GX_FALSE) or set_x2(GX_TRUE) calls were retained after FIFO writes where the original assembly wrote to the context state field."
+  ],
+  "review_feedback": [
+    "No line review comments were present in the provided PR slice.",
+    "One collaborator review by ribbanya approved the PR with an empty body on 2022-09-18T13:21:44Z.",
+    "The only explicit PR-body rationale was: \"Refactor to prefer INSERT_FIELD macro.\""
+  ],
+  "searchable_terms": [
+    "pr-572",
+    "More gx matches & cleanup",
+    "r-burns",
+    "dolphin gx",
+    "GXTransform.c",
+    "GXTev.c",
+    "GXFrameBuf.c",
+    "GXBump.c",
+    "GXTexture.c",
+    "__GX_unknown_001.h",
+    "INSERT_FIELD",
+    "GXSetTevColor",
+    "GXSetAlphaCompare",
+    "GXSetNumTevStages",
+    "GXSetViewportJitter",
+    "GXSetScissorBoxOffset",
+    "GXSetCurrentMtx",
+    "GXSetScissor",
+    "GXSetDispCopySrc",
+    "GXSetTexCopySrc",
+    "GXSetDispCopyDst",
+    "GXSetDispCopyGamma",
+    "GXSetNumIndStages",
+    "GXInitTlutRegion",
+    "WGPIPE",
+    "GX_LOAD_BP_REG",
+    "GX_LOAD_XF_REG",
+    "GX_LOAD_CP_REG",
+    "GXContext",
+    "__GXContexts.main",
+    "x1D0",
+    "x204",
+    "x4F0_flags",
+    "viewport_v",
+    "UNDEFINED_FUNC to typed prototype",
+    "asm-to-c"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename GXContext fields x1D0, x204, x454_pad, or x458 to semantic names.",
+    "Search for other GX register packing sites that still use manual mask/or instead of INSERT_FIELD.",
+    "Check whether GXSetTevOrder, GXSetCopyFilter, GXSetTexCopyDst, GXSetTevColorS10, and GXInitTexCacheRegion were later converted from asm to C.",
+    "Compare later changes to GXSetViewportJitter for cleanup of temp_f31/temp_f29 style matching temporaries."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

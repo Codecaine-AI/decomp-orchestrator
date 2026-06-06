@@ -1,0 +1,155 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-344",
+  "pr": {
+    "number": 344,
+    "title": "Ftmario",
+    "url": "https://github.com/doldecomp/melee/pull/344",
+    "state": "MERGED",
+    "author": "nicolasrmerz",
+    "created_at": "2022-04-04T00:50:26Z",
+    "merged_at": "2022-04-04T23:11:32Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched a block of Mario fighter code by moving several routines from asm/melee/ft/chara/ftmario.s into src/melee/ft/chara/ftmario.c. The PR decompiled functions around func_800E0D1C through func_800E10EC, including Mario/Dr. Mario-style special/action setup, callbacks, random selection of x222C/x2230 variants via HSD_Randi, accessory callback func_800E0EE0, and effect/item-spawn calls. It also replaced two float sdata extern uses with direct 3.0f and 0.0f literals, removed unused lbl_804D9190/lbl_804D9194 data, and updated remaining assembly references from lbl_800E0EE0 to func_800E0EE0. Review caught that func_800E0D1C needed to return the selected value because Dr. Mario used that return path; the author accepted and made it return int.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "fighter",
+      "fix",
+      "naming"
+    ],
+    "systems": [
+      "fighter",
+      "ftmario",
+      "asm",
+      "effects",
+      "callbacks"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/chara/ftmario.c",
+      "role": "Added matching C implementations for Mario fighter routines and helper logic; added random.h include and externs for fighter/effect callbacks."
+    },
+    {
+      "path": "asm/melee/ft/chara/ftmario.s",
+      "role": "Removed the now-decompiled assembly for func_800E0D1C, func_800E0DA8, func_800E0E18, func_800E0E54, func_800E0E84, func_800E0EA4, func_800E0EE0, func_800E1040, func_800E10B0, and func_800E10EC; kept later assembly and adjusted callback symbol references."
+    }
+  ],
+  "what_changed": [
+    "Deleted about 300 lines of ftmario assembly and replaced them with C implementations in src/melee/ft/chara/ftmario.c.",
+    "Added #include <sysdolphin/baselib/random.h> to use HSD_Randi in C.",
+    "Added extern declarations for functions used by the newly decompiled code, including func_8008A4D4, func_800E0EE0, func_80084F3C, func_8007500C, func_8000B1CC, func_8029B6F8, func_802C0510, and ef_Spawn.",
+    "Added inline helper _func_800E0EE0_arr_copy(Fighter* ft_2, int* arr), which fills an array with values 0..8 excluding ft_2->x222C and ft_2->x2230 and returns the output count.",
+    "Implemented func_800E0D1C in C as a random variant selector: builds the filtered array, picks arr[HSD_Randi(outpos)], shifts x222C into x2230, writes the new x222C, and returns the selected value.",
+    "Implemented action/setup functions func_800E0DA8 and func_800E1040 that clear x2200_ftcmd_var0 and x2210_ThrowFlags.flags, call func_800693AC with action IDs 0x157/0x158, call func_8006EBA4, and assign ft->cb.x21BC_callback_Accessory4 = func_800E0EE0.",
+    "Implemented simple transition/interrupt wrappers: func_800E0E18 calls func_8008A2BC when func_8006F238 returns 0; func_800E0EA4 calls func_800E1178 when func_80082708 returns 0; func_800E10B0 calls func_800CC730 when func_8006F238 returns 0.",
+    "Implemented callback-gated routines func_800E0E54 and func_800E10EC, which call func_8008A4D4 or func_800CCAAC only when ft->x2200_ftcmd_var0 is nonzero.",
+    "Implemented func_800E0E84 as a direct wrapper around func_80084F3C.",
+    "Implemented func_800E0EE0 in C: checks and clears ft->x2210_ThrowFlags.b0, gets bone coordinates with func_8000B1CC and func_8007500C, branches on ft->x4_fighterKind, then either calls func_8029B6F8 plus ef_Spawn or chooses a random x222C/x2230 variant and calls func_802C0510.",
+    "Changed func_800E0C24 and func_800E0C68 to pass direct float literals 3.0f and 0.0f to func_800704F0 instead of extern constants lbl_804D9190 and lbl_804D9194.",
+    "Removed lbl_804D9190 and lbl_804D9194 from ftmario.s sdata2 and retained lbl_804D9198/lbl_804D919C for 0.0f/1.0f constants used by the new C code.",
+    "Updated remaining assembly callback-address loads in func_800E1178 and func_800E11E0 from lbl_800E0EE0 to func_800E0EE0."
+  ],
+  "smart_moves": [
+    "Factored the repeated filtered-random-array loop into _func_800E0EE0_arr_copy for the larger callback while keeping func_800E0D1C’s version explicit enough to match its local stack/register behavior.",
+    "Preserved matching-sensitive locals and stack layout with explicit temporary variables and padding arrays, e.g. u8 padding[8], arr[9], arr[11], tmp/tmp2, and outsize.",
+    "Used project struct/field names where available instead of raw offsets for fighter state: x2200_ftcmd_var0, x2210_ThrowFlags.flags, x2210_ThrowFlags.b0, x222C, x2230, x5E8_fighterBones, x4_fighterKind, and cb.x21BC_callback_Accessory4.",
+    "Converted the internal assembly label lbl_800E0EE0 into callable C symbol func_800E0EE0 and updated remaining asm references, which avoids dangling label-style callback references after decompilation.",
+    "Removed unnecessary sdata float symbols by replacing them with direct float literals where the code was clearer and still matched."
+  ],
+  "decomp_lessons": [
+    "A function that appears void from its local behavior can still need a return value because another character file or sibling implementation depends on it; review explicitly noted func_800E0D1C is used by Dr. Mario and should return r3.",
+    "When decompiling fighter callbacks, inspect sibling characters such as Dr. Mario for ABI expectations, return types, and reused helper semantics.",
+    "Avoid helper names containing 'nonmatching' if the function is actually part of a matching C solution; reviewers may read that as a decomp status marker rather than a semantic description.",
+    "For matching loops that build temporary arrays, the exact local array size, helper inlining, and padding can matter. This PR used arr[9]/arr[11], explicit outpos, and padding to align with generated code.",
+    "Callback bitfield handling can be expressed through named bitfields when the struct supports it; here x2210_ThrowFlags.b0 replaced the raw rlwinm/rlwimi assembly pattern.",
+    "After moving a label-defined assembly routine into C, remember to update any remaining assembly address loads to the function symbol name."
+  ],
+  "naming_conventions": [
+    "Use func_XXXXXXXX for still-unnamed decompiled functions when no semantic name is established, e.g. func_800E0D1C and func_800E0EE0.",
+    "Use ftMario_OnDeath for the known Mario death callback while leaving unknown nearby routines in address-based names.",
+    "Helper _func_800E0EE0_arr_copy names the helper after the parent function and its array-copy role; this was chosen after a reviewer questioned a confusing earlier name containing 'copy_nonmatching'.",
+    "Avoid the word 'nonmatching' in helper names unless it refers to decompilation match status; in this PR discussion the author clarified that the old name meant values not matching attributes, but agreed it was confusing.",
+    "Use field names from Fighter rather than raw offsets where available, including x2200_ftcmd_var0, x2210_ThrowFlags, x222C, x2230, and x21BC_callback_Accessory4."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used HSD_Randi(outpos/outsize) with a filtered local int array to reproduce the original random-selection assembly pattern.",
+    "Used explicit assignments ft->x2230 = ft->x222C followed by ft->x222C = selected_value to match the observed order of stores.",
+    "Preserved stack/register behavior with seemingly artificial locals: r3, i, outpos in func_800E0D1C; flag_res, tmp, tmp2, padding, and arr[11] in func_800E0EE0.",
+    "Kept func_800E0D1C’s return as the selected random value after review; reviewer suggested returning r3 would still match.",
+    "Expressed action-state setup calls with exact action IDs 0x157 and 0x158 and existing constants lbl_804D9198/lbl_804D919C for 0.0f/1.0f parameters.",
+    "Matched callback assignment by storing func_800E0EE0 into ft->cb.x21BC_callback_Accessory4 instead of leaving an asm local label.",
+    "Used direct float literals for 3.0f and 0.0f in func_800E0C24/func_800E0C68, allowing removal of lbl_804D9190/lbl_804D9194."
+  ],
+  "review_feedback": [
+    "PsiLupan asked why a helper had a name like 'copy_nonmatching' despite being part of a matching function, flagging ambiguity between semantic 'nonmatching values' and decompilation match status.",
+    "nicolasrmerz replied that the name came from r-burns's decomp.me scratch and meant copying integers that do not match the fighter attributes in the conditional, not nonmatching decomp status, and said it would be renamed to reduce confusion.",
+    "r-burns reviewed src/melee/ft/chara/ftmario.c and noted that func_800E0D1C needed to return something because it is used by Dr. Mario; he suggested `return r3` should still match.",
+    "nicolasrmerz acknowledged the missing return-value catch."
+  ],
+  "searchable_terms": [
+    "PR344",
+    "Ftmario",
+    "ftmario.c",
+    "ftmario.s",
+    "func_800E0D1C",
+    "func_800E0DA8",
+    "func_800E0E18",
+    "func_800E0E54",
+    "func_800E0E84",
+    "func_800E0EA4",
+    "func_800E0EE0",
+    "func_800E1040",
+    "func_800E10B0",
+    "func_800E10EC",
+    "ftMario_OnDeath",
+    "_func_800E0EE0_arr_copy",
+    "HSD_Randi",
+    "x222C",
+    "x2230",
+    "x2200_ftcmd_var0",
+    "x2210_ThrowFlags",
+    "x21BC_callback_Accessory4",
+    "func_800693AC",
+    "func_8006EBA4",
+    "func_8006F238",
+    "func_8008A2BC",
+    "func_8008A4D4",
+    "func_80084F3C",
+    "func_80082708",
+    "func_8007500C",
+    "func_8000B1CC",
+    "func_8029B6F8",
+    "func_802C0510",
+    "ef_Spawn",
+    "lbl_804D9190",
+    "lbl_804D9194",
+    "lbl_804D9198",
+    "lbl_804D919C",
+    "Dr. Mario",
+    "ftdrmario_2.c",
+    "copy_nonmatching",
+    "decomp.me cdQ5o",
+    "decomp.me yJ6cV"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or semantically identify func_800E0D1C or func_800E0EE0.",
+    "Search Dr. Mario files for func_800E0D1C usage to confirm the cross-character return-value dependency noted in review.",
+    "Look for subsequent cleanup of extern declarations in ftmario.c into headers.",
+    "Search for other fighter PRs that update assembly callback labels from lbl_XXXXXXXX to func_XXXXXXXX after decompiling the callback.",
+    "Find other uses of x222C/x2230 random-selection helpers to compare naming and matching patterns."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

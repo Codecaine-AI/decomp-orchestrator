@@ -1,0 +1,176 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-722",
+  "pr": {
+    "number": 722,
+    "title": "Migrate most of `ftcoll` to C",
+    "url": "https://github.com/doldecomp/melee/pull/722",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-26T04:19:05Z",
+    "merged_at": "2023-01-26T04:31:24Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large fighter-collision migration that removed most of asm/melee/ft/ftcoll.s and moved the logic into src/melee/ft/ftcoll.c, while tightening related fighter collision structs, bitfield accessors, and function prototypes. The PR body describes it as mostly C migrations with some matches by coauthors; diff evidence shows both C cleanup and remaining MWERKS inline asm blocks for some fcoll routines, so it should be treated as a major source migration rather than a fully semantic rename pass.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c-migration",
+      "headers",
+      "struct-layout",
+      "bitfields",
+      "prototype-cleanup"
+    ],
+    "systems": [
+      "fighter",
+      "ftcoll",
+      "lbcollision",
+      "game-mode",
+      "player",
+      "melee-core"
+    ]
+  },
+  "key_files": [
+    "asm/melee/ft/ftcoll.s",
+    "src/melee/ft/ftcoll.c",
+    "src/melee/ft/ftcoll.h",
+    "src/melee/ft/types.h",
+    "src/melee/lb/lbcollision.h",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/ft_unknown_006.h",
+    "src/melee/ft/ftlib.h",
+    "src/melee/gm/code_801601C4.h",
+    "src/melee/pl/pl_unknown_001.h",
+    "src/melee/ft/chara/ftCLink/ftclink.c",
+    "src/melee/ft/chara/ftMars/ftMarsSpecialLw.c",
+    "src/melee/ft/chara/ftMasterHand/ftMasterHand_31.c",
+    "src/melee/ft/chara/ftPurin/ftpurin.c",
+    "src/melee/ft/chara/ftYoshi/ftyoshi2.c",
+    "src/melee/ft/ftcommon.c"
+  ],
+  "what_changed": [
+    "Deleted 2754 lines from asm/melee/ft/ftcoll.s and added roughly 2987 lines to src/melee/ft/ftcoll.c.",
+    "Added or migrated fcoll routines around combo-count handling, victim/attacker tracking, hitbox/hurtbox collision, shield/collision checks, and fighter interaction state; visible examples include func_800763C0, func_80076444, func_8007646C, func_800764DC, func_80076528, func_800765AC, func_800765E0, and func_800765F0.",
+    "Preserved some routines as MWERKS inline asm inside fcoll.c with typed asm signatures, such as func_8007699C(Fighter*, Hitbox*, Fighter*, Hitbox*), func_80076CBC(Fighter*, Hitbox*, Fighter*), and func_80076ED8(Fighter*, Hitbox*, Fighter*, Hurtbox*).",
+    "Changed fcoll prototypes from untyped void-style declarations to typed boolean-returning and argument-specific declarations in fcoll.h.",
+    "Expanded Fighter bitfield representation around offsets 0x221B and 0x2225, replacing generic x221B_flag.bits and x2225_flag.bits usage in multiple files with direct fields such as x221B_b0 through x221B_b7 and x2225_b0 through x2225_b7.",
+    "Adjusted many character/fighter call sites to use the new direct bitfield names, including CLink, Mars counter code, Master Hand, Purin, Yoshi, fighter initialization/action-change code, and ftcommon helpers.",
+    "Refined lbcollision.h's Hitbox layout by splitting padding to expose sfx_severity at 0x38, sfx_kind at 0x3C, x42/x43 bitfields, and a union at 0x134 containing either HSD_GObj* owner or hit_grabbed_victim_only.",
+    "Updated thrown-hitbox clearing from fp->x1064_thrownHitbox.x134 = 0 to fp->x1064_thrownHitbox.owner = NULL, reflecting the improved Hitbox union typing.",
+    "Added missing prototypes in ft_unknown_006.h, gm/code_801601C4.h, lbcollision.h, pl_unknown_001.h, and ftlib.h to support the migrated fcoll code.",
+    "Renamed at least one Fighter field from x119D to grabber_unk1, suggesting the offset's use was inferred from grab/collision handling."
+  ],
+  "smart_moves": [
+    "Kept the migration buildable by improving headers and prototypes alongside the fcoll source movement, instead of leaving migrated code dependent on local extern declarations only.",
+    "Used direct bitfield members for hot collision flags at 0x221B and 0x2225, which reduced repeated generic UnkFlagStruct access and made matching against lbz/rlwinm flag patterns more explicit.",
+    "Improved Hitbox layout incrementally where fcoll needed real semantics: sfx fields, x42/x43 flags, and the 0x134 owner/grab union were exposed without pretending the full struct was solved.",
+    "Retained an explicit warning in lbcollision.h that the Hitbox 0x134 union is unacceptable, which documents a known compromise instead of hiding uncertain layout semantics.",
+    "Used typed callback aliases such as HSD_GObjEvent for func_8007B1B8 rather than a raw void (*)(HSD_GObj*) signature.",
+    "Converted helper prototypes to bool where call sites test return values, e.g. func_8007699C, func_80076CBC, func_80076ED8, and lbcollision helpers.",
+    "Moved item-owner combo logic to clearer names in func_8007646C, using owner and enum_t asid and checking func_80086960(owner) before forwarding combo credit."
+  ],
+  "decomp_lessons": [
+    "Large assembly migrations often require struct/header work first; fcoll needed Fighter, Hitbox, Hurtbox, ftlib, gm, and pl prototypes to express the code cleanly.",
+    "When a generic flag byte blocks matching or readability, expose direct bitfields at the exact byte offset and update call sites consistently.",
+    "Do not over-resolve uncertain unions: if one field is used as a pointer in one context and a bit in another, a documented union can be an acceptable interim decomp tactic.",
+    "Typed boolean returns are useful when migrated collision routines are immediately used in conditionals; this avoids void stubs that obscure control flow.",
+    "For migrated code that still has nonmatching or hard-to-express sections, moving asm into C under MWERKS pragmas can reduce standalone .s debt while preserving exact behavior.",
+    "Comments like @todo #GET_FIGHTER adds an instruction are valuable matching notes; they record why apparently idiomatic macros may not be used in a matching function.",
+    "Header prototype corrections in dependent systems can be a prerequisite for source migration even when the primary PR target is one fighter subsystem."
+  ],
+  "naming_conventions": [
+    "Direct unknown bitfields were named with offset-plus-bit form, e.g. x221B_b0, x221B_b5, x2225_b2, preserving address evidence while improving access syntax.",
+    "Generic flag structs remain named xNNNN_flag where their bit layout has not been broken out or required for matching.",
+    "Improved inferred semantic names are conservative: x119D became grabber_unk1 rather than a fully speculative name.",
+    "Hitbox fields exposed from padding use semantic names when evidence is stronger, such as sfx_severity, sfx_kind, owner, and hit_grabbed_victim_only.",
+    "Function names remain address-based func_800..., but comments describe roles such as Combo Count Logic, Get Attack ID, Item Owner, and Check to end combo for victim."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed most standalone fcoll.s assembly while keeping some routines as inline asm in fcoll.c under MWERKS_GEKKO pragmas, preserving exact codegen where C was not yet matched.",
+    "Used typed asm function signatures to make inline asm blocks callable from C with correct argument and return types.",
+    "Avoided GET_FIGHTER in at least one place because the diff comment says it adds an instruction; direct gobj->user_data access was used for matching.",
+    "Introduced inline ftHitGetPtr(Fighter* fp, u32 i) returning &fp->x914[i] to centralize hitbox indexing in the migrated collision code.",
+    "Changed padding and bitfield definitions in lbcollision.h to make lbz/rlwinm accesses map to named fields at offsets 0x40, 0x42, 0x43, and 0x134.",
+    "Used bool prototypes for collision-check helper functions so branches testing collision results line up naturally in C.",
+    "Preserved exact uncertain behavior by keeping a union for Hitbox offset 0x134 rather than forcing one field interpretation across all call sites."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "r-burns",
+      "state": "APPROVED",
+      "submitted_at": "2023-01-26T04:31:00Z",
+      "body": ""
+    },
+    {
+      "note": "No issue comments or review comments were present in the slice, so there is no detailed human review feedback to extract."
+    }
+  ],
+  "searchable_terms": [
+    "PR722",
+    "ftcoll",
+    "Migrate most of ftcoll to C",
+    "asm/melee/ft/ftcoll.s",
+    "src/melee/ft/ftcoll.c",
+    "func_800763C0",
+    "func_80076444",
+    "func_8007646C",
+    "func_800764DC",
+    "func_80076528",
+    "func_800765AC",
+    "func_800765E0",
+    "func_800765F0",
+    "func_8007699C",
+    "func_80076CBC",
+    "func_80076ED8",
+    "func_8007B1B8",
+    "func_80086960",
+    "Hitbox",
+    "Hurtbox",
+    "Fighter",
+    "x1064_thrownHitbox",
+    "owner",
+    "hit_grabbed_victim_only",
+    "sfx_severity",
+    "sfx_kind",
+    "x221B_b0",
+    "x221B_b1",
+    "x221B_b2",
+    "x221B_b3",
+    "x221B_b4",
+    "x221B_b5",
+    "x221B_b6",
+    "x221B_b7",
+    "x2225_b0",
+    "x2225_b1",
+    "x2225_b2",
+    "x2225_b3",
+    "x2225_b4",
+    "x2225_b5",
+    "x2225_b6",
+    "x2225_b7",
+    "grabber_unk1",
+    "MWERKS_GEKKO",
+    "inline asm",
+    "HSD_GObjEvent",
+    "lbcollision.h",
+    "ftcoll.h",
+    "types.h"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that replace the remaining inline asm functions in src/melee/ft/ftcoll.c with matching C.",
+    "Search for subsequent cleanup of the lbcollision.h Hitbox 0x134 union marked '@todo This union is unacceptable.'",
+    "Track later renames for x221B_b* and x2225_b* to learn their actual fighter collision semantics.",
+    "Search for follow-up struct work around Fighter offset x119D / grabber_unk1.",
+    "Inspect later PRs touching func_8007699C, func_80076CBC, and func_80076ED8 for final prototypes and matching tactics."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

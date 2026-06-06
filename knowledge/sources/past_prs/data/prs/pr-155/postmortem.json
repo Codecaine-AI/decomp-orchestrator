@@ -1,0 +1,128 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-155",
+  "pr": {
+    "number": 155,
+    "title": "improve frank efficiency",
+    "url": "https://github.com/doldecomp/melee/pull/155",
+    "state": "MERGED",
+    "author": "EpochFlame",
+    "created_at": "2021-12-06T18:10:41Z",
+    "merged_at": "2021-12-06T22:53:19Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "PR #155 optimized and simplified the epilogue-fixup tooling path by making tools/frank.py handle work previously split with tools/postprocess.py, then updated the Makefile to remove POSTPROC/PROCFLAGS and run Frank directly in quiet epilogue-processing rules. The Frank changes replaced count-based branch restoration with aligned byte-sequence scanning for BLR-family instructions and added logic to reunify separated mtlr/blr instruction pairs by shifting intermediary instructions upward. The author summarized it as simplified, faster code that obsoletes postprocess.py and still matches.",
+  "change_classification": {
+    "primary_type": "tooling-optimization",
+    "categories": [
+      "decomp-matching",
+      "tooling",
+      "build-system",
+      "binary-postprocessing"
+    ],
+    "systems": [
+      "tools/frank.py",
+      "Makefile",
+      "epilogue-processing"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "tools/frank.py",
+      "role": "Updated Frank binary postprocessor to restore branch-to-link-register byte sequences via aligned scanning and to reunify mtlr/blr instruction pairs."
+    },
+    {
+      "path": "Makefile",
+      "role": "Removed postprocess.py integration and PROCFLAGS, added quiet Frank invocation and status echo in EPILOGUE_PROCESS object rules."
+    }
+  ],
+  "what_changed": [
+    "Removed the Makefile POSTPROC variable pointing to tools/postprocess.py.",
+    "Removed PROCFLAGS containing -fprologue-fixup=old_stack, which had been used for postprocess.py.",
+    "Changed EPILOGUE_PROCESS rules for .c, .cp, and .cpp sources to echo 'Frank is fixing $<' and run CC_EPI and Frank under $(QUIET).",
+    "Kept Frank invocation as '$(PYTHON) $(FRANK) $(word 2,$^) $@ $(word 2,$^)' but eliminated the subsequent postprocess.py call.",
+    "Added named byte constants BLR_BYTE_SEQ and MTLR_BYTE_SEQ in tools/frank.py.",
+    "Renamed/expanded the branch byte list from conditional-branch-focused CBLR_BYTES to BLR_BYTE_SEQ_ARRAY, including the normal BLR byte sequence.",
+    "Replaced count-comparison restoration logic with a scan over vanilla_bytes using bytes.find, 4-byte alignment checks, and direct replacement into final_bytes at matching vanilla positions.",
+    "Added a second pass that finds aligned MTLR_BYTE_SEQ followed by aligned BLR_BYTE_SEQ and, when not adjacent, moves the mtlr instruction to immediately before the blr by shifting intermediary bytes upward."
+  ],
+  "smart_moves": [
+    "Consolidated postprocessing into Frank, reducing the build pipeline from compiler plus Frank plus postprocess.py to compiler plus Frank for epilogue-processed objects.",
+    "Used explicit byte constants for BLR and MTLR to make the low-level matching intent more readable than repeated raw literals.",
+    "Applied 4-byte alignment checks before treating found byte sequences as PowerPC instructions, avoiding accidental matches inside instruction immediates or data-like byte regions.",
+    "Switched away from count-only branch repair, which only detected mismatched totals, toward position-based restoration from vanilla bytes.",
+    "Handled both unconditional BLR and conditional branch-to-link-register variants through one BLR_BYTE_SEQ_ARRAY loop.",
+    "Added a targeted mtlr/blr reunification pass, suggesting Frank now absorbs a fixup class previously handled by postprocess.py."
+  ],
+  "decomp_lessons": [
+    "For binary patching helpers, prefer instruction-aligned scanning over raw byte-count heuristics; counts can indicate a mismatch but do not reliably identify safe replacement positions.",
+    "When matching depends on compiler epilogue shape, a purpose-built postprocessor can preserve vanilla instruction bytes at known positions while still using compiler output for surrounding code.",
+    "Build tooling for matching should be kept as simple as possible: if one script can perform all required epilogue fixups, removing a second postprocess stage reduces maintenance surface and command noise.",
+    "Name byte patterns by their instruction semantics, such as BLR_BYTE_SEQ and MTLR_BYTE_SEQ, so future contributors can audit matching hacks without decoding hex constants repeatedly.",
+    "When manipulating PowerPC instruction streams, 4-byte alignment checks are an important guardrail for correctness.",
+    "If a matching tactic moves instructions, keep the transformation narrow and evidence-based: this PR only shifts bytes between an mtlr and its paired blr when both aligned instructions are found."
+  ],
+  "naming_conventions": [
+    "Use uppercase constants for fixed byte-pattern sentinels and instruction sequences, e.g. CODESIZE_MAGIC, BLR_BYTE_SEQ, MTLR_BYTE_SEQ.",
+    "Prefer semantically broad names when a list includes multiple variants: BLR_BYTE_SEQ_ARRAY replaced the narrower CBLR_BYTES once unconditional BLR was included.",
+    "Makefile tooling variables use uppercase names such as HOSTCC, SHA1SUM, PYTHON, FRANK, HOSTCFLAGS."
+  ],
+  "assembly_or_matching_tactics": [
+    "CODESIZE_MAGIC is used to locate the code-size marker and establish the end-of-code offset before replacing vanilla code bytes with stripped bytes from 0x34 through eoc_offset.",
+    "Branch-to-link-register fixup scans vanilla_bytes for each BLR-family byte sequence and copies the corresponding 4-byte vanilla instruction into final_bytes at the same aligned position.",
+    "The branch restoration loop advances by instruction-size increments and ignores non-4-byte-aligned byte-sequence hits.",
+    "The mtlr/blr reunification pass searches final_bytes for aligned MTLR_BYTE_SEQ, then an aligned later BLR_BYTE_SEQ, and skips pairs already adjacent.",
+    "For non-adjacent mtlr/blr pairs, the script rewrites bytes as: bytes before mtlr, intermediary bytes, the mtlr instruction, then bytes from blr onward, effectively shifting intermediary instructions upward and placing mtlr directly before blr."
+  ],
+  "review_feedback": [
+    "No formal review comments were present in the provided slice.",
+    "Issue comment from the author: 'obsoletes postprocess.py', documenting the motivation for removing the Makefile postprocess.py step.",
+    "Issue comment from the author: 'frank now matches **and** looks good while doing so', indicating the intended result was both matching correctness and cleaner implementation.",
+    "PR body said 'simplified code and runs faster' and included Co-Authored-By: Ethan Roseman <ethteck@gmail.com>."
+  ],
+  "searchable_terms": [
+    "pr-155",
+    "improve frank efficiency",
+    "EpochFlame",
+    "Ethan Roseman",
+    "ethteck",
+    "tools/frank.py",
+    "Makefile",
+    "postprocess.py",
+    "POSTPROC",
+    "PROCFLAGS",
+    "EPILOGUE_PROCESS",
+    "CC_EPI",
+    "FRANK",
+    "CODESIZE_MAGIC",
+    "BLR_BYTE_SEQ",
+    "MTLR_BYTE_SEQ",
+    "BLR_BYTE_SEQ_ARRAY",
+    "CBLR_BYTES",
+    "branch to link register",
+    "conditional branches",
+    "blr",
+    "mtlr",
+    "PowerPC",
+    "4-byte alignment",
+    "epilogue fixup",
+    "binary postprocessing",
+    "old_stack",
+    "fprologue-fixup"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that remove tools/postprocess.py entirely or update documentation after Frank obsoleted it.",
+    "Search for subsequent changes to BLR_BYTE_SEQ_ARRAY or mtlr/blr reunification logic to see whether this heuristic needed fixes.",
+    "Look for PRs touching EPILOGUE_PROCESS to understand the evolution of epilogue matching workflows.",
+    "Search for failures or comments mentioning Frank alignment checks, branch-to-link-register fixups, or postprocess.py removal."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,156 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-634",
+  "pr": {
+    "number": 634,
+    "title": "Match dolphin OSExi",
+    "url": "https://github.com/doldecomp/melee/pull/634",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-12-29T08:47:24Z",
+    "merged_at": "2022-12-30T08:21:55Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched a large portion of Dolphin OSExi by replacing many inline assembly stubs in src/dolphin/os/OSExi.c with typed C, adding a new public OSExi header, moving the Ecb BSS allocation from asm into C, and tightening related interrupt/time declarations. The PR body says the work was based on Prime decomp, with the caveat that OSExi had been moved to EXIBios in the Dolphin version used by Prime.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "cleanup",
+      "asm-to-c",
+      "library-port"
+    ],
+    "systems": [
+      "dolphin/os",
+      "EXI",
+      "interrupts",
+      "time",
+      "build"
+    ]
+  },
+  "key_files": [
+    "src/dolphin/os/OSExi.c",
+    "include/dolphin/os/OSExi.h",
+    "include/dolphin/os/OSInterrupt.h",
+    "src/dolphin/os/OSInterrupt.c",
+    "include/dolphin/os/OSTime.h",
+    "asm/dolphin/os/OSExi_data.s",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Added include/dolphin/os/OSExi.h with EXIState, EXIChannel, EXIType, EXICallback, EXIControl, and prototypes for SetExiInterruptMask, EXIImm, EXIImmEx, EXIDma, EXISync, EXIClearInterrupts, EXISetExiCallback, EXIProbe, EXIProbeEx, EXIAttach, EXIDetach, EXISelect, EXIDeselect, EXIInit, EXILock, EXIUnlock, EXIGetState, and EXIGetID.",
+    "Reworked src/dolphin/os/OSExi.c from mostly raw inline asm and unk_t externs into typed C for many routines, while retaining assembly for hard-to-match pieces such as EXISync and EXTIntrruptHandler.",
+    "Defined EXIControl Ecb[EXI_MAX_CHAN] in C and deleted asm/dolphin/os/OSExi_data.s, which previously only allocated the Ecb BSS block.",
+    "Introduced EXI register helpers and bit-construction macros in OSExi.c, including REG_MAX, EXI_FREQ_1M, REG(chan, idx), EXI_0CR, CPR_CLK, and CPR_CS.",
+    "Added typed interrupt mask macros for EXI and PI debug interrupts in OSInterrupt.h, such as OS_INTRMASK_EXI_0_EXI, OS_INTRMASK_EXI_0_TC, OS_INTRMASK_EXI_0_EXT, and OS_INTRMASK_PI_DEBUG.",
+    "Changed __OSInterrupt from u8 to s16 and changed OSInterruptHandler and __OSSetInterruptHandler/__OSGetInterruptHandler signatures to use __OSInterrupt.",
+    "Added OSTicksToMilliseconds(ticks) to OSTime.h.",
+    "Removed OSExi_data.s.o from obj_files.mk because the Ecb data is now emitted by C."
+  ],
+  "smart_moves": [
+    "Used Prime decomp as a reference source instead of treating every OSExi function as a from-scratch decompilation target, while explicitly noting the library-version wrinkle that Prime's corresponding code had moved to EXIBios.",
+    "Created a real OSExi.h before/alongside the C conversion, which made the file less dependent on unk_t externs and encoded channel/type/state/callback semantics in reusable declarations.",
+    "Preserved assembly only where still needed, instead of forcing full C conversion; EXISync remained asm with a proper BOOL EXISync(EXIChannel) signature, and EXTIntrruptHandler remained a static asm function.",
+    "Moved the Ecb BSS symbol from a standalone asm data file into a typed EXIControl Ecb[EXI_MAX_CHAN] definition, simplifying the build and making structure layout evidence explicit.",
+    "Captured repeated EXI MMIO arithmetic with REG(chan, idx) and interrupt masks with named OS_INTRMASK_* macros, reducing magic-number repetition while preserving the underlying bit operations."
+  ],
+  "decomp_lessons": [
+    "When decompiling SDK subsystems, build the header/struct model early; once EXIControl fields and callback types are named, many former raw offset loads/stores become straightforward state-machine C.",
+    "Reference decomp from nearby games can be highly useful, but document version differences. Here the PR body notes that Prime's Dolphin version placed OSExi in EXIBios.",
+    "Converting an asm BSS blob to a typed C global can eliminate an asm object from the build, but only after the struct size/layout is understood; here the old Ecb allocation was 0xC0 bytes, matching three EXIControl entries of 0x40 bytes each as implied by the diff's indexed accesses.",
+    "Interrupt APIs benefit from strong typedefs and named masks. Changing handlers to take __OSInterrupt and adding OS_INTRMASK_* macros made OSExi handler setup/masking code less opaque.",
+    "Partial matching is acceptable and useful: the PR removed a large amount of assembly while leaving stubborn routines in asm with improved prototypes."
+  ],
+  "naming_conventions": [
+    "EXI enums use subsystem-prefixed uppercase constants: EXI_STATE_DMA_ACCESS, EXI_STATE_IMM_ACCESS, EXI_STATE_SELECTED, EXI_STATE_ATTACHED, EXI_STATE_LOCKED, EXI_STATE_BUSY.",
+    "EXI channel enum names follow EXI_CHAN_N plus EXI_MAX_CHAN.",
+    "EXI operation types use EXI_READ, EXI_WRITE, EXI_TYPE_2, and EXI_MAX_TYPE.",
+    "Callback typedefs are subsystem-prefixed and descriptive: EXICallback.",
+    "The EXI control struct is named EXIControl and field names reflect callback/state/transfer/cache roles: exiCallback, tcCallback, extCallback, state, immLen, immBuf, dev, id, idTime, items, queue.",
+    "Interrupt mask macros use OS_INTRMASK_<source> and derive masks with 0x80000000U >> OS_INTR_*.",
+    "Internal helpers keep Dolphin-style double-underscore names where appropriate, such as __EXIProbe and __EXIAttach."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced raw inline asm functions with C implementations for SetExiInterruptMask, EXIImm, EXIImmEx, EXIDma, EXIClearInterrupts, EXISetExiCallback, EXI probe/attach/select/deselect/init/lock/unlock/state/id logic, while preserving necessary low-level asm routines.",
+    "Used volatile memory-mapped register declarations at fixed addresses: __EXIRegs[EXI_MAX_CHAN][REG_MAX] at 0xCC006800 and __EXIProbeStartTime[2] at 0x800030C0.",
+    "Encoded immediate-transfer packing/unpacking in C using byte shifts like ((3 - i) * 8), mirroring the original PowerPC byte packing behavior.",
+    "Centralized EXI control register construction with EXI_0CR(tstart, dma, rw, tlen), helping match bitfield composition without scattering magic shifts.",
+    "Used named state flags such as EXI_STATE_BUSY and EXI_STATE_SELECTED to match guard conditions around OSDisableInterrupts/OSRestoreInterrupts critical sections.",
+    "Kept callback dispatch behavior explicit by clearing/setting OSContext around EXI and TC callbacks, matching SDK-style interrupt handler patterns."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "feedback": "Updated and reformatted the PR, then left merge control to r-burns in case further tweaks were desired.",
+      "evidence": "Issue comment: '@r-burns I updated and reformatted this but I'll let you merge in case you want to tweak anything.'"
+    },
+    {
+      "author": "r-burns",
+      "feedback": "Accepted the update/reformat.",
+      "evidence": "Issue comment: 'perfect, thanks!'"
+    }
+  ],
+  "searchable_terms": [
+    "OSExi",
+    "EXIBios",
+    "Prime decomp",
+    "Ecb",
+    "EXIControl",
+    "EXICallback",
+    "EXIState",
+    "EXIChannel",
+    "EXIType",
+    "SetExiInterruptMask",
+    "EXIImm",
+    "EXIImmEx",
+    "EXIDma",
+    "EXISync",
+    "EXIClearInterrupts",
+    "EXISetExiCallback",
+    "EXIProbe",
+    "EXIProbeEx",
+    "EXIAttach",
+    "EXIDetach",
+    "EXISelect",
+    "EXIDeselect",
+    "EXIInit",
+    "EXILock",
+    "EXIUnlock",
+    "EXIGetState",
+    "EXIGetID",
+    "EXIIntrruptHandler",
+    "TCIntrruptHandler",
+    "EXTIntrruptHandler",
+    "__EXIRegs",
+    "__EXIProbeStartTime",
+    "OS_INTRMASK_EXI_0_EXI",
+    "OS_INTRMASK_EXI_0_TC",
+    "OS_INTRMASK_EXI_0_EXT",
+    "OS_INTRMASK_EXI_1_EXI",
+    "OS_INTRMASK_EXI_1_TC",
+    "OS_INTRMASK_EXI_1_EXT",
+    "OS_INTRMASK_EXI_2_EXI",
+    "OS_INTRMASK_EXI_2_TC",
+    "OS_INTRMASK_PI_DEBUG",
+    "__OSInterrupt",
+    "OSTicksToMilliseconds",
+    "OSExi_data.s",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that finish matching EXISync or EXTIntrruptHandler in src/dolphin/os/OSExi.c.",
+    "Search for later cleanups to the misspelled EXIIntrruptHandler and TCIntrruptHandler symbol names, if any.",
+    "Compare this OSExi.h layout against later Dolphin SDK headers or Prime EXIBios-derived declarations.",
+    "Check whether the __OSInterrupt typedef change from u8 to s16 affected other interrupt handlers in subsequent PRs."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

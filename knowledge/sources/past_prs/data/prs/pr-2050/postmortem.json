@@ -1,0 +1,127 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2050",
+  "pr": {
+    "number": 2050,
+    "title": "ft: Match ftKirby and ftPp special functions (part 2)",
+    "url": "https://github.com/doldecomp/melee/pull/2050",
+    "state": "MERGED",
+    "author": "itsgrimetime",
+    "created_at": "2025-12-30T17:24:28Z",
+    "merged_at": "2026-01-06T00:10:42Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched a small batch of Kirby and Popo fighter special/init callbacks, replacing several placeholder declarations with simple C implementations and tightening related prototypes. The PR body states 100% matches for ftKb_Init_UnkCallbackPairs0_1, ftPp_SpecialHiStart_0_Coll, ftPp_SpecialHiThrow_0_Coll, ftPp_SpecialHi_80122098, and ftPp_SpecialHiThrow_1_Anim. It also corrected callback/function signatures in ftKb_Init.h and ftanim.h, notably giving ftAnim_80070458 a concrete Kirby animation-related signature.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "fighter-callbacks",
+      "prototype-cleanup"
+    ],
+    "systems": [
+      "fighter",
+      "ftKirby",
+      "ftPopo",
+      "ftanim"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftKirby/ftKb_Init.c",
+    "src/melee/ft/chara/ftKirby/ftKb_Init.h",
+    "src/melee/ft/chara/ftPopo/ftPp_SpecialS.c",
+    "src/melee/ft/chara/ftPopo/ftPp_SpecialS.h",
+    "src/melee/ft/ftanim.h"
+  ],
+  "what_changed": [
+    "Implemented ftKb_Init_UnkCallbackPairs0_1, checking Kirby hat state via fp->fv.kb.hat.x14.data and fp->fv.kb.hat.jobj before calling ftAnim_80070458(fp, &fp->fv.kb.x44, arg1).",
+    "Changed ftKb_Init_OnItemInvisible from a generic HSD_GObj signature and Fighter_OnItemInvisible wrapper call to a Fighter_GObj implementation that checks it_8026B2B4(fp->item_gobj) and conditionally calls ftAnim_80070CC4(gobj, 1).",
+    "Implemented ftPp_SpecialHiStart_0_Coll as a ground-collision check: if ft_800827A0(gobj) returns 0, it transitions through ftPp_SpecialHi_801217EC(gobj).",
+    "Implemented ftPp_SpecialHiThrow_0_Coll with the same ft_800827A0(gobj) == 0 collision pattern, transitioning through ftPp_SpecialHi_80121CE0(gobj).",
+    "Implemented ftPp_SpecialHi_80122098 by preserving fp->cur_anim_frame while calling Fighter_ChangeMotionState(gobj, 0x15E, 0, fp->cur_anim_frame, 1.0f, 0.0f, NULL).",
+    "Implemented ftPp_SpecialHiThrow_1_Anim to end the throw animation by calling ft_8008A2BC(gobj) when ftAnim_IsFramesRemaining(gobj) returns 0.",
+    "Added multiple ftPp_SpecialS.h prototypes for Popo SpecialHi start/throw IASA, Coll, transition, and animation helpers.",
+    "Refined header prototypes: ftKb_Init_UnkDemoCallbacks0 now names parameters kind, out1, and out2; ftKb_SpecialN_800F1420 now takes a u32* arg1; ftAnim_80070458 changed from UNK_RET/UNK_PARAMS to void ftAnim_80070458(Fighter*, struct KirbyFV_x44_t*, int)."
+  ],
+  "smart_moves": [
+    "Used existing fighter helper idioms rather than open-coding state transitions: ft_800827A0 for ground/collision checks, Fighter_ChangeMotionState for action-state transitions, ftAnim_IsFramesRemaining for animation completion, and ft_8008A2BC for post-animation cleanup/transition.",
+    "The ftAnim_80070458 prototype was made concrete only once call-site evidence identified its arguments: Fighter*, KirbyFV_x44_t*, and int. This improves type safety for future Kirby hat animation work.",
+    "The Popo collision callbacks share a minimal matching pattern, each dispatching to the appropriate transition helper only when ft_800827A0 reports the expected condition.",
+    "The Kirby hat callback guards both data availability and JObj absence before invoking ftAnim_80070458, which documents a useful invariant for similar Kirby hat-related callbacks.",
+    "Header additions in ftPp_SpecialS.h expose newly matched local helpers by address and name, improving cross-file reuse and future matching context."
+  ],
+  "decomp_lessons": [
+    "Small fighter callbacks often match as thin wrappers around established engine helpers; looking for repeated patterns in neighboring action callbacks can reveal the correct control flow.",
+    "For collision callbacks, a common form is `if (ft_800827A0(gobj) == 0) { transition(gobj); }`; this pattern should be checked when matching similar grounded special-state collision functions.",
+    "For animation callbacks, `if (ftAnim_IsFramesRemaining(gobj) == 0)` is a strong signal for end-of-animation transition logic.",
+    "Kirby hat/init code may require inspecting nested fighter-vars such as `fp->fv.kb.hat.x14.data`, `fp->fv.kb.hat.jobj`, and `fp->fv.kb.x44` to recover correct calls into ftanim helpers.",
+    "Replacing UNK_PARAMS prototypes with concrete signatures can be part of matching a function, especially when a newly matched call site provides enough argument evidence.",
+    "Preserving `fp->cur_anim_frame` in Fighter_ChangeMotionState calls can be necessary for matching mid-animation action-state transitions."
+  ],
+  "naming_conventions": [
+    "Fighter callback names follow character/module/action/phase suffixes such as ftPp_SpecialHiStart_0_Coll, ftPp_SpecialHiThrow_1_Anim, and ftKb_Init_UnkCallbackPairs0_1.",
+    "Address-suffixed unknown helpers remain in use when behavior is not semantically named, e.g. ftPp_SpecialHi_80122098, ftPp_SpecialHi_801217EC, and ftKb_SpecialN_800F1420.",
+    "Header comments retain hex address tags such as /* 122098 */ next to function declarations.",
+    "Newly clarified prototypes should prefer meaningful parameter names where known, as shown by ftKb_Init_UnkDemoCallbacks0(int kind, int* out1, int* out2).",
+    "Use Fighter_GObj* for fighter object callbacks when the function immediately treats the gobj as a fighter object."
+  ],
+  "assembly_or_matching_tactics": [
+    "Convert placeholder `/// #function` stubs into minimal control-flow wrappers around known helpers when the assembly pattern is a simple conditional branch and call.",
+    "Use return-value comparisons exactly, e.g. `ft_800827A0(gobj) == 0` and `ftAnim_IsFramesRemaining(gobj) == 0`, to match branch structure.",
+    "For Fighter_ChangeMotionState matches, preserve literal action-state IDs and float constants; this PR used state `0x15E`, flags `0`, current frame, rate `1.0f`, blend/start value `0.0f`, and NULL.",
+    "Infer missing function prototypes from successful call sites, as with ftAnim_80070458(Fighter*, struct KirbyFV_x44_t*, int).",
+    "Use `GET_FIGHTER(gobj)` once and access fighter vars through the resulting `Fighter* fp` to match common fighter-source style and expected codegen."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "The only human text excerpt is the PR summary listing five functions matched at 100%; no reviewer rationale or requested changes were available."
+  ],
+  "searchable_terms": [
+    "pr-2050",
+    "ftKirby",
+    "ftKb_Init",
+    "ftKb_Init_UnkCallbackPairs0_1",
+    "ftKb_Init_OnItemInvisible",
+    "ftKb_Init_UnkDemoCallbacks0",
+    "ftKb_SpecialN_800F1420",
+    "KirbyHatStruct",
+    "KirbyFV_x44_t",
+    "ftAnim_80070458",
+    "ftAnim_80070CC4",
+    "ftPopo",
+    "ftPp_SpecialS",
+    "ftPp_SpecialHiStart_0_Coll",
+    "ftPp_SpecialHiThrow_0_Coll",
+    "ftPp_SpecialHi_80122098",
+    "ftPp_SpecialHiThrow_1_Anim",
+    "ftPp_SpecialHi_801217EC",
+    "ftPp_SpecialHi_80121CE0",
+    "ft_800827A0",
+    "Fighter_ChangeMotionState",
+    "ftAnim_IsFramesRemaining",
+    "ft_8008A2BC",
+    "GET_FIGHTER",
+    "Fighter_GObj",
+    "decomp matching",
+    "fighter callbacks",
+    "Popo SpecialHi",
+    "Kirby hat"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching ftAnim_80070458 to see whether the KirbyFV_x44_t signature was reused or further refined.",
+    "Search for other ftPp_SpecialHi collision callbacks using ft_800827A0 to propagate the same matching pattern.",
+    "Search for Kirby hat callbacks that check fp->fv.kb.hat.x14.data and fp->fv.kb.hat.jobj before animation setup.",
+    "Review surrounding ftPp_SpecialHi_801217EC and ftPp_SpecialHi_80121CE0 implementations for opportunities to name the transition helpers semantically.",
+    "Check subsequent ftKb_SpecialN_800F1420 work for confirmation of the u32* arg1 prototype."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

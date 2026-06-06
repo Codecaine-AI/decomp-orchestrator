@@ -1,0 +1,153 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1164",
+  "pr": {
+    "number": 1164,
+    "title": "Split plstale into a new \"plattack\" and match some of the functions, setup appropriate function prototypes",
+    "url": "https://github.com/doldecomp/melee/pull/1164",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-01-31T23:41:21Z",
+    "merged_at": "2024-01-31T23:45:39Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Separated the latter 0x80037590-0x80037B2C portion of plstale into a new plattack unit, renamed the affected symbols from generic pl_* names to plStale_* and plAttack_*, added initial C matches for small stale/attack counter helpers, introduced a StaleMoveTable struct, and updated build/split/symbol metadata plus callsites across fighter, item, and player code.",
+  "change_classification": {
+    "primary_type": "module-split-and-decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "naming",
+      "types-structs",
+      "build-config",
+      "asm-symbol-renaming"
+    ],
+    "systems": [
+      "player",
+      "plstale",
+      "plattack",
+      "fighter",
+      "ftcoll",
+      "item",
+      "config"
+    ]
+  },
+  "key_files": [
+    "asm/melee/pl/plstale.s",
+    "asm/melee/pl/plattack.s",
+    "src/melee/pl/plstale.c",
+    "src/melee/pl/plattack.c",
+    "src/melee/pl/plstale.h",
+    "src/melee/pl/plattack.h",
+    "src/melee/pl/player.c",
+    "src/melee/pl/player.h",
+    "src/melee/pl/types.h",
+    "src/melee/pl/pl_0371.h",
+    "config/GALE01/splits.txt",
+    "config/GALE01/symbols.txt",
+    "configure.py",
+    "obj_files.mk",
+    "src/melee/ft/ft_0881.c",
+    "asm/melee/ft/ft_0881.s",
+    "asm/melee/ft/ft_0892.s",
+    "asm/melee/ft/ft_0D14.s",
+    "asm/melee/ft/ftcoll.s",
+    "asm/melee/it/it_2725.s",
+    "asm/melee/pl/plbonus.s"
+  ],
+  "what_changed": [
+    "Split the original plstale text range in config/GALE01/splits.txt: plstale.c now covers 0x8003715C-0x80037590 and new plattack.c covers 0x80037590-0x80037B2C.",
+    "Moved the corresponding assembly from asm/melee/pl/plstale.s into a new asm/melee/pl/plattack.s; plstale.s deleted roughly the moved attack-counter portion.",
+    "Renamed symbols in config/GALE01/symbols.txt from pl_8003715C/pl_80037168/pl_80037208/pl_8003722C/pl_800373CC to plStale_* and from pl_80037590/pl_8003759C/pl_80037B08 to plAttack_*.",
+    "Updated assembly callsites in fighter, collision, item, and bonus code to branch to plStale_* or plAttack_* rather than the old generic pl_* names.",
+    "Added C implementations for plStale_8003715C, plStale_80037168, and plStale_80037208 in src/melee/pl/plstale.c.",
+    "Added C implementations for plAttack_80037590 and plAttack_80037B08 in src/melee/pl/plattack.c.",
+    "Added src/melee/pl/plstale.h and src/melee/pl/plattack.h, and removed stale-related prototypes from the broad placeholder header src/melee/pl/pl_0371.h.",
+    "Introduced StaleMoveTable in src/melee/pl/types.h and replaced individual StaticPlayer stale_move_table_current_write_index and stale_move_index_0..9 fields with a single stale_moves member.",
+    "Changed Player_GetStaleMoveTableIndexPtr and Player_GetStaleMoveTableIndexPtr2 to return StaleMoveTable* instead of s32*, returning &player->stale_moves.",
+    "Updated Player_InitAllPlayers to call plStale_8003715C and plAttack_80037590.",
+    "Added plattack.c to configure.py as a NonMatching object and added asm/melee/pl/plattack.s.o to obj_files.mk.",
+    "Adjusted an archive local in Player_80036DD8 from int* to void**, likely to match lbArchive_80016C64 usage."
+  ],
+  "smart_moves": [
+    "The PR split the code at a clean address boundary and mirrored that split in splits.txt, symbols.txt, assembly files, source files, and object lists, avoiding a half-renamed module state.",
+    "Renaming by subsystem intent, plStale_* versus plAttack_*, made callsites more searchable and reduced ambiguity from the old pl_* prefix.",
+    "Extracting StaleMoveTable converted a run of manually named stale_move_index fields into a typed aggregate with documented current_index and 10 entries, making the matched reset loop in plStale_80037168 straightforward.",
+    "The small 16-bit counter helpers were good early matching targets: both stale and attack counters initialize to 1, increment as u16 values, skip zero on wraparound, and return the previous value.",
+    "Moving prototypes out of pl_0371.h into focused plstale/plattack headers reduced dependence on placeholder declarations and gave dependent files a clearer include path.",
+    "The build configuration was updated in both configure.py and obj_files.mk, which is important when a source split has both nonmatching C and assembly object implications."
+  ],
+  "decomp_lessons": [
+    "When a contiguous assembly blob actually contains different logical systems, split it only after updating split ranges, symbol names, object lists, assembly filenames, and all cross-module callsites together.",
+    "Use address-preserving subsystem prefixes such as plStale_80037208 and plAttack_80037B08 when semantics are known but final descriptive names are not yet available.",
+    "Replacing offset-based field runs with a small struct can make reset/clear loops expressible in C while preserving layout; here StaticPlayer offset 0xBC became StaleMoveTable stale_moves.",
+    "Counter helpers that avoid returning or storing zero after u16 wrap can often be matched with a local `before` variable, increment, zero check, and return-before pattern.",
+    "Do not leave old prototypes in catchall placeholder headers after focused headers exist; stale declarations can hide type mismatches during later decomp work.",
+    "For module splits, remember that sbss ownership may need to move too: this PR assigned player.c 0x804D6470-0x804D6478, plstale.c 0x804D6478-0x804D6480, and plattack.c 0x804D6480-0x804D6488."
+  ],
+  "naming_conventions": [
+    "Use camel-style subsystem prefixes with retained addresses: plStale_8003715C, plStale_80037208, plAttack_80037590, plAttack_80037B08.",
+    "New file/module names follow lowercase subsystem names: plstale.c/plstale.h and plattack.c/plattack.h.",
+    "Typed player table name used in StaticPlayer is `stale_moves`; the struct type is `StaleMoveTable`.",
+    "StaleMoveTable fields are `current_index`, `StaleMoves[i].move_id`, and `StaleMoves[i].num_action_states`.",
+    "The old broad pl_0371.h prototypes were removed once plstale.h and plattack.h were introduced.",
+    "Evidence caveat: the diff excerpt for plattack.h shows `u16 plStale_80037B08(void);` while plattack.c and symbols.txt use `plAttack_80037B08`; future work should verify header prototypes exactly match definitions."
+  ],
+  "assembly_or_matching_tactics": [
+    "Preserved branch targets in assembly while renaming callee symbols, e.g. calls from ft_0881.s and it_2725.s to pl_80037208 became plStale_80037208, and calls to pl_80037B08 became plAttack_80037B08.",
+    "Matched plStale_80037208 and plAttack_80037B08 with the same u16 increment/wrap-skip-zero idiom: store `before`, increment global, if the global becomes zero set it to one, then return `before`.",
+    "Matched plStale_80037168 by using Player_GetStaleMoveTableIndexPtr(slot), setting current_index to zero, and looping over 10 stale move entries to clear move_id and num_action_states.",
+    "Kept larger plAttack_8003759C in assembly/nonmatching while extracting smaller confirmed functions first, limiting matching risk.",
+    "Updated .sbss split boundaries alongside text split boundaries so globals like unk_804D6478 and unk_804D6480 belong to the intended module."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "type": "tooling-suggestion",
+      "comment": "Suggested the VSCode EditorConfig extension: \"This thing might make your life easier assuming you're using VSCode.\"",
+      "lesson": "No substantive code-review feedback was captured in the slice; the only human comment was an editor/tooling suggestion."
+    }
+  ],
+  "searchable_terms": [
+    "pr1164",
+    "plstale split",
+    "plattack",
+    "plStale_8003715C",
+    "plStale_80037168",
+    "plStale_80037208",
+    "plStale_8003722C",
+    "plStale_800373CC",
+    "plAttack_80037590",
+    "plAttack_8003759C",
+    "plAttack_80037B08",
+    "StaleMoveTable",
+    "StaticPlayer stale_moves",
+    "Player_GetStaleMoveTableIndexPtr",
+    "Player_GetStaleMoveTableIndexPtr2",
+    "Player_GetTotalAttackCountPtr",
+    "unk_804D6478",
+    "unk_804D6480",
+    "stale move table",
+    "total attack count",
+    "config GALE01 splits",
+    "symbols.txt rename",
+    "obj_files plattack",
+    "nonmatching plattack"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename plStale_* or plAttack_* symbols to final descriptive names.",
+    "Find later fixes to src/melee/pl/plattack.h to confirm whether `plStale_80037B08` was a header typo in this slice.",
+    "Search for further StaleMoveTable layout refinements or field renames after PR 1164.",
+    "Search for PRs that match plAttack_8003759C, the large attack table initialization/reset routine left nonmatching here.",
+    "Check whether unk_804D6478 and unk_804D6480 later receive semantic names."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

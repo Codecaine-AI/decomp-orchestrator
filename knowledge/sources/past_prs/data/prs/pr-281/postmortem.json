@@ -1,0 +1,127 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-281",
+  "pr": {
+    "number": 281,
+    "title": "Match some ftMario functions",
+    "url": "https://github.com/doldecomp/melee/pull/281",
+    "state": "MERGED",
+    "author": "nicolasrmerz",
+    "created_at": "2022-02-19T03:01:11Z",
+    "merged_at": "2022-02-19T04:56:11Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched several early Mario fighter functions by moving them from asm/melee/ft/chara/ftmario.s into new C source and header files, then wiring ftmario.o into the source object lists. The PR covered ftMario_OnDeath, func_800E0920, ftMario_OnLoad, an inline-asm wrapper label lbl_800E0A00, and func_800E0A20. It also introduced a partial ftMarioAttributes struct sufficient for the matched code. Review feedback caught a copied header guard typo that initially referenced ftness instead of ftmario; the author fixed it.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "fighter",
+      "headers",
+      "build-system",
+      "inline-asm"
+    ],
+    "systems": [
+      "fighter",
+      "ftmario",
+      "asm",
+      "repo-root",
+      "makefiles"
+    ]
+  },
+  "key_files": [
+    "asm/melee/ft/chara/ftmario.s",
+    "src/melee/ft/chara/ftmario.c",
+    "src/melee/ft/chara/ftmario.h",
+    "e_files.mk",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Removed 163 lines of hand-written/disassembled assembly from asm/melee/ft/chara/ftmario.s for the matched Mario functions at the start of the file, leaving later asm beginning at func_800E0B00.",
+    "Added src/melee/ft/chara/ftmario.c with C implementations for ftMario_OnDeath, func_800E0920, ftMario_OnLoad, and func_800E0A20.",
+    "Kept lbl_800E0A00 as an asm function inside ftmario.c rather than converting it to normal C; it simply calls func_800E1368 with the original prologue/epilogue sequence.",
+    "Added src/melee/ft/chara/ftmario.h with includes, prototypes, and a partial ftMarioAttributes struct containing padding through offset 0x14 and field x14.",
+    "Updated e_files.mk to add $(EPILOGUE_DIR)/src/melee/ft/chara/ftmario.o to EPILOGUE_UNSCHEDULED.",
+    "Updated obj_files.mk to add $(BUILD_DIR)/src/melee/ft/chara/ftmario.o before the remaining asm ftmario.o, allowing this file to be partially decompiled while preserving unmatched asm in the same character module."
+  ],
+  "smart_moves": [
+    "Used a partial character-specific attributes struct with explicit padding and the one observed field x14 instead of over-claiming the full Mario attribute layout.",
+    "Preserved matching for a troublesome tiny wrapper by keeping lbl_800E0A00 in inline asm, avoiding wasted effort or compiler mismatch risk for a function that only branches to func_800E1368.",
+    "Split ftmario into both source and asm object entries, a common partial-decomp tactic when only a prefix of an asm file is matched and later functions remain in assembly.",
+    "Expressed the repeated special-attributes copy as typed struct assignment: copying ft->x10C_ftData->ext_attr into ft->x2D8_specialAttributes2 and then assigning ft->x2D4_specialAttributes to that buffer.",
+    "Used #pragma push / #pragma peephole on around func_800E0A20, indicating a compiler-codegen tactic needed for the switch/call structure to match the original assembly."
+  ],
+  "decomp_lessons": [
+    "For fighter OnLoad functions, watch for character special attributes being copied from ftData->ext_attr into x2D8_specialAttributes2, then stored through x2D4_specialAttributes; this pattern can often be modeled with a character-specific attribute struct even if only a few offsets are known.",
+    "Header guards are easy to mis-copy when cloning another fighter header; reviewers expect the guard name to match the file/module, e.g. _ftmario_h_ for ftmario.h rather than _ftness_h_.",
+    "Partial decompilation can coexist with an existing asm file by adding a src object while keeping the asm object in obj_files.mk; remove only the matched functions from the asm file.",
+    "Item/resource initialization in fighter OnLoad may access ftDataInfo->x48_items and call item/resource helpers such as func_8026B3F8 with constants or character attributes.",
+    "Switch reconstruction for item-type behavior may require attention to exact case ordering and compiler behavior; func_800E0A20 maps func_8026B320 results 1..4 to func_80070FB4 third arguments 1, 0, 2, and 3 respectively, then conditionally calls func_80070C48 when arg1 is nonzero."
+  ],
+  "naming_conventions": [
+    "Character file/header names follow lowercase fighter module names: ftmario.c and ftmario.h.",
+    "Exported lifecycle hooks use the character name with capitalized character portion, as in ftMario_OnDeath and ftMario_OnLoad.",
+    "Unknown functions retained address-based names such as func_800E0920, func_800E0A20, func_800E1368, func_8026B3F8, func_8026B2B4, and func_8026B320.",
+    "Labels that remained as standalone asm wrappers can retain lbl_ address names, e.g. lbl_800E0A00.",
+    "The new character attributes typedef follows the pattern ftMarioAttributes, with unknown fields represented using offset-style names and padding arrays such as x0_padding, x14, and x14_padding.",
+    "Header guard convention for this file is _ftmario_h_."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed matched assembly from ftmario.s while leaving the remaining unmatched asm in place starting at func_800E0B00.",
+    "Used inline asm with nofralloc for lbl_800E0A00 to preserve exact stack frame and branch sequence.",
+    "Used #pragma push, #pragma peephole on, and #pragma pop around func_800E0A20, implying peephole optimization was necessary or helpful for matching.",
+    "Modeled a 0x84-byte attribute block with padding so struct assignment produced the original copy loop behavior for the special attributes.",
+    "Maintained both $(BUILD_DIR)/src/melee/ft/chara/ftmario.o and $(BUILD_DIR)/asm/melee/ft/chara/ftmario.o in TEXT_O_FILES for a partial source/asm split."
+  ],
+  "review_feedback": [
+    "PsiLupan reviewed src/melee/ft/chara/ftmario.h and said: \"Fix the define here to be ftmario\" because the new header guard hunk initially showed _ftness_h_.",
+    "nicolasrmerz replied: \"Good catch, fixed\". The final diff excerpt shows the corrected guard as #ifndef _ftmario_h_ / #define _ftmario_h_."
+  ],
+  "searchable_terms": [
+    "PR281",
+    "ftMario",
+    "ftmario",
+    "ftMario_OnDeath",
+    "ftMario_OnLoad",
+    "func_800E0920",
+    "lbl_800E0A00",
+    "func_800E0A20",
+    "func_800E1368",
+    "func_80074A4C",
+    "func_8026B3F8",
+    "func_8026B2B4",
+    "func_8026B320",
+    "func_80070FB4",
+    "func_80070C48",
+    "ftMarioAttributes",
+    "x2D8_specialAttributes2",
+    "x2D4_specialAttributes",
+    "x10C_ftData",
+    "ext_attr",
+    "x48_items",
+    "x1974_heldItem",
+    "x2224_flag",
+    "_ftmario_h_",
+    "peephole",
+    "nofralloc",
+    "partial decomp",
+    "obj_files.mk",
+    "e_files.mk"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename or flesh out ftMarioAttributes fields beyond x14.",
+    "Find other fighter OnLoad functions that copy ext_attr into x2D8_specialAttributes2 using struct assignment for reusable matching patterns.",
+    "Search for other PRs using #pragma peephole on around switch statements to understand MWCC matching behavior.",
+    "Check whether lbl_800E0A00 was later converted from inline asm to C or given a semantic name.",
+    "Review neighboring Mario functions after func_800E0B00 for continued ftmario.s decompilation patterns."
+  ],
+  "confidence": 0.94,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

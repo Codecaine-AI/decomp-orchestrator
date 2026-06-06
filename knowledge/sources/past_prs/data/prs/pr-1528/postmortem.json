@@ -1,0 +1,109 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1528",
+  "pr": {
+    "number": 1528,
+    "title": "Match DrawRectangle",
+    "url": "https://github.com/doldecomp/melee/pull/1528",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-05-27T00:28:25Z",
+    "merged_at": "2025-05-27T00:35:11Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the previously stubbed sysdolphin baselib particle.c function DrawRectangle by implementing direct GX immediate-mode rectangle drawing. The function begins a 4-vertex primitive, computes max coordinates from min plus width/height, reads a GXColor into local RGBA byte temporaries, writes four position/color vertices through WGPIPE in clockwise order, and ends with GXEnd.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "function-match",
+      "graphics",
+      "gx-immediate-mode",
+      "stub-replacement"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "particle",
+      "GX"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/particle.c"
+  ],
+  "what_changed": [
+    "Replaced the placeholder marker `/// #DrawRectangle` in `src/sysdolphin/baselib/particle.c` with a concrete `void DrawRectangle(f32 x_min, f32 y_min, f32 w, f32 h, GXColor* color)` implementation.",
+    "Added GX-related includes: `<dolphin/gx/__types.h>` and `<dolphin/gx/GXGeometry.h>`.",
+    "Implemented rectangle drawing using `GXBegin(0x80, 0, 4)`, four vertex writes through `WGPIPE`, and `GXEnd()`.",
+    "Computed `x_max = x_min + w` and `y_max = y_min + h` before emitting vertices.",
+    "Loaded `color->a`, `color->b`, `color->g`, and `color->r` into local `u8` temporaries, then emitted color bytes to `WGPIPE` as r, g, b, a for each vertex.",
+    "Emitted the rectangle corners in clockwise order starting from top-left: `(x_min, y_min)`, `(x_max, y_min)`, `(x_max, y_max)`, `(x_min, y_max)`."
+  ],
+  "smart_moves": [
+    "Used raw `WGPIPE` writes rather than higher-level wrappers, which is often necessary for matching GX immediate-mode codegen in Melee.",
+    "Preserved explicit local temporaries for `r`, `g`, `b`, and `a` instead of repeatedly dereferencing `GXColor`; this likely reflects the original compiler's load ordering and register allocation requirements.",
+    "Loaded the color fields in the observed-compatible order `a`, `b`, `g`, `r`, while still writing them to the graphics FIFO as RGBA.",
+    "Kept the primitive setup minimal with `GXBegin(0x80, 0, 4)` and direct four-vertex emission, matching a simple filled rectangle path.",
+    "Documented the intended vertex order in a comment, making the otherwise repetitive FIFO writes easier to audit."
+  ],
+  "decomp_lessons": [
+    "For GX immediate-mode matching, exact FIFO write order matters: position floats and color bytes should be emitted in the same sequence as the target assembly.",
+    "Local byte temporaries can be important even when they appear redundant, especially when struct field load order affects matching.",
+    "A simple rectangle helper may not call abstraction helpers; direct `WGPIPE.f32` and `WGPIPE.u8` writes can be the matching representation.",
+    "When replacing a decomp stub marker, include only the headers needed to expose the GX types and functions used by the matched implementation.",
+    "Coordinate naming using `x_min`, `y_min`, `x_max`, and `y_max` makes the geometry reconstruction explicit and searchable for future graphics matches."
+  ],
+  "naming_conventions": [
+    "Function name preserved as `DrawRectangle`, matching the existing stub marker.",
+    "Rectangle bounds are named `x_min`, `y_min`, `x_max`, and `y_max`.",
+    "Input size parameters are named `w` and `h`.",
+    "The color pointer parameter is named `color`; individual channel temporaries are named `r`, `g`, `b`, and `a`.",
+    "A local `GXColor c` appears in the implementation but is not used in the diff excerpt; evidence does not explain whether it was required for matching or incidental."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use `GXBegin(0x80, 0, 4)` for a four-vertex primitive rather than symbolic enum names when the raw constant is the matched form shown in the diff.",
+    "Write vertex positions directly as `WGPIPE.f32` pairs followed by four `WGPIPE.u8` color channel writes.",
+    "Compute `x_max` and `y_max` after `GXBegin`, matching the order shown in the implemented source.",
+    "Read `GXColor` channels into locals once and reuse those locals for all four vertices.",
+    "Emit corners clockwise starting at top-left to match the target vertex order."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided excerpt.",
+    "The PR had one issue comment according to the context counts, but its body was not included, so no feedback can be extracted."
+  ],
+  "searchable_terms": [
+    "DrawRectangle",
+    "particle.c",
+    "sysdolphin",
+    "baselib",
+    "GXBegin",
+    "GXEnd",
+    "WGPIPE",
+    "GXColor",
+    "GXGeometry",
+    "immediate mode",
+    "rectangle",
+    "x_min",
+    "y_min",
+    "x_max",
+    "y_max",
+    "RGBA",
+    "fifo",
+    "0x80",
+    "DrawASCII"
+  ],
+  "follow_up_queries": [
+    "Find other unmatched functions in `src/sysdolphin/baselib/particle.c` near `DrawASCII`.",
+    "Search for other direct `WGPIPE` rectangle or quad drawing helpers that may share the same color load and vertex emission pattern.",
+    "Check whether the unused local `GXColor c` in `DrawRectangle` is necessary for matching or can be removed without affecting the match.",
+    "Compare other GX immediate-mode matches that use `GXBegin(0x80, 0, 4)` to confirm primitive naming and argument conventions."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

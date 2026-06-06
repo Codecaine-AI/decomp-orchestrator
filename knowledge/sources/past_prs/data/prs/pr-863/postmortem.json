@@ -1,0 +1,148 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-863",
+  "pr": {
+    "number": 863,
+    "title": "Partially match `ftCo_ItemThrow`",
+    "url": "https://github.com/doldecomp/melee/pull/863",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-25T01:38:41Z",
+    "merged_at": "2023-05-25T01:44:47Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Partially decompiled the common fighter item-throw code by introducing `src/melee/ft/chara/ftCommon/ftCo_ItemThrow.c` and its header, moving most of `asm/melee/ft/ft_08A4.s` into C or guarded inline assembly. The PR report shows the new file at 88.32% matched overall, with many small callbacks fully matched and larger decision/throw routines still partial or retained under `MUST_MATCH`. It also wired the new item-throw header into many common attack, guard, damage, Donkey heavy-item, Link, Peach, Samus, Ness, and Yoshi files, added motion-variable structs for item throw state, updated object-file ordering, and deleted the old `ftitempickup.c` build target.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-field-discovery",
+      "build-system"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "item",
+      "asm",
+      "melee-core"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_ItemThrow.c",
+    "src/melee/ft/chara/ftCommon/ftCo_ItemThrow.h",
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/chara/ftCommon/types.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/ft_081B.c",
+    "src/melee/ft/ftitempickup.c",
+    "src/melee/it/item.c",
+    "src/melee/it/item.h",
+    "src/melee/pl/pl_0371.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Added a new `ftCo_ItemThrow.c` implementation containing item-throw transition checks, motion-state selection, animation/IASA/physics/collision callbacks, throw release logic, and item interaction calls.",
+    "Removed roughly 1700 lines from `asm/melee/ft/ft_08A4.s`, leaving only a small amount of assembly/data behind, and replaced the `ftitempickup.c.o` object in `obj_files.mk` with `ftCo_ItemThrow.c.o`.",
+    "Added `ftCo_ItemThrow.h` with prototypes for functions such as `ft_80094E54`, `ft_80094EA4`, `ft_80095328`, `ft_80095744`, `ft_800957F4`, `ftCo_ItemThrow_Anim`, `ftCo_ItemThrow_IASA`, `ftCo_ItemThrow_Phys`, `ftCo_LightThrowDash_Phys`, `ftCo_LightThrowAir_Phys`, and item-throw collision callbacks.",
+    "Added `ftCo_ItemThrowVars` and `ftCo_ItemThrow4Vars` to `union ftCommon_MotionVars`, documenting offsets around `fp+2340` through `fp+2360`, including fields such as `facing_dir`, `x20`, `unk_timer`, `anim_spd`, and a `Vec3`.",
+    "Updated many fighter action files to include `ftCo_ItemThrow.h`, reflecting that item throw checks are used from attacks, guard/damage states, Donkey heavy-item states, and character-specific item-related moves.",
+    "Renamed or surfaced fighter/item fields in supporting files; examples visible in the diff include replacing raw item pointer uses with `fp->item_gobj` and frame speed references with `fp->frame_spd_mul`.",
+    "The new code uses helper logic such as `getHeavyThrowMsid` and checks stick input, C-stick input, `p_ftCommonData` thresholds, fighter facing direction, and held item properties to select between light, heavy, forward/back/up/down, dash, air, and drop throw motion IDs.",
+    "Several routines remain partial or protected by `#if defined(MUST_MATCH) && !defined(WIP)` inline assembly, indicating the PR intentionally moved the file forward without fully matching every function."
+  ],
+  "smart_moves": [
+    "Introduced the module under the more precise common-fighter path `ft/chara/ftCommon/ftCo_ItemThrow.*` instead of leaving item-throw code buried in `ft_08A4.s` or `ftitempickup.c`.",
+    "Preserved matching progress with `MUST_MATCH` inline assembly blocks while also providing readable C alternatives for non-fully-matched functions, letting the project compile and keep exact codegen where needed.",
+    "Factored repeated heavy throw forward/back selection into a small helper, `getHeavyThrowMsid`, making the C intent clearer around `var_f31 * fp->facing_dir` checks.",
+    "Added motion-variable structs at known offsets instead of continuing to use only raw `0x2340`/`0x2360` field access, which improves future matching and field naming.",
+    "Moved constants from assembly `.sdata2` into guarded C constants under `MWERKS_GEKKO`, preserving compiler-specific constant emission needed for matching.",
+    "Used existing gameplay abstractions where available, including `fp->input`, `fp->motion_id`, `fp->item_gobj`, `p_ftCommonData`, `Fighter_ChangeMotionState`, `Item_8026ABD8`, `Item_8026AC74`, and `Item_8026AD20`."
+  ],
+  "decomp_lessons": [
+    "For large fighter action modules, partial migration is useful: match easy callbacks first, keep hard control-flow functions under `MUST_MATCH` assembly, and still land the new source/header structure.",
+    "Item-throw logic depends on both fighter input state and item behavior helpers such as `it_8026B30C`, `it_8026B334`, and `it_8026B2B4`; matching this area benefits from naming the held item pointer and item-specific speed/throw helpers early.",
+    "Motion variable unions should be extended with action-specific structs when repeated offsets become clear; this PR documents item throw state at `fp+2340` and related heavy/4-direction throw state.",
+    "Stick-angle decision trees can be made understandable by naming threshold data from `p_ftCommonData`, even when many fields remain generic offsets such as `x3C`, `x40`, `x98`, `xCC`, `xD0`, `xD4`, and `xD8`.",
+    "When replacing assembly with C, object-file ordering must be updated in `obj_files.mk`; this PR swaps out the old pickup object for the new common item-throw object.",
+    "Header fallout is broad for common fighter transitions: introducing a new common action header often requires include updates across attack, guard, damage, and character-specific state files."
+  ],
+  "naming_conventions": [
+    "`ftCo_` prefix is used for common fighter action functions and callbacks, e.g. `ftCo_ItemThrow_Anim`, `ftCo_ItemThrow_IASA`, `ftCo_ItemThrow_Phys`, `ftCo_LightThrowDash_Phys`, and `ftCo_HeavyThrow_Coll`.",
+    "Unidentified but address-stable functions remain named by address, e.g. `ft_80094E54`, `ft_80094EA4`, `ft_80095328`, `ft_80095744`, `ftCo_800958FC`, and `ftCo_80095EFC`.",
+    "Motion IDs use semantic enum names such as `ftCo_MS_HeavyThrowF4`, `ftCo_MS_HeavyThrowB4`, `ftCo_MS_HeavyThrowHi4`, `ftCo_MS_HeavyThrowLw4`, `ftCo_MS_LightThrowDash`, and `ftCo_MS_LightThrowDrop`.",
+    "Fighter fields are progressively renamed from offsets to semantic names where supported, such as `item_gobj`, `motion_id`, `facing_dir`, `frame_spd_mul`, and `co_attrs.jump_startup_time`.",
+    "Unknown motion-variable fields are kept with offset-style names such as `x4`, `x8`, `x20`, and `unk_timer` when evidence is insufficient for a real name."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `#if defined(MUST_MATCH) && !defined(WIP)` blocks with inline `asm` and `nofralloc` to preserve exact functions that were not yet matched in C.",
+    "Kept readable C versions in the `#else` side for partially matched functions, allowing iterative cleanup without losing a known-good assembly fallback.",
+    "Retained compiler-sensitive constants with `#ifdef MWERKS_GEKKO`, including float/double constants used for integer-to-float conversion and degree-to-radian conversion.",
+    "Explicitly modeled the stack in the header for an M2C-generated context struct `struct _m2c_stack_ftCo_80095EFC`, which helps when reconstructing stack-local `Vec3` layout.",
+    "Used temporary variables and sometimes `goto` labels in decompiled C to reproduce original branch structure in complex stick-threshold decision trees.",
+    "The PR report indicates strategic matching progress: many small callbacks are 100%, while large routines like `ftCo_80095A30`, `ftCo_80095EFC`, `ftCo_800958FC`, and `ft_80095328` remain lower-percentage partial matches."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice, so there is no direct reviewer feedback to extract."
+  ],
+  "searchable_terms": [
+    "PR863",
+    "ftCo_ItemThrow",
+    "ft_08A4",
+    "ftitempickup",
+    "ft_80094E54",
+    "ft_80094EA4",
+    "ft_80095328",
+    "ft_80095744",
+    "ft_800957F4",
+    "ftCo_800958FC",
+    "ftCo_80095A30",
+    "ftCo_80095D5C",
+    "ftCo_80095EFC",
+    "ftCo_ItemThrow_Anim",
+    "ftCo_ItemThrow_IASA",
+    "ftCo_ItemThrow_Phys",
+    "ftCo_LightThrowDash_Phys",
+    "ftCo_LightThrowAir_Phys",
+    "ftCo_LightThrowDashDrop_Coll",
+    "ftCo_LightThrow_Coll",
+    "ftCo_LightThrowAir_Coll",
+    "ftCo_HeavyThrow_Coll",
+    "ftCo_MS_HeavyThrowF4",
+    "ftCo_MS_HeavyThrowB4",
+    "ftCo_MS_HeavyThrowHi4",
+    "ftCo_MS_HeavyThrowLw4",
+    "ftCo_MS_LightThrowDash",
+    "item_gobj",
+    "frame_spd_mul",
+    "ftCo_ItemThrowVars",
+    "ftCo_ItemThrow4Vars",
+    "p_ftCommonData",
+    "it_8026B30C",
+    "it_8026B334",
+    "it_8026B2B4",
+    "Item_8026ABD8",
+    "Item_8026AC74",
+    "Item_8026AD20",
+    "pl_8003E978",
+    "MUST_MATCH",
+    "MWERKS_GEKKO"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that fully match `ftCo_80095A30`, `ftCo_80095EFC`, `ft_80095328`, or remove the `MUST_MATCH` inline assembly in `ftCo_ItemThrow.c`.",
+    "Search subsequent changes to `ftCo_ItemThrowVars` and `ftCo_ItemThrow4Vars` for better names for `x20`, `unk_timer`, `anim_spd`, and the `Vec3 x8` field.",
+    "Check later item/fighter field renames around `fp->item_gobj`, `fp->frame_spd_mul`, `fp->x2214`, and `fp->x221F_flag.bits.b4`.",
+    "Find PRs that rename `p_ftCommonData` throw threshold fields such as `x3C`, `x40`, `x98`, `xCC`, `xD0`, `xD4`, and `xD8`.",
+    "Compare later object-file list changes to verify whether `ftitempickup.c` stayed deleted or was split/renamed elsewhere."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

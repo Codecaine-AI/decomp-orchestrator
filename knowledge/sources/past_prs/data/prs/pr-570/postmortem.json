@@ -1,0 +1,127 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-570",
+  "pr": {
+    "number": 570,
+    "title": "Finish matching GXMisc",
+    "url": "https://github.com/doldecomp/melee/pull/570",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-09-17T22:04:42Z",
+    "merged_at": "2022-09-17T23:42:18Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Finished matching the remaining GXMisc PE interrupt-related routines by replacing large inline assembly blocks with C implementations in src/dolphin/gx/GXMisc.c. The PR typed callback globals, introduced GXDrawDoneCallback, and decompiled GXTokenInterruptHandler, GXSetDrawDoneCallback, GXFinishInterruptHandler, and __GXPEInit while preserving OS context switching, interrupt masking, PE register acknowledgement, draw-done wakeups, and callback behavior.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "hardware-registers",
+      "interrupt-handlers",
+      "callback-typing"
+    ],
+    "systems": [
+      "src/dolphin/gx",
+      "GX",
+      "GXMisc",
+      "PE interrupts",
+      "Dolphin OS interrupt/context APIs"
+    ]
+  },
+  "key_files": [
+    "src/dolphin/gx/GXMisc.c"
+  ],
+  "what_changed": [
+    "Replaced inline assembly implementations of GXTokenInterruptHandler, GXSetDrawDoneCallback, GXFinishInterruptHandler, and __GXPEInit with C code.",
+    "Changed lbl_804D7320 from unk_t to a typed token callback pointer taking a u16.",
+    "Changed lbl_804D7324 from unk_t to a typed GXDrawDoneCallback pointer and added typedef void (*GXDrawDoneCallback)(void).",
+    "GXTokenInterruptHandler now reads the PE token value from __peReg[7], temporarily switches to a stack OSContext before invoking the token callback, restores the interrupted context, and acknowledges the PE token interrupt via __peReg[5].",
+    "GXSetDrawDoneCallback now returns the previous draw-done callback, disables interrupts before replacing the callback pointer, restores the prior interrupt state, and uses a typed callback signature.",
+    "GXFinishInterruptHandler now acknowledges the finish interrupt, sets lbl_804D7328[0] to GX_TRUE, invokes the draw-done callback under a temporary OSContext if present, restores the current context, and wakes GXDrawDoneThreadQueue.",
+    "__GXPEInit now registers PE token and finish interrupt handlers using OS_INTR_PI_PE_TOKEN and OS_INTR_PI_PE_FINISH, initializes GXDrawDoneThreadQueue, unmasks the related interrupt bits, and initializes PE interrupt status/control bits in __peReg[5]."
+  ],
+  "smart_moves": [
+    "Used function pointer typedefs instead of leaving callback storage as unk_t, making the callback contracts explicit while also supporting matching.",
+    "Preserved the interrupt-handler context dance from assembly: clear a temporary OSContext, set it current before calling user callbacks, clear it again, then restore the interrupted OSContext.",
+    "Kept callback replacement interrupt-safe by saving OSDisableInterrupts() return value and passing it back to OSRestoreInterrupts().",
+    "Mapped magic interrupt IDs from the assembly to named constants OS_INTR_PI_PE_TOKEN and OS_INTR_PI_PE_FINISH in __GXPEInit.",
+    "Expressed PE acknowledgement bit operations directly on __peReg[5], matching the original rlwinm/ori/sth behavior without introducing unsupported abstractions."
+  ],
+  "decomp_lessons": [
+    "For Dolphin interrupt handlers, the second argument can be the current OSContext; preserving and restoring it around callbacks is often necessary for matching and correctness.",
+    "Inline assembly that calls through a global function pointer can often be decompiled cleanly once the callback type is inferred from argument setup: token callback receives the u16 token value, draw-done callback receives no arguments.",
+    "When replacing callback setters, check whether the original assembly returns the previous function pointer and protects the global write with OSDisableInterrupts/OSRestoreInterrupts.",
+    "Hardware register bit acknowledgements may compile to compact C expressions such as __peReg[5] = __peReg[5] & ~mask | mask; avoid over-simplifying if the exact codegen matters.",
+    "Interrupt initialization code can become much clearer by replacing immediate interrupt numbers with existing named OS interrupt constants, if those constants produce the same values."
+  ],
+  "naming_conventions": [
+    "Introduced GXDrawDoneCallback for a void(void) callback type used by GXSetDrawDoneCallback and lbl_804D7324.",
+    "Used callback parameter name cb in GXSetDrawDoneCallback.",
+    "Used current_ctx for the interrupted OSContext argument in interrupt handlers.",
+    "Used temp_ctx for the temporary OSContext used during callback invocation.",
+    "Used temp_r31 for the token value formerly held in r31, preserving a register-derived temporary name rather than inventing a semantic name not proven by the diff.",
+    "Kept unresolved small-data globals as lbl_804D7320, lbl_804D7324, and lbl_804D7328 where the PR did not provide better symbol names."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted nofralloc inline assembly interrupt handlers into C with explicit __OSInterrupt unused and OSContext* current_ctx parameters.",
+    "Matched callback invocation by loading the global function pointer, checking it for NULL, setting a temporary current OS context, calling through the pointer, then restoring the original context.",
+    "Matched GXSetDrawDoneCallback by storing the previous callback before disabling interrupts, then returning it after restoring interrupts.",
+    "Matched PE register writes through halfword-indexed __peReg accesses: token and finish handlers use __peReg[5] acknowledgements, token handler reads __peReg[7].",
+    "Replaced hard-coded assembly interrupt IDs 0x12 and 0x13 with OS_INTR_PI_PE_TOKEN and OS_INTR_PI_PE_FINISH while preserving registration order.",
+    "Retained explicit bitwise expression structure in __GXPEInit for setting bits 2, 3, 0, and 1 on __peReg[5], likely to preserve code generation."
+  ],
+  "review_feedback": [
+    "No issue comments or review comments were included in the provided PR slice.",
+    "The slice reports one review, but no review body or actionable feedback is available."
+  ],
+  "searchable_terms": [
+    "Finish matching GXMisc",
+    "GXMisc.c",
+    "GXTokenInterruptHandler",
+    "GXSetDrawDoneCallback",
+    "GXFinishInterruptHandler",
+    "__GXPEInit",
+    "GXDrawDoneCallback",
+    "lbl_804D7320",
+    "lbl_804D7324",
+    "lbl_804D7328",
+    "GXDrawDoneThreadQueue",
+    "__peReg",
+    "PE_POKE_ZMODE_ID",
+    "GXPokeZMode",
+    "OSClearContext",
+    "OSSetCurrentContext",
+    "OSDisableInterrupts",
+    "OSRestoreInterrupts",
+    "OSWakeupThread",
+    "__OSSetInterruptHandler",
+    "OSInitThreadQueue",
+    "__OSUnmaskInterrupts",
+    "OS_INTR_PI_PE_TOKEN",
+    "OS_INTR_PI_PE_FINISH",
+    "__OSInterrupt",
+    "OSContext",
+    "GX_TRUE",
+    "PE token interrupt",
+    "PE finish interrupt",
+    "asm-to-c",
+    "callback setter",
+    "interrupt handler matching"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename lbl_804D7320, lbl_804D7324, or lbl_804D7328 to semantic GX callback/status names.",
+    "Check whether GXSetDrawDoneCallback's prototype was also updated in a header in another PR.",
+    "Search for other Dolphin GX interrupt handlers that use the same temporary OSContext callback pattern.",
+    "Compare this __GXPEInit bit-manipulation style with later hardware register matching cleanups."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

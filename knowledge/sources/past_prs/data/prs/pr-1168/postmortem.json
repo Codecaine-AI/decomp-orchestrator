@@ -1,0 +1,147 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1168",
+  "pr": {
+    "number": 1168,
+    "title": "itcerebi",
+    "url": "https://github.com/doldecomp/melee/pull/1168",
+    "state": "MERGED",
+    "author": "ncough",
+    "created_at": "2024-02-01T07:51:03Z",
+    "merged_at": "2024-02-01T09:24:19Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Decompiled the Celebi item file `src/melee/it/items/itcerebi.c` to a reported 100% match, replacing the 325-line assembly file and moving the object from nonmatching ASM to matching C in the build. The PR added C implementations for the item state table and behavior callbacks, adjusted symbol scopes for newly local static functions and float literals, and corrected/added item helper prototypes needed by the C translation.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "build-config",
+      "symbols"
+    ],
+    "systems": [
+      "item",
+      "pokemon-items",
+      "effects",
+      "stage",
+      "baselib-random",
+      "config",
+      "build"
+    ]
+  },
+  "key_files": [
+    "src/melee/it/items/itcerebi.c",
+    "asm/melee/it/items/itcerebi.s",
+    "config/GALE01/symbols.txt",
+    "src/melee/it/it_2725.h",
+    "configure.py",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted `asm/melee/it/items/itcerebi.s` and added a 158-line C implementation in `src/melee/it/items/itcerebi.c`.",
+    "Marked `melee/it/items/itcerebi.c` as `Object(Matching, ...)` in `configure.py` instead of `Object(NonMatching, ...)`.",
+    "Changed `obj_files.mk` so the build uses `$(BUILD_DIR)/src/melee/it/items/itcerebi.c.o` instead of `$(BUILD_DIR)/asm/melee/it/items/itcerebi.s.o`.",
+    "Implemented `ItemStateTable it_803F80F8[]` with three states and callback triples matching the old data table.",
+    "Implemented visible item entry points `it_802D3EF8` and `it_802D3F4C`, plus static internal callbacks around animation state changes, physics checks, effect spawning, and destroy/transition logic.",
+    "Changed the formerly global internal Celebi callbacks `it_802D3F6C`, `it_802D3FA0`, `it_802D4024`, `it_802D4064`, `it_802D4068`, `it_802D4070`, `it_802D40FC`, `it_802D4140`, `it_802D4160`, `it_802D4168`, `it_802D41DC`, `it_802D4200`, and `it_802D429C` to local symbol scope in `config/GALE01/symbols.txt`.",
+    "Changed float constants at `.sdata2:0x804DD4C0` and `.sdata2:0x804DD4C4` from global names `it_804DD4C0` and `it_804DD4C4` to local labels `@169` and `@175`.",
+    "Updated `src/melee/it/it_2725.h` by adding the prototype `it_80273670(HSD_GObj*, int, float)` and correcting `it_8027A09C(Item_GObj*)` from `void` to `bool`."
+  ],
+  "smart_moves": [
+    "Kept internal behavior callbacks as `static`, then reflected that in `symbols.txt` by changing their scope to local; this avoids exporting implementation details that are only referenced by the local state table or callbacks.",
+    "Used existing item access macros and conventions such as `GET_ITEM(gobj)`, `GET_JOBJ(gobj)`, `Item_GObj*`, `Item*`, and `ItemStateTable` rather than open-coding object layout access.",
+    "Preserved the old assembly callback structure in clear C: state callbacks return `bool` where the item engine expects destruction/transition checks, while animation/physics callbacks return `void`.",
+    "Matched repeated hitlag/effect setup by assigning `item->entered_hitlag = efLib_PauseAll` and `item->exited_hitlag = efLib_ResumeAll` before spawning or changing states.",
+    "Translated special attributes as a `float*` pulled from `item->xC4_article_data->x4_specialAttributes`, matching the assembly’s indexed loads while keeping the decomp compact.",
+    "Corrected the header type for `it_8027A09C` to `bool`, which is supported by the implementation using it in an `if` condition in `it_802D4200`."
+  ],
+  "decomp_lessons": [
+    "When an item file reaches 100% match, update all three integration points together: delete the ASM file, switch `obj_files.mk` to the C object, and mark the object `Matching` in `configure.py`.",
+    "State-table callback functions that are not public API should be declared `static` in C and marked local in `symbols.txt`; otherwise symbol scope can drift from the translated source.",
+    "Assembly float literals that become ordinary C constants such as `0.0f` and `1.0f` may need local `@NNN` symbols rather than global `it_804...` names in `symbols.txt`.",
+    "Header prototypes should be corrected as part of matching work when callsite behavior reveals the true signature, especially `bool` return values used in control flow.",
+    "For item special attributes, a simple `float* attrs = item->xC4_article_data->x4_specialAttributes;` can match assembly that loads consecutive per-item parameters.",
+    "Small callback stubs should stay simple: empty `void` callbacks and `return false` callbacks can directly model tiny `blr` / `li r3,0; blr` assembly functions.",
+    "The PR body explicitly says the work was based on PR #1124, so related item decomp patterns from that PR may have been reused; the slice does not provide details beyond that statement."
+  ],
+  "naming_conventions": [
+    "File and PR naming use the item module name `itcerebi` for Celebi.",
+    "Unrenamed functions retain address-based names like `it_802D3EF8`, matching existing doldecomp convention for unknown item symbols.",
+    "Internal callbacks in the C file are declared `static` while externally visible entry points remain non-static.",
+    "Local float constants in `symbols.txt` use generated labels such as `@169` and `@175` instead of global `it_804DD4C0`-style names.",
+    "Existing item-engine typedefs and names are preserved: `Item_GObj`, `Item`, `HSD_JObj`, `ItemStateTable`, and `ITEM_ANIM_UPDATE`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced direct assembly loads from `gobj->0x2C`, `item->0xC4`, and special-attribute offsets with `GET_ITEM(gobj)` and `item->xC4_article_data->x4_specialAttributes`.",
+    "Matched the random horizontal velocity branch using `if (HSD_Randi(2) != 0) item->x40_vel.x = attrs[1]; else item->x40_vel.x = -attrs[1];`.",
+    "Matched the blast-zone destruction test as `item->pos.y > Stage_GetBlastZoneTopOffset()` returning `true` or `false`.",
+    "Matched vertical acceleration by adding `((float*) item->xC4_article_data->x4_specialAttributes)[3]` to `item->x40_vel.y`.",
+    "Matched effect spawning with a local `float f = 1.0f;` passed by address to `efSync_Spawn(0x472, gobj, jobj, &f)`.",
+    "Used direct boolean return wrappers for state callbacks, including `return it_8027A118(gobj, it_802D3F6C);` and `return false;` for no-op callbacks."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The only human text says: \"100% match on `src/melee/it/items/itcerebi.c`. Changes based on #1124.\""
+  ],
+  "searchable_terms": [
+    "pr-1168",
+    "itcerebi",
+    "Celebi",
+    "ncough",
+    "100% match",
+    "src/melee/it/items/itcerebi.c",
+    "asm/melee/it/items/itcerebi.s",
+    "ItemStateTable",
+    "it_803F80F8",
+    "it_802D3EF8",
+    "it_802D3F4C",
+    "it_802D3F6C",
+    "it_802D3FA0",
+    "it_802D4024",
+    "it_802D4070",
+    "it_802D40FC",
+    "it_802D4168",
+    "it_802D4200",
+    "it_802D429C",
+    "it_80273670",
+    "it_8027A09C",
+    "it_8027A118",
+    "Item_80268E5C",
+    "efLib_PauseAll",
+    "efLib_ResumeAll",
+    "efSync_Spawn",
+    "HSD_Randi",
+    "Stage_GetBlastZoneTopOffset",
+    "GET_ITEM",
+    "GET_JOBJ",
+    "xC4_article_data",
+    "x4_specialAttributes",
+    "entered_hitlag",
+    "exited_hitlag",
+    "ITEM_ANIM_UPDATE",
+    "configure.py Matching",
+    "obj_files.mk c.o",
+    "symbols local scope",
+    "@169",
+    "@175",
+    "based on #1124"
+  ],
+  "follow_up_queries": [
+    "Inspect PR #1124 for the prior item decomp patterns that this PR says it was based on.",
+    "Search for other Pokemon item files using the same `efSync_Spawn(0x472, ...)` and hitlag callback setup.",
+    "Look for later renames of `it_802D3EF8`, `it_802D4168`, and `it_803F80F8` to recover semantic Celebi function names.",
+    "Audit nearby item headers for other `void` prototypes that should actually return `bool` when used as predicates.",
+    "Compare other item decomp PRs that switch symbol scopes from global to local after making callbacks `static`."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

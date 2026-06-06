@@ -1,0 +1,98 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1131",
+  "pr": {
+    "number": 1131,
+    "title": "Create `revert_asm.py` to unlink C files from `make`",
+    "url": "https://github.com/doldecomp/melee/pull/1131",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-01-26T11:47:22Z",
+    "merged_at": "2024-01-26T11:48:28Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added a new Python helper, `tools/revert_asm.py`, that takes a source C file path, disassembles its built object back into an asm `.s` file using `build/tools/dtk elf disasm`, and edits `obj_files.mk` so `make` uses the generated asm file instead of the C source. The PR is a small tooling change for quickly reverting a decompiled C translation unit back to assembly in the build graph.",
+  "change_classification": {
+    "primary_type": "tooling",
+    "categories": [
+      "decomp-matching",
+      "tooling",
+      "build-configuration"
+    ],
+    "systems": [
+      "tooling",
+      "build system",
+      "asm/C source switching"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "tools/revert_asm.py",
+      "role": "New command-line tool for reverting a `src/.../*.c` file to an `asm/.../*.s` input in `obj_files.mk`."
+    }
+  ],
+  "what_changed": [
+    "Created executable script `tools/revert_asm.py` with an argparse CLI: `usage: revert_asm.py [-h] C_FILE`.",
+    "The script resolves the provided C file relative to the repository `src` directory, computes the matching object path under `build/GALE01/obj`, and computes the corresponding asm path under `asm` with a `.s` suffix.",
+    "It invokes `build/tools/dtk elf disasm <obj_path> <asm_path>` via `subprocess.run(..., check=True)` to produce assembly from the built object.",
+    "It handles Windows by appending `.exe` to the `build/tools/dtk` path when `platform.system() == \"Windows\"`.",
+    "After disassembly, it rewrites `obj_files.mk`, replacing the source path such as `src/.../*.c` with the asm path such as `asm/.../*.s`."
+  ],
+  "smart_moves": [
+    "Uses `Path(__file__).parents[1]` to locate the repository root from the tool location instead of depending on the caller's working directory.",
+    "Uses `path.resolve().relative_to(root / \"src\")` so the input must correspond to a file inside `src`, then derives object and asm paths consistently from that relative path.",
+    "Uses `Path.with_suffix()` to convert both C/source-relative and object paths to `.s` and `.o`, avoiding fragile string suffix manipulation.",
+    "Runs `dtk` with `check=True`, so failures in disassembly stop the script instead of silently editing `obj_files.mk` after a failed conversion.",
+    "Normalizes paths with `.as_posix()` before replacing entries in `obj_files.mk`, matching typical makefile path formatting and helping cross-platform use."
+  ],
+  "decomp_lessons": [
+    "A small reversible tooling path is useful when a C file is not ready to stay linked into the build: disassemble the current object and switch the makefile entry back to asm.",
+    "For decomp workflows, derive `src`, `asm`, and `build/.../obj` paths from one source-relative path to reduce mistakes when moving a translation unit between C and assembly.",
+    "When mutating build lists, make the change narrow and mechanical: this script performs a direct `obj_files.mk` text replacement from `src/...` to `asm/...`.",
+    "Cross-platform decomp tooling should account for Windows executable suffixes even for internal build tools such as `dtk`."
+  ],
+  "naming_conventions": [
+    "Tool name uses an action-oriented snake_case filename: `revert_asm.py`.",
+    "CLI metavar is uppercase and descriptive: `C_FILE`.",
+    "Internal path variables follow explicit suffix naming: `obj_path`, `src_path`, `asm_path`, `dtk_path`, and `mk_path`.",
+    "The script describes its purpose as `revert a C file to asm for make`, matching the PR title's wording about unlinking C files from `make`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Uses `dtk elf disasm` to regenerate an asm `.s` file from the built `.o` corresponding to a C source file.",
+    "Maps `src/<relative>.c` to `asm/<relative>.s` and `build/GALE01/obj/<relative>.o`, preserving the source-relative directory structure.",
+    "Switches the active build input by replacing the `src` path with the `asm` path in `obj_files.mk`, rather than deleting source files or manually editing broader build configuration."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1131",
+    "revert_asm.py",
+    "unlink C files from make",
+    "tools/revert_asm.py",
+    "obj_files.mk",
+    "dtk elf disasm",
+    "build/tools/dtk",
+    "build/GALE01/obj",
+    "src path to asm path",
+    "Path.with_suffix",
+    "platform.system Windows",
+    "subprocess.run check=True",
+    "asm .s",
+    "object .o",
+    "ribbanya"
+  ],
+  "follow_up_queries": [
+    "Find later changes to `tools/revert_asm.py` for robustness improvements or bug fixes.",
+    "Search PRs that edit `obj_files.mk` to switch files between `src` and `asm`.",
+    "Search for tooling that invokes `dtk elf disasm` or other `dtk` subcommands.",
+    "Check whether later build tooling replaced direct `obj_files.mk` text replacement with a generated source list workflow."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

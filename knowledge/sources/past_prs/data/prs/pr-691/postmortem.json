@@ -1,0 +1,168 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-691",
+  "pr": {
+    "number": 691,
+    "title": "Match OSContext, OSInterrupt",
+    "url": "https://github.com/doldecomp/melee/pull/691",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-01-16T19:25:03Z",
+    "merged_at": "2023-01-16T20:02:40Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched Dolphin OSContext and OSInterrupt work by converting large raw asm/data fragments into typed C/inline-asm sources, moving formerly separate data objects into C, and tightening shared headers for interrupt masks, context layout, hardware-register externs, and volatile interrupt state.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "asm-cleanup",
+      "data-migration",
+      "hardware-registers"
+    ],
+    "systems": [
+      "dolphin/os",
+      "OSContext",
+      "OSInterrupt",
+      "OSMemory",
+      "OSExi",
+      "db",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "src/dolphin/os/OSContext.c",
+    "src/dolphin/os/OSInterrupt.c",
+    "src/dolphin/os/OSInterrupt.h",
+    "src/dolphin/os/OSContext.h",
+    "asm/dolphin/os/OSContext_data.s",
+    "asm/dolphin/os/OSInterrupt_data.s",
+    "obj_files.mk",
+    "src/dolphin/os/OSMemory.h",
+    "src/dolphin/os/OSExi.h",
+    "src/dolphin/db/db.h",
+    "src/dolphin/db/db.c",
+    "src/dolphin/os/OSError.c"
+  ],
+  "what_changed": [
+    "Deleted asm/dolphin/os/OSContext_data.s and asm/dolphin/os/OSInterrupt_data.s, then removed their object entries from obj_files.mk, indicating their data was absorbed into C sources.",
+    "Reworked OSContext.c from mostly raw inline assembly with address comments into typed MWERKS_GEKKO inline asm plus C-visible logic. Examples include __OSLoadFPUContext, __OSSaveFPUContext, OSLoadFPUContext, OSSaveFPUContext, OSSetCurrentContext, OSSaveContext, OSLoadContext, OSInitContext, OSDumpContext, OSSwitchFPUContext, and __OSContextInit.",
+    "OSContext.h renamed context fields SHORT_0x1A0 and SHORT_0x1A2 to mode and state, removed an explicit padding member before psfs, and gave OSInitContext typed u32 pc/newsp parameters.",
+    "OSInterrupt.c gained C data and C logic for InterruptHandlerTable, InterruptPrioTable, volatile __OSLastInterruptTime/__OSLastInterrupt/__OSLastInterruptSrr0, __OSInterruptInit, SetInterruptMask, __OSMaskInterrupts, __OSUnmaskInterrupts, __OSDispatchInterrupt, and ExternalInterruptHandler.",
+    "OSInterrupt.h introduced typedef u32 OSInterruptMask and many OS_INTRMASK_* macros built as 0x80000000U >> OS_INTR_* values, including grouped masks such as OS_INTRMASK_MEM, OS_INTRMASK_DSP, OS_INTRMASK_EXI, OS_INTRMASK_PI, and OS_INTRMASK_PI_PE.",
+    "OSInterrupt.h changed last-interrupt globals to volatile externs and declared __RAS_OSDisableInterrupts_begin/end labels used by OSDisableInterrupts inline asm.",
+    "Moved shared hardware-register extern declarations into headers: __MEMRegs moved to OSMemory.h and __EXIRegs plus EXI_REG_MAX moved to OSExi.h.",
+    "DBPrintf was made const-correct and declared in db.h as void DBPrintf(const char* str, ...).",
+    "OSError.c references were adjusted around __OSLastInterruptTime and lbl_804D738C, including replacing an asm comment reference to lbl_804D738C with __OSLastInterruptTime+4."
+  ],
+  "smart_moves": [
+    "Converted anonymous data labels for context dump strings and interrupt priority data into named C uses, enabling deletion of separate data .s objects and simplifying obj_files.mk.",
+    "Kept fragile CPU state save/restore routines as MWERKS_GEKKO inline asm while replacing raw numeric struct accesses where possible with typed OSContext fields such as fpuctx->state, fpuctx->fpscr, and fpuctx->fprs[i].",
+    "Used OSInterruptMask and enum-derived OS_INTRMASK_* macros to make interrupt bit manipulation readable while preserving the original high-bit mask convention.",
+    "Centralized hardware register arrays in headers so OSInterrupt.c could share __MEMRegs and __EXIRegs without duplicating local extern declarations.",
+    "Marked last-interrupt globals volatile, matching their interrupt-side update semantics and avoiding misleading ordinary-data declarations.",
+    "Preserved RAS/profiling entry labels for OSDisableInterrupts by naming __RAS_OSDisableInterrupts_begin and __RAS_OSDisableInterrupts_end rather than leaving anonymous labels."
+  ],
+  "decomp_lessons": [
+    "For low-level Dolphin OS code, matching often benefits from a hybrid style: keep true context-switch and MSR/FPU operations in inline asm, but give the asm typed signatures and struct-field references where the compiler accepts them.",
+    "When data-only asm files contain strings, priority tables, or sbss globals that can be represented naturally in C, migrate them into the owning C file and remove their object files from the build to reduce artificial split points.",
+    "Interrupt masks should be named as masks, not addresses. The reviewed 0x80000000U base literal is a mask seed shifted by interrupt enum value, not a virtual-address constant.",
+    "Use volatile for globals written/read across interrupt paths, hardware state, or diagnostic paths; reviewers explicitly discussed that standard volatile semantics were sufficient here.",
+    "Expose shared MMIO register arrays through headers when multiple OS subsystems need them, instead of repeating file-local externs that can drift in size or naming.",
+    "Const-correct variadic debug functions matter for matching callers that pass string literals; DBPrintf changed from char* to const char*."
+  ],
+  "naming_conventions": [
+    "Interrupt mask constants use OS_INTRMASK_<subsystem>_<source>, derived from matching OS_INTR_<subsystem>_<source> enum names.",
+    "Grouped interrupt masks use subsystem-wide names such as OS_INTRMASK_MEM, OS_INTRMASK_AI, OS_INTRMASK_DSP, OS_INTRMASK_EXI, OS_INTRMASK_PI, and OS_INTRMASK_PI_PE.",
+    "Raw context fields were promoted from placeholder names SHORT_0x1A0/SHORT_0x1A2 to semantic names mode and state.",
+    "External interrupt handler naming replaced an address-style placeholder lbl_80347B80 with ExternalInterruptHandler.",
+    "RAS labels were named __RAS_OSDisableInterrupts_begin and __RAS_OSDisableInterrupts_end."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used #ifdef MWERKS_GEKKO around inline asm implementations with NOT_IMPLEMENTED fallbacks for non-Gekko builds.",
+    "Declared asm functions with register parameters, e.g. register OSContext* fpuctx or ctx, to align parameter registers with the original PowerPC code.",
+    "Retained nofralloc on context/interrupt assembly routines that must not create a normal stack frame.",
+    "Replaced raw address-commented assembly with readable instructions but kept exact operations such as mfmsr/mtmsr, mfspr, mtfsf, lfd/stfd, psq_l/psq_st, and branch labels.",
+    "SetInterruptMask was translated into C using __cntlzw(mask) to select the highest-priority interrupt group, then writes subsystem MMIO registers for MEM, DSP, AI, EXI, and PI masks.",
+    "Some paired-single save/load accesses remained numeric offsets such as 456(fpuctx), 464(fpuctx), etc., suggesting exact addressing was kept where struct-field inline-asm syntax or matching constraints were less convenient."
+  ],
+  "review_feedback": [
+    {
+      "file": "src/dolphin/os/OSInterrupt.h",
+      "commenter": "ribbanya",
+      "feedback": "Asked whether 0x80000000U should be abstracted as something like BASE_VIRT_ADDR."
+    },
+    {
+      "file": "src/dolphin/os/OSInterrupt.h",
+      "commenter": "r-burns",
+      "feedback": "Clarified that 0x80000000U in OS_INTRMASK_* macros is not an address but a mask value."
+    },
+    {
+      "file": "src/dolphin/os/OSInterrupt.h",
+      "commenter": "ribbanya",
+      "feedback": "Asked how volatile should be handled across different platforms."
+    },
+    {
+      "file": "src/dolphin/os/OSInterrupt.h",
+      "commenter": "r-burns",
+      "feedback": "Responded that a special cross-platform volatile policy was probably unnecessary because volatile semantics are well-defined."
+    }
+  ],
+  "searchable_terms": [
+    "OSContext",
+    "OSInterrupt",
+    "OSInterruptMask",
+    "OS_INTRMASK_MEM",
+    "OS_INTRMASK_DSP",
+    "OS_INTRMASK_EXI",
+    "OS_INTRMASK_PI",
+    "InterruptPrioTable",
+    "InterruptHandlerTable",
+    "__OSLastInterruptSrr0",
+    "__OSLastInterrupt",
+    "__OSLastInterruptTime",
+    "__OSLoadFPUContext",
+    "__OSSaveFPUContext",
+    "OSLoadFPUContext",
+    "OSSaveFPUContext",
+    "OSSetCurrentContext",
+    "OSSaveContext",
+    "OSLoadContext",
+    "OSInitContext",
+    "OSDumpContext",
+    "OSSwitchFPUContext",
+    "__OSContextInit",
+    "__OSInterruptInit",
+    "SetInterruptMask",
+    "__OSMaskInterrupts",
+    "__OSUnmaskInterrupts",
+    "__OSDispatchInterrupt",
+    "ExternalInterruptHandler",
+    "__RAS_OSDisableInterrupts_begin",
+    "__RAS_OSDisableInterrupts_end",
+    "__MEMRegs",
+    "__EXIRegs",
+    "DBPrintf const char",
+    "MWERKS_GEKKO",
+    "nofralloc",
+    "psq_l",
+    "psq_st",
+    "__cntlzw"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that further rename lbl_804D738C or resolve remaining OSInterrupt sbss placeholder declarations.",
+    "Check follow-up work on non-MWERKS_GEKKO fallbacks in OSContext.c and OSInterrupt.c, since this PR used NOT_IMPLEMENTED stubs.",
+    "Search for later discussion or changes around volatile MMIO declarations and interrupt globals.",
+    "Compare subsequent Dolphin OS decomp PRs that reuse OSInterruptMask or enum-derived mask macro patterns."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

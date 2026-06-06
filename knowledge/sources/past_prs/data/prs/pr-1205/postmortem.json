@@ -1,0 +1,113 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1205",
+  "pr": {
+    "number": 1205,
+    "title": "Tweak `revert_asm` to use `dtk dol split` instead of `dtk elf disasm`",
+    "url": "https://github.com/doldecomp/melee/pull/1205",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-02-12T19:10:53Z",
+    "merged_at": "2024-02-12T19:12:11Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Updated the asm reversion workflow so `tools/revert_asm.py` no longer directly invokes `dtk elf disasm` on an object file. Instead it builds `ninja all_source` and copies the generated split asm from `build/GALE01/asm/...` back into `asm/...`, aligning reverted asm with the project's `dtk dol split` output format. The PR also regenerated `asm/melee/lb/lbdvd.s` in the newer split-asm style and adjusted several `config/GALE01/symbols.txt` object annotations for lbDvd string data and sizes.",
+  "change_classification": {
+    "primary_type": "tooling-update",
+    "categories": [
+      "tooling",
+      "decomp-matching",
+      "asm-regeneration",
+      "symbol-config"
+    ],
+    "systems": [
+      "tools/revert_asm.py",
+      "asm",
+      "config/GALE01",
+      "lbDvd"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "tools/revert_asm.py",
+      "role": "Changed revert workflow from direct dtk elf disasm of build objects to building all_source and copying generated asm output."
+    },
+    {
+      "path": "asm/melee/lb/lbdvd.s",
+      "role": "Regenerated asm output in the new splitter style; large formatting-oriented churn in lbDvd assembly."
+    },
+    {
+      "path": "config/GALE01/symbols.txt",
+      "role": "Updated lbDvd object sizes and data:string annotations to match generated split data."
+    }
+  ],
+  "what_changed": [
+    "`tools/revert_asm.py` now maps a source path to `build/GALE01/asm/<path>.s` instead of `build/GALE01/obj/<path>.o`.",
+    "`tools/revert_asm.py` removed direct construction of a `build/tools/dtk [elf disasm]` command and instead runs `subprocess.run([\"ninja\", \"all_source\"], stdout=subprocess.DEVNULL, check=True)`.",
+    "After building `all_source`, the script copies the generated asm file into the corresponding `asm/...` path with `shutil.copy`.",
+    "The old platform-specific `.exe` handling for the dtk binary was removed because the script no longer invokes dtk directly.",
+    "`asm/melee/lb/lbdvd.s` was regenerated with `dtk dol split`-style syntax: `.file \"lbdvd.c\"`, `.text`, `.balign 4`, `.fn ... global` / `.endfn`, `.obj` / `.endobj`, and many immediates rendered in hex form.",
+    "`config/GALE01/symbols.txt` adjusted several lbDvd data entries, including marking `lbDvd_803BA6A8`, `lbDvd_803BA6BC`, `lbDvd_803BA6C8`, `lbDvd_803BA6D8`, `lbDvd_803BA6E8`, `lbDvd_804D37E4`, and `lbDvd_804D37EC` as `data:string` with corrected sizes."
+  ],
+  "smart_moves": [
+    "Reused the existing `ninja all_source` pipeline instead of duplicating dtk invocation logic inside `revert_asm.py`; this makes reverted asm follow the same splitter output as the normal build tooling.",
+    "Removed OS-specific dtk executable handling from the script by avoiding direct dtk calls, reducing a source of platform drift.",
+    "Copied generated asm from the build tree rather than trying to disassemble object files ad hoc, which keeps asm formatting, labels, sections, and data annotations consistent with the repository's configured split process.",
+    "Regenerated a concrete asm file (`asm/melee/lb/lbdvd.s`) and symbol config entries in the same PR, providing evidence of the tool behavior and keeping the checked-in asm/config state synchronized."
+  ],
+  "decomp_lessons": [
+    "When reverting C back to asm, prefer the same project-level split pipeline used by the build over standalone object disassembly; otherwise generated asm syntax and data boundaries can diverge.",
+    "Tooling changes that affect asm generation can create large textual diffs with little or no semantic code change; reviewers should separate formatting/tool-output churn from real assembly instruction changes.",
+    "Generated data object boundaries may become more precise after switching split sources; update `symbols.txt` sizes and `data:string` annotations to match the new splitter output.",
+    "Checked-in asm should use the project's current generated format, including `.fn`/`.endfn` for functions and `.obj`/`.endobj` for data objects when that is what the splitter emits."
+  ],
+  "naming_conventions": [
+    "lbDvd functions retain address-based names such as `lbDvd_800174BC`, `lbDvd_800174E8`, and `lbDvd_80017740`.",
+    "Local labels in regenerated asm use `.L_800xxxxx` address-style labels.",
+    "Data symbols retain subsystem/address naming such as `lbDvd_803BA6A8`, `lbDvd_804D37D0`, and `preloadCache`.",
+    "Generated asm function declarations use `.fn <symbol>, global` and terminate with `.endfn <symbol>` rather than separate `.global` plus bare label declarations."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use `ninja all_source` as the source of truth for regenerated asm, then copy `build/GALE01/asm/<path>.s` into `asm/<path>.s`.",
+    "Expect `dtk dol split`-style asm to emit `.file`, `.text`, `.balign`, `.fn`/`.endfn`, and `.obj`/`.endobj` directives.",
+    "Expect formatting differences such as decimal immediates becoming hex immediates (`4` to `0x4`, `0` to `0x0`) and `crclr 6` becoming `crclr cr1eq`.",
+    "Small-data references in regenerated output may appear as `li r3, symbol@sda21` instead of prior `addi r3, r13, symbol@sda21` textual forms, based on the diff excerpt.",
+    "Asm regeneration can require corresponding `symbols.txt` updates for string data sizes, not only `.s` file updates."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1205",
+    "revert_asm.py",
+    "dtk dol split",
+    "dtk elf disasm",
+    "ninja all_source",
+    "build/GALE01/asm",
+    "build/GALE01/obj",
+    "asm/melee/lb/lbdvd.s",
+    "config/GALE01/symbols.txt",
+    "lbDvd_800174BC",
+    "lbDvd_803BA6A8",
+    "lbDvd_804D37E4",
+    "data:string",
+    ".fn",
+    ".endfn",
+    ".obj",
+    ".endobj",
+    "preloadCache"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify `tools/revert_asm.py` after switching to `ninja all_source`.",
+    "Search for other asm regeneration PRs caused by `dtk dol split` output format changes.",
+    "Check whether other `symbols.txt` entries needed `data:string` size corrections after splitter changes.",
+    "Look for revert_asm usage guidance or issues involving copied files from `build/GALE01/asm`."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

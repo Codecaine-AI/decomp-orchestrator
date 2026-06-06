@@ -1,0 +1,161 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1675",
+  "pr": {
+    "number": 1675,
+    "title": "lbarchive matches",
+    "url": "https://github.com/doldecomp/melee/pull/1675",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-07-10T06:55:03Z",
+    "merged_at": "2025-07-10T06:59:42Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched or made equivalent the melee/lb/lbarchive.c object by rewriting archive-loading helpers, correcting prototypes and const/size types, adding several previously missing lbArchive functions, and updating baselib archive APIs accordingly. configure.py moved lbarchive.c from NonMatching to Equivalent. The PR also split a previously broad data symbol at 0x803BA5B0 into two local string labels, improving symbol accuracy.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "naming",
+      "api-prototypes",
+      "varargs",
+      "data-symbols"
+    ],
+    "systems": [
+      "melee/lb",
+      "sysdolphin/baselib",
+      "config",
+      "build-config"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/lbarchive.c",
+    "src/melee/lb/lbarchive.h",
+    "src/sysdolphin/baselib/archive.c",
+    "src/sysdolphin/baselib/archive.h",
+    "config/GALE01/symbols.txt",
+    "configure.py"
+  ],
+  "what_changed": [
+    "Changed configure.py classification for melee/lb/lbarchive.c from Object(NonMatching, ...) to Object(Equivalent, ...).",
+    "Updated lbArchive_InitializeDAT to take void* data and size_t length instead of u8* and u32, and changed local symbol pointers to const char*.",
+    "Reworked lbArchive_LoadSections and related varargs loaders to use clearer symbol/symbol_name naming and const char* symbol names.",
+    "Introduced static inline helpers lbArchive_LoadArchive_inline, lbArchive_vLoadSectionsFatal, and lbArchive_vLoadSections to share code while preserving matching behavior.",
+    "Changed lbArchive_LoadArchive, lbArchive_LoadSymbols, and lbArchive_80016DBC signatures to return HSD_Archive* and take const char* filenames.",
+    "Added implementations for lbArchive_80016F80, lbArchive_80017040, lbArchive_800171CC, and lbArchive_80017340.",
+    "Added lbdvd dependency in lbarchive.c and used lbDvd_8001819C to detect preloaded archives before falling back to loading from file.",
+    "Replaced manual 32-byte rounding expression with OSRoundUp32B(lbFile_800163D8(filename)) for archive allocation sizing.",
+    "Updated baselib archive prototypes and definitions: HSD_ArchiveParse now uses size_t file_size, HSD_ArchiveGetPublicAddress takes const char*, and HSD_ArchiveLocateExtern takes const char*.",
+    "Added relocation/parsing logic in lbArchive_80017340 that initializes an HSD_Archive from an HSD_ArchiveHeader, validates file size, computes data/relocation/public/extern/symbol table pointers, and applies base-address relocation.",
+    "Adjusted symbols.txt by replacing lbArchive_803BA5B0 as a single 0x40 global object with two local string labels: lbl_803BA5B0 and lbl_803BA5C8."
+  ],
+  "smart_moves": [
+    "Factored repeated varargs archive symbol lookup loops into inline helpers with fatal and nonfatal variants, matching the different assertion behavior while reducing duplicated source structure.",
+    "Used const char* for filenames and archive symbol names, matching read-only string usage and propagating the type correction through both lbarchive and baselib archive APIs.",
+    "Used size_t for file sizes in archive parsing/loading paths, aligning prototypes with size semantics and avoiding narrower u32-only signatures where the diff indicates size values are passed around.",
+    "Kept a small inline wrapper around lbArchive_LoadArchive instead of directly inlining all callers, likely to influence code generation while keeping a clean external symbol.",
+    "Used OSRoundUp32B instead of an open-coded alignment expression, making the allocation intent clearer while preserving the 32-byte rounding behavior.",
+    "Added explicit preloaded-archive paths through lbDvd_8001819C for functions that return whether an archive was already available.",
+    "Inserted small unused stack byte arrays in some functions, an evidence-backed matching tactic likely used to reproduce stack layout.",
+    "Split the 0x803BA5B0 data symbol into two string labels, avoiding an over-broad global object when evidence indicated separate strings."
+  ],
+  "decomp_lessons": [
+    "When matching archive loader code, varargs prototypes must match the actual calling convention closely; the first fixed parameter and va_start target are especially important.",
+    "For varargs symbol loaders, separate fatal and nonfatal lookup behavior can be represented with shared inline helpers if it helps reproduce codegen while keeping behavior clear.",
+    "Const-correcting string parameters should be propagated through headers and dependent baselib functions to prevent mismatched declarations.",
+    "File-size and allocation-size types matter for matching and readability; size_t is preferable where the source treats values as sizes.",
+    "Replacing hand-written bitmask alignment with a known macro such as OSRoundUp32B can both document intent and match expected compiler output.",
+    "Data symbol boundaries in symbols.txt should be revisited when decompilation reveals embedded strings; a single guessed global object may need to become multiple lbl_* string entries.",
+    "Functions that load resources may have a preloaded-DVD-cache branch; checking lbdvd before heap allocation can be structurally important for matching.",
+    "Relocation routines should reconstruct archive internal pointers from the header layout in order: data, reloc_info, public_info, extern_info, symbols, then apply base-address additions to relocation offsets."
+  ],
+  "naming_conventions": [
+    "Used lbArchive_* prefix for melee library archive functions.",
+    "Kept unknown functions named by address, such as lbArchive_80016DBC, lbArchive_80016F80, lbArchive_80017040, lbArchive_800171CC, and lbArchive_80017340.",
+    "Named varargs pointee parameters symbol or symbols and string values symbol_name, clarifying the alternating pointer/name argument pattern.",
+    "Used const char* filename for archive file path parameters.",
+    "Used HSD_Archive* and HSD_ArchiveHeader* in prototypes rather than generic void* where types were known.",
+    "Used lbl_803BA5B0 and lbl_803BA5C8 for local string data labels when no semantic name was established.",
+    "Named internal helpers with descriptive suffixes: lbArchive_LoadArchive_inline, lbArchive_vLoadSectionsFatal, and lbArchive_vLoadSections."
+  ],
+  "assembly_or_matching_tactics": [
+    "Marked lbarchive.c as Equivalent rather than Matching in configure.py, indicating the PR improved decompilation quality to equivalent codegen/behavior but not necessarily byte-identical matching.",
+    "Used #pragma dont_inline around lbArchive_InitializeDAT and introduced static inline helpers to steer inlining decisions.",
+    "Introduced unused stack padding arrays such as u8 _[8] in several functions, likely to match stack frame layout.",
+    "Used OSRoundUp32B for heap allocation size to match the original 32-byte alignment pattern.",
+    "Separated fatal and nonfatal varargs lookup loops so the HSD_ASSERT path appears only in functions that require fatal missing-symbol behavior.",
+    "Changed broad data symboling to exact string labels, which can affect rodata/data matching and symbol map correctness."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR context.",
+    "The PR had one issue comment according to counts, but no comment body was included in the excerpt, so reviewer intent or discussion cannot be extracted."
+  ],
+  "searchable_terms": [
+    "pr-1675",
+    "lbarchive matches",
+    "r-burns",
+    "lbarchive",
+    "lbArchive",
+    "lbArchive_InitializeDAT",
+    "lbArchive_LoadSections",
+    "lbArchive_LoadArchive",
+    "lbArchive_LoadArchive_inline",
+    "lbArchive_LoadSymbols",
+    "lbArchive_80016DBC",
+    "lbArchive_80016EFC",
+    "lbArchive_80016F80",
+    "lbArchive_80017040",
+    "lbArchive_800171CC",
+    "lbArchive_80017340",
+    "lbArchive_vLoadSectionsFatal",
+    "lbArchive_vLoadSections",
+    "HSD_Archive",
+    "HSD_ArchiveHeader",
+    "HSD_ArchiveParse",
+    "HSD_ArchiveGetPublicAddress",
+    "HSD_ArchiveLocateExtern",
+    "HSD_ArchiveRelocationInfo",
+    "HSD_ArchivePublicInfo",
+    "HSD_ArchiveExternInfo",
+    "lbDvd_8001819C",
+    "lbHeap_80015BD0",
+    "lbHeap_80015CA8",
+    "lbFile_800163D8",
+    "lbFile_8001668C",
+    "OSRoundUp32B",
+    "OSReport",
+    "HSD_ASSERT",
+    "va_list",
+    "va_start",
+    "va_arg",
+    "va_end",
+    "const char*",
+    "size_t",
+    "intptr_t",
+    "relocation",
+    "archive relocation",
+    "preloaded archive",
+    "symbols.txt",
+    "lbl_803BA5B0",
+    "lbl_803BA5C8",
+    "Equivalent",
+    "NonMatching"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename lbArchive_80016DBC, lbArchive_80016F80, lbArchive_80017040, lbArchive_800171CC, or lbArchive_80017340 with semantic names.",
+    "Search for callers of lbArchive_80017040 and lbArchive_800171CC to confirm the meaning of the returned bool as preloaded/archive-from-DVD-cache.",
+    "Compare future changes to HSD_ArchiveParse and lbArchive_80017340 for additional struct layout or relocation field naming improvements.",
+    "Check whether lbarchive.c eventually moves from Equivalent to Matching and what remaining codegen differences were resolved.",
+    "Search for similar varargs symbol-loading patterns in other lb or baselib files that can reuse the fatal/nonfatal inline helper approach."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

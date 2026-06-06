@@ -1,0 +1,129 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1178",
+  "pr": {
+    "number": 1178,
+    "title": "Remove `MUST_MATCH` usages in `src/melee`",
+    "url": "https://github.com/doldecomp/melee/pull/1178",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-02-01T19:02:08Z",
+    "merged_at": "2024-02-01T19:03:15Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Removed remaining or many `MUST_MATCH` conditionals from `src/melee` by either keeping the required C tricks unconditionally, converting matched functions to normal C, renaming numeric library/fighter symbols to semantic names, and moving `lb_00B0` back to an asm object where its inline-asm/placeholder state was not cleanly compilable as source. The PR was merged without discussion or review comments, so intent is inferred from the title and diff.",
+  "change_classification": {
+    "primary_type": "code-quality/decomp-matching-cleanup",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-renaming",
+      "build-config",
+      "asm-fallback"
+    ],
+    "systems": [
+      "fighter",
+      "library",
+      "collision",
+      "map-collision",
+      "ground",
+      "item",
+      "stage",
+      "asm",
+      "config"
+    ]
+  },
+  "key_files": [
+    "obj_files.mk",
+    "config/GALE01/symbols.txt",
+    "asm/melee/lb/lb_00B0.s",
+    "src/melee/lb/lb_00B0.c",
+    "src/melee/lb/lb_00B0.h",
+    "src/melee/ft/ftcommon.c",
+    "src/melee/ft/ftcommon.h",
+    "src/melee/mp/mpcoll.c",
+    "src/melee/mp/mplib.h",
+    "src/melee/mp/forward.h",
+    "src/melee/ft/chara/ftKirby/ftKb_Init.c",
+    "src/melee/gr/ground.c",
+    "src/melee/lb/lbcollision.c",
+    "src/melee/it/item.c"
+  ],
+  "what_changed": [
+    "Removed `#ifdef MUST_MATCH` branches and empty guards across multiple `src/melee` files, including fighter common code, character init/special files, ground, collision, item, and map collision code.",
+    "Changed `obj_files.mk` to build `asm/melee/lb/lb_00B0.s.o` instead of `src/melee/lb/lb_00B0.c.o`, while adding a full `asm/melee/lb/lb_00B0.s` translation unit.",
+    "Kept some matching-only source patterns unconditionally instead of hiding them behind `MUST_MATCH`, such as repeated assignment in Game & Watch neutral special, unused stack locals in Sheik/ground/lbcollision/walk code, and `#pragma force_active` blocks for Zako Boy/Girl demo strings.",
+    "Renamed several address-style library functions to descriptive names in source, headers, symbols, and asm references: `lb_8000BA44` to `lbDObjSetRateAll`, `lb_8000BB24` to `lbDObjReqAnimAll`, `lb_8000BD28` to `lbGetJObjFramerate`, `lb_8000BDB4` to `lbGetJObjCurrFrame`, `lb_8000BE40` to `lbGetJObjEndFrame`, `lb_8000CC5C` to `lbGetFreeColorRegister`, and `lb_8000CD60` to `lbGetFreeAlphaRegister`.",
+    "Renamed `ftCo_GetParasolStatus` to `ftGetParasolStatus` across C, headers, dox, symbol map, and asm call sites, preserving the `@was{ftGetParasolStatus}` breadcrumb in `ftcommon.c`.",
+    "Introduced `src/melee/mp/forward.h` with `mpLib_Callback` and adjusted `mplib.h`/`mpcoll.c` callback typing.",
+    "Replaced a Kirby unknown typedef from `unk_t ftKirby_UnkArrayThing[12]` with an explicit 12-field struct and used `ftKirby_UnkArrayThing*` in `ftKb_Init_800EE528`.",
+    "Added missing baselib includes such as `dobj.h`, `tobj.h`, and `gobj.h` where semantic calls or declarations required them."
+  ],
+  "smart_moves": [
+    "Used an asm fallback for `lb_00B0` at the object-file level rather than preserving large inline-asm `MUST_MATCH` blocks inside C; this makes source files cleaner while keeping the build matched.",
+    "Made necessary dummy stack variables and odd matching constructs unconditional, which removes preprocessor noise without pretending those constructs are ordinary logic.",
+    "Renamed numeric symbols only where behavior was already evident from wrappers/call sites, making downstream C more readable while synchronizing asm references and `symbols.txt` so links remain stable.",
+    "Kept alternative matching attempts behind local `#define SOLUTION` switches in a few places (`ftCommon_8007CEF4`, `mpColl_80043558`) instead of project-wide `MUST_MATCH`, making the remaining matching issue localized.",
+    "Preserved matching-sensitive asserts by using fixed line numbers where needed rather than relying on conditional `MUST_MATCH` assert aliases."
+  ],
+  "decomp_lessons": [
+    "If a file still depends heavily on raw asm or nonmatching placeholders, moving that translation unit to `asm/` can be cleaner than carrying giant inline asm guarded by `MUST_MATCH` in C.",
+    "Remove global matching macros by converting each case to an explicit local tactic: dummy stack locals, repeated assignments, fixed assert line numbers, force-active pragmas, or a localized solution selector.",
+    "When renaming an address-style function, update every dependent layer together: source calls, headers/dox, asm branch labels/calls, and `config/GALE01/symbols.txt`.",
+    "Semantic names can often be inferred safely from wrapper behavior: JObj frame/rate helpers, DObj animation helpers, and TEV color/alpha register allocators were renamed consistently with their actual use.",
+    "Structuring unknown arrays as named structs can improve typing without requiring full semantic field names; the Kirby 12-word array became an explicit `ftKirby_UnkArrayThing` with offset fields."
+  ],
+  "naming_conventions": [
+    "`ftCo_GetParasolStatus` was shortened/generalized to `ftGetParasolStatus`, implying parasol status is not treated as strictly `ftCo_`-scoped.",
+    "Library helper names use descriptive `lb` prefixes plus object domain/action: `lbGetJObjCurrFrame`, `lbGetJObjEndFrame`, `lbGetJObjFramerate`, `lbDObjSetRateAll`, `lbDObjReqAnimAll`.",
+    "Register allocation helpers use explicit TEV purpose names: `lbGetFreeColorRegister` and `lbGetFreeAlphaRegister`.",
+    "Unknown structs may use a local descriptive placeholder plus offset-based fields, as in `ftKirby_UnkArrayThing` with `x0`, `x4`, ..., `x2C`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced `src/melee/lb/lb_00B0.c.o` with `asm/melee/lb/lb_00B0.s.o` in `obj_files.mk` while keeping a cleaned-up C file for reference/non-built source.",
+    "Updated asm call targets and relocation references to renamed symbols, e.g. `bl ftGetParasolStatus`, `bl lbGetJObjEndFrame`, and `.rel ftGetParasolStatus`.",
+    "Left unused stack locals such as `u32 _[6]`, `u32 _[8]`, `u32 _[5]`, and unused pointer temporaries directly in C to preserve stack layout without macro guards.",
+    "Used fixed-line `HSD_ASSERT(1276, ftGetParasolStatus(gobj) != FtParasol_None)` and `HSD_ASSERT(299/308, ...)` patterns instead of conditional assert wrappers.",
+    "Kept small artificial constructs like `fp = fp = GET_FIGHTER(gobj);` where needed for matching rather than hiding them behind `#ifdef MUST_MATCH`."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or formal reviews were present in the PR slice.",
+    "The PR carried the `code-quality` label in GitHub metadata.",
+    "Because there was no human discussion, reviewer intent and rationale beyond the title/diff are not evidenced."
+  ],
+  "searchable_terms": [
+    "MUST_MATCH",
+    "remove MUST_MATCH usages",
+    "lb_00B0 asm fallback",
+    "obj_files.mk asm/melee/lb/lb_00B0.s.o",
+    "ftGetParasolStatus",
+    "ftCo_GetParasolStatus",
+    "lbGetJObjFramerate",
+    "lbGetJObjCurrFrame",
+    "lbGetJObjEndFrame",
+    "lbDObjSetRateAll",
+    "lbDObjReqAnimAll",
+    "lbGetFreeColorRegister",
+    "lbGetFreeAlphaRegister",
+    "mpLib_Callback",
+    "ftKirby_UnkArrayThing",
+    "dummy stack",
+    "force_active",
+    "HSD_ASSERT fixed line"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that restore `src/melee/lb/lb_00B0.c.o` after matching the C source.",
+    "Search for remaining `#define SOLUTION` blocks in `src/melee` after PR 1178.",
+    "Search for residual `MUST_MATCH` outside `src/melee` or newly introduced guards after this cleanup.",
+    "Audit all call sites of `ftGetParasolStatus` after the rename for stale `ftCo_GetParasolStatus` references."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

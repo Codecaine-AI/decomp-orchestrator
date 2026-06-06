@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { graphDbExists, openKnowledgeGraph, rankFeatureForSourcePath, resourceGraphDbPath } from "../knowledge/index.js";
 import type { BoardMeasures, BoardSnapshot, TargetCandidate } from "../types/index.js";
 import { candidateFromReportFunction, objdiffSourceMap } from "./candidates.js";
 import { asArray, asObject, stringValue, type JsonObject } from "./json.js";
@@ -35,6 +36,7 @@ export function loadBoardSnapshot(repoRoot: string, limit: number): BoardSnapsho
     }
   }
 
+  applyGraphFeatures(candidates);
   candidates.sort((left, right) => right.priority - left.priority);
   const measures = asObject(report.measures) as BoardMeasures;
   return {
@@ -44,4 +46,30 @@ export function loadBoardSnapshot(repoRoot: string, limit: number): BoardSnapsho
     measures,
     candidates: candidates.slice(0, limit),
   };
+}
+
+function applyGraphFeatures(candidates: TargetCandidate[]): void {
+  const dbPath = resourceGraphDbPath();
+  if (!graphDbExists(dbPath) || candidates.length === 0) return;
+  const store = openKnowledgeGraph(dbPath);
+  try {
+    for (let index = candidates.length - 1; index >= 0; index -= 1) {
+      const candidate = candidates[index];
+      const feature = rankFeatureForSourcePath(store, candidate.sourcePath, {
+        source_path: candidate.sourcePath,
+        unit: candidate.unit,
+        symbol: candidate.symbol,
+      });
+      if (feature.editability === "read_only_complete" || feature.editability === "locked" || feature.editability === "blocked") {
+        candidates.splice(index, 1);
+        continue;
+      }
+      if (feature.priority_bonus !== 0) {
+        candidate.priority += feature.priority_bonus;
+        candidate.reason = `${candidate.reason}; graph bonus ${feature.priority_bonus.toFixed(2)} (${feature.explanation.join(", ")})`;
+      }
+    }
+  } finally {
+    store.db.close();
+  }
 }

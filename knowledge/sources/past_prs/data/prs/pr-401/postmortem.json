@@ -1,0 +1,160 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-401",
+  "pr": {
+    "number": 401,
+    "title": "Change github actions from wine to wibo",
+    "url": "https://github.com/doldecomp/melee/pull/401",
+    "state": "MERGED",
+    "author": "BR-",
+    "created_at": "2022-07-04T15:56:02Z",
+    "merged_at": "2022-07-15T18:45:39Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Reworked the GitHub Actions build workflow to use WiBo instead of Wine for running the Metrowerks tools in CI, motivated by spurious Wine failures. The workflow now installs multilib/i386 dependencies rather than wine32, checks out and builds decompals/WiBo, invokes make with WINE pointing at the built wibo executable, verifies and patches mwldeppc.exe with SHA1 checks before and after, uploads GALE01.map for map-generating builds, and appends match-progress output to the GitHub step summary.",
+  "change_classification": {
+    "primary_type": "tooling",
+    "categories": [
+      "ci",
+      "tooling",
+      "build-fix",
+      "decomp-matching-support"
+    ],
+    "systems": [
+      ".github",
+      "GitHub Actions",
+      "WiBo",
+      "Metrowerks compiler tooling",
+      "map/progress tooling"
+    ]
+  },
+  "key_files": [
+    ".github/workflows/build.yml",
+    "tools/mwld_patch.py",
+    "tools/mwld_prepatch.sha1",
+    "tools/mwld_postpatch.sha1"
+  ],
+  "what_changed": [
+    "Removed the workflow-level WINEPREFIX and stopped installing wine32 in the devkitPro container.",
+    "Changed the CI dependency install to include build-essential, gcc-multilib, g++-multilib, and libc6:i386.",
+    "Added a named checkout step for the Melee repository and a second checkout of decompals/WiBo into tools/WiBo.",
+    "After downloading the GC compilers, added SHA1 verification of tools/mwcc_compiler/1.1/mwldeppc.exe before patching, applied tools/mwld_patch.py, then verified the post-patch SHA1.",
+    "Added a small binary patch script that opens tools/mwcc_compiler/1.1/mwldeppc.exe, seeks to offset 0x0001ff75, and writes byte 0x51.",
+    "Added prepatch and postpatch SHA1 files for mwldeppc.exe.",
+    "Added CI steps to configure and build WiBo with CMake.",
+    "Changed the Melee build step to run make with WINE=./tools/WiBo/build/wibo.",
+    "Added artifact upload of build/ssbm.us.1.2/GALE01.map when the matrix makeflags entry is GENERATE_MAP=1.",
+    "Added a progress calculation step that runs tools/calcprogress.py on main.dol and GALE01.map and writes the result to $GITHUB_STEP_SUMMARY."
+  ],
+  "smart_moves": [
+    "Kept the existing build system interface by passing WINE=./tools/WiBo/build/wibo to make, allowing WiBo to replace Wine without broad Makefile changes in this PR.",
+    "Protected the linker binary patch with explicit prepatch and postpatch SHA1 checks, reducing the risk of silently patching an unexpected mwldeppc.exe.",
+    "Built WiBo from its GitHub repository in CI rather than depending on a preinstalled binary, making the workflow self-contained.",
+    "Used the workflow change as an opportunity to upload the generated map and report current match percentage, improving CI observability for decomp progress.",
+    "Recognized during discussion that the WiBo Makefile-to-CMake transition could break the PR and adjusted rather than merging prematurely.",
+    "Removed WIBO_DEBUG after noticing it had been left on by default, based on the author's final comment."
+  ],
+  "decomp_lessons": [
+    "For decomp CI, emulator/wrapper stability matters: replacing Wine with WiBo was pursued specifically to avoid spurious Wine failures.",
+    "When patching proprietary compiler/linker binaries in automation, pair the patch with before-and-after hashes so future toolchain drift fails loudly.",
+    "Keep wrapper substitution localized through existing variables such as WINE when possible; this minimizes churn in build logic while changing the runtime implementation.",
+    "CI can serve matching work directly by generating and uploading map files and publishing match percentages on successful builds.",
+    "External tool transitions can affect downstream CI; the comments note WiBo moving from Makefile to CMake, requiring the workflow to adapt.",
+    "Older GCC/libstdc++ behavior can affect building tools like WiBo; reviewers discussed filesystem-library linking quirks around gcc 8 and suggested conditional detection rather than unconditional upstream changes."
+  ],
+  "naming_conventions": [
+    "Workflow steps were given explicit names such as Checkout Melee repo, Checkout WiBo repo, Build WiBo, Build Melee, Upload map, and Calc progress.",
+    "The WiBo checkout path used tools/WiBo, matching the external repository name and keeping it under the tools directory.",
+    "The make override continued to use the existing WINE variable name even though the executable is WiBo, preserving build-script compatibility.",
+    "Hash files were named by state, tools/mwld_prepatch.sha1 and tools/mwld_postpatch.sha1, making the binary patch validation order clear.",
+    "The uploaded map artifact was named GALE01.map, matching the generated map path."
+  ],
+  "assembly_or_matching_tactics": [
+    "No source-level matching tactics or assembly restructures were present in this PR.",
+    "The relevant binary-tooling tactic was a one-byte patch to mwldeppc.exe at offset 0x0001ff75, writing 0x51, guarded by SHA1 checks.",
+    "The workflow enabled better matching visibility by generating GALE01.map and running tools/calcprogress.py against main.dol and the map."
+  ],
+  "review_feedback": [
+    {
+      "author": "BR-",
+      "feedback": "Initially cautioned not to merge yet while testing the WiBo workflow."
+    },
+    {
+      "author": "BR-",
+      "feedback": "Later marked it ready to merge and noted the bonus additions of match percentage output and map upload."
+    },
+    {
+      "author": "BR-",
+      "feedback": "Flagged that WiBo was switching from Makefile to CMake and that this would break the PR until fixed."
+    },
+    {
+      "author": "r-burns",
+      "feedback": "Suggested explicitly linking the filesystem library on gcc 8 by adding -lstdc++fs to LDFLAGS."
+    },
+    {
+      "author": "BR-",
+      "feedback": "Confirmed that the -lstdc++fs handling had been added for the Makefile but was lost during the transition to CMake, and considered PRing it on the WiBo side."
+    },
+    {
+      "author": "r-burns",
+      "feedback": "Advised that the filesystem-library fix should not necessarily be PR'd upstream unconditionally because it is specific to older GCC versions; at minimum it should be conditional on a try_compile result."
+    },
+    {
+      "author": "r-burns",
+      "feedback": "Suggested checking whether the linker error only appeared with optimizations by trying a CMake Debug build."
+    },
+    {
+      "author": "BR-",
+      "feedback": "Final note said the patch was hopefully good to merge and that WIBO_DEBUG had accidentally been left on by default but was removed."
+    }
+  ],
+  "searchable_terms": [
+    "PR401",
+    "Change github actions from wine to wibo",
+    "Wine",
+    "WiBo",
+    "decompals/WiBo",
+    "GitHub Actions",
+    "build.yml",
+    "devkitpro/devkitppc",
+    "wine32",
+    "gcc-multilib",
+    "g++-multilib",
+    "libc6:i386",
+    "WINE=./tools/WiBo/build/wibo",
+    "mwldeppc.exe",
+    "mwld_patch.py",
+    "mwld_prepatch.sha1",
+    "mwld_postpatch.sha1",
+    "sha1sum",
+    "0x0001ff75",
+    "0x51",
+    "GALE01.map",
+    "calcprogress.py",
+    "GITHUB_STEP_SUMMARY",
+    "GENERATE_MAP=1",
+    "NON_MATCHING=1",
+    "CMake",
+    "Makefile",
+    "gcc 8",
+    "stdc++fs",
+    "try_compile",
+    "WIBO_DEBUG"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that updated WiBo build handling after its CMake transition.",
+    "Find references to mwld_patch.py or mwld_prepatch.sha1 to see whether the linker patch remained in use.",
+    "Find CI workflow changes involving WINE= or WiBo to track subsequent toolchain wrapper adjustments.",
+    "Find PRs that changed calcprogress.py or map artifact upload behavior.",
+    "Find discussion or fixes for gcc 8 -lstdc++fs / std::filesystem build issues in WiBo or related tooling."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

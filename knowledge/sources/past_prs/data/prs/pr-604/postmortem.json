@@ -1,0 +1,180 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-604",
+  "pr": {
+    "number": 604,
+    "title": "Match lbfile",
+    "url": "https://github.com/doldecomp/melee/pull/604",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-12-10T03:48:18Z",
+    "merged_at": "2022-12-10T06:45:13Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched most of lbfile by replacing the deleted asm/melee/lb/lbfile.s object with C implementations in src/melee/lb/lbfile.c, removing lbfile.s from obj_files.mk, and adding support fixes in DVD headers and sbss alignment. The C version covers file-load callback/cancel handling, filename extension selection for .usd/.dat based on lbLang, DVD entry lookup/open/length queries, HSD_DevComRequest reads, and archive allocation/cache paths. One small function, lbFile_800161A0, remained as inline asm under NON_MATCHING guards. A review comment explicitly justified removing DVDFileInfo.callback because the struct layout was needed for Dolphin DVD stack matches and likely came from a different SDK version.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "types-structs",
+      "build-system",
+      "alignment"
+    ],
+    "systems": [
+      "melee/lb/lbfile",
+      "dolphin/dvd",
+      "sysdolphin/baselib/archive",
+      "obj_files",
+      "asm"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/lb/lbfile.c",
+      "role": "Main C implementation replacing lbfile.s; added file callback/cancel handling, extension construction, DVD file length/open wrappers, async DevCom reads, and archive loading helpers."
+    },
+    {
+      "path": "asm/melee/lb/lbfile.s",
+      "role": "Deleted 678-line assembly file after matching in C."
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "Removed asm/melee/lb/lbfile.s.o so the build uses src/melee/lb/lbfile.c.o."
+    },
+    {
+      "path": "include/dolphin/dvd/dvd.h",
+      "role": "Adjusted DVDFileInfo layout by removing callback field and made DVDConvertPathToEntrynum take const char*."
+    },
+    {
+      "path": "asm/melee/lb/lbunknown_005.s",
+      "role": "Added .balign 8 before sbss symbol lbl_804D63D0, likely to preserve small-BSS layout after lbfile changes."
+    }
+  ],
+  "what_changed": [
+    "Deleted asm/melee/lb/lbfile.s and removed its object from obj_files.mk, indicating the lbfile text range was now produced from C instead of standalone assembly.",
+    "Added C definitions for func_800161C4, func_80016204, func_8001634C, func_800163D8, func_800164A4, func_80016580, func_8001668C, func_80016760, and func_800168A0 in src/melee/lb/lbfile.c.",
+    "Kept lbFile_800161A0 as inline asm in the C file under NON_MATCHING fallback, wrapped with #pragma push/#pragma pop and clang-format off/on comments.",
+    "Made cancel a static BOOL in lbfile.c and changed lbFile_8001615C to assert on cancelflag using the literal string \"!cancelflag\", then set cancel = TRUE.",
+    "Introduced static char lbl_803BA508[] = __FILE__ and a static filename buffer lbl_80432058 with constants MAX_FILENAME_LENGTH, FILE_EXTENSION_LENGTH, and MAX_BASENAME_LENGTH.",
+    "Implemented func_80016204 to append or preserve file extensions: existing non-empty extensions are kept, a trailing dot uses lbLang_IsSettingUS, and no extension uses lbLang_IsSavedLanguageUS; appended extensions are \"usd\" or \"dat\".",
+    "Implemented DVD length helpers using DVDConvertPathToEntrynum, DVDFastOpen, DVDFileInfo.length, DVDClose, OSDisableInterrupts, OSRestoreInterrupts, OSReport, and __assert.",
+    "Implemented HSD_DevComRequest paths with 0x20-byte rounding via (*size + 0x1F) & 0xFFFFFFE0 and transfer type selection based on whether an HSD_Archive pointer is at or above 0x80000000.",
+    "Changed DVDConvertPathToEntrynum prototype from char* to const char*.",
+    "Removed DVDFileInfo.callback from include/dolphin/dvd/dvd.h.",
+    "Added .balign 8 to asm/melee/lb/lbunknown_005.s before lbl_804D63D0 in .sbss."
+  ],
+  "smart_moves": [
+    "Matched broad lbfile behavior in C while isolating the remaining hard-to-match lbFile_800161A0 as inline asm instead of keeping the whole module in assembly.",
+    "Used real source-level control flow for file extension logic and DVD error handling, preserving OSReport and __assert line-number-sensitive calls such as 0x99, 0xD8, 0xEE, and 0x11A.",
+    "Updated the Dolphin DVD struct layout globally rather than papering over stack offsets locally; the author noted this was needed for other dolphin/dvd stack matches too.",
+    "Preserved static data placement by defining lbl_803BA508 from __FILE__, making cancel static, and adding explicit .sbss alignment in a neighboring asm file.",
+    "Kept const-correctness for DVDConvertPathToEntrynum once lbfile began passing const filename pointers.",
+    "Used a small inline helper, qwer, and an inline wrapper for func_800163D8 to reproduce generated code shape for repeated archive-load paths."
+  ],
+  "decomp_lessons": [
+    "SDK header layouts can be version-sensitive: a field that exists in one Dolphin SDK definition may break stack matches for the target binary. Validate struct size and offsets against callsite stack behavior.",
+    "When converting a module from asm to C, remove the old asm object from obj_files.mk in the same PR to avoid duplicate text and ensure the matched C object is linked.",
+    "If one tiny function remains stubborn, inline asm inside the C file can let the rest of the module decompile cleanly without blocking object-file replacement.",
+    "Small-BSS and alignment side effects matter across files; matching one module may require .balign changes in adjacent asm to preserve global layout.",
+    "For file-size reads through DVDFileInfo, field offsets are decisive. Here DVDFileInfo.length at 0x34 was used by stack reads, and the removed callback field changed the expected struct footprint.",
+    "Pointer-region checks like ((u32) ptr >= 0x80000000) can be needed to reproduce transfer mode constants passed to engine I/O APIs.",
+    "Preserve assert strings and line-number constants when matching functions with OSReport/__assert paths; these calls strongly constrain codegen and rodata."
+  ],
+  "naming_conventions": [
+    "Address-based placeholder names were retained for unknown functions: func_800161C4, func_80016204, func_8001634C, func_800163D8, func_800164A4, func_80016580, func_8001668C, func_80016760, and func_800168A0.",
+    "Known callback-like symbols used lbFile_ prefix: lbFile_8001615C and lbFile_800161A0.",
+    "Generated-label-style data names were retained where exact identity/layout mattered: lbl_803BA508, lbl_80432058, and lbl_804D63D0.",
+    "Local constants used uppercase descriptive names for inferred sizes: MAX_FILENAME_LENGTH, FILE_EXTENSION_LENGTH, and MAX_BASENAME_LENGTH.",
+    "The helper name qwer is non-semantic and appears to be a matching expedient rather than a reusable naming convention."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted the standalone lbfile.s asm file after adding C equivalents, but preserved lbFile_800161A0 as inline asm with nofralloc.",
+    "Wrapped inline asm with #pragma push/#pragma pop and disabled clang-format around the asm block to keep formatting tooling from disturbing it.",
+    "Used an otherwise unused local variable in func_80016580, likely to influence stack/register allocation for matching.",
+    "Used inline functions qwer and func_800163D8_inline to encourage inlining/code-shape matching in callsites.",
+    "Used exact bit masking ((*arg2 + 0x1F) & 0xFFFFFFE0) to reproduce 0x20-byte alignment for read sizes.",
+    "Added .balign 8 in .sbss of lbunknown_005.s to maintain global alignment after converting lbfile.",
+    "Removed DVDFileInfo.callback so stack offsets and frame sizes for DVDFastOpen/DVDClose callers match the target."
+  ],
+  "review_feedback": [
+    {
+      "author": "r-burns",
+      "path": "include/dolphin/dvd/dvd.h",
+      "comment": "This is needed for some dolphin/dvd stack matches as well, so I think it's correct. I assume this struct def was copied from a different dolphin sdk version.",
+      "lesson": "The DVDFileInfo.callback removal was intentional and based on stack matching evidence, not just local lbfile convenience."
+    },
+    {
+      "author": "ribbanya",
+      "state": "APPROVED",
+      "comment": "Approved with no body in the available review data."
+    }
+  ],
+  "searchable_terms": [
+    "pr-604",
+    "Match lbfile",
+    "r-burns",
+    "lbfile",
+    "asm/melee/lb/lbfile.s",
+    "src/melee/lb/lbfile.c",
+    "obj_files.mk",
+    "include/dolphin/dvd/dvd.h",
+    "asm/melee/lb/lbunknown_005.s",
+    "lbFile_8001615C",
+    "lbFile_800161A0",
+    "func_800161C4",
+    "func_80016204",
+    "func_8001634C",
+    "func_800163D8",
+    "func_800164A4",
+    "func_80016580",
+    "func_8001668C",
+    "func_80016760",
+    "func_800168A0",
+    "HSD_DevComRequest",
+    "HSD_Archive",
+    "func_80015BD0",
+    "func_8001819C",
+    "DVDFileInfo",
+    "DVDFastOpen",
+    "DVDClose",
+    "DVDConvertPathToEntrynum",
+    "OSDisableInterrupts",
+    "OSRestoreInterrupts",
+    "OSReport",
+    "__assert",
+    "lbLang_IsSettingUS",
+    "lbLang_IsSavedLanguageUS",
+    "MAX_FILENAME_LENGTH",
+    "FILE_EXTENSION_LENGTH",
+    "MAX_BASENAME_LENGTH",
+    "lbl_80432058",
+    "lbl_803BA508",
+    "lbl_804D63D0",
+    ".balign 8",
+    "callback field removed",
+    "dolphin sdk version",
+    "stack matches",
+    ".usd",
+    ".dat",
+    "0xFFFFFFE0",
+    "0x80000000"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename lbfile placeholder functions such as func_80016204 or func_800163D8.",
+    "Search for other Dolphin DVD stack-match fixes involving DVDFileInfo layout or removed callback fields.",
+    "Look for future cleanup of inline asm lbFile_800161A0 into matching C.",
+    "Search for other PRs that add .balign in asm files after moving neighboring modules from asm to C.",
+    "Check whether qwer was later renamed or eliminated once surrounding archive functions were better understood."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

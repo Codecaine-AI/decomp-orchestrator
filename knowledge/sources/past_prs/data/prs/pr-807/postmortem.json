@@ -1,0 +1,147 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-807",
+  "pr": {
+    "number": 807,
+    "title": "Clean up `ftPeach` motion definitions",
+    "url": "https://github.com/doldecomp/melee/pull/807",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-04-23T01:03:36Z",
+    "merged_at": "2023-04-23T01:12:16Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Cleaned up Peach motion-state definitions by replacing raw hexadecimal state-change flags and move-id bitfields in `ftPe_Init_MotionStateTable` with named enums/macros. Added a Peach-specific `ftPe_MotionFlags` enum in `forward.h` that composes common `FtStateChange_*` bits into reusable aliases for float attacks, specials, parasol states, and side smash. Also included the necessary forward headers and made one literal-only condition change from `0xC00` to `3072`, with no review discussion explaining that choice.",
+  "change_classification": {
+    "primary_type": "motion_state_table_cleanup",
+    "categories": [
+      "headers",
+      "enum_cleanup",
+      "motion_flags",
+      "readability",
+      "fighter_init"
+    ],
+    "systems": [
+      "fighter",
+      "ftPeach",
+      "motion_states"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftPeach/forward.h",
+    "src/melee/ft/chara/ftPeach/ftPe_Init.c"
+  ],
+  "what_changed": [
+    "Added `#include \"ft/forward.h\"` to `src/melee/ft/chara/ftPeach/forward.h` so the new Peach motion-flag enum can reference `FtStateChange_*` names.",
+    "Added `typedef enum ftPe_MotionFlags` containing composed flag aliases such as `ftPe_MF_Base`, `ftPe_MF_FloatAttackAirN`, `ftPe_MF_AttackS4`, `ftPe_MF_SpecialN`, `ftPe_MF_SpecialAirS`, `ftPe_MF_ParasolOpen`, and `ftPe_MF_ParasolFallSpecial`.",
+    "Updated `src/melee/ft/chara/ftPeach/ftPe_Init.c` to include `forward.h` and `ft/forward.h` before `ftPe_Init.h`.",
+    "Replaced raw state-change flag constants in `ftPe_Init_MotionStateTable` such as `0x0024040C`, `0x00340212`, `0x00440058`, and `0x004C0058` with Peach-specific `ftPe_MF_*` enum values.",
+    "Replaced raw move-id upper-byte constants such as `0x0D000000`, `0x13000000`, `0x14000000`, and `0x57800000` with expressions like `FtMoveId_AttackAirN << 24`, `FtMoveId_SpecialS << 24`, and `(FtMoveId_Unk87 << 24) | (1 << 23)`.",
+    "Converted zero state-change flags in the float and float-end motion states to `FtStateChange_None`.",
+    "Preserved unknown move-id cases with explicit names like `FtMoveId_Unk01`, `FtMoveId_Unk14`, `FtMoveId_Unk17`, and `FtMoveId_Unk87` instead of inventing more specific semantics.",
+    "Changed one held-input mask test in `ftPe_8011BA20` from `0xC00` to decimal `3072`; the PR context does not explain why this representation was preferred."
+  ],
+  "smart_moves": [
+    "Factored repeated bitflag combinations into layered aliases: for example `ftPe_MF_SpecialAirN` builds on `ftPe_MF_SpecialN` plus `FtStateChange_SkipUpdateParasol`, and `ftPe_MF_SpecialAirS` builds on `ftPe_MF_SpecialS` plus the same parasol skip flag.",
+    "Kept the motion table semantically stable while making encoded fields searchable by using named `FtStateChange_*` and `FtMoveId_*` constants rather than opaque hex values.",
+    "Used conservative unknown names (`Move_14`, `Move_17`, `FtMoveId_Unk*`) where the underlying meaning was not established, avoiding speculative decomp naming.",
+    "Moved fighter-specific composed flags into Peach's `forward.h`, making them reusable by Peach implementation files without bloating the motion-state table itself.",
+    "Made bitfield construction explicit with shifts, including the parasol entries' extra `(1 << 23)` bit, which documents that those values are not plain move IDs."
+  ],
+  "decomp_lessons": [
+    "For motion-state tables, prefer symbolic `FtStateChange_*` flag combinations and `FtMoveId_* << 24` expressions over raw hex constants once the bit meanings are known.",
+    "When many table rows share nearly identical flags, introduce fighter-local motion-flag aliases to reveal relationships among states and reduce copy-paste hex auditing.",
+    "Unknown but distinct motion flags or move IDs should be named as unknown placeholders rather than overinterpreted; this keeps progress match-safe while preserving searchability.",
+    "Composed enum values in forward headers can act as documentation for common state-transition behavior, such as preserving fastfall, preserving gfx/sfx, skipping parasol updates, and freezing state.",
+    "Keep unusual packed-field bits visible as separate OR terms, as with `(FtMoveId_Unk87 << 24) | (1 << 23)`, instead of collapsing them back into an opaque constant."
+  ],
+  "naming_conventions": [
+    "Peach-local motion flags use the `ftPe_MF_*` prefix, e.g. `ftPe_MF_Base`, `ftPe_MF_SpecialAirHi`, and `ftPe_MF_ParasolFallSpecial`.",
+    "Peach motion states retain the existing `ftPe_MS_*` style in `ftPeach_MotionState`.",
+    "Common fighter state-change flags use `FtStateChange_*`, including names such as `FtStateChange_None`, `FtStateChange_SkipUpdateParasol`, `FtStateChange_PreserveFastFall`, and `FtStateChange_Unk_UpdatePhys`.",
+    "Move IDs use `FtMoveId_*` and are shifted into the packed motion-state field with `<< 24`.",
+    "Unidentified meanings are explicitly marked with `Unk` or neutral move labels, such as `FtMoveId_Unk01`, `FtMoveId_Unk87`, `ftPe_MF_Move_14`, and `ftPe_MF_Move_17`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replace packed motion-table hex literals with equivalent symbolic expressions while preserving the exact bit pattern.",
+    "Use enum composition to guarantee the generated constants remain compile-time constants suitable for static motion-state table initializers.",
+    "Represent packed move-id fields as `FtMoveId_* << 24`; when extra high bits are present, OR them explicitly as in `(FtMoveId_Unk87 << 24) | (1 << 23)`.",
+    "The `0xC00` to `3072` change may have been matching- or style-driven, but the PR slice contains no comments confirming the reason."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-807",
+    "ftPeach",
+    "ftPe",
+    "Peach",
+    "motion definitions",
+    "motion state table",
+    "ftPe_Init_MotionStateTable",
+    "ftPe_MotionFlags",
+    "ftPe_MF_Base",
+    "ftPe_MF_FloatAttack",
+    "ftPe_MF_FloatAttackAirN",
+    "ftPe_MF_Move_14",
+    "ftPe_MF_FloatAttackAirB",
+    "ftPe_MF_FloatAttackAirHi",
+    "ftPe_MF_Move_17",
+    "ftPe_MF_AttackS4",
+    "ftPe_MF_Special",
+    "ftPe_MF_SpecialN",
+    "ftPe_MF_SpecialHi",
+    "ftPe_MF_SpecialLw",
+    "ftPe_MF_SpecialS",
+    "ftPe_MF_SpecialAirN",
+    "ftPe_MF_SpecialAirHi",
+    "ftPe_MF_SpecialAirS",
+    "ftPe_MF_ParasolOpen",
+    "ftPe_MF_ParasolFallSpecial",
+    "FtStateChange_None",
+    "FtStateChange_SkipUpdateItemVis",
+    "FtStateChange_FreezeState",
+    "FtStateChange_SkipUpdateParasol",
+    "FtStateChange_PreserveColAnimHitStatus",
+    "FtStateChange_SkipUpdateHit",
+    "FtStateChange_PreserveFastFall",
+    "FtStateChange_PreserveGfx",
+    "FtStateChange_SkipUpdateModel",
+    "FtStateChange_PreserveSfx",
+    "FtStateChange_SkipUpdateRumble",
+    "FtStateChange_Unk_UpdatePhys",
+    "FtStateChange_Unk_6",
+    "FtStateChange_SkipUpdateModelPartVis",
+    "FtStateChange_Unk_19",
+    "FtMoveId_Unk01",
+    "FtMoveId_AttackAirN",
+    "FtMoveId_Unk14",
+    "FtMoveId_AttackAirB",
+    "FtMoveId_AttackAirHi",
+    "FtMoveId_Unk17",
+    "FtMoveId_AttackS4",
+    "FtMoveId_SpecialLw",
+    "FtMoveId_SpecialS",
+    "FtMoveId_SpecialHi",
+    "FtMoveId_SpecialN",
+    "FtMoveId_Unk87",
+    "forward.h",
+    "ftPe_Init.c",
+    "parasol",
+    "float attack",
+    "special move flags"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename `ftPe_MF_Move_14`, `ftPe_MF_Move_17`, `FtMoveId_Unk01`, or `FtMoveId_Unk87` to more meaningful names.",
+    "Search whether other fighters define local `*_MotionFlags` enums in their `forward.h` files and follow the same composition pattern.",
+    "Check nearby history for why the input mask in `ftPe_8011BA20` was changed from `0xC00` to `3072`.",
+    "Audit remaining raw motion-state table constants in other `ft*/Init.c` files for similar symbolic cleanup opportunities."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

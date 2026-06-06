@@ -1,0 +1,136 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-925",
+  "pr": {
+    "number": 925,
+    "title": "Match some ftPurin callbacks",
+    "url": "https://github.com/doldecomp/melee/pull/925",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-06-09T02:01:34Z",
+    "merged_at": "2023-06-11T23:54:24Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched a set of Jigglypuff/Purin callback functions in ftPr_Init.c by replacing large MWERKS_GEKKO inline assembly blocks with C for SpecialHi and SpecialLw animation, physics, collision, and helper callbacks. The PR also cleaned up fighter access to use GET_FIGHTER in several places, converted some raw motion IDs to ftPr_MS_* enum names, preserved callback setup/clearing for x21BC_callback_Accessory4, and adjusted an sdata2 constant boundary in ftPr_Init.s.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "fighter-callbacks",
+      "asm-removal",
+      "cleanup"
+    ],
+    "systems": [
+      "fighter",
+      "ftPurin",
+      "asm",
+      "animation",
+      "physics",
+      "collision"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftPurin/ftPr_Init.c",
+    "asm/melee/ft/chara/ftPr_Init.s"
+  ],
+  "what_changed": [
+    "Replaced inline assembly implementations of ftPr_SpecialHi_Anim and ftPr_SpecialAirHi_Anim with C that sets the first hit capsule to sleep when specialhi state permits, then exits to ft_8008A2BC on grounded completion or ftCo_800CC730 on aerial completion.",
+    "Replaced simple pass-through physics callbacks with C wrappers: ftPr_SpecialHi_Phys calls ft_80084F3C, ftPr_SpecialAirHi_Phys calls ft_80084EEC, ftPr_SpecialLw_Phys calls ft_80084F3C, and ftPr_SpecialAirLw_Phys calls ft_80084EEC.",
+    "Replaced collision callbacks with C conditionals: grounded SpecialHi and SpecialLw call transition helpers when ft_800827A0 fails; aerial SpecialHi checks ft_CheckGroundAndLedge and ftCliffCommon_80081298.",
+    "Decompiled ftPr_SpecialHi_8013CDD8 to call ftCommon_8007D7FC, choose ftPr_MS_SpecialHiL or ftPr_MS_SpecialHiR based on facing_dir, call Fighter_ChangeMotionState with flags 0x0C4C508AU, and restore x21BC_callback_Accessory4.",
+    "Decompiled ftPr_SpecialHi_8013CE7C to clear fighter->cb.x21BC_callback_Accessory4.",
+    "Replaced raw motion IDs in ftPr_SpecialHi_8013CD34 with ftPr_MS_SpecialAirHiL and ftPr_MS_SpecialAirHiR.",
+    "Converted several fighter pointer loads from getFighter(gobj) to the project-preferred GET_FIGHTER(gobj) macro.",
+    "Updated asm/melee/ft/chara/ftPr_Init.s so ftPr_Init_804D9C18 became a float 1.0 with an explicit file boundary and new .sdata2 alignment before ftPr_Init_804D9C20."
+  ],
+  "smart_moves": [
+    "Recognized repeated assembly patterns as small callback wrappers and expressed them as direct calls or simple if conditions, reducing hundreds of assembly lines while preserving control flow.",
+    "Used existing fighter struct fields such as mv.pr.specialhi.x0, x914[0].x43_b2, x914[0].state, x914[0].element, cur_anim_frame, and cb.x21BC_callback_Accessory4 instead of leaving raw offsets.",
+    "Mapped hit capsule element assignment to HitElement_Sleep and disabled-state comparison to HitCapsule_Disabled, making the decompiled behavior searchable and less magic-number dependent.",
+    "Converted motion state numeric IDs to ftPr_MS_* enum constants where shown in the diff, improving readability and reducing risk of confusing left/right or ground/air states.",
+    "Kept grounded and aerial callback behavior distinct: grounded completion uses ft_8008A2BC while aerial completion uses ftCo_800CC730."
+  ],
+  "decomp_lessons": [
+    "For fighter callbacks, prefer GET_FIGHTER over direct user_data access or getFighter when possible; reviewer noted fake todo variables can be used if extra stack is needed for matching.",
+    "Empty early-return branches should use the RETURN_IF macro rather than hand-written if blocks with bare return statements.",
+    "When Fighter_ChangeMotionState flags are still opaque, use the melee-flags tool to split them if practical; at minimum, replace raw motion IDs with enum values.",
+    "Simple assembly wrappers around common physics/collision routines are good candidates for direct C functions once the called routine and branch polarity are known.",
+    "Callback fields such as fighter->cb.x21BC_callback_Accessory4 should be explicitly restored or cleared in the matched C; these assignments are semantically important and easy to miss when translating raw stores."
+  ],
+  "naming_conventions": [
+    "Use ftPr_* for Purin/Jigglypuff functions, including ftPr_SpecialHi_Anim, ftPr_SpecialAirHi_Anim, ftPr_SpecialLw_Anim, and related Phys/Coll callbacks.",
+    "Use Fighter_GObj* for fighter object parameters in newly decompiled fighter callback functions where the project convention allows it.",
+    "Use GET_FIGHTER(gobj) for extracting Fighter* from a fighter gobj.",
+    "Use enum-style motion state names such as ftPr_MS_SpecialHiL, ftPr_MS_SpecialHiR, ftPr_MS_SpecialAirHiL, and ftPr_MS_SpecialAirHiR instead of raw IDs like 365, 366, 367, or 368.",
+    "Use named hit capsule constants such as HitCapsule_Disabled and HitElement_Sleep instead of raw state or element literals."
+  ],
+  "assembly_or_matching_tactics": [
+    "Matched short nofralloc asm callbacks by translating branch structure directly into if (!function(...)) and if (!ftAnim_IsFramesRemaining(...)) forms.",
+    "For paired ground/air callbacks, reused the same high-level structure but preserved distinct terminal calls: ft_8008A2BC for ground and ftCo_800CC730 for air.",
+    "Preserved the original facing_dir comparison against ftPr_Init_804D9C10 to choose left versus right motion states.",
+    "Kept the motion-state flag literal 0x0C4C508AU in the decompiled code; reviewer suggested melee-flags could further split this field.",
+    "Adjusted sdata2 constants and alignment in the remaining asm file, including changing ftPr_Init_804D9C18 from a double 0.0078125 to a float 1.0 and inserting a file-boundary section/alignment before ftPr_Init_804D9C20."
+  ],
+  "review_feedback": [
+    "Reviewer ribbanya: use GET_FIGHTER instead of getFighter or direct user_data access; if more stack is needed, create fake vars with a todo.",
+    "Reviewer ribbanya: prefer the RETURN_IF macro over empty returns.",
+    "Reviewer ribbanya: use the melee-flags tool to split motion-state flags when possible; if not, at least use enum values for motion IDs, with ftPr_MS_SpecialHiL cited as the example.",
+    "Reviewer ribbanya: consecutive command variable zeroing can be written as a chained assignment: fighter->cmd_vars[0] = fighter->cmd_vars[1] = fighter->cmd_vars[2] = fighter->cmd_vars[3] = 0."
+  ],
+  "searchable_terms": [
+    "PR925",
+    "ftPurin",
+    "ftPr_Init.c",
+    "ftPr_Init.s",
+    "ftPr_SpecialHi_Anim",
+    "ftPr_SpecialAirHi_Anim",
+    "ftPr_SpecialHi_Phys",
+    "ftPr_SpecialAirHi_Phys",
+    "ftPr_SpecialHi_Coll",
+    "ftPr_SpecialAirHi_Coll",
+    "ftPr_SpecialHi_8013CD34",
+    "ftPr_SpecialHi_8013CDD8",
+    "ftPr_SpecialHi_8013CE7C",
+    "ftPr_SpecialLw_Anim",
+    "ftPr_SpecialAirLw_Anim",
+    "ftPr_SpecialLw_Phys",
+    "ftPr_SpecialAirLw_Phys",
+    "ftPr_SpecialLw_Coll",
+    "GET_FIGHTER",
+    "getFighter",
+    "RETURN_IF",
+    "melee-flags",
+    "Fighter_ChangeMotionState",
+    "ftPr_MS_SpecialHiL",
+    "ftPr_MS_SpecialHiR",
+    "ftPr_MS_SpecialAirHiL",
+    "ftPr_MS_SpecialAirHiR",
+    "HitCapsule_Disabled",
+    "HitElement_Sleep",
+    "x21BC_callback_Accessory4",
+    "ftAnim_IsFramesRemaining",
+    "ft_8008A2BC",
+    "ftCo_800CC730",
+    "ft_80084F3C",
+    "ft_80084EEC",
+    "ft_800827A0",
+    "ft_CheckGroundAndLedge",
+    "ftCliffCommon_80081298",
+    "0x0C4C508A"
+  ],
+  "follow_up_queries": [
+    "Find later ftPurin PRs that split 0x0C4C508A with melee-flags or renamed the related motion-state flags.",
+    "Search for remaining direct fighter_gobj->user_data uses in ftPr_Init.c that could be converted to GET_FIGHTER.",
+    "Search for other fighter callback PRs where simple Phys/Coll asm wrappers were replaced by direct C calls.",
+    "Check whether RETURN_IF was later applied to the empty-return patterns noted in review."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

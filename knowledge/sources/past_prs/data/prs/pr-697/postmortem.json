@@ -1,0 +1,137 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-697",
+  "pr": {
+    "number": 697,
+    "title": "Match __OSUnhandledException",
+    "url": "https://github.com/doldecomp/melee/pull/697",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-01-17T10:18:06Z",
+    "merged_at": "2023-01-17T10:30:23Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched Dolphin OS __OSUnhandledException in C by removing the MUST_MATCH inline assembly implementation and its separate data assembly file, folding report strings and exception switch behavior into src/dolphin/os/OSError.c. The PR also moved the __DIRegs hardware register declaration from OSInit.c into OSInit.h so OSError.c could reference it, and removed asm/dolphin/os/OSError_data.s from obj_files.mk.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "hardware-registers",
+      "exception-handling"
+    ],
+    "systems": [
+      "dolphin/os",
+      "OSError",
+      "OSInit",
+      "build-system",
+      "asm"
+    ]
+  },
+  "key_files": [
+    "src/dolphin/os/OSError.c",
+    "asm/dolphin/os/OSError_data.s",
+    "src/dolphin/os/OSInit.c",
+    "src/dolphin/os/OSInit.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted asm/dolphin/os/OSError_data.s, which previously held MUST_MATCH-only report string data, the __OSUnhandledException jump table jtbl_804022D4, and sdata label lbl_804D5C18.",
+    "Removed the OSError_data.s object from TEXT_O_FILES in obj_files.mk.",
+    "Removed the inline assembly version of __OSUnhandledException from OSError.c and kept a C implementation that now matches closely enough to replace it.",
+    "Adjusted __OSUnhandledException formatting strings to match the original data exactly, including changing \"DSISR= 0x%08x\" to \"DSISR = 0x%08x\" and adding the explicit \"TB = 0x%016llx\\n\" OSReport call using OSGetTime().",
+    "Changed the error 15 hardware register reporting from raw pointer casts at 0xCC005030, 0xCC005032, 0xCC005000+0x20/+0x22, and 0xCC006014 to named register arrays __DSPRegs and __DIRegs.",
+    "Fixed the final last-interrupt report call to pass __OSLastInterruptTime for the %016llx field in addition to __OSLastInterrupt and __OSLastInterruptSrr0.",
+    "Added includes for <dolphin/dsp/dsp.h> and <dolphin/os/OSInit.h> in OSError.c to expose __DSPRegs and __DIRegs.",
+    "Moved the __DIRegs declaration out of OSInit.c and into OSInit.h as extern vu32 __DIRegs[0x10] AT_ADDRESS(0xCC006000), making the DI hardware register block reusable by OSError.c."
+  ],
+  "smart_moves": [
+    "Converted anonymous absolute-address loads into named hardware register arrays, which made the C expression cleaner and likely helped produce the expected addressing sequence while improving maintainability.",
+    "Promoted __DIRegs to a header instead of duplicating an extern declaration locally in OSError.c, establishing a shared declaration point for the DI register block.",
+    "Matched string data by using literal OSReport format strings in C, allowing the separate OSError_data.s file and hand-maintained labels to be deleted.",
+    "Used OSReport(\"TB = 0x%016llx\\n\", OSGetTime()) directly, matching the original 64-bit time print behavior and avoiding the prior placeholder OSReport(\"\", time, (u32) time) workaround.",
+    "Removed the MUST_MATCH asm branch entirely once the C implementation matched, reducing future maintenance burden and making __OSUnhandledException easier to inspect."
+  ],
+  "decomp_lessons": [
+    "For Dolphin OS exception/reporting functions, exact format-string spelling, spacing, and newline placement matter because strings can drive data layout and matching.",
+    "If an asm data file only exists to host report strings or jump tables for an inline asm fallback, a successful C match can often eliminate both the asm function and the data object.",
+    "Hardware register accesses should prefer existing named volatile register arrays such as __DSPRegs and __DIRegs over raw pointer casts when that produces correct code and clearer intent.",
+    "Shared memory-mapped register declarations belong in headers when multiple C files need them; this avoids scattered local externs and keeps AT_ADDRESS declarations consistent.",
+    "When reproducing varargs calls like OSReport, ensure every format specifier has a matching argument, especially 64-bit %llx fields such as OSGetTime() and __OSLastInterruptTime.",
+    "Switch cases that originally compiled through an assembly jump table can still be represented naturally in C when the case values and report calls are arranged to reproduce the same behavior."
+  ],
+  "naming_conventions": [
+    "Preserved SDK-style double-underscore internal names such as __OSUnhandledException, __OSErrorTable, __OSLastInterrupt, __OSLastInterruptSrr0, __OSLastInterruptTime, __DSPRegs, and __DIRegs.",
+    "Used OS_ERROR_DSI and other OS error enum-style constants where available, while retaining raw case 15 where the excerpt does not show a named constant.",
+    "Moved away from synthetic labels such as lbl_80401FF8, lbl_804D5C18, and jtbl_804022D4 once equivalent C literals/control flow matched."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted a large inline asm implementation guarded by MUST_MATCH after replacing it with equivalent C.",
+    "Eliminated separate assembly data labels by relying on C string literals and switch lowering.",
+    "Matched load behavior for AI/ARAM/DI DMA address reporting through indexed volatile register arrays: __DSPRegs[24], __DSPRegs[25], __DSPRegs[16], __DSPRegs[17], and __DIRegs[5].",
+    "Used a direct 64-bit OSGetTime() result in a varargs OSReport call for the TB field.",
+    "Preserved exception handler dispatch semantics: call registered __OSErrorTable[error] handler with scheduler disabled, re-enable scheduler, reschedule, then OSLoadContext; special-case error 8 by loading context before reporting unhandled exception."
+  ],
+  "review_feedback": [
+    "No issue comments or review comments were present in the provided PR context.",
+    "The PR had one review, but the provided excerpt contains no review body or actionable reviewer feedback."
+  ],
+  "searchable_terms": [
+    "pr-697",
+    "Match __OSUnhandledException",
+    "__OSUnhandledException",
+    "OSError.c",
+    "OSError_data.s",
+    "OSInit.c",
+    "OSInit.h",
+    "obj_files.mk",
+    "MUST_MATCH",
+    "inline asm removal",
+    "report_messages",
+    "jtbl_804022D4",
+    "lbl_80401FF8",
+    "lbl_804D5C18",
+    "OSReport",
+    "OSDumpContext",
+    "OSGetTime",
+    "PPCHalt",
+    "__OSErrorTable",
+    "OSDisableScheduler",
+    "OSEnableScheduler",
+    "__OSReschedule",
+    "OSLoadContext",
+    "OS_ERROR_DSI",
+    "DSISR",
+    "DAR",
+    "SRR0",
+    "TB",
+    "__OSLastInterrupt",
+    "__OSLastInterruptSrr0",
+    "__OSLastInterruptTime",
+    "__DSPRegs",
+    "__DIRegs",
+    "AT_ADDRESS",
+    "0xCC005000",
+    "0xCC006000",
+    "AI DMA Address",
+    "ARAM DMA Address",
+    "DI DMA Address",
+    "Dolphin OS exception handling"
+  ],
+  "follow_up_queries": [
+    "Find other Dolphin OS files that still use MUST_MATCH inline asm with separate *_data.s files for strings or jump tables.",
+    "Search for raw 0xCC00xxxx hardware register pointer casts that could be replaced by named volatile register arrays.",
+    "Audit OSReport calls with %llx format strings for missing or incorrectly split 64-bit arguments.",
+    "Check whether error case 15 has a named OS_ERROR_* constant that could replace the raw case value without affecting matching."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

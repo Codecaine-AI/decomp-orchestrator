@@ -1,0 +1,145 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1600",
+  "pr": {
+    "number": 1600,
+    "title": "devcom matches",
+    "url": "https://github.com/doldecomp/melee/pull/1600",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-16T06:55:55Z",
+    "merged_at": "2025-06-16T07:00:25Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched a substantial portion of sysdolphin baselib devcom by replacing minimal stubs/globals with real DevCom queue, callback, allocation, and request logic. The PR also tightened related headers and call sites: HSD_DevCom now uses size_t for size, HSD_DevComIsBusy returns bool, HSD_DevComRequest returns an int request id, HSD_AudioMalloc gained a concrete void* HSD_AudioMalloc(size_t) prototype, and lbfile was adjusted to use clearer destination/size/priority parameter names plus a ROUND_UP_32 helper. Symbol data for the former monolithic HSD_DevCom_804083B8 region was split into individual string labels used by devcom assertions/messages.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-map-cleanup",
+      "callback-queue-logic",
+      "type-correction"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "devcom",
+      "lbfile",
+      "game-mode",
+      "config"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/devcom.c",
+    "src/sysdolphin/baselib/devcom.h",
+    "src/melee/lb/lbfile.c",
+    "src/sysdolphin/baselib/forward.h",
+    "src/sysdolphin/baselib/synth.h",
+    "src/melee/gm/gm_1A3F.c",
+    "config/GALE01/symbols.txt"
+  ],
+  "what_changed": [
+    "Expanded src/sysdolphin/baselib/devcom.c from a minimal HSD_DevComIsBusy implementation and raw globals into matched DevCom infrastructure: static ARQRequest arrays, DevCom status queues, relay buffers, free-list state, wakeup callbacks, unlink logic, and HSD_DevComRequest.",
+    "Changed devComStatus from bool devComStatus[4] to static HSD_DevCom* devComStatus[4], with HSD_DevComIsBusy returning whether a queue pointer is non-null.",
+    "Added HSD_DevComUnlink with interrupt disable/restore protection, queue traversal, tail-cache maintenance via HSD_DevCom_804C6330, and an HSD_ASSERT fallback if the target node is not found.",
+    "Added HSD_DevComStdCallback and HSD_DevComARAMCallback paths that identify ARQ request slot, clear ARAM/relay state, invoke user callbacks when present, unlink completed requests, return request nodes to the free list, and wake DVD/ARAM processing.",
+    "Implemented HSD_DevComRequest to allocate or reuse HSD_DevCom nodes, validate alignment and buffer-size constraints with HSD_ASSERT, normalize priority for non-priority request types, enqueue requests by priority, and return a request id.",
+    "Left several DevCom functions as documented nonmatched placeholders using /// #function comments: HSD_DevComARAMWakeUp, HSD_DevComDVDStdCallback, HSD_DevComDVDARAMEndCallback, HSD_DevComDVDMemCallback, HSD_DevComDVDCallback, HSD_DevComDVDWakeUp, and HSD_DevComCancelEx.",
+    "Updated devcom.h to include placeholder.h and dolphin/ar.h, move the HSD_DevCom forward declaration to baselib/forward.h, use size_t for HSD_DevCom.size, expose ARQRequest callback prototypes, and correct HSD_DevComRequest to return int.",
+    "Added typedef struct HSD_DevCom HSD_DevCom; to src/sysdolphin/baselib/forward.h.",
+    "Changed HSD_AudioMalloc in synth.h from UNK_RET HSD_AudioMalloc(UNK_PARAMS) to void* HSD_AudioMalloc(size_t), supporting typed allocation in HSD_DevComRequest.",
+    "Adjusted lbFile_800164A4 signature and internals: renamed/retargeted parameters to file, dest, size, pri; wrote file size through size_t*; selected DevCom type from destination address; used HSD_DevComRequest's corrected argument order and return signature.",
+    "Added ROUND_UP_32(x) in lbfile.c and reused it for DevCom transfer size and heap allocation alignment instead of open-coded ((*x + 0x1F) & 0xFFFFFFE0).",
+    "Simplified gm_801A4014 busy wait from HSD_DevComIsBusy(1) != 0 to HSD_DevComIsBusy(1), reflecting the bool return type.",
+    "Split config/GALE01/symbols.txt data at 0x804083B8 from one global HSD_DevCom_804083B8 object into multiple lbl_804083B8 through lbl_80408470 string symbols, likely matching the devcom assertion/message strings."
+  ],
+  "smart_moves": [
+    "Converted devComStatus into a pointer queue rather than a bool array; HSD_DevComIsBusy still provides a bool API while preserving the real internal linked-list state needed by matching code.",
+    "Used interrupt guards around free-list and queue mutation, which matches low-level asynchronous DVD/ARAM callback expectations and avoids race-prone decomp code.",
+    "Introduced a small static inline HSD_DevComARAMCallback_inline helper to isolate the exact free-list reinsertion sequence, a common matching tactic when statement ordering/register allocation matters.",
+    "Centralized 32-byte alignment in ROUND_UP_32, improving readability while preserving the bitwise alignment expression needed by file transfer and heap allocation paths.",
+    "Corrected HSD_AudioMalloc's prototype before using it for typed HSD_DevCom block allocation, avoiding casts or placeholder signatures that would obscure matching.",
+    "Kept unknown or not-yet-matched DevCom routines as explicit /// #function placeholders instead of overclaiming implementation, while adding prototypes so matched functions can call them.",
+    "Split the data symbol block into individual strings, which is useful when assertion strings or callback labels must be referenced independently by matched C."
+  ],
+  "decomp_lessons": [
+    "When a public function appears to return a simple status, inspect nearby queue usage before modeling the backing storage as bool; here the status array is really per-priority HSD_DevCom* queue heads.",
+    "For asynchronous subsystems, matching often depends on modeling queue heads, queue tails, free lists, and interrupt masking explicitly rather than using simplified containers or booleans.",
+    "Return types can unlock cleaner callers: changing HSD_DevComRequest from void to int reflects the request id produced from HSD_DevCom_804D6050 + priority and clarifies cancellation/tracking semantics.",
+    "Use size_t for byte counts when the struct field and API represent transfer sizes; this propagated from HSD_DevCom.size into HSD_DevComRequest and lbFile_800164A4.",
+    "Alignment invariants should be expressed at the boundary of the request API. HSD_DevComRequest asserts src, dest, and size are all 32-byte aligned and size is nonzero.",
+    "Symbol-map granularity matters for matching data references: a single large data object may need to be decomposed into string labels once code starts referencing individual messages.",
+    "Forward declarations should live in shared forward headers when multiple baselib headers need the type; devcom.h now relies on baselib/forward.h for HSD_DevCom.",
+    "If a function's decomp is incomplete, add accurate prototypes for related unknown functions rather than forcing an implementation. This preserves compile/link structure and supports incremental matching."
+  ],
+  "naming_conventions": [
+    "DevCom globals use existing address-derived placeholder names when semantic names are not yet known, such as HSD_DevCom_804C6330, HSD_DevCom_804D77F0, HSD_DevCom_804D7808, and HSD_DevCom_804D6050.",
+    "Local variables in newly matched code still use decompiler-style names when meaning is uncertain, such as temp_r30, temp_r3, var_r0, and var_r5.",
+    "Constants introduced for discovered semantics use uppercase macro style: DEVCOMDEST_SBUF, DEVCOM_BUF_SIZE, INIT_N_DEVCOMS, and ROUND_UP_32.",
+    "Function names follow established HSD_DevCom subsystem prefixes: HSD_DevComIsBusy, HSD_DevComUnlink, HSD_DevComStdCallback, HSD_DevComARAMCallback, HSD_DevComRequest.",
+    "Unknown data strings in symbols.txt remain address labels with lbl_ prefixes rather than speculative semantic names."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used static inline helpers for small logic fragments, specifically HSD_DevComARAMCallback_inline and HSD_DevComGetDestType, likely to preserve instruction shape without exporting extra symbols.",
+    "Used gotos and explicit cleanup labels in HSD_DevComUnlink to model original control flow around OSRestoreInterrupts.",
+    "Used exact bitmask operations for destination type and priority classification: type & 7 for destination type and (type & 0x38) == 0x20 for priority preservation.",
+    "Preserved 32-byte alignment as bit arithmetic: (((x) + 31) & ~31).",
+    "Modeled request ids as a monotonically increasing base incremented by 4 plus priority: result = HSD_DevCom_804D6050 + pri; HSD_DevCom_804D6050 += 4.",
+    "Used pointer identity comparisons against devComARQR[0][0] and devComARQR[1][0] to recover the ARQ channel index.",
+    "Allocated HSD_DevCom nodes in batches of 16 and linked dc[1] onward into a free list, matching the original allocator pattern rather than allocating one node at a time."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1600",
+    "devcom matches",
+    "r-burns",
+    "HSD_DevCom",
+    "HSD_DevComRequest",
+    "HSD_DevComIsBusy",
+    "HSD_DevComUnlink",
+    "HSD_DevComStdCallback",
+    "HSD_DevComARAMCallback",
+    "HSD_DevComARAMWakeUp",
+    "HSD_DevComDVDWakeUp",
+    "HSD_DevComCancelEx",
+    "devComStatus",
+    "devComARQR",
+    "devComRelayBufFlag",
+    "HSD_DevCom_804C6330",
+    "HSD_DevCom_804D77F0",
+    "HSD_DevCom_804D7808",
+    "HSD_DevCom_804D6050",
+    "DEVCOMDEST_SBUF",
+    "DEVCOM_BUF_SIZE",
+    "INIT_N_DEVCOMS",
+    "ROUND_UP_32",
+    "HSD_AudioMalloc",
+    "ARQRequest",
+    "OSDisableInterrupts",
+    "OSRestoreInterrupts",
+    "HSD_ASSERT",
+    "lbFile_800164A4",
+    "lbFile_8001634C",
+    "gm_801A4014",
+    "symbols.txt",
+    "lbl_804083B8",
+    "lbl_80408470"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that implement HSD_DevComARAMWakeUp or HSD_DevComDVDWakeUp after the placeholders added in pr-1600.",
+    "Search for later renames of HSD_DevCom_804C6330, HSD_DevCom_804D77F0, HSD_DevCom_804D7808, or HSD_DevCom_804D6050 to recover semantic global names.",
+    "Check whether HSD_DevComCancelEx later uses the int request id returned by HSD_DevComRequest.",
+    "Look for follow-up cleanup of lbFile_800164A4 parameter names and HSD_DevComCallback signature once more DevCom code is matched.",
+    "Search for later symbol-map changes around lbl_804083B8 through lbl_80408470 to identify the assertion strings semantically."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

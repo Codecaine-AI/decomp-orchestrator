@@ -1,6 +1,6 @@
 ---
 covers: Score integration gate, global regression protection, and PR handoff boundary
-concepts: [score-integration, regression-gate, baseline, pr-handoff, review]
+concepts: [score-integration, regression-gate, baseline, pr-handoff, pr-split-plan, review]
 ---
 
 # Score Integration And PR Handoff
@@ -15,6 +15,12 @@ A candidate should pass through these checks before it affects the board
 baseline:
 
 - The worker still owns the lease and write set for the candidate.
+- The worker report's local-regression block passed the runner acceptance gate:
+  target regression is false, neighbor regressions are empty, validation
+  artifacts exist on disk, and edited paths stay inside the write set.
+- The worker post-return repair gate is clean: no unaccepted write-set diff is
+  retained, configured runner-owned post-return checks passed, and any
+  `repair_request` loop has resolved rather than exhausted.
 - Local validation is preserved and unresolved local regressions are not kept.
 - The source remains reviewable and understandable.
 - The branch-level build/report refresh confirms the score movement.
@@ -39,8 +45,26 @@ allocation decision happen outside the worker loop.
 
 ## PR Boundary
 
-The orchestrator does not create one PR per file, worker, symbol, or lease.
-Human-facing PR packaging is a separate step after the run produces a coherent
-improvement bundle. The PR-review agent can help analyze review patterns and PR
-knowledge, but final presentation and merge readiness stay outside the worker
-lease loop.
+The orchestrator does not create one PR per file, worker, symbol, or lease, and
+it does not publish GitHub PRs automatically. Human-facing PR packaging is a
+separate step after the run produces a coherent improvement bundle.
+
+For review-sized handoff, the packaging step can ask the orchestrator for a
+directory-scoped split plan. `pr-split-plan` inspects the branch/worktree
+against the selected base ref, groups changed files by Melee subsystem
+directories such as `melee/it`, `melee/gm`, and `melee/cm`, and emits suggested
+slice branches, titles, pathspecs, and patch commands. Shared or support
+directories become separate slices so cross-cutting changes can be reviewed or
+stacked intentionally.
+
+Directory grouping is a proposal, not proof of independence. Each slice carries
+an unverified disposition: `independent`, `shared-prep`, `stacked`, or
+`needs-merge`. A slice becomes truly independent only after it is applied to a
+fresh worktree based on the current base ref and passes the configured
+configure/build/regression check by itself. If a subsystem slice only passes
+after a shared slice is present, the PRs should be stacked or merged rather than
+presented as independent.
+
+The PR-review agent can help analyze review patterns and PR knowledge, but
+final branch creation, presentation, reviewer coordination, and merge readiness
+stay operator-owned outside the worker lease loop.

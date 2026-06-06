@@ -1,0 +1,163 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1038",
+  "pr": {
+    "number": 1038,
+    "title": "RObj match",
+    "url": "https://github.com/doldecomp/melee/pull/1038",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2023-12-21T15:36:42Z",
+    "merged_at": "2024-01-22T20:41:43Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Partial RObj decompilation work was merged in a conservative form: robj.c gained many reconstructed functions and header knowledge, but the build was kept matching by unlinking robj.c and restoring/linking the full robj.s assembly. The PR also added DTK-style assembler macros, expanded robj split sections, adjusted RObj symbol scopes to local, and fixed object.h assert macro usage. Comments indicate the author intended the PR as in-progress RObj work; reviewer/maintainer feedback pushed it toward preserving match safety until the remaining functions and DTK setup could be handled later.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "partial-decomp",
+      "headers",
+      "assembly",
+      "build-config",
+      "safety-fix"
+    ],
+    "systems": [
+      "sysdolphin/baselib/robj",
+      "sysdolphin/baselib/object",
+      "asm",
+      "macros.inc",
+      "GALE01 splits",
+      "GALE01 symbols",
+      "obj_files"
+    ]
+  },
+  "key_files": [
+    "asm/sysdolphin/baselib/robj.s",
+    "src/sysdolphin/baselib/robj.c",
+    "src/sysdolphin/baselib/robj.h",
+    "src/sysdolphin/baselib/object.h",
+    "src/macros.inc",
+    "config/GALE01/splits.txt",
+    "config/GALE01/symbols.txt",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Restored/kept the full RObj assembly path in asm/sysdolphin/baselib/robj.s, now with a .file \"robj.c\" directive and DTK-style symbol structure in the assembly diff.",
+    "Removed src/sysdolphin/baselib/robj.c.o from TEXT_O_FILES in obj_files.mk so the build links asm/sysdolphin/baselib/robj.s.o instead of the partial C object.",
+    "Added substantial reconstructed RObj C code: HSD_RObjGetGlobalPosition, set_dirup_matrix, resolveCnsDirUp, resolveLimits, HSD_RObjUpdateAll, HSD_RObjResolveRefs/All, HSD_RObjLoadDesc, HSD_RObjRemove/RemoveAll, HSD_RObjAlloc/Free, Rvalue allocation/removal/reference resolution, HSD_RObjSetConstraintObj, and _HSD_RObjForgetMemory.",
+    "Left weak or unfinished areas explicitly nonmatching with NOT_IMPLEMENTED, including resolveCnsOrientation and expEvaluate in robj.c.",
+    "Expanded robj.c split coverage in config/GALE01/splits.txt for .rodata, .data, .bss, .sdata, and .sdata2 in addition to .text/.sbss.",
+    "Changed HSD_RObj_804DE6A0 through HSD_RObj_804DE6CC in config/GALE01/symbols.txt from global to local scope.",
+    "Renamed the RObj type mask macro from TYPE_MASK to ROBJ_TYPE_MASK and added REFTYPE_EXP, REFTYPE_LIMIT, and REFTYPE_BYTECODE alongside existing RObj reftypes.",
+    "Cleaned up robj.h struct pointer types to use project typedef names such as HSD_Rvalue*, HSD_RvalueList*, HSD_ExpDesc*, HSD_ByteCodeExpDesc*, HSD_IKHintDesc*, and HSD_Joint* instead of underscored incomplete struct names.",
+    "Broadened RObj APIs from HSD_JObj-specific parameters to void* where the implementation accepts a generic object plus HSD_ObjUpdateFunc, notably HSD_RObjSetConstraintObj and HSD_RObjUpdateAll.",
+    "Fixed object.h iref_INC assert style by replacing a manual __assert call with HSD_ASSERT(158, HSD_OBJ(o)->ref_count_individual != 0).",
+    "Added many PowerPC assembler constants and DTK helper macros to src/macros.inc, including SPR names, CR bit names, and .fn/.endfn/.obj/.endobj/.sym/.endsym/.rel."
+  ],
+  "smart_moves": [
+    "The final merge avoided regressing matching status by unlinking the incomplete C translation and restoring robj.s, while still preserving the recovered C and headers for future work.",
+    "Replacing inline asm/nonmatching bodies with NOT_IMPLEMENTED made unfinished C explicit rather than hiding partial behavior behind fragile inline assembly.",
+    "Keeping objdiff evidence in the discussion made the merge decision grounded in measurable match status instead of relying only on source-level intent.",
+    "Moving RObj constants in symbols.txt from global to local aligned symbol visibility with the restored assembly/data ownership.",
+    "Adding DTK macros to macros.inc supports assembly produced or maintained in a cleaner DTK-compatible style and can be reused by other assembly restoration work.",
+    "Using HSD_ASSERT in object.h followed the project macro convention and avoided open-coded assert strings/line handling."
+  ],
+  "decomp_lessons": [
+    "For large baselib files with many remaining mismatches, it is acceptable to merge useful C/header progress while continuing to link the original assembly until the whole file can be matched.",
+    "If a partial C file cannot yet be linked, remove its object from obj_files.mk rather than letting nonmatching code affect the final DOL.",
+    "Split sections must include all data-bearing sections referenced by a file; robj.c needed .rodata, .data, .bss, .sdata, and .sdata2 entries, not just text/sbss.",
+    "Use NOT_IMPLEMENTED for known unfinished functions when the linked assembly remains authoritative; this keeps the C roadmap visible without claiming a match.",
+    "Header work can still be valuable before a file fully matches: reftype constants, function prototypes, union field usage, and reference-resolution APIs help future matching attempts.",
+    "Prefer project-level assert macros such as HSD_ASSERT over manually spelling __assert unless there is evidence the manual form is required for matching."
+  ],
+  "naming_conventions": [
+    "Use ROBJ_TYPE_MASK instead of a generic TYPE_MASK for RObj flag masks.",
+    "Represent RObj high-bit type classes as REFTYPE_EXP, REFTYPE_JOBJ, REFTYPE_LIMIT, REFTYPE_BYTECODE, and REFTYPE_IKHINT.",
+    "Use HSD_RObj*, HSD_Rvalue*, HSD_RvalueList*, HSD_ExpDesc*, HSD_ByteCodeExpDesc*, HSD_IKHintDesc*, and HSD_Joint* typedef-style names in robj.h rather than underscored struct tags when those names exist.",
+    "RObj helper predicates introduced/used include RObjHasFlags, RObjHasFlags2, and RObjHasLimitReftype.",
+    "RObj public APIs follow the HSD_RObj... and HSD_Rvalue... prefixes; private helpers are lower-case or static names such as set_dirup_matrix, resolveCnsDirUp, resolveLimits, expLoadDesc, and bcexpLoadDesc."
+  ],
+  "assembly_or_matching_tactics": [
+    "Restore all of robj.s when the C file is not yet ready to replace it.",
+    "Unlink robj.c from obj_files.mk while retaining robj.s.o in TEXT_O_FILES to preserve matching output.",
+    "Use DTK-style assembler macros in macros.inc: .fn/.endfn for functions, .obj/.endobj for objects, .sym/.endsym for sized untyped symbols, and .rel for relative relocations.",
+    "Add .file \"robj.c\" to robj.s to associate the assembly with the source file name.",
+    "Mark unfinished C functions as NOT_IMPLEMENTED rather than using inline asm as a temporary bridge when the assembly file is still linked.",
+    "Track local/global symbol scope for file-owned constants; this PR made HSD_RObj_804DE6A0 through HSD_RObj_804DE6CC local.",
+    "Use objdiff as the arbiter for whether the PR should link C or assembly; comments specifically referenced an objdiff screenshot before merging."
+  ],
+  "review_feedback": [
+    {
+      "source": "issue comment by ribbanya",
+      "feedback": "Suggested merging only after restoring all robj.s, unlinking robj.c, replacing inline asm with NOT_IMPLEMENTED, fixing object.h macro usage, reverting a nonmatching jobj.h change, and checking objdiff."
+    },
+    {
+      "source": "author response by PsiLupan",
+      "feedback": "Accepted the conservative merge path, explaining the PR was intended to show RObj was being worked on and that remaining matching/DTK setup could be handled later."
+    },
+    {
+      "source": "absence of review comments",
+      "feedback": "No line-level review comments were present in the slice; evidence comes from issue comments and the final diff."
+    }
+  ],
+  "searchable_terms": [
+    "RObj match",
+    "robj",
+    "HSD_RObjGetGlobalPosition",
+    "set_dirup_matrix",
+    "resolveCnsDirUp",
+    "resolveCnsOrientation",
+    "resolveLimits",
+    "HSD_RObjUpdateAll",
+    "HSD_RObjResolveRefs",
+    "HSD_RObjResolveRefsAll",
+    "HSD_RObjLoadDesc",
+    "HSD_RObjRemove",
+    "HSD_RObjRemoveAll",
+    "HSD_RObjAlloc",
+    "HSD_RObjFree",
+    "HSD_RvalueAlloc",
+    "HSD_RvalueResolveRefs",
+    "HSD_RObjSetConstraintObj",
+    "_HSD_RObjForgetMemory",
+    "ROBJ_TYPE_MASK",
+    "REFTYPE_EXP",
+    "REFTYPE_JOBJ",
+    "REFTYPE_LIMIT",
+    "REFTYPE_BYTECODE",
+    "REFTYPE_IKHINT",
+    "RObjHasLimitReftype",
+    "HSD_ASSERT",
+    "NOT_IMPLEMENTED",
+    "objdiff",
+    "DTK macros",
+    ".fn",
+    ".endfn",
+    ".obj",
+    ".endobj",
+    ".rel",
+    "robj.s restored",
+    "robj.c unlinked",
+    "obj_files.mk",
+    "config/GALE01/splits.txt",
+    "config/GALE01/symbols.txt",
+    "src/macros.inc"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that relink src/sysdolphin/baselib/robj.c.o or finish matching RObj from the DTK setup.",
+    "Search for subsequent implementations of resolveCnsOrientation and expEvaluate in robj.c.",
+    "Search for later changes to ROBJ_TYPE_MASK or RObj reftype constants to confirm final naming.",
+    "Find other PRs that add or use DTK macros .fn/.obj/.rel in src/macros.inc.",
+    "Check whether the object.h HSD_ASSERT(158, ...) pattern was reused elsewhere for ref/iref count assertions."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

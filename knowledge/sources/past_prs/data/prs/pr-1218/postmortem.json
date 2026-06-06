@@ -1,0 +1,154 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1218",
+  "pr": {
+    "number": 1218,
+    "title": "Match `lbColl_80007DD8`",
+    "url": "https://github.com/doldecomp/melee/pull/1218",
+    "state": "MERGED",
+    "author": "rjeli",
+    "created_at": "2024-02-14T09:53:22Z",
+    "merged_at": "2024-02-14T17:59:25Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched `lbColl_80007DD8` by tightening its argument types and local structure, replacing manual JObj matrix setup/assert logic with `HSD_JObjGetMtxPtr`, and using a conditional transformed matrix path for `PSMTXConcat`. The PR also cleaned nearby collision helper typing by changing `lbColl_800077A0` to take `MtxPtr`, updated the `lbColl_80007DD8` prototype to use `Vec3*` and `float*`, and improved `HSD_JObjSetupMatrixSub` readability by replacing raw JObj flag constants with named macros plus a new `JOBJ_JOINT` mask.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "function-match",
+      "type-correction",
+      "headers",
+      "macro-cleanup",
+      "collision",
+      "baselib"
+    ],
+    "systems": [
+      "src/melee/lb",
+      "src/sysdolphin/baselib",
+      "lbcollision",
+      "jobj"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/lbcollision.c",
+    "src/melee/lb/lbcollision.h",
+    "src/sysdolphin/baselib/jobj.c",
+    "src/sysdolphin/baselib/jobj.h"
+  ],
+  "what_changed": [
+    "`lbColl_80007DD8` was rewritten from mostly anonymous `arg0`/`arg1`/`arg2`/`unk_t` temporaries into clearer parameters: `HitCapsule* capsule`, `HitResult* hit`, `Mtx hit_transform`, `Vec3* arg3`, `float* angle`, and `float scale`.",
+    "`lbColl_80007DD8` now computes `dist_offset` from `capsule->scl` or `capsule->scl * scale` depending on `capsule->x43_b1`.",
+    "The hit matrix path now uses `PSMTXConcat(hit_transform, HSD_JObjGetMtxPtr(hit->bone), transformed_hit)` when a transform is provided, then passes either `transformed_hit` or `HSD_JObjGetMtxPtr(hit->bone)` into `lbColl_800077A0` via a conditional expression.",
+    "Manual null-check/assert and `lbColl_JObjSetupMatrix` access to `hit->bone->mtx` were removed from `lbColl_80007DD8` in favor of `HSD_JObjGetMtxPtr`, whose assert line was identified as relevant to the match.",
+    "`lbColl_800077A0` changed its matrix parameter from `Mtx arg1` to `MtxPtr arg1`, and its local `diff_cb_x` temporary was removed in favor of directly testing `diff_cb.x`.",
+    "`lbcollision.h` was updated so `lbColl_80007DD8` advertises `Vec3*` and `float*` instead of two `unk_t` parameters.",
+    "`HSD_JObjSetupMatrixSub` replaced raw flag masks like `0xFFFFFFBF`, `0x800000`, `0x600000`, `0x200000`, and `0x400000` with named macros such as `~JOBJ_MTX_DIRTY`, `JOBJ_USER_DEF_MTX`, `JOBJ_JOINT`, `JOBJ_JOINT1`, `JOBJ_JOINT2`, and `JOBJ_EFFECTOR`.",
+    "`jobj.h` added `#define JOBJ_JOINT (3 << 21)` as the mask used to switch over the joint kind bits."
+  ],
+  "smart_moves": [
+    "The successful matching move was to recognize that the assert line `0x478U` pointed to `HSD_JObjGetMtxPtr`, not to an open-coded `lbColl_JObjSetupMatrix` sequence.",
+    "Using `HSD_JObjGetMtxPtr(hit->bone)` let the code preserve the expected assert/setup behavior while avoiding unwanted inlining of `lbColl_JObjSetupMatrix`.",
+    "The conditional expression selecting `transformed_hit` versus `HSD_JObjGetMtxPtr(hit->bone)` compactly modeled the original matrix source choice and helped reach 100% match according to the author comment.",
+    "Renaming parameters and locals around `HitCapsule`, `HitResult`, `hit_transform`, `dist_offset`, and `angle` made the function easier to reason about without changing the decomp intent.",
+    "Replacing magic JObj flag numbers with existing/new macros improved readability in baselib code while keeping the same bit operations."
+  ],
+  "decomp_lessons": [
+    "When a function match is blocked by inlining or stack-order issues, grep or trace assert line numbers; they can reveal the real helper call the compiler/original code used.",
+    "For this compiler, forcing inline behavior with pragmas may be possible, but review guidance says the better fix is usually to structure code through helper functions rather than relying on inline pragmas.",
+    "If a helper like `HSD_JObjGetMtxPtr` contains the expected assert and matrix setup semantics, prefer calling it over duplicating null checks and matrix setup manually.",
+    "Matrix parameters should use the correct pointer typedefs (`MtxPtr`) when call sites pass selected or stack matrices by pointer-like array decay; this can affect matching and clarity.",
+    "Bitfield and flag cleanup can be safely paired with matching work when named constants exactly represent the old masks and cases."
+  ],
+  "naming_conventions": [
+    "Use domain names for collision parameters where known: `capsule` for `HitCapsule*`, `hit` for `HitResult*`, `hit_transform` for an optional hit transform matrix, `angle` for `float*`, and `scale` for a scalar multiplier.",
+    "Use `dist_offset` for the value derived from capsule scale and optional external scale.",
+    "Use `transformed_hit` for a stack matrix produced by concatenating an input transform with the hit bone matrix.",
+    "Use JObj flag macro names instead of raw constants: `JOBJ_MTX_DIRTY`, `JOBJ_USER_DEF_MTX`, `JOBJ_JOINT`, `JOBJ_JOINT1`, `JOBJ_JOINT2`, and `JOBJ_EFFECTOR`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Reviewer suggested that inline-related pragmas exist for the compiler: `dont_inline on|off`, `inline_depth(n|smart)`, and `always_inline on|off`, with documentation in the CodeWarrior manual.",
+    "Reviewer cautioned that pragmas are mainly for forcing a match and that the correct approach is almost always to nest code in helper functions, or nest a helper in another function.",
+    "The concrete matching tactic was to replace manual JObj setup with `PSMTXConcat(hit_transform, HSD_JObjGetMtxPtr(hit->bone), transformed_hit)` when `hit_transform != NULL`.",
+    "The author reported the PR was initially down to stack ordering/padding, then reached 100% after applying the assert-line/helper insight.",
+    "Avoid unwanted inlining of `lbColl_JObjSetupMatrix` by using `HSD_JObjGetMtxPtr` where the original assert/setup path appears to correspond."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "feedback": "Inline pragmas are available (`dont_inline`, `inline_depth`, `always_inline`), but the better fix is usually to arrange code through helper functions instead of forcing compiler behavior."
+    },
+    {
+      "author": "ribbanya",
+      "feedback": "The assert line `0x478U` / 1144 identifies `HSD_JObjGetMtxPtr`; using it inside the `PSMTXConcat` path would bring the match up significantly."
+    },
+    {
+      "author": "ribbanya",
+      "feedback": "The PR was considered mergeable as-is before the final 100% improvement."
+    },
+    {
+      "author": "ribbanya",
+      "feedback": "Final comment: `Nice work!`"
+    },
+    {
+      "author": "rjeli",
+      "feedback": "Author confirmed the assert-line grep was the missing insight and reported `100% now!`"
+    }
+  ],
+  "searchable_terms": [
+    "PR1218",
+    "lbColl_80007DD8",
+    "lbColl_800077A0",
+    "lbColl_JObjSetupMatrix",
+    "HSD_JObjGetMtxPtr",
+    "HSD_JObjSetupMatrixSub",
+    "PSMTXConcat",
+    "HitCapsule",
+    "HitResult",
+    "HSD_JObj",
+    "MtxPtr",
+    "Mtx",
+    "Vec3",
+    "hit_transform",
+    "transformed_hit",
+    "dist_offset",
+    "capsule->x43_b1",
+    "capsule->scl",
+    "hit->bone",
+    "hit->pos",
+    "hit->size",
+    "JOBJ_MTX_DIRTY",
+    "JOBJ_USER_DEF_MTX",
+    "JOBJ_JOINT",
+    "JOBJ_JOINT1",
+    "JOBJ_JOINT2",
+    "JOBJ_EFFECTOR",
+    "resolveIKJoint1",
+    "resolveIKJoint2",
+    "HSD_RObjUpdateAll",
+    "assert line 0x478",
+    "assert line 1144",
+    "dont_inline",
+    "inline_depth",
+    "always_inline",
+    "CodeWarrior pragmas",
+    "stack ordering",
+    "padding"
+  ],
+  "follow_up_queries": [
+    "Find other unmatched collision functions manually calling `lbColl_JObjSetupMatrix` or accessing `jobj->mtx` where `HSD_JObjGetMtxPtr` may be the original helper.",
+    "Search for assert line numbers in unmatched functions to identify hidden helper calls.",
+    "Audit remaining `unk_t` parameters in `lbcollision.h` for cases that can be promoted to `Vec3*`, `float*`, or matrix typedefs.",
+    "Look for other raw JObj flag masks in `jobj.c` that can be replaced by named macros without disturbing matches.",
+    "Compare matrix argument types in collision helpers for places where `MtxPtr` is more accurate than `Mtx`."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

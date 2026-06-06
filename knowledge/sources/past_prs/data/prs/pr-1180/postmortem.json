@@ -1,0 +1,149 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1180",
+  "pr": {
+    "number": 1180,
+    "title": "Remove remaining `MUST_MATCH` usages",
+    "url": "https://github.com/doldecomp/melee/pull/1180",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-02-02T02:54:36Z",
+    "merged_at": "2024-02-02T02:55:34Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Removed the remaining project-level `MUST_MATCH` build/config mechanism and converted the remaining conditional code to clearer guards such as `MWERKS_GEKKO` for compiler-specific inline assembly and `!BUGFIX` for original/bug-compatible data retention. The PR also demoted several old inline-assembly `GXTev` matched bodies to `NOT_IMPLEMENTED`, added `__ppc_eabi_init.c` to splits/config as a nonmatching object, and made a few local macro/header cleanups needed after eliminating `MUST_MATCH`. There was no PR body or review discussion in the slice, so intent is inferred from the title and diff.",
+  "change_classification": {
+    "primary_type": "tooling/config cleanup for matching mode removal",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "tooling",
+      "conditional-compilation",
+      "nonmatching-stubs"
+    ],
+    "systems": [
+      "build",
+      "configure.py",
+      "m2ctx",
+      "dolphin/os/init",
+      "Runtime",
+      "dolphin/gx",
+      "sysdolphin/baselib",
+      "fighter"
+    ]
+  },
+  "key_files": [
+    "Makefile",
+    "configure.py",
+    "tools/m2ctx/m2ctx.py",
+    "config/GALE01/splits.txt",
+    "src/Runtime/__init_cpp_exceptions.c",
+    "src/dolphin/os/init/__ppc_eabi_init.c",
+    "src/dolphin/os/init/__start.c",
+    "src/dolphin/os/init/__start.h",
+    "src/dolphin/gx/GXTev.c",
+    "src/dolphin/os/OSAlloc.c",
+    "src/placeholder.h",
+    "src/sysdolphin/baselib/debug.h",
+    "src/sysdolphin/baselib/gobj.c",
+    "src/sysdolphin/baselib/mobj.c",
+    "src/sysdolphin/baselib/texp.c",
+    "src/melee/ft/chara/ftCommon/ftCo_DamageIce.c"
+  ],
+  "what_changed": [
+    "Removed Makefile logic that defined `MUST_MATCH` via `ASFLAGS += --defsym MUST_MATCH=1` and `CFLAGS += -DMUST_MATCH` when `NON_MATCHING` was not set.",
+    "Removed the `configure.py --must-match` argument and its `-DMUST_MATCH` C flag injection.",
+    "Removed `-D MUST_MATCH` from `tools/m2ctx/m2ctx.py` default preprocessor arguments.",
+    "Added `dolphin/os/init/__ppc_eabi_init.c` to `configure.py` as `Object(NonMatching, ...)` and added its `.init` and `.text` ranges to `config/GALE01/splits.txt`.",
+    "Replaced `#ifdef MUST_MATCH` with `#ifdef MWERKS_GEKKO` around compiler-specific inline assembly in `src/Runtime/__init_cpp_exceptions.c`, `src/dolphin/os/init/__ppc_eabi_init.c`, `src/dolphin/os/init/__start.c`, and `src/placeholder.h`.",
+    "Restructured `__init_cpp_exceptions` so the function always exists, with the MWERKS_GEKKO path registering the fragment with `GetR2()` and the fallback path calling `NOT_IMPLEMENTED`.",
+    "Restructured `__start.c` so `__start` and static `__init_registers` have MWERKS_GEKKO asm implementations and non-MWERKS `NOT_IMPLEMENTED` fallbacks; removed the public `__init_registers` prototype from `__start.h`.",
+    "Removed large `#ifdef MUST_MATCH` inline-assembly implementations of `GXSetTevSwapMode`, `GXSetTevSwapModeTable`, and `GXSetTevOrder` from `src/dolphin/gx/GXTev.c`, replacing them with normal C function stubs that call `NOT_IMPLEMENTED`.",
+    "Changed data/assert retention guards from `defined(MUST_MATCH) || !defined(BUGFIX)` to `#ifndef BUGFIX` in `OSAlloc.c`, `debug.h`, and `mobj.c`; changed a `texp.c` static data block from `#ifdef MUST_MATCH` to `#ifndef BUGFIX`.",
+    "Moved `HSD_ASSERT2` out of the shared baselib debug header and defined it locally in `ftCo_DamageIce.c`, apparently because only that file needed the file/line/message assertion form after the header cleanup.",
+    "Kept the `#pragma dont_inline` around `HSD_GObj_80390EB8` use in `gobj.c` unconditionally, while converting the old `MUST_MATCH` comments into Doxygen-style `@todo` notes."
+  ],
+  "smart_moves": [
+    "Separated two meanings previously overloaded onto `MUST_MATCH`: compiler capability (`MWERKS_GEKKO` for inline asm and special registers) versus original-code/bug-compatible behavior (`!BUGFIX` for force-active strings and assertions).",
+    "Removed the compatibility switch from all major entry points at once: Makefile, configure.py, and m2ctx, reducing the chance that future tools see a stale `MUST_MATCH` define.",
+    "Preserved callable symbols by using `NOT_IMPLEMENTED` fallbacks instead of deleting nonportable functions outright; this keeps non-Metrowerks/tooling builds structurally coherent.",
+    "Made `__init_registers` static in the C file and removed it from the header, reflecting that it is an internal startup helper rather than a public init API.",
+    "Moved file-specific assertion macro use into the only changed consumer shown (`ftCo_DamageIce.c`) rather than keeping a broad `HSD_ASSERT2` macro in `debug.h`.",
+    "For old matching-only pragma control in `gobj.c`, retained the matching tactic (`#pragma dont_inline`) while documenting the underlying decomp question about possible file boundaries."
+  ],
+  "decomp_lessons": [
+    "Do not use a broad project-level `MUST_MATCH` macro to mean both 'build the matching target' and 'this compiler supports target inline asm'; prefer precise guards like `MWERKS_GEKKO` for compiler-specific assembly.",
+    "When preserving retail-compatible data or line-number behavior, guard on bugfix policy (`#ifndef BUGFIX`) rather than matching mode. Matching and bug compatibility are related but not identical concerns.",
+    "If an inline-assembly body is removed because it depends on the matching compiler, leave a typed C stub with `NOT_IMPLEMENTED` so call sites and headers remain stable while the function awaits real decompilation.",
+    "Startup/runtime files may need section-aware configuration updates when split into normal objects; keep `splits.txt` and `configure.py` object lists synchronized.",
+    "Inline prevention pragmas can be retained as a matching tactic independent of a global matching macro when evidence suggests inlining changes codegen.",
+    "Macro cleanup should minimize global namespace exposure: file-specific helper assertion macros can live near their only use until a better shared API is designed."
+  ],
+  "naming_conventions": [
+    "Use `MWERKS_GEKKO` to guard Metrowerks/Gekko-only inline assembly such as `asm`, `SECTION_INIT asm`, `GetR2`, `__init_hardware`, `__flush_cache`, `__start`, and `__init_registers`.",
+    "Use `BUGFIX`/`#ifndef BUGFIX` to distinguish original bug-compatible behavior, retained force-active strings, and original assertion line behavior.",
+    "Use `NOT_IMPLEMENTED` for portable fallback bodies when the real implementation is only available under MWERKS_GEKKO.",
+    "Keep internal startup helpers such as `__init_registers` static when they are not intended for headers.",
+    "Doxygen-style TODO references in C comments can link symbols with `#HSD_GObj_80390EB8` and `#HSD_GObj_80391070`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed `MUST_MATCH` assembler and C defines from Makefile, configure.py, and m2ctx rather than relying on build mode to expose matching-only code.",
+    "Converted inline asm gates from `MUST_MATCH` to `MWERKS_GEKKO`, which directly describes the compiler feature needed for `asm` blocks and register instructions.",
+    "Deleted large hand-written asm bodies for `GXSetTevSwapMode`, `GXSetTevSwapModeTable`, and `GXSetTevOrder`; the resulting source intentionally leaves those functions nonimplemented until a C decomp or better matching tactic exists.",
+    "Kept `#pragma push`, `#pragma dont_inline on`, and `#pragma pop` around `HSD_JObjDispAll(... HSD_GObj_80390EB8(arg1) ...)` as a local codegen control instead of hiding it behind `MUST_MATCH`.",
+    "Kept `#pragma force_active on` blocks under `#ifndef BUGFIX` for unused strings/static data in OSAlloc and MObj, indicating those bytes matter for original-compatible layout or matching."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR1180",
+    "MUST_MATCH",
+    "MWERKS_GEKKO",
+    "BUGFIX",
+    "NON_MATCHING",
+    "--must-match",
+    "-DMUST_MATCH",
+    "ASFLAGS --defsym MUST_MATCH",
+    "configure.py RuntimeLib",
+    "m2ctx.py",
+    "__ppc_eabi_init.c",
+    "__init_hardware",
+    "__flush_cache",
+    "__start",
+    "__init_registers",
+    "__init_cpp_exceptions",
+    "GetR2",
+    "__register_fragment",
+    "GXTev.c",
+    "GXSetTevSwapMode",
+    "GXSetTevSwapModeTable",
+    "GXSetTevOrder",
+    "NOT_IMPLEMENTED",
+    "HSD_ASSERT",
+    "HSD_ASSERT2",
+    "HSD_GObj_80391070",
+    "HSD_GObj_80390EB8",
+    "pragma dont_inline",
+    "pragma force_active",
+    "OSAlloc.c",
+    "mobj.c",
+    "texp.c",
+    "ftCo_DamageIce.c",
+    "splits.txt"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that implement `GXSetTevSwapMode`, `GXSetTevSwapModeTable`, or `GXSetTevOrder` in C after these asm bodies were removed.",
+    "Search for any remaining `MUST_MATCH` references after PR 1180 to confirm the macro was fully retired.",
+    "Audit `#ifndef BUGFIX` blocks introduced here to see whether they still represent original-code compatibility or should be replaced by narrower feature macros.",
+    "Check later history of `HSD_ASSERT2` to see whether the local `ftCo_DamageIce.c` macro became a shared assertion API.",
+    "Review later changes to `__ppc_eabi_init.c` and startup init splitting for lessons on matching `.init` section functions."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

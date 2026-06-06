@@ -1,0 +1,194 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-90",
+  "pr": {
+    "number": 90,
+    "title": "First part of cleaning up incbins/pointers in .data",
+    "url": "https://github.com/doldecomp/melee/pull/90",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-10-02T17:40:39Z",
+    "merged_at": "2021-10-02T17:40:45Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large assembly-data cleanup pass that began replacing opaque .data incbins with explicit .4byte/.asciz/.balign data and symbolic pointers. The bulk of the work was in asm/data.s, with many new global labels added in text assembly files so tables in .data could point at real symbols instead of remaining anonymous/raw. There was no PR body or review discussion in the slice, so intent beyond the title and diff is inferred from the changes.",
+  "change_classification": {
+    "primary_type": "asm-data-incbin-cleanup",
+    "categories": [
+      "code-change",
+      "data-section-reconstruction",
+      "pointer-symbolization",
+      "asm-labeling"
+    ],
+    "systems": [
+      "asm",
+      "data",
+      "melee",
+      "dolphin",
+      "sysdolphin",
+      "baselib"
+    ]
+  },
+  "key_files": [
+    {
+      "file": "asm/data.s",
+      "role": "Primary .data reconstruction; removed multiple incbins and expanded them into explicit words, strings, labels, and symbol pointers."
+    },
+    {
+      "file": "asm/melee/ft/code_8006DBF4.s",
+      "role": "Added many global labels for function entries or branch/jump-table targets referenced from data."
+    },
+    {
+      "file": "asm/melee/ef/code_8005B4B8.s",
+      "role": "Added global labels around functions and jump-table branch targets such as lbl_80067498-style labels."
+    },
+    {
+      "file": "asm/melee/cm/code_80028B9C.s",
+      "role": "Added global labels for branch targets and function boundaries referenced by reconstructed data."
+    },
+    {
+      "file": "asm/melee/it/code_80266F3C.s",
+      "role": "Added labels needed for item-related pointer tables."
+    },
+    {
+      "file": "asm/melee/it/code_8027CF30.s",
+      "role": "Added labels needed for item-related pointer tables."
+    },
+    {
+      "file": "asm/melee/lb/code_8001E2F8.s",
+      "role": "Added labels near lb/data references; data excerpt includes lbRefSetUnuse and lbRefData-related strings."
+    },
+    {
+      "file": "asm/sdata.s",
+      "role": "Small data-section label/pointer cleanup."
+    },
+    {
+      "file": "asm/dolphin/card/CARD.s",
+      "role": "Added func_803534BC global label for a function boundary."
+    },
+    {
+      "file": "asm/dolphin/dolphin_sdk_1.s",
+      "role": "Added func_80347BFC global label for a function boundary."
+    },
+    {
+      "file": "asm/dolphin/dolphin_sdk_2.s",
+      "role": "Added func_8034E6A0 global label for a function boundary."
+    },
+    {
+      "file": "asm/sysdolphin/baselib/cobj.s",
+      "role": "Added a baselib label needed by data pointers."
+    },
+    {
+      "file": "asm/sysdolphin/baselib/tobj.s",
+      "role": "Added a baselib label needed by data pointers."
+    }
+  ],
+  "what_changed": [
+    "Replaced large .incbin ranges in asm/data.s with explicit data declarations. Examples include lbl_803BB0E0, lbl_803BB300, lbl_803BB3C0, lbl_803BB5D0, lbl_803BB6B0, lbl_803BB800, and lbl_803BB8D4.",
+    "Split formerly opaque data blobs into many address-named global labels such as lbl_803BB0F8, lbl_803BB110, lbl_803BB120, lbl_803BB17C, lbl_803BB194, and many lbl_803BBAxx/lbl_803BBBxx/lbl_803BBCxx labels.",
+    "Converted some embedded pointers to symbolic .4byte references, for example .4byte lbl_803BB0F8, .4byte lbl_803BB110, .4byte lbl_803BB120, .4byte lbl_803BB17C, .4byte lbl_803BB194, .4byte func_80022650, and .4byte func_80022940.",
+    "Decoded many byte sequences into visible strings or string-like word data, including lbRefSetUnuse error text, lbRefData-related data, /audio/, .ssm filename entries such as main.ssm, pokemon.ssm, nr_title.ssm, and character/stage music names.",
+    "Added global labels in code assembly files for function starts and branch-table targets, e.g. func_803534BC, func_80347BFC, func_8034E6A0, func_8002B3D4, func_8002C908, func_8005DBC0, and numerous lbl_8002A4F8/lbl_80067498-style case labels.",
+    "Introduced or exposed jump-table labels in data, including jtbl_803C6118, while leaving some remaining unknown chunks as incbin such as jtbl_803C613C and jtbl_803C61BC in the diff excerpt.",
+    "Touched 17 files total, with the context reporting 5657 additions and 248 deletions; asm/data.s accounted for most of the size with 5184 additions and 248 deletions."
+  ],
+  "smart_moves": [
+    "Did the cleanup incrementally: the PR title says this is the first part, and the diff shows some unknown regions still preserved as .incbin instead of forcing uncertain interpretation.",
+    "Added global text labels before converting data pointers, which lets .data use symbols for function pointers and jump-table targets without changing code bytes.",
+    "Carved sublabels at internal data offsets before referencing them, making later struct recovery easier than one monolithic label per old incbin.",
+    "Used address-stable autogenerated names for unknown labels, minimizing semantic overclaiming while still making the data linkable and searchable.",
+    "Preserved alignment and string termination where visible, using .asciz and .balign for some strings and explicit zero words where the exact binary layout matters.",
+    "Exposed repeated pointer-table patterns and filename arrays, creating footholds for future typed C data definitions."
+  ],
+  "decomp_lessons": [
+    "For .data decompilation, first replace opaque incbins with exact assembly data before attempting semantic C structs; this improves relocation visibility without requiring full type knowledge.",
+    "When a data table contains code pointers, add labels at the target functions or branch labels in the relevant .s files before changing the data words to symbolic references.",
+    "Unknown data can still be improved safely by splitting it into address labels and exact .4byte values; semantic names should wait until evidence is stronger.",
+    "Do not remove every incbin blindly. Keeping uncertain jump-table or binary regions as incbin is safer than making incorrect declarations.",
+    "String-looking data may appear either as .asciz or as packed .4byte words depending on alignment and matching needs; preserving exact layout is more important than readability.",
+    "Large data cleanup PRs benefit from being staged by address range or subsystem because they create many cross-file label dependencies."
+  ],
+  "naming_conventions": [
+    "Unknown data labels use address-based lbl_XXXXXXXX names, e.g. lbl_803BB0F8 and lbl_803BBC30.",
+    "Unknown function-entry labels use func_XXXXXXXX, e.g. func_803534BC, func_80347BFC, func_8034E6A0, and func_8005DBC0.",
+    "Jump-table labels use jtbl_XXXXXXXX where identified, e.g. jtbl_803C6118.",
+    "Branch/case targets inside functions are exported as lbl_XXXXXXXX when referenced by data jump tables, e.g. lbl_8002A4F8 and lbl_80067498.",
+    "The PR mostly avoids semantic renaming; address-derived names are used until stronger evidence exists."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replace .incbin \"baserom.dol\", offset, size with exact .4byte constants, .asciz strings, .balign directives, and new labels.",
+    "Represent known relocatable pointers as .4byte symbol instead of raw address when the target label is available.",
+    "Add .global before labels that must be referenced across assembly files or from data.s.",
+    "Expose function boundaries by inserting .global func_XXXXXXXX immediately before the existing instruction stream, without changing instructions.",
+    "Expose computed-branch case labels after bctr/jump-table dispatch sites so reconstructed jump tables can reference labels.",
+    "Leave unresolved regions as .incbin to maintain binary match when the table structure is not fully decoded.",
+    "Use NULL as an explicit .4byte value where the assembler/project convention supports it, as seen near a string block in the diff excerpt."
+  ],
+  "review_feedback": [
+    {
+      "status": "none_in_slice",
+      "details": "The provided context reports zero issue comments, zero review comments, and zero reviews. No reviewer guidance or requested changes are available."
+    }
+  ],
+  "searchable_terms": [
+    "PR90",
+    "data-incbins",
+    "First part of cleaning up incbins/pointers in .data",
+    "asm/data.s",
+    "incbin cleanup",
+    "pointer symbolization",
+    "lbl_803BB0E0",
+    "lbl_803BB0F8",
+    "lbl_803BB120",
+    "lbl_803BB194",
+    "lbl_803BB2DC",
+    "lbRefSetUnuse",
+    "lbRefData",
+    "lbl_803BB300",
+    "lbl_803BB3C0",
+    "lbl_803BB5D0",
+    "lbl_803BB6B0",
+    "lbl_803BB800",
+    "lbl_803BB8D4",
+    "lbl_803BBA94",
+    "main.ssm",
+    "pokemon.ssm",
+    "nr_title.ssm",
+    "jtbl_803C6118",
+    "jtbl_803C613C",
+    "jtbl_803C61BC",
+    "func_80022650",
+    "func_80022940",
+    "func_803534BC",
+    "func_80347BFC",
+    "func_8034E6A0",
+    "func_8005DBC0",
+    "func_8002B3D4",
+    "lbl_8002A4F8",
+    "lbl_80067498",
+    "asm/melee/ft/code_8006DBF4.s",
+    "asm/melee/ef/code_8005B4B8.s",
+    "asm/melee/cm/code_80028B9C.s",
+    "asm/melee/it/code_80266F3C.s",
+    "asm/melee/it/code_8027CF30.s",
+    "asm/melee/lb/code_8001E2F8.s",
+    "asm/sdata.s"
+  ],
+  "follow_up_queries": [
+    "Find remaining .incbin directives in asm/data.s near jtbl_803C613C and jtbl_803C61BC for later table reconstruction.",
+    "Search for raw .4byte 0x800xxxxx and .4byte 0x803xxxxx values in asm/data.s that could now be replaced with symbols.",
+    "Audit lbl_803BBA94 through lbl_803BBCF0 as a likely filename pointer table and recover a typed array if enough consumers are decompiled.",
+    "Trace references to lbRefSetUnuse, lbRefData, func_80022650, and func_80022940 to identify the surrounding data structure.",
+    "Review newly exported lbl_8002A4F8/lbl_80067498-style labels to identify jump-table switch statements for future C matching.",
+    "Look for later PRs that semantically rename or type the data ranges first exposed in PR 90."
+  ],
+  "confidence": 0.83,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { decompResourcesRoot, knowledgeManifestPath, knowledgeReferenceResources, resourceMap } from "../../knowledge/index.js";
+import { decompResourcesRoot, resourceMap } from "../../knowledge/index.js";
 import type { BoardSnapshot, PiPromptBundle, RunRecord } from "../../types/index.js";
 import { readTemplate, renderTemplate, stableJson } from "../runtime/index.js";
 
@@ -12,6 +12,7 @@ export interface DirectorPromptOptions {
   repoRoot: string;
   stateDir: string;
   initialBoardPath: string;
+  queuePressure?: Record<string, unknown>;
 }
 
 function templatePath(name: "system" | "initial_user"): string {
@@ -21,7 +22,6 @@ function templatePath(name: "system" | "initial_user"): string {
 export function directorPrompt(options: DirectorPromptOptions): PiPromptBundle {
   const systemTemplatePath = templatePath("system");
   const userTemplatePath = templatePath("initial_user");
-  const selectedKnowledgeReferences = knowledgeReferenceResources("director");
   const filesToRead = [
     {
       path: options.initialBoardPath,
@@ -39,14 +39,6 @@ export function directorPrompt(options: DirectorPromptOptions): PiPromptBundle {
       path: resolve(decompResourcesRoot(), "index.md"),
       reason: "resource library entry point for decomp evidence surfaces",
     },
-    {
-      path: knowledgeManifestPath(),
-      reason: "orchestrator-owned agent knowledge manifest and capability routing",
-    },
-    ...selectedKnowledgeReferences.map((reference) => ({
-      path: reference.path,
-      reason: `director knowledge reference: ${reference.purpose}`,
-    })),
   ];
   const currentState = {
     role: "director",
@@ -60,11 +52,11 @@ export function directorPrompt(options: DirectorPromptOptions): PiPromptBundle {
       measures: options.snapshot.measures,
       top_candidates: options.snapshot.candidates.slice(0, 12),
     },
+    queue_pressure: options.queuePressure ?? null,
     artifact_paths: {
       initial_board: options.initialBoardPath,
       director_cycles_dir: resolve(options.stateDir, "runs", options.run.id, "director_cycles"),
     },
-    selected_knowledge_references: selectedKnowledgeReferences,
   };
   const values = {
     CURRENT_STATE_JSON: stableJson(currentState),

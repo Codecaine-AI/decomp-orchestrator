@@ -1,0 +1,135 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-841",
+  "pr": {
+    "number": 841,
+    "title": "Update M2C",
+    "url": "https://github.com/doldecomp/melee/pull/841",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-12T06:56:39Z",
+    "merged_at": "2023-05-12T07:04:07Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Updated the vendored m2c tooling with a small upstream-style maintenance pass: removed unused imports/locals, added a --force-decimal formatter option, adjusted global declaration sort ordering, fixed union-vs-struct CType emission for anonymous/tagged struct-union types, and changed asm label parsing so jlabel is treated as an in-function jump target rather than a global/function label. The weird-asm end-to-end test was extended to cover jlabel behavior.",
+  "change_classification": {
+    "primary_type": "tooling_update",
+    "categories": [
+      "tooling",
+      "m2c",
+      "formatter_option",
+      "asm_parser",
+      "type_formatting",
+      "cleanup",
+      "tests"
+    ],
+    "systems": [
+      "tools/m2c",
+      "m2c asm parsing",
+      "m2c C formatter",
+      "m2c type system",
+      "m2c end-to-end tests"
+    ]
+  },
+  "key_files": [
+    "tools/m2c/m2c/main.py",
+    "tools/m2c/m2c/options.py",
+    "tools/m2c/m2c/asm_file.py",
+    "tools/m2c/m2c/types.py",
+    "tools/m2c/m2c/translate.py",
+    "tools/m2c/tests/end_to_end/weird-asm/test.s",
+    "tools/m2c/tests/end_to_end/weird-asm/test-out.c",
+    "tools/m2c/m2c/arch_mips.py",
+    "tools/m2c/m2c/arch_ppc.py",
+    "tools/m2c/m2c/flow_graph.py",
+    "tools/m2c/m2c/if_statements.py",
+    "tools/m2c/m2c/c_types.py",
+    "tools/m2c/m2c/evaluate.py",
+    "tools/m2c/m2c/demangle_codewarrior.py",
+    "tools/m2c/m2c/ir_pattern.py"
+  ],
+  "what_changed": [
+    "Added an m2c CLI flag --force-decimal in main.py and threaded it into Options.force_decimal and Formatter.force_decimal.",
+    "Changed Formatter.format_int so force_decimal causes all integer constants to be emitted in decimal form; previously only values with abs(val) < 10 used decimal before falling back to hex formatting behavior.",
+    "Changed asm_file.py label handling: process_label now accepts Optional[bool] for glabel, plain colon labels pass glabel=None, and directives pass glabel=(directive != \"jlabel\").",
+    "Changed .text label classification so labels starting with '.' or labels explicitly marked with glabel=False are treated as local in-function labels. This makes jlabel create a jump label inside the current function instead of being treated like glabel/dlabel.",
+    "Extended tools/m2c/tests/end_to_end/weird-asm/test.s with a branch to jumptarget_label followed by jlabel jumptarget_label; updated expected output warning from .label to .jumptarget_label.",
+    "Fixed Type.to_ctype-related handling in types.py to create ca.Union when data.struct.is_union is true and ca.Struct otherwise, instead of always constructing ca.Struct.",
+    "Adjusted translate.py global_decls sorting so is_global is only considered when the symbol is not in-file: is_global if not is_in_file else False.",
+    "Removed many unused imports and unused locals across arch_mips.py, arch_ppc.py, c_types.py, demangle_codewarrior.py, evaluate.py, flow_graph.py, ir_pattern.py, main.py, translate.py, and types.py.",
+    "Applied minor style simplifications such as replacing f-strings without interpolations with plain string literals and using 'curr_start not in context.emitted_nodes'."
+  ],
+  "smart_moves": [
+    "The jlabel change is narrow and explicit: it reuses the existing process_label path but distinguishes glabel/dlabel from jlabel via a tri-state Optional[bool], avoiding a larger parser rewrite.",
+    "The weird-asm end-to-end test directly exercises the new jlabel semantics by adding a branch target and asserting the changed diagnostic target name.",
+    "The --force-decimal feature was threaded through the same Options-to-Formatter path as existing zfill_constants behavior, keeping numeric formatting policy centralized in Formatter.format_int.",
+    "The union CType fix constructs the pycparser ca.Union or ca.Struct object before wrapping it in ca.TypeDecl, preserving the existing TypeDecl interface while correcting the underlying kind.",
+    "Most cleanup changes remove unused imports/locals without changing logic, reducing type-checker/linter noise in a vendored decompilation helper."
+  ],
+  "decomp_lessons": [
+    "For m2c asm parsing, directive names matter: glabel/dlabel and jlabel should not necessarily imply the same label scope. jlabel can represent a local jump target within a function.",
+    "When adding m2c output-formatting knobs, thread the option from argparse to Options and then to Formatter rather than scattering formatting decisions through translation code.",
+    "Type emission code must preserve struct-vs-union identity even for anonymous or tag-only types; using ca.Struct unconditionally can silently produce the wrong C model.",
+    "End-to-end tests for unusual assembly syntax are valuable because small parser classification changes can alter function boundaries, label names, and emitted diagnostics.",
+    "Cleanup of unused imports and locals can be a useful part of m2c updates because the tool spans many architecture, IR, type, and formatting modules."
+  ],
+  "naming_conventions": [
+    "New CLI flag uses kebab-case: --force-decimal.",
+    "Options and Formatter fields use snake_case for the same setting: force_decimal.",
+    "Existing label directives distinguished in parser logic include glabel, dlabel, and jlabel.",
+    "The weird-asm test uses jumptarget_label as the jlabel target name, and expected diagnostics show it as .jumptarget_label.",
+    "Internal synthetic conditional-return target remains named _m2c_conditionalreturn_."
+  ],
+  "assembly_or_matching_tactics": [
+    "Treat jlabel as glabel=False when processing .text labels so it becomes a local label associated with the current function.",
+    "Plain colon labels in asm_file.py now pass glabel=None, separating implicit labels from directive-driven global/local label intent.",
+    "In .text, labels starting with '.' or labels with glabel explicitly false are routed to asm_file.new_label(label.lstrip('.')) and require an active current_function.",
+    "The weird-asm regression covers a branch to jumptarget_label followed by jlabel jumptarget_label to ensure m2c recognizes it as a jump target rather than a new function/global.",
+    "No direct decompilation matching tactic for Melee C functions is evidenced; this PR is focused on m2c tooling behavior."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR 841",
+    "Update M2C",
+    "m2c",
+    "tools/m2c",
+    "force_decimal",
+    "--force-decimal",
+    "Formatter.format_int",
+    "Options.force_decimal",
+    "zfill_constants",
+    "asm_file process_label",
+    "jlabel",
+    "glabel",
+    "dlabel",
+    "jumptarget_label",
+    "weird-asm",
+    "Type.to_ctype",
+    "ca.Union",
+    "ca.Struct",
+    "StructUnion",
+    "global_decls sort_order",
+    "unused imports cleanup",
+    "arch_mips.py",
+    "arch_ppc.py",
+    "flow_graph.py",
+    "if_statements.py",
+    "translate.py",
+    "types.py"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching tools/m2c/m2c/asm_file.py jlabel handling to see whether the Optional[bool] glabel distinction was refined.",
+    "Find uses of --force-decimal or force_decimal in project scripts to understand when decimal constants were preferred for Melee decomp output.",
+    "Search later m2c updates for ca.Union or StructUnion fixes to see whether more struct-vs-union CType issues were found.",
+    "Check weird-asm test history for additional unusual label/directive parser regressions."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

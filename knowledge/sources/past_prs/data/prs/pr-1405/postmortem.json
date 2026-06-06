@@ -1,0 +1,118 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1405",
+  "pr": {
+    "number": 1405,
+    "title": "Rewrite diff workflow to make it compare properly",
+    "url": "https://github.com/doldecomp/melee/pull/1405",
+    "state": "MERGED",
+    "author": "thefoxcam",
+    "created_at": "2024-07-29T20:25:55Z",
+    "merged_at": "2024-07-29T21:51:01Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Reworked the GitHub Actions diff-check workflow so objdiff compares the intended expected and actual reports, then moved the broken-function detection logic out of inline jq and into a new Python helper, tools/diff_changes.py. The workflow now records the original HEAD before checking out the comparison target, rebuilds the expected report there, checks back out HEAD, generates an objdiff changes report, and runs the Python script to fail CI when any previously 100% fuzzy-matched function regresses.",
+  "change_classification": {
+    "primary_type": "tooling",
+    "categories": [
+      "ci",
+      "tooling",
+      "objdiff-reporting",
+      "workflow-maintenance"
+    ],
+    "systems": [
+      ".github/workflows/build.yml",
+      "tools/diff_changes.py",
+      "GitHub Actions",
+      "objdiff-cli"
+    ]
+  },
+  "key_files": [
+    ".github/workflows/build.yml",
+    "tools/diff_changes.py"
+  ],
+  "what_changed": [
+    "Added tools/diff_changes.py, a Python script that reads an objdiff changes JSON file from a path or stdin and reports functions whose fuzzy_match_percent changed from 100 to a lower value.",
+    "Replaced inline jq filtering in .github/workflows/build.yml with a call to python tools/diff_changes.py \"$changes\" and explicit propagation of the script exit status.",
+    "Changed the workflow to save the current commit with head=$(git rev-parse HEAD) before switching revisions, then git checkout \"$head\" before running objdiff-cli report changes.",
+    "The new script prints \"No functions broken.\" and exits 0 when there are no regressions, or emits a GitHub Actions ::error:: message plus formatted JSON and exits 1 when regressions are found.",
+    "The broken-function output became more specific by including function names and fuzzy percentage transitions such as \"func_name (100% -> 95)\"."
+  ],
+  "smart_moves": [
+    "The core fix was preserving the original HEAD before checkout and returning to it before generating the objdiff changes report, which directly addresses the PR title's claim that the previous workflow did not compare properly.",
+    "Moving JSON processing from a dense inline jq expression into tools/diff_changes.py made the CI failure logic easier to inspect, reuse, and extend.",
+    "The helper uses defensive .get calls for units, functions, from, and to fields, which makes it more tolerant of partially missing objdiff report fields than the previous shell/jq snippet.",
+    "The script keeps CI behavior simple: exit 0 for no broken functions and exit 1 for regressions, matching GitHub Actions expectations.",
+    "Including the before/after fuzzy percentage in the output improves triage for decomp regressions because reviewers can see both the matched baseline and the degraded score."
+  ],
+  "decomp_lessons": [
+    "When comparing decompilation match reports across revisions, preserve and restore the intended git revision explicitly; otherwise generated reports can accidentally compare the wrong tree state.",
+    "CI regressions for matching work should detect drops from fully matching functions, not just raw build failures.",
+    "Objdiff JSON post-processing is worth centralizing in scripts once the logic becomes nontrivial, especially when it is used to gate PRs.",
+    "For decomp PR workflows, clear failure output matters: list the object/unit and affected functions so authors can quickly locate matching regressions.",
+    "A report comparison pipeline should generate actual and expected reports at the correct revisions before invoking objdiff-cli report changes."
+  ],
+  "naming_conventions": [
+    "The new helper name diff_changes.py mirrors the objdiff-cli report changes operation it processes.",
+    "The script uses explicit variable names from_fuzzy and to_fuzzy for the two sides of the objdiff comparison.",
+    "The workflow uses expected, actual, and changes variables for expected-report.json, actual-report.json, and changes-report.json.",
+    "The script groups broken functions under the objdiff unit name from unit.get(\"name\")."
+  ],
+  "assembly_or_matching_tactics": [
+    "The regression heuristic is based on objdiff fuzzy_match_percent: flag a function when the source side was 100 and the target side is lower than that.",
+    "The workflow builds all_source before generating both actual and expected objdiff reports, then compares those reports with objdiff-cli report changes.",
+    "The check is aimed at preserving fully matched functions by failing CI when a 100% match regresses."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "file": ".github/workflows/build.yml",
+      "feedback": "Suggested replacing the invalid shell line `exit python tools/diff_changes.py \"$changes\"` with running `python tools/diff_changes.py \"$changes\"` followed by `exit \"$?\"`."
+    },
+    {
+      "author": "ribbanya",
+      "file": ".github/workflows/build.yml",
+      "feedback": "A second review suggestion showed `tree`; the excerpt does not provide enough surrounding context to determine the intended rationale."
+    }
+  ],
+  "searchable_terms": [
+    "PR 1405",
+    "diff workflow",
+    "build_diff_fix2",
+    "tools/diff_changes.py",
+    "diff_changes.py",
+    ".github/workflows/build.yml",
+    "objdiff-cli report changes",
+    "objdiff-cli report generate",
+    "changes-report.json",
+    "expected-report.json",
+    "actual-report.json",
+    "fuzzy_match_percent",
+    "from_fuzzy",
+    "to_fuzzy",
+    "100% regression",
+    "broken functions",
+    "ninja all_source",
+    "git rev-parse HEAD",
+    "git checkout head",
+    "GitHub Actions ::error::",
+    "jq replacement",
+    "thefoxcam",
+    "ribbanya"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify tools/diff_changes.py to see whether the objdiff regression heuristic changed.",
+    "Search for other workflow fixes involving git checkout and objdiff report generation to identify recurring CI comparison pitfalls.",
+    "Check whether diff_changes.py gained tests or broader stdin/file handling validation after this PR.",
+    "Search for PRs mentioning fuzzy_match_percent regressions or broken functions to see how this CI gate affected future decomp work."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

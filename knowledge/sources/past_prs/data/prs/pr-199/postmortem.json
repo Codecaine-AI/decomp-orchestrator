@@ -1,0 +1,102 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-199",
+  "pr": {
+    "number": 199,
+    "title": "Match an easy HSD_Class function",
+    "url": "https://github.com/doldecomp/melee/pull/199",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-17T20:57:38Z",
+    "merged_at": "2021-12-17T20:57:44Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the small SysDolphin baselib HSD_Class helper ClassInfoInit in C, removed its hand-written assembly from asm/sysdolphin/baselib/class.s, added the new source object to build lists, and declared the function in class.h. The function checks bit 0 of info->head.flags and calls info->head.info_init only when that bit is clear.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "build-system"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "class",
+      "asm",
+      "src"
+    ]
+  },
+  "key_files": [
+    "asm/sysdolphin/baselib/class.s",
+    "src/sysdolphin/baselib/class.c",
+    "src/sysdolphin/baselib/class.h",
+    "obj_files.mk",
+    "e_files.mk"
+  ],
+  "what_changed": [
+    "Deleted the assembly implementation of ClassInfoInit from asm/sysdolphin/baselib/class.s.",
+    "Created src/sysdolphin/baselib/class.c with a C implementation of ClassInfoInit(HSD_ClassInfo* info).",
+    "Implemented ClassInfoInit as a flag guard: if ((info->head.flags & 1) == 0), call (*info->head.info_init)().",
+    "Added src/sysdolphin/baselib/class.o to TEXT_O_FILES before the remaining asm class.o entry, allowing this matched function to be compiled from C while the rest of class.s remains in assembly.",
+    "Added class.o to EPILOGUE_UNSCHEDULED in e_files.mk.",
+    "Declared void ClassInfoInit(HSD_ClassInfo* info); in src/sysdolphin/baselib/class.h."
+  ],
+  "smart_moves": [
+    "Kept the matched C function in a new source file while leaving the remaining unmatched HSD_Class assembly in asm/sysdolphin/baselib/class.s, enabling incremental decompilation.",
+    "Used the existing HSD_ClassInfo structure fields directly, making the assembly behavior readable as a simple flags check plus function-pointer call.",
+    "Updated both object-file ordering and epilogue build configuration, which is necessary for a newly decompiled source object to replace only the matched assembly slice."
+  ],
+  "decomp_lessons": [
+    "Tiny assembly routines that load a struct flag word, test a single bit, and conditionally call a function pointer can often match cleanly as direct C field access plus a function-pointer invocation.",
+    "When splitting one function out of an assembly file, remove exactly that global symbol from the .s file and insert the corresponding src object before the leftover asm object in TEXT_O_FILES.",
+    "Header updates matter even for small matched functions: adding the prototype in class.h documents the interface and lets other C files call the decompiled symbol consistently.",
+    "For HSD_ClassInfo, info->head.flags bit 0 controls whether ClassInfoInit should skip calling info->head.info_init."
+  ],
+  "naming_conventions": [
+    "Preserved the existing exported symbol name ClassInfoInit.",
+    "Used HSD_ClassInfo* as the typed parameter name for the class-info object.",
+    "Kept SysDolphin baselib source paths aligned with existing asm paths: src/sysdolphin/baselib/class.c mirrors asm/sysdolphin/baselib/class.s."
+  ],
+  "assembly_or_matching_tactics": [
+    "The assembly sequence lwz r0, 4(r3) followed by clrlwi. r0, r0, 0x1f maps to testing the low bit of info->head.flags.",
+    "The assembly sequence lwz r12, 0(r3); mtlr r12; blrl maps to calling the function pointer at info->head.info_init.",
+    "The branch to lbl_80381C08 on nonzero low bit maps to skipping the initializer call when flags & 1 is true.",
+    "The C expression (*info->head.info_init)(); was sufficient to reproduce the indirect branch behavior in the removed assembly."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "ClassInfoInit",
+    "HSD_ClassInfo",
+    "HSD_Class",
+    "hsdInitClassInfo",
+    "sysdolphin",
+    "baselib",
+    "class.c",
+    "class.h",
+    "class.s",
+    "info_init",
+    "head.flags",
+    "function pointer",
+    "flags & 1",
+    "EPILOGUE_UNSCHEDULED",
+    "TEXT_O_FILES",
+    "obj_files.mk",
+    "e_files.mk",
+    "incremental decompilation"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that decompile additional functions from asm/sysdolphin/baselib/class.s.",
+    "Search for other HSD_ClassInfo flag bit checks to confirm the semantics of head.flags bit 0.",
+    "Look for later header refinements to HSD_ClassInfo or info_init typing that affect this function-pointer call."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

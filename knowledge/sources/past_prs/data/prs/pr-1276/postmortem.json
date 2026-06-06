@@ -1,0 +1,107 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1276",
+  "pr": {
+    "number": 1276,
+    "title": "RObj work",
+    "url": "https://github.com/doldecomp/melee/pull/1276",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-02-20T16:54:58Z",
+    "merged_at": "2024-02-20T17:02:20Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Small baselib RObj/JObj matching cleanup. The PR moved the NULL guard for individual-reference increments into the shared iref_INC helper, simplified callers such as HSD_JObjRefThis and HSD_RObjResolveRefs to call iref_INC directly, and adjusted RObj constraint-object helper typing/casts to help match HSD_RObjSetConstraintObj.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "inline-helper-cleanup",
+      "reference-counting"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "RObj",
+      "JObj"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/object.h",
+    "src/sysdolphin/baselib/jobj.h",
+    "src/sysdolphin/baselib/robj.c"
+  ],
+  "what_changed": [
+    "Changed static inline iref_INC in object.h so it performs the o != NULL check internally before incrementing HSD_OBJ(o)->ref_count_individual and asserting it did not wrap to zero.",
+    "Simplified HSD_JObjRefThis in jobj.h from an explicit jobj != NULL guard around iref_INC(jobj) to a direct iref_INC(jobj) call.",
+    "Simplified HSD_RObjResolveRefs in robj.c so the resolved robj->u.jobj is passed directly to iref_INC after HSD_ASSERT(883, robj->u.jobj), instead of guarding the call locally.",
+    "Changed the local ref_JObj helper signature from HSD_JObj* o to void* o, then cast to HSD_JObj* only for accessing the embedded object field in hsdObjIsDescendantOf.",
+    "In HSD_RObjSetConstraintObj, replaced a commented-out HSD_JObj* local with an actual bool isDesc declaration, consistent with descendant-test matching work."
+  ],
+  "smart_moves": [
+    "Centralized the NULL behavior in iref_INC rather than duplicating null checks at every call site; this both matches the observed codegen noted in the PR body and reduces future caller-side noise.",
+    "Used a direct call pattern for HSD_JObjRefThis and HSD_RObjResolveRefs, relying on iref_INC to preserve safety and produce the expected inline structure.",
+    "Changed ref_JObj to accept void* because HSD_RObjSetConstraintObj receives a void* constraint object; delaying the HSD_JObj cast until field access can better reflect the original function's typing and register/codegen behavior.",
+    "Preserved the comma-expression descendant check pattern in ref_JObj while adjusting only the type/cast details needed for matching."
+  ],
+  "decomp_lessons": [
+    "When multiple callers show the same local NULL guard around an inline helper, verify whether the original SDK-style helper itself contained the guard. Moving the check into the inline can be the matching solution.",
+    "For baselib reference-count helpers, caller shape matters: HSD_JObjRefThis matched better as a thin wrapper around iref_INC once iref_INC handled NULL.",
+    "For functions that accept generic object pointers, such as HSD_RObjSetConstraintObj, keeping helper parameters as void* and casting only at the field access can avoid introducing non-original typed temporaries.",
+    "A matching fix may involve headers as much as C files; inline changes in object.h and jobj.h directly affect code generation in robj.c.",
+    "Do not assume a caller-side assert eliminates the need to model helper NULL behavior; HSD_RObjResolveRefs still benefited from calling the NULL-safe helper directly after HSD_ASSERT."
+  ],
+  "naming_conventions": [
+    "Kept existing baselib/HSD names: HSD_RObjResolveRefs, HSD_RObjSetConstraintObj, HSD_JObjRefThis, iref_INC, ref_INC.",
+    "The helper name ref_JObj remains lower_snake/mixed internal style, while public or exported HSD functions retain HSD_* CamelCase style.",
+    "The actual boolean local used for descendant checks is named isDesc, matching the hsdObjIsDescendantOf test result."
+  ],
+  "assembly_or_matching_tactics": [
+    "Move NULL checks into inline helpers when that is where the original null branch appears; this changes every inlined caller's branch layout.",
+    "Prefer direct inline-helper calls at call sites once helper semantics are corrected, rather than wrapping them in redundant if statements.",
+    "Use void* parameters and localized casts to influence generated code for generic object APIs.",
+    "Retain comma-expression assignment-and-test forms when they are part of the matching shape: assign isDesc from hsdObjIsDescendantOf, then compare isDesc != 0."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR1276",
+    "RObj work",
+    "PsiLupan",
+    "HSD_RObjSetConstraintObj",
+    "HSD_RObjResolveRefs",
+    "HSD_JObjRefThis",
+    "iref_INC",
+    "ref_INC",
+    "HSD_OBJ",
+    "ref_count_individual",
+    "HSD_ASSERT 158",
+    "HSD_ASSERT 883",
+    "HSD_IDGetData",
+    "HSD_JObjUnrefThis",
+    "HSD_RvalueResolveRefsAll",
+    "ref_JObj",
+    "hsdObjIsDescendantOf",
+    "hsdJObj",
+    "void pointer cast",
+    "NULL check inline helper",
+    "baselib robj.c",
+    "baselib object.h",
+    "baselib jobj.h"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching iref_INC or ref_INC to see whether NULL-safe helper semantics were retained.",
+    "Search for other callers with redundant iref_INC NULL guards that could be simplified after this change.",
+    "Compare subsequent HSD_RObjSetConstraintObj matching work for additional void* versus HSD_JObj* typing lessons.",
+    "Audit other HSD object descendant checks for comma-expression isDesc patterns."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

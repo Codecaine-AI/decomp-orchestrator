@@ -1,0 +1,116 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1465",
+  "pr": {
+    "number": 1465,
+    "title": "Fix `ninja diff` false positives",
+    "url": "https://github.com/doldecomp/melee/pull/1465",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-09-25T13:08:21Z",
+    "merged_at": "2024-09-25T13:11:13Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "CI/tooling and config cleanup to reduce `ninja diff` false positives. The PR changed the build workflow so the link job runs `ninja` with errors temporarily ignored and then always runs `ninja diff`, and it corrected GALE01 split/symbol metadata for several small data/rodata/sdata/sdata2 objects whose previous sizes/scopes overreached into padding or neighboring objects. Two item source tweaks supported the metadata: `itheiho.c` internal helper prototypes were made `static`, and `itsword.c` replaced a dummy stack array with `PAD_STACK(8)`.",
+  "change_classification": {
+    "primary_type": "tooling_fix",
+    "categories": [
+      "fix",
+      "tooling",
+      "ci",
+      "config_metadata",
+      "symbol_splits",
+      "matching_cleanup"
+    ],
+    "systems": [
+      ".github/workflows",
+      "config/GALE01",
+      "items",
+      "itheiho",
+      "itsword",
+      "splits",
+      "symbols"
+    ]
+  },
+  "key_files": [
+    ".github/workflows/build.yml",
+    "config/GALE01/splits.txt",
+    "config/GALE01/symbols.txt",
+    "src/melee/it/items/itheiho.c",
+    "src/melee/it/items/itsword.c"
+  ],
+  "what_changed": [
+    "In `.github/workflows/build.yml`, the `link` job changed from `ninja || ninja diff` to `set +e; ninja; set -e; ninja diff`, so the canonical diff target runs after the build attempt instead of only as a shell OR fallback.",
+    "In `config/GALE01/splits.txt`, many section end addresses were tightened to non-rounded object ends, including examples such as `plstale.c` `.sbss` ending at `0x804D647A` instead of `0x804D6480`, `itsword.c` `.sdata2` ending at `0x804DC8FC` instead of `0x804DC900`, `itheiho.c` `.data` ending at `0x803F8465` instead of `0x803F8468`, and item `.sdata` ranges ending at `...2D`, `...4D`, or `...65` instead of the next aligned boundary.",
+    "In `config/GALE01/symbols.txt`, several anonymous or local constants/strings were split out from larger global-looking ranges, e.g. `@234` at `0x803F6718`, `@238` at `0x803F8440`, `@264` at `0x803F9428`, and multiple `.sdata` string labels such as `@216`, `@217`, `@236`, and `@237`.",
+    "Symbol metadata was corrected for size/type/scope: examples include `it_803B86C8` changing from size `0x10` 4-byte data to size `0xC` float data, `Chan` shrinking from size `0x8` to `0x4`, and `staleAttackInstance` replacing `lbl_804D6478` as a size `0x2` `.sbss` object.",
+    "In `src/melee/it/items/itheiho.c`, 22 forward declarations for internal helper functions were changed from external declarations to `static`, aligning source linkage with local symbol metadata.",
+    "In `src/melee/it/items/itsword.c`, an explicit dummy `u8 _[8] = { 0 };` stack pad was replaced with `PAD_STACK(8)` after local variable declarations."
+  ],
+  "smart_moves": [
+    "The workflow fix separates the build attempt from the diff check: temporarily disabling `set -e` around `ninja` lets CI proceed to `ninja diff`, then reenabling `set -e` ensures the actual diff result controls failure.",
+    "The config changes treat small string/float constants as exact-sized local objects rather than rounded global placeholders, avoiding alignment padding being interpreted as meaningful section contents.",
+    "Making `itheiho.c` helper declarations `static` is a low-risk source change that makes object symbol visibility agree with the revised `symbols.txt` local scopes.",
+    "Using `PAD_STACK(8)` in `itsword.c` records stack-padding intent directly and avoids a misleading dummy variable while preserving the matching tactic."
+  ],
+  "decomp_lessons": [
+    "False positives in diff tooling can come from metadata, not source code: over-broad split ranges and inaccurate symbol sizes/scopes can make padding or adjacent literals appear as mismatches.",
+    "For GALE01 split maintenance, section end addresses should reflect the true end of the object data, not necessarily the next aligned address.",
+    "When symbol analysis reveals local compiler-generated constants or string literals, prefer anonymous/local `@NNN` labels with accurate size/type metadata over broad `it_` global placeholders.",
+    "Source linkage should match symbol visibility. If functions are file-local, mark prototypes `static` so object symbols and config scopes stay consistent.",
+    "For intentional stack padding, prefer project macros like `PAD_STACK(n)` over dummy local arrays when available; this improves readability while preserving decomp matching behavior.",
+    "CI jobs that are meant to report binary diffs should run the diff target explicitly after a build attempt rather than relying on shell short-circuit behavior."
+  ],
+  "naming_conventions": [
+    "Anonymous local compiler constants and string literals are represented as `@NNN` labels in `symbols.txt` when no semantic name is known.",
+    "Address-derived names such as `it_803F83F0` remain for global or still-unidentified data objects.",
+    "Known semantic globals should replace generic labels when evidence exists, as shown by `lbl_804D6478` becoming `staleAttackInstance`.",
+    "File-local functions in C should use `static` declarations when their symbols are local."
+  ],
+  "assembly_or_matching_tactics": [
+    "Tighten split ranges to exact data ends to prevent padding bytes from participating in diff comparisons.",
+    "Correct symbol type metadata, e.g. distinguish `data:float`, `data:double`, `data:string`, and `data:4byte`, so generated/linker metadata matches the actual binary layout.",
+    "Use `PAD_STACK(8)` instead of an initialized dummy byte array for explicit stack layout preservation.",
+    "Use local `@NNN` symbol entries for small constants or strings embedded between larger data objects.",
+    "Mark internal helper prototypes `static` to match local symbol linkage and avoid exporting unintended symbols."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "ninja diff false positives",
+    "build.yml ninja diff",
+    "set +e ninja set -e",
+    "GALE01 splits.txt",
+    "GALE01 symbols.txt",
+    "split range exact end",
+    "symbol size scope local",
+    "anonymous @NNN symbols",
+    "PAD_STACK(8)",
+    "dummy stack array",
+    "itheiho static prototypes",
+    "itsword PAD_STACK",
+    "staleAttackInstance",
+    "Chan size 0x4",
+    "sdata string labels",
+    "sdata2 float constants",
+    "it_803B86C8",
+    "it_803F8440",
+    "it_804D5640",
+    "it_804DD5B8"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that changed `build.yml` `ninja diff` behavior or CI diff reporting.",
+    "Find PRs that convert dummy stack arrays to `PAD_STACK` in item files.",
+    "Find PRs that tighten `config/GALE01/splits.txt` section ends to exact unaligned addresses.",
+    "Find PRs that convert address-derived `it_` symbols to local `@NNN` string or float constants.",
+    "Find PRs that make item helper function declarations `static` to match local symbol scope."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

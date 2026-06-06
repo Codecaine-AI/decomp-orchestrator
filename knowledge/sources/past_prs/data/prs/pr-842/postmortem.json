@@ -1,0 +1,151 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-842",
+  "pr": {
+    "number": 842,
+    "title": "Partially match all of `ftLk_SpecialN`",
+    "url": "https://github.com/doldecomp/melee/pull/842",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-12T12:02:33Z",
+    "merged_at": "2023-05-12T12:10:44Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Moved Link neutral special work out of the old ftLk_Init assembly file and into src/melee/ft/chara/ftLink/ftLk_SpecialN.c, adding C implementations and guarded fallback inline asm for many ftLk_SpecialN states. The PR also tightened Link-specific typing, renamed some Link projectile fields and SpecialS helpers, added SpecialN motion vars and a Vec3 group struct, and updated item/fighter headers to make those C translations compile. Evidence for intent is mostly the title and the diff; there were no review comments.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "typing",
+      "asm-migration",
+      "fighter-special-move"
+    ],
+    "systems": [
+      "fighter",
+      "ftLink",
+      "item",
+      "asm",
+      "build",
+      "lint"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftLink/ftLk_SpecialN.c",
+    "src/melee/ft/chara/ftLink/ftLk_SpecialN.h",
+    "asm/melee/ft/chara/ftLk_Init.s",
+    "obj_files.mk",
+    "src/melee/ft/chara/ftLink/types.h",
+    "src/melee/ft/chara/ftLink/ftLk_Init.c",
+    "src/melee/ft/chara/ftLink/ftLk_Init.h",
+    "src/melee/it/it_27CF.h",
+    "src/melee/ft/forward.h",
+    "src/melee/ft/types.h",
+    ".flake8"
+  ],
+  "what_changed": [
+    "Deleted asm/melee/ft/chara/ftLk_Init.s, a 1646-line assembly file containing ftLk_SpecialN functions, and removed its object entry from obj_files.mk.",
+    "Expanded ftLk_SpecialN.c by over 2000 lines to host Link neutral-B logic, including ftLk_SpecialN_Enter, ftLk_SpecialAirN_Enter, Start/Loop/End Anim/IASA/Phys/Coll functions, helper inlines, and guarded inline asm blocks under MUST_MATCH when WIP is not defined.",
+    "Changed ftLk_SpecialN prototypes from generic HSD_GObj* to ftLk_GObj* throughout ftLk_SpecialN.h and the implementation.",
+    "Renamed ftLk_SpecialN_UnsetFv10 to ftLk_SpecialN_UnsetArrow and replaced fp->fv.lk.x10 usage with fp->fv.lk.arrow_gobj where the field is used as Link's arrow item object.",
+    "Added Link-specific forward typedefs such as ftLk_Fighter and ftLk_GObj, and changed Link fighter vars struct naming from ftLink_FighterVars to ftLk_FighterVars.",
+    "Updated ftLk_DatAttrs field typing/naming, notably changing x4 to specialn_anim_rate and making early dat attributes floats where the SpecialN translation uses them as floats.",
+    "Added ftLk_MotionVars.specialn fields at fp+2340 through fp+2358 and ftLk_SpecialN_Vec3Group for grouped Vec3 stack/static data used by bow/arrow positioning.",
+    "Added ftLk_Init_Vec3Group as a zero-initialized const and exported it through ftLk_Init.h.",
+    "Updated item prototypes in it_27CF.h from broad HSD_GObj* to Item_GObj* for many item-object arguments, supporting typed projectile interactions.",
+    "Renamed Link SpecialS helpers to more descriptive names: ftLk_Is2071b0_5to13 to ftLk_SpecialS_Is2071b0_5to13, ftLk_Is2071b0_1to13 to ftLk_SpecialS_Is2071b0_1to13, and ftLk_800EC4B4 to ftLk_SpecialS2_Enter.",
+    "Adjusted Fighter flag bitfield access from fp->x221E_flag.bits.bN to direct aliases such as fp->x221E_b0, fp->x221E_b3, fp->x221E_b6, and fp->x221E_b7 across fighter and several character files.",
+    "Added a repository .flake8 file ignoring E501 line-too-long, likely to tolerate decomp-generated or signature-heavy lines."
+  ],
+  "smart_moves": [
+    "Kept matching-safe inline asm guarded by defined(MUST_MATCH) && !defined(WIP) while adding readable C alternatives, allowing progress on understanding without losing the ability to build a matching target.",
+    "Factored repeated callback assignment into setCallbacks, setting x21DC_callback_OnTakeDamage and x21E4_callback_OnDeath2 to ftLk_800EAF58 in one place.",
+    "Introduced typed aliases ftLk_GObj, ftLk_Fighter, and Item_GObj instead of continuing to pass every object as HSD_GObj*, making fighter-vs-item ownership clearer for projectile code.",
+    "Renamed the Link arrow field before translating more neutral-B logic, so later code can read as arrow_gobj rather than opaque x10.",
+    "Modeled the fp+2340 motion-var region as a Link SpecialN-specific struct, which reduces raw offset reasoning for translated animation and projectile-positioning code.",
+    "Used a small ftLk_SpecialN_Vec3Group const to mirror the original block copy/stack Vec3 behavior in C, a useful tactic for matching code that initializes multiple Vec3 temporaries from static data.",
+    "Preserved known oddities with explicit TODOs, such as questions around ftLk_Init_BoomerangExists return behavior and unused stack padding, rather than overclaiming semantics."
+  ],
+  "decomp_lessons": [
+    "When a move file is too large to fully match at once, it can still be useful to relocate the assembly into the C source under MUST_MATCH and provide WIP C bodies side-by-side for incremental reverse engineering.",
+    "Projectile-heavy fighter specials benefit from early object-type separation: fighter gobj, Link fighter, and item gobj aliases prevent many ambiguous HSD_GObj* casts.",
+    "Field names should follow observed role as soon as evidence is strong enough; arrow_gobj and specialn_anim_rate make later SpecialN code much easier to review than x10 and x4.",
+    "Do not force full semantic naming when uncertain: this PR still keeps fields such as x14, x18, x8, and helper names like unkCondition/foo/bar/baz where evidence is incomplete.",
+    "For animation-command variables, an enum like cmd_unk0_bool, cmd_unk1_bool, cmd_unk2, cmd_unk3 documents indexing without pretending the command variables are fully understood.",
+    "Inline helper extraction can mirror repeated assembly patterns, but comments/TODOs should call out where shared code could be improved later, as with the air/ground enter functions.",
+    "Struct/header cleanup may be a prerequisite for matching a single fighter move because translated move logic touches dat attrs, motion vars, item constructors, callbacks, and generic fighter flags."
+  ],
+  "naming_conventions": [
+    "Use character-prefixed object and fighter aliases such as ftLk_GObj and ftLk_Fighter for character-specific code.",
+    "Use Item_GObj* for item/projectile object references and item APIs when the object is known to be an item.",
+    "Prefer move-scoped names for functions once behavior is identified, e.g. ftLk_SpecialN_UnsetArrow and ftLk_SpecialS2_Enter.",
+    "Use dat attr names tied to the consuming move when known, e.g. specialn_anim_rate.",
+    "Use direct flag aliases such as x221E_b6 instead of nested bitfield access x221E_flag.bits.b6 when such aliases exist.",
+    "Keep unknown field names as xN or unk_timer when semantics remain uncertain rather than inventing gameplay names.",
+    "Motion vars are nested by character/move, as in fp->mv.lk.specialn."
+  ],
+  "assembly_or_matching_tactics": [
+    "Moved standalone .s assembly into guarded inline asm in the C file using #if defined(MUST_MATCH) && !defined(WIP), #pragma push/pop, nofralloc, and clang-format off comments.",
+    "Provided C versions in the #else branch for WIP/non-MUST_MATCH builds, allowing decomp work to continue while retaining exact assembly references.",
+    "Used explicit unused-stack padding under MUST_MATCH in several helpers to influence stack layout.",
+    "Used static inline helpers for repeated assembly patterns: setCallbacks, projectile spawn condition handling, Vec3 gathering, and animation-rate setup.",
+    "Represented repeated stack Vec3 initialization with ftLk_SpecialN_Vec3Group and ftLk_Init_Vec3Group.",
+    "Preserved exact float constants, including 0.0, 0.0078125, and 5 * deg_to_rad for the former 0.0872664600610733 constant.",
+    "Kept raw labels and instruction comments in inline asm, making the source searchable by original addresses such as 800ECDAC, 800ED15C, and 800EE3F0."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-842",
+    "ftLk_SpecialN",
+    "ftLk_SpecialN.c",
+    "ftLk_SpecialN_Enter",
+    "ftLk_SpecialAirN_Enter",
+    "ftLk_SpecialNStart_Anim",
+    "ftLk_SpecialNLoop_Anim",
+    "ftLk_SpecialNEnd_Anim",
+    "ftLk_SpecialN_UnsetArrow",
+    "ftLk_SpecialN_ProcessFv10",
+    "ftLk_SpecialN_ProcessFv14",
+    "arrow_gobj",
+    "boomerang_gobj",
+    "ftLk_FighterVars",
+    "ftLk_MotionVars",
+    "ftLk_SpecialN_Vec3Group",
+    "ftLk_Init_Vec3Group",
+    "specialn_anim_rate",
+    "Item_GObj",
+    "ftLk_GObj",
+    "MUST_MATCH",
+    "WIP",
+    "inline asm",
+    "asm/melee/ft/chara/ftLk_Init.s",
+    "it_802A83E0",
+    "it_802AF1A4",
+    "it_802A8398",
+    "it_802A8A7C",
+    "it_802AF304",
+    "ftParts_8007500C",
+    "lb_8000B1CC",
+    "Fighter_ChangeMotionState",
+    "ftAnim_SetAnimRate",
+    "x221E_b6",
+    "x221E_flag",
+    "E501"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match ftLk_SpecialN and remove the guarded inline asm blocks.",
+    "Search for later renames of ftLk_SpecialN helper names foo, bar, baz, and unkCondition.",
+    "Check later item header cleanup around it_27CF.h Item_GObj prototype conversions.",
+    "Find later struct refinements for ftLk_DatAttrs fields x0, x8, xC, x10, and Link fv.lk.x14/x18.",
+    "Search for follow-up work on direct x221E_bN aliases and fighter flag bitfield cleanup."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

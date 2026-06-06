@@ -1,0 +1,169 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-552",
+  "pr": {
+    "number": 552,
+    "title": "Add matching DObjForeachAnim and nonmatching JObjForeachAnim",
+    "url": "https://github.com/doldecomp/melee/pull/552",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-09-05T03:44:37Z",
+    "merged_at": "2022-09-05T18:52:09Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Replaced an inline assembly animation traversal helper with named C implementations for TObjForeachAnim, RObjForeachAnim, PObjForeachAnim, MObjForeachAnim, and a matching DObjForeachAnim, while keeping JObjForeachAnim as nonmatching C behind NON_MATCHING with the original assembly fallback. The PR also introduced HSD_TypeMask in object.h, using MASK_OF(type) to derive *_MASK constants from existing HSD_Type ordinals, and rewired remaining assembly calls from func_803647DC/func_80364924 to DObjForeachAnim/JObjForeachAnim.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "nonmatching-decomp",
+      "headers",
+      "naming",
+      "types-structs",
+      "assembly-cleanup"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "aobj",
+      "object",
+      "include",
+      "src"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/aobj.c",
+    "include/sysdolphin/baselib/object.h",
+    "include/sysdolphin/baselib/aobj.h"
+  ],
+  "what_changed": [
+    "Removed the assembly implementation previously exposed as func_803647DC and replaced it with C helpers for PObjForeachAnim, MObjForeachAnim, and DObjForeachAnim.",
+    "Renamed the remaining func_80364924 assembly block to JObjForeachAnim and added a NON_MATCHING C version of JObjForeachAnim guarded by #ifdef NON_MATCHING.",
+    "Changed TObjForeachAnim and RObjForeachAnim signatures from raw s32 flags plus untyped callback arguments to HSD_TypeMask mask, void (*func)(), AObj_Arg_Type arg_type, and callbackArg* arg.",
+    "Replaced numeric callback object type literals such as 0xA and 0xB with named HSD_Type enum constants such as ROBJ_TYPE and TOBJ_TYPE.",
+    "Added include/sysdolphin/baselib/dobj.h to aobj.c so the new DObjForeachAnim implementation can use HSD_DObj fields and related types.",
+    "Added HSD_TypeMask to object.h with AOBJ_MASK, COBJ_MASK, DOBJ_MASK, FOBJ_MASK, FOG_MASK, JOBJ_MASK, LOBJ_MASK, MOBJ_MASK, POBJ_MASK, ROBJ_MASK, TOBJ_MASK, WOBJ_MASK, RENDER_MASK, CHAN_MASK, TEVREG_MASK, CBOBJ_MASK, and ALL_TYPE_MASK.",
+    "Added MASK_OF(type) as a macro in object.h to derive mask bits from HSD_Type values with the expression 1 << ((type) - 1).",
+    "Removed stale declarations for TObjForeachAnim, func_803647DC, and func_80364924 from aobj.h.",
+    "Updated assembly callsites inside JObjForeachAnim/HSD_ForeachAnim fallback assembly to call DObjForeachAnim and JObjForeachAnim by their recovered names rather than func_803647DC and func_80364924."
+  ],
+  "smart_moves": [
+    "Introduced HSD_TypeMask next to HSD_Type in object.h after review discussion noted the relationship between type ordinals and mask bits.",
+    "Used a MASK_OF(type) macro instead of manually spelling each bit shift, reducing the chance that mask constants drift from the corresponding HSD_Type enum values.",
+    "Renamed mask constants to *_MASK rather than *_BITS to align the naming with the HSD_TypeMask typedef and reviewer preference.",
+    "Kept JObjForeachAnim nonmatching behind NON_MATCHING while preserving the matching assembly fallback, allowing readable progress without regressing binary matching.",
+    "Converted object-type magic numbers in callbackForeachFunc calls to named constants, improving readability and reducing type-ID mistakes.",
+    "Factored the old monolithic assembly traversal into object-specific traversal helpers: PObjForeachAnim, MObjForeachAnim, DObjForeachAnim, RObjForeachAnim, and TObjForeachAnim."
+  ],
+  "decomp_lessons": [
+    "When decompiling traversal code that uses bit flags keyed by object type, introduce a typed mask enum and name each mask after the object type rather than carrying raw hex flags through the C.",
+    "If mask bits correspond directly to enum ordinals, derive them with a macro so later enum edits are less error-prone.",
+    "A partially decompiled function can still be valuable if guarded with NON_MATCHING and paired with the original assembly fallback.",
+    "For animation foreach helpers, keep the callback parameters typed consistently across object helpers: HSD_TypeMask mask, void (*func)(), AObj_Arg_Type arg_type, and callbackArg* arg.",
+    "Replacing function-address placeholder names in assembly callsites with recovered names improves searchability even before all callees are fully decompiled.",
+    "Reviewers favored simpler boolean expressions, e.g. using jobj != NULL in an assert expression instead of negating an equality expression."
+  ],
+  "naming_conventions": [
+    "Recovered func_803647DC as DObjForeachAnim.",
+    "Recovered func_80364924 as JObjForeachAnim.",
+    "Object traversal helpers follow the pattern <ObjectPrefix>ForeachAnim, e.g. TObjForeachAnim, RObjForeachAnim, PObjForeachAnim, MObjForeachAnim, DObjForeachAnim, JObjForeachAnim.",
+    "Type-mask enum constants use uppercase object prefixes with _MASK suffix, e.g. DOBJ_MASK, MOBJ_MASK, POBJ_MASK, ROBJ_MASK, TOBJ_MASK.",
+    "Type enum constants use uppercase object prefixes with _TYPE suffix, e.g. DOBJ_TYPE, POBJ_TYPE, JOBJ_TYPE.",
+    "The mask typedef was named HSD_TypeMask and placed near the related HSD_Type typedef in object.h.",
+    "The macro for deriving a bitmask from an HSD_Type value was named MASK_OF(type)."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed the func_803647DC inline assembly block after matching its behavior as DObjForeachAnim plus helper functions.",
+    "Left JObjForeachAnim assembly in place under #else while a NON_MATCHING C translation documents intended control flow.",
+    "The NON_MATCHING JObjForeachAnim C version mirrors traversal order: assert non-null jobj, process jobj aobj if JOBJ_MASK is set, process dobj via DObjForeachAnim when union_type_dobj(jobj), process robj via RObjForeachAnim, then recurse through children unless JOBJ_INSTANCE is set.",
+    "DObjForeachAnim walks a linked list of HSD_DObj nodes, invokes callbackForeachFunc for dobj->aobj under DOBJ_MASK, delegates material traversal to MObjForeachAnim, conditionally delegates pobj traversal under POBJ_MASK, then advances to dobj->next.",
+    "PObjForeachAnim checks pobj->flags & 0x3000 for 0x1000 and follows pobj->u.x14_unk->aobj before invoking callbackForeachFunc with POBJ_TYPE.",
+    "MObjForeachAnim handles MOBJ_MASK for mobj->aobj and then delegates texture traversal to TObjForeachAnim.",
+    "Remaining assembly was updated to branch/link to recovered names DObjForeachAnim and JObjForeachAnim, preserving matching while improving symbol clarity."
+  ],
+  "review_feedback": [
+    {
+      "author": "PsiLupan",
+      "file": "src/sysdolphin/baselib/aobj.c",
+      "feedback": "Requested simplifying a confusing assertion expression to use != directly."
+    },
+    {
+      "author": "PsiLupan",
+      "file": "src/sysdolphin/baselib/aobj.c",
+      "feedback": "Suggested a typed prototype shape for PObjForeachAnim: HSD_PObj* object, HSD_TypeMask mask, callback function, AObj_Arg_Type, and callbackArg*."
+    },
+    {
+      "author": "PsiLupan",
+      "file": "src/sysdolphin/baselib/aobj.c",
+      "feedback": "Discussed defining an HSD_TypeMask enum for object animation traversal masks."
+    },
+    {
+      "author": "PsiLupan",
+      "file": "src/sysdolphin/baselib/aobj.c",
+      "feedback": "Asked whether the enum definition should go in aobj.h."
+    },
+    {
+      "author": "r-burns",
+      "file": "src/sysdolphin/baselib/aobj.c",
+      "feedback": "Responded that HSD_TypeMask is very similar to HSD_Type and should be placed next to that enum in object.h."
+    },
+    {
+      "author": "PsiLupan",
+      "file": "include/sysdolphin/baselib/object.h",
+      "feedback": "Preferred using a MASK_OF(ordinal) macro and renaming *_BITS to *_MASK to match HSD_TypeMask."
+    }
+  ],
+  "searchable_terms": [
+    "pr-552",
+    "DObjForeachAnim",
+    "JObjForeachAnim",
+    "PObjForeachAnim",
+    "MObjForeachAnim",
+    "TObjForeachAnim",
+    "RObjForeachAnim",
+    "HSD_ForeachAnim",
+    "callbackForeachFunc",
+    "HSD_TypeMask",
+    "HSD_Type",
+    "MASK_OF",
+    "DOBJ_MASK",
+    "MOBJ_MASK",
+    "POBJ_MASK",
+    "ROBJ_MASK",
+    "TOBJ_MASK",
+    "JOBJ_MASK",
+    "DOBJ_TYPE",
+    "MOBJ_TYPE",
+    "POBJ_TYPE",
+    "ROBJ_TYPE",
+    "TOBJ_TYPE",
+    "JOBJ_TYPE",
+    "AObj_Arg_Type",
+    "callbackArg",
+    "func_803647DC",
+    "func_80364924",
+    "NON_MATCHING",
+    "union_type_dobj",
+    "JOBJ_INSTANCE",
+    "src/sysdolphin/baselib/aobj.c",
+    "include/sysdolphin/baselib/object.h",
+    "include/sysdolphin/baselib/aobj.h",
+    "sysdolphin baselib aobj"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that make JObjForeachAnim matching or remove its NON_MATCHING guard.",
+    "Search for further cleanup of HSD_TypeMask or MASK_OF usage after PR #552.",
+    "Check whether PObjForeachAnim, MObjForeachAnim, DObjForeachAnim, TObjForeachAnim, and RObjForeachAnim prototypes were later moved to headers.",
+    "Look for later renames of pobj->u.x14_unk or struct field discoveries related to PObj animation data.",
+    "Search for other PRs replacing raw HSD_Type numeric literals with *_TYPE constants."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,150 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1058",
+  "pr": {
+    "number": 1058,
+    "title": "Match `it_2ADA` (488 bytes)",
+    "url": "https://github.com/doldecomp/melee/pull/1058",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-01-13T18:04:19Z",
+    "merged_at": "2024-01-13T18:20:32Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the 488-byte item source file `src/melee/it/items/it_2ADA.c`, replacing the old assembly file `asm/melee/it/items/it_2ADA.s` in the build. The matched code implements item spawn/setup, callbacks, lifetime decrement, physics update, collision/death check, and a wrapper to `it_8026B894`. Supporting header/prototype cleanups were made so the item code could typecheck and match, including changing `Item_80268B18` to return `Item_GObj*` and adding a prototype for `it_8026DFB0`. The PR report says the file and all six functions reached 100.00% with score 0.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "prototype-correction",
+      "formatting-for-match"
+    ],
+    "systems": [
+      "item",
+      "melee/it/items",
+      "asm",
+      "build",
+      "dolphin",
+      "fighter",
+      "sysdolphin"
+    ]
+  },
+  "key_files": [
+    "asm/melee/it/items/it_2ADA.s",
+    "src/melee/it/items/it_2ADA.c",
+    "src/melee/it/items/it_2ADA.h",
+    "obj_files.mk",
+    "src/melee/it/item.h",
+    "src/melee/it/it_266F.h",
+    "src/melee/it/items/itmetamon.c",
+    "src/melee/it/items/itmato.c",
+    "src/dolphin/os/OSThread.c",
+    "src/dolphin/os/OSTime.h",
+    "src/dolphin/card/CARDBios.c",
+    "src/sysdolphin/baselib/cobj.c"
+  ],
+  "what_changed": [
+    "Deleted `asm/melee/it/items/it_2ADA.s`, which contained 167 lines of hand-written/disassembled assembly for the item file.",
+    "Added `src/melee/it/items/it_2ADA.c` with C implementations for `it_802ADA1C`, `it_802ADAF0`, `it_802ADB48`, `it_802ADB80`, `it_802ADBB0`, and `it_802ADBE4`, plus the `ItemStateTable it_803F6C88` data object.",
+    "Updated `obj_files.mk` so the build uses `$(BUILD_DIR)/src/melee/it/items/it_2ADA.c.o` instead of `$(BUILD_DIR)/asm/melee/it/items/it_2ADA.s.o`.",
+    "`it_802ADA1C` constructs a `SpawnItem`, sets `kind = It_Kind_Unk1`, copies position/velocity inputs, forces `prev_pos.z = 0`, sets parent object fields to `NULL`, enables `spawnitem.x44_flag.bits.b0`, calls `Item_80268B18`, then initializes the spawned item from special attributes via `it_80275158` and `it_802ADAF0`.",
+    "`it_802ADAF0` calls `it_8026B3A8`, starts animation update with `Item_80268E5C(gobj, 0, ITEM_ANIM_UPDATE)`, and clears `item->xDCE_flag.bits.b7`; it retains a `MUST_MATCH` unused stack byte array for matching.",
+    "`it_802ADB48` decrements `GET_ITEM(gobj)->xD44_lifeTimer` by 1 and returns true once the timer is less than or equal to zero.",
+    "`it_802ADB80` fetches `ItemAttr` from `GET_ITEM(gobj)->xCC_item_attr` and forwards fall speed values to `it_80272860`.",
+    "`it_802ADBB0` returns the boolean result of `it_8026DFB0()` using a ternary form, matching the original branch shape.",
+    "`it_802ADBE4` forwards two `Item_GObj*` arguments to `it_8026B894`.",
+    "Changed `Item_80268B18` in `src/melee/it/item.h` from returning `HSD_GObj*` to returning `Item_GObj*`, allowing the new item code to use item-specific object typing directly.",
+    "Added `/* 26DFB0 */ bool it_8026DFB0(void);` to `src/melee/it/it_266F.h` for the new collision/death check callback.",
+    "Updated `src/melee/it/items/it_2ADA.h` to expose `it_802ADA1C`, `it_802ADBE4`, and `it_803F6C88`, and added `<placeholder.h>` to satisfy currently unresolved type/header needs.",
+    "Made several nearby formatting or include-order adjustments in unrelated files such as `itmetamon.c`, `itmato.c`, `OSInit.c`, `OSTime.h`, `CARDBios.c`, `ftdemo.c`, `ftmaterial.c`, and `cobj.c`; these appear to be incidental style or matching-sensitive changes rather than functional changes."
+  ],
+  "smart_moves": [
+    "Kept the item state callbacks static in the C file while exporting only the externally needed entry points and data table through `it_2ADA.h`.",
+    "Used typed item accessors and structs (`Item_GObj`, `Item`, `ItemAttr`, `SpawnItem`, `ItemStateTable`) instead of preserving raw offset logic from the assembly, improving future readability without losing the match.",
+    "Corrected `Item_80268B18` to return `Item_GObj*`, which better reflects how item spawn results are consumed by item code and reduces local casts or generic `HSD_GObj*` leakage.",
+    "Preserved a `#ifdef MUST_MATCH` unused stack allocation in `it_802ADAF0`, explicitly documenting it with `@todo Unused stack`; this isolates a matching artifact without forcing it into normal non-matching builds.",
+    "Expressed bitfield behavior directly through known fields (`spawnitem.x44_flag.bits.b0`, `item->xDCE_flag.bits.b7`) instead of manual byte/rlwimi operations, confirming useful struct/bitfield layout knowledge.",
+    "Used a one-entry `ItemStateTable` initializer matching the old `.data` object `it_803F6C88`, keeping callback order visible and reusable for future item matches."
+  ],
+  "decomp_lessons": [
+    "When matching item spawn routines, reconstructing the stack `SpawnItem` layout is often the central task: field order, zeroed parent pointers, `x3C_damage`, `x40`, and `x44_flag.bits.b0` all affect codegen.",
+    "For assembly that loads item special attributes through `item->xC4_article_data->x4_specialAttributes`, naming and typing that path can turn opaque offset chains into clean C while still matching.",
+    "Small boolean wrappers may need source forms that preserve branch/codegen shape, such as `return it_8026DFB0() ? true : false;` rather than assuming direct return will match.",
+    "A tiny file match can require broad header hygiene: missing prototypes and inaccurate return types outside the target file can block clean C or force worse local code.",
+    "Matching artifacts should be fenced with `MUST_MATCH` and documented when possible, so future cleanup can revisit them without obscuring intended logic.",
+    "Changing `obj_files.mk` from the asm object to the C object is the final integration step for an asm-to-C match and should accompany deletion of the old `.s` file."
+  ],
+  "naming_conventions": [
+    "Unidentified item file and function names retained address-based names such as `it_2ADA`, `it_802ADA1C`, `it_802ADAF0`, `it_802ADB48`, `it_802ADB80`, `it_802ADBB0`, and `it_802ADBE4`.",
+    "Item globals retain address-based names with section/address comments, e.g. `/* 3F6C88 */ extern ItemStateTable it_803F6C88[];`.",
+    "Header prototypes use address comments such as `/* 2ADA1C */`, `/* 2ADBE4 */`, and `/* 26DFB0 */` to preserve mapping to original binary addresses.",
+    "Item object variables use local names like `gobj`, `item`, `ip`, and `attrs`; `GET_ITEM(gobj)` is used for conversion from item gobj to item data.",
+    "Struct fields follow existing decomp offset-prefixed naming, e.g. `xD44_lifeTimer`, `xDCE_flag.bits.b7`, `xCC_item_attr`, `xC4_article_data`, `x4_specialAttributes`, `x10_fall_speed`, and `x14_fall_speed_max`.",
+    "Function pointer spacing was normalized in `it_2725.h` from `void(*)(Item_GObj*)` to `void (*)(Item_GObj*)`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced assembly constants `it_804DCF28` and `it_804DCF2C` with C literals/expressions: zeroing `prev_pos.z` and subtracting `1` from `xD44_lifeTimer`.",
+    "Matched the assembly stack initialization of `SpawnItem` by assigning fields in a precise sequence in `it_802ADA1C`, including copy-by-value for `Vec3` inputs.",
+    "Used a scoped block around `Item_GObj* gobj = Item_80268B18(&spawnitem);` in `it_802ADA1C`, likely to influence local lifetime/register allocation for the match.",
+    "Added `#ifdef MUST_MATCH u8 _[4] = { 0 }; #endif` in `it_802ADAF0` to account for an unused stack slot visible in the original assembly.",
+    "Kept `it_802ADBB0` as an explicit ternary boolean conversion, mirroring the original compare-and-branch return pattern.",
+    "Several whitespace-only macro formatting changes, such as `((x) &0x7f)`, `((ticks) *8)`, and `((a) *0.01745329252F)`, may be clang-format or compiler-tokenization workarounds in this codebase; the dump does not provide review evidence explaining them."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the PR slice.",
+    "The only explicit PR-body rationale was `Resolves #1057` plus the matching report showing 100.00% for the file and every listed function."
+  ],
+  "searchable_terms": [
+    "pr-1058",
+    "ribbanya",
+    "Match it_2ADA",
+    "488 bytes",
+    "it_2ADA.c",
+    "it_2ADA.s",
+    "asm-to-c",
+    "ItemStateTable",
+    "it_803F6C88",
+    "it_802ADA1C",
+    "it_802ADAF0",
+    "it_802ADB48",
+    "it_802ADB80",
+    "it_802ADBB0",
+    "it_802ADBE4",
+    "SpawnItem",
+    "It_Kind_Unk1",
+    "Item_80268B18",
+    "Item_80268E5C",
+    "ITEM_ANIM_UPDATE",
+    "it_80275158",
+    "it_8026B3A8",
+    "it_8026DFB0",
+    "it_80272860",
+    "it_8026B894",
+    "xD44_lifeTimer",
+    "xDCE_flag.bits.b7",
+    "x44_flag.bits.b0",
+    "xC4_article_data",
+    "x4_specialAttributes",
+    "MUST_MATCH unused stack",
+    "Item_GObj return type",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Look for issue #1057 to understand the original target or motivation for matching `it_2ADA`.",
+    "Search later PRs for removal or explanation of `<placeholder.h>` in `src/melee/it/items/it_2ADA.h`.",
+    "Search later PRs for renaming of `it_2ADA`, `It_Kind_Unk1`, or the functions `it_802ADA1C` through `it_802ADBE4` to semantic item names.",
+    "Search for other PRs that changed `Item_80268B18` return type or item spawn typing to confirm this convention became standard.",
+    "Search for `MUST_MATCH` unused stack patterns in item files to reuse the approach for similar small stack mismatches."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -32,6 +32,9 @@ docs/
   maps each original HTML design section to markdown coverage.
 - [Original visual design](design.html) keeps the standalone HTML design doc
   intact for diagram-heavy review.
+- [Knowledge resource graph design](resource-graph-design.html) sketches the
+  proposed resource registry, vertical-slice indexers, file graph, worker
+  lookup APIs, and graph-ranked scheduling layer.
 
 ## Documentation Rules
 

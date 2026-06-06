@@ -1,0 +1,152 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1570",
+  "pr": {
+    "number": 1570,
+    "title": "Misc camera matches",
+    "url": "https://github.com/doldecomp/melee/pull/1570",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-04T05:24:08Z",
+    "merged_at": "2025-06-04T05:28:42Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched several previously incomplete or partially matched camera routines and tightened camera/stage interfaces. The PR added real implementations for Camera_8002928C and Camera_8002AF68, improved matching for Camera_80029AAC and Camera_8002A28C, corrected Camera_80029C88's signature to include an unused CameraBounds parameter, exposed CameraBox bitfields and a cooldown-like s16 field, added a Camera unk_2ba field, and typed several stage-specific camera eye-y-bound helpers as float-returning functions. It also named SHRINEROUTE and HOMERUN internal stage IDs so camera code could switch on them directly.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-layout",
+      "function-signatures",
+      "stage-enum-naming"
+    ],
+    "systems": [
+      "camera",
+      "stage",
+      "melee-core"
+    ]
+  },
+  "key_files": [
+    "src/melee/cm/camera.c",
+    "src/melee/cm/camera.h",
+    "src/melee/cm/types.h",
+    "src/melee/gr/forward.h",
+    "src/melee/gr/grcastle.h",
+    "src/melee/gr/grcorneria.h",
+    "src/melee/gr/grgarden.h",
+    "src/melee/gr/grhomerun.h",
+    "src/melee/gr/grshrineroute.h",
+    "src/melee/gr/grzebes.h"
+  ],
+  "what_changed": [
+    "Implemented Camera_8002928C as a bool-returning camera-box state check using Stage_GetCamBoundsLeftOffset, Stage_GetCamBoundsRightOffset, Stage_GetCamBoundsTopOffset, and Stage_GetCamBoundsBottomOffset, with a small inline cam_bound helper testing normalized coordinates outside 0.35f..0.65f.",
+    "Changed CameraBox layout in src/melee/cm/types.h from one xC_b0 bitfield plus padding to xC_b0, xC_b1, xC_b2 bitfields and s16 xE, allowing Camera_80028F5C and Camera_8002928C to address individual flags and a timer/counter directly.",
+    "Updated Camera_80028F5C initialization to clear xC_b0, xC_b1, xC_b2 as boolean bitfields and set xE to 0 instead of masking bits and writing to padding.",
+    "Reworked Camera_80029AAC with clearer dx/dy calculations, a CameraUnkGlobals pointer to cm_803BCCA0, and direct incremental interest updates; the diff indicates this was a matching-oriented rewrite rather than a behavioral feature change.",
+    "Changed Camera_80029C88 signature from void Camera_80029C88(CameraMovement*, f32) to void Camera_80029C88(CameraBounds*, CameraMovement*, f32), preserving an unused first parameter and removing a previous todo about swapped r3/r4 arguments.",
+    "Rewrote Camera_8002A28C to access cm_80452C68 directly instead of through local Camera*, added a u8 stack pad, copied unk_B0 to unk_1B0, cleared source xC fields, decremented unk_8C timers, and unlinked unk_A0 through HSD_GObjPLink_80390228 when conditions match.",
+    "Implemented Camera_8002AF68 to set HSD_CObj FOV, interest, and eye position from CameraMovement plus cm_80452C68.translation, while clamping eye y to a stage-specific lower bound for CASTLE, CORNERIA, ZEBES, GARDEN, SHRINEROUTE, and HOMERUN.",
+    "Added includes in camera.c for grcastle, grcorneria, grzebes, grgarden, grshrineroute, grhomerun, and baselib/controller.h.",
+    "Typed grCastle_801D0FF0, grCorneria_801E2FCC, grZebes_801DCCC8, grGarden_80203624, grShrineRoute_802087B0, and grHomeRun_8021EF10 as float-returning void-argument functions in their stage headers.",
+    "Named InternalStageId entries SHRINEROUTE and HOMERUN, with HOMERUN explicitly assigned 0x43.",
+    "Adjusted Camera struct padding around offset 0x2BA to add s16 unk_2ba before f32 unk_2bc."
+  ],
+  "smart_moves": [
+    "Converted hidden bit manipulation and padding access in CameraBox into explicit bitfields and xE, making later camera matching code easier to express without relying on anonymous fill bytes.",
+    "Preserved an unused first parameter in Camera_80029C88 to resolve the earlier register/order mismatch noted in the removed todo; this is a common decomp tactic when call ABI evidence implies an argument exists even if the function body does not use it.",
+    "Used direct global accesses to cm_80452C68 in Camera_8002A28C plus an explicit stack padding array to influence register allocation and stack shape for matching.",
+    "Localized the repeated camera-bound threshold test into a static inline cam_bound helper, keeping Camera_8002928C readable while still matching the simple comparison pattern.",
+    "Tied Camera_8002AF68 to stage-specific float helpers through properly typed prototypes instead of leaving those calls as UNK_RET/UNK_PARAMS, improving both type safety and generated code consistency.",
+    "Used named internal stage IDs in the Camera_8002AF68 switch, reducing magic enum usage and documenting which stage-specific camera lower-bound functions participate in eye-position clamping."
+  ],
+  "decomp_lessons": [
+    "When a field is used as individual bits in one function and as state flags in another, exposing actual bitfields can remove awkward masks and help match boolean assignments.",
+    "If a function has a persistent register mismatch, consider whether the true prototype contains an unused leading parameter rather than forcing argument swaps inside the body.",
+    "Small stack padding declarations such as u8 _[16] or u8 _1[4] can be useful matching tools when a function's logic is known but stack/register allocation is off.",
+    "Typing cross-module stage helper functions can unlock camera matches that depend on their return type; replacing UNK_RET/UNK_PARAMS with float(void) is meaningful when callers use the return as a numeric bound.",
+    "Stage enum naming can be driven by decompiled camera logic: if a switch calls grShrineRoute or grHomeRun helpers, naming those InternalStageId values makes the code more self-documenting.",
+    "Direct global references may produce closer codegen than holding a pointer local, even when a local pointer is cleaner C; matching sometimes requires sacrificing abstraction."
+  ],
+  "naming_conventions": [
+    "Camera functions retain address-based names such as Camera_8002928C, Camera_80029AAC, Camera_8002A28C, and Camera_8002AF68.",
+    "Unknown CameraBox fields are named by offset and bit position, e.g. xC_b0, xC_b1, xC_b2, and xE.",
+    "Unknown Camera struct fields continue offset-based names such as unk_2ba and unk_2bc.",
+    "Internal stage enum names use all-caps stage identifiers such as CASTLE, CORNERIA, ZEBES, GARDEN, SHRINEROUTE, and HOMERUN.",
+    "Stage helper prototypes follow existing module/address naming, e.g. grCastle_801D0FF0 and grHomeRun_8021EF10, even after their return types are clarified."
+  ],
+  "assembly_or_matching_tactics": [
+    "Added an unused CameraBounds* parameter to Camera_80029C88 to align the ABI/register expectations; the removed comment explicitly said r3 and r4 needed to be swapped for a match.",
+    "Inserted explicit stack padding arrays in Camera_8002A28C and Camera_8002AF68, likely to reproduce target stack layout or register allocation.",
+    "Changed Camera_8002A28C from local Camera* pointer-based access to direct cm_80452C68 global member access to improve matching.",
+    "Reordered and simplified arithmetic in Camera_80029AAC, including computing dx and dy once and applying movement->interest.x += dx * var_f1 style updates.",
+    "Introduced a local CameraUnkGlobals* unk = &cm_803BCCA0 in Camera_80029AAC to shape repeated global field access codegen.",
+    "Used float-returning stage prototypes so Camera_8002AF68 can compare vec.y against eye_y_bound without unknown-return casts."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "The only recorded human activity count was one issue comment, but its body was not included in the excerpt, so no reviewer intent or feedback can be inferred."
+  ],
+  "searchable_terms": [
+    "Misc camera matches",
+    "Camera_8002928C",
+    "Camera_80029AAC",
+    "Camera_80029C88",
+    "Camera_8002A28C",
+    "Camera_8002AF68",
+    "CameraBox",
+    "CameraMovement",
+    "CameraBounds",
+    "CameraUnkGlobals",
+    "cm_80452C68",
+    "cm_803BCCA0",
+    "cm_804D6464",
+    "xC_b0",
+    "xC_b1",
+    "xC_b2",
+    "xE",
+    "unk_2ba",
+    "unk_2bc",
+    "cam_bound",
+    "Stage_GetCamBoundsLeftOffset",
+    "Stage_GetCamBoundsRightOffset",
+    "Stage_GetCamBoundsTopOffset",
+    "Stage_GetCamBoundsBottomOffset",
+    "HSD_CObjSetFov",
+    "HSD_CObjSetInterest",
+    "HSD_CObjSetEyePosition",
+    "HSD_GObjPLink_80390228",
+    "InternalStageId",
+    "SHRINEROUTE",
+    "HOMERUN",
+    "CASTLE",
+    "CORNERIA",
+    "ZEBES",
+    "GARDEN",
+    "grCastle_801D0FF0",
+    "grCorneria_801E2FCC",
+    "grZebes_801DCCC8",
+    "grGarden_80203624",
+    "grShrineRoute_802087B0",
+    "grHomeRun_8021EF10",
+    "float stage camera bound",
+    "unused parameter matching",
+    "stack padding matching"
+  ],
+  "follow_up_queries": [
+    "Find callers of Camera_80029C88 to verify all call sites use the added CameraBounds* argument consistently.",
+    "Search for CameraBox xC_b1, xC_b2, and xE usage to refine field names beyond offset-based placeholders.",
+    "Investigate stage helper functions grCastle_801D0FF0, grCorneria_801E2FCC, grZebes_801DCCC8, grGarden_80203624, grShrineRoute_802087B0, and grHomeRun_8021EF10 to determine semantic names for the returned eye-y lower bound.",
+    "Check whether Camera.unk_2ba is used elsewhere and whether it can be renamed or grouped with nearby camera timing/config fields.",
+    "Compare Camera_8002AF68 against remaining camera cobj setup functions to identify shared translation, interest, eye-position, and fov patterns."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

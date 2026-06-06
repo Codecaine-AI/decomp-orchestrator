@@ -1,0 +1,145 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-253",
+  "pr": {
+    "number": 253,
+    "title": "All functions in stage.c are matched,  but you'll have to move the string declarations",
+    "url": "https://github.com/doldecomp/melee/pull/253",
+    "state": "MERGED",
+    "author": "snuffysasa",
+    "created_at": "2022-02-04T19:33:03Z",
+    "merged_at": "2022-02-04T22:30:29Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the remaining stage.c work by moving a large block of gr/stage.s text into C, adding stage.o to the epilogue build list, typing several needed extern functions and small stage-related structs, and relocating/renaming data symbols. The PR author noted two stage.c functions were still guarded by inline asm because moving string declarations without changing the DOL was unresolved; a later issue comment specifically called out calc_unk_cam_y_bounds_80224BC4 as non-matching when 0.5F was declared locally instead of externed, due to regalloc changes.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "data-symbols",
+      "build-system"
+    ],
+    "systems": [
+      "stage",
+      "gr",
+      "camera",
+      "asm",
+      "include",
+      "dolphin-mtx",
+      "build"
+    ]
+  },
+  "key_files": [
+    "src/melee/gr/stage.c",
+    "asm/melee/gr/stage.s",
+    "src/melee/gr/stage.h",
+    "include/functions.h",
+    "include/variables.h",
+    "include/dolphin/mtx/mtxtypes.h",
+    "asm/melee/db/code_80225374.s",
+    "e_files.mk"
+  ],
+  "what_changed": [
+    "Removed roughly 453 lines from asm/melee/gr/stage.s and replaced many stage routines with C implementations in src/melee/gr/stage.c.",
+    "Added C implementations for functions including func_80224DC8, func_80224E38, func_80224E64, func_80224FDC, func_80225074, func_80225194, func_8022519C, func_802251B4, func_802251E8, func_8022524C, func_80225298, func_802252E4, and func_8022532C.",
+    "Reworked camera helper functions to use literal constants such as 0.0174532923847F, 0.5F, 0.0F, and an inline Vec initializer { 0, 0, -100.0F } instead of some externed constants/data.",
+    "Introduced local stage data structs in stage.c: StructStageIDWithUnks, StructNumberAndStage, and StructPairWithStageID, plus globals unk_struct_804D49E8 and unk_struct_804D49F0.",
+    "Renamed the stage data array label from lbl_803E9960 to unk_arr_803E9960 in asm/melee/gr/stage.s and referenced it as extern struct StructStageIDWithUnks unk_arr_803E9960[] in C.",
+    "Added typed prototypes in include/functions.h for dependencies used by the C stage code, including func_80051EC8, func_801C2D24, func_801C28AC, func_8016B238, and func_8016B3A0.",
+    "Added S32Vec and S32VecPtr typedefs to include/dolphin/mtx/mtxtypes.h.",
+    "Refined StageInfo in src/melee/gr/stage.h by splitting the opaque data area to expose s8 unk8C before the remaining data array, enabling stage_info.unk8C bit checks.",
+    "Added src/melee/gr/stage.o to EPILOGUE_UNSCHEDULED in e_files.mk.",
+    "Inserted .4byte NULL padding/placeholders in asm/melee/db/code_80225374.s around rodata, sdata, and sdata2 sections, apparently to preserve data layout after moving stage symbols."
+  ],
+  "smart_moves": [
+    "Used small local structs to describe previously raw stage globals just enough to express list_idx, stage_id, and pointer relationships without overclaiming full type knowledge.",
+    "Converted compact assembly condition chains into simple C boolean/equality logic, for example func_80224DC8 returning whether the argument is one of several stage IDs.",
+    "Preserved matching-sensitive data layout by leaving NULL words/padding in neighboring asm sections when moving or deleting stage-owned rodata/sdata/sdata2.",
+    "Exposed only the StageInfo byte needed by the matched code as unk8C and adjusted the padding size instead of attempting a speculative full StageInfo layout.",
+    "Added exact function prototypes for cross-module calls so the new C could compile with correct argument and return types, especially Vec pointer and f32-heavy signatures.",
+    "Kept known-unknown names such as unk_arr_803E9960 and unk_struct_804D49E8 rather than inventing semantic names not supported by evidence."
+  ],
+  "decomp_lessons": [
+    "Moving constants from extern symbols to local literals can affect register allocation; the issue comment notes calc_unk_cam_y_bounds_80224BC4 became non-matching when 0.5F was declared rather than externed.",
+    "String declarations and assert strings are data-layout sensitive. The PR body says two functions were matched but kept behind inline asm because moving string declarations while preserving DOL matching was unresolved.",
+    "For stage work, exposing a single known field inside a large unknown struct can be enough to match code while minimizing risky struct guesses.",
+    "When deleting asm data from one file, check neighboring section alignment and insert explicit NULL padding if needed to keep downstream labels and DOL layout stable.",
+    "Literal floating constants can match existing code, but they must be verified against both instruction selection and regalloc; externed constants may be required for some functions.",
+    "Adding a decompiled object to e_files.mk is part of landing a matched C translation, not just replacing asm text."
+  ],
+  "naming_conventions": [
+    "Unidentified data arrays were given descriptive-but-cautious unk_* names, e.g. lbl_803E9960 became unk_arr_803E9960.",
+    "Unknown globals with partial structure knowledge were named unk_struct_804D49E8 and unk_struct_804D49F0.",
+    "Local placeholder struct names used shape-based descriptions such as StructStageIDWithUnks, StructNumberAndStage, and StructPairWithStageID.",
+    "Existing address-suffixed function names were retained for unmatched semantics, e.g. calc_unk_cam_y_bounds_80224BC4 and unk_set_vec3_to_cam_offset_80224BF8.",
+    "StageInfo unknown byte naming used offset-oriented unk8C and shrank the anonymous data padding accordingly."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed matched stage functions from asm/melee/gr/stage.s while preserving remaining data declarations and necessary layout padding.",
+    "Used explicit float literals with F suffix and high-precision radians conversion constant 0.0174532923847F for camera angle helpers.",
+    "Used stack-local struct copies before calling func_801C0754, func_801C0800, func_801C0F78, func_801C0FB8, and func_801C1074, matching the original pattern of copying sdata pair values to the stack before mutation.",
+    "Translated loops in func_80224E64 and func_80224FDC into C loops that preserve the search order over spawn/camera vectors and HSD_Randi calls.",
+    "Kept __assert calls with __FILE__ and exact line numbers/string literals visible in the C translation, but the PR notes moving string declarations remained a matching hazard.",
+    "Inserted .4byte NULL before labels in code_80225374.s rodata/sdata/sdata2 to compensate for data relocation effects."
+  ],
+  "review_feedback": [
+    {
+      "author": "PsiLupan",
+      "url": "https://github.com/doldecomp/melee/pull/253#issuecomment-1030390932",
+      "feedback": "Currently non-matching on calc_unk_cam_y_bounds_80224BC4 due to regalloc change after declaring 0.5F rather than externing."
+    },
+    {
+      "author": "snuffysasa",
+      "url": "https://github.com/doldecomp/melee/pull/253",
+      "feedback": "PR body states the commit was compiling and matching, but two stage.c functions were still wrapped with inline asm because correctly moving string declarations while keeping the DOL matching was not solved."
+    }
+  ],
+  "searchable_terms": [
+    "stage.c",
+    "asm/melee/gr/stage.s",
+    "src/melee/gr/stage.c",
+    "calc_unk_cam_y_bounds_80224BC4",
+    "calc_unk_cam_y_80224B98",
+    "unk_set_vec3_to_cam_offset_80224BF8",
+    "func_80224DC8",
+    "func_80224E64",
+    "func_80224FDC",
+    "func_80225074",
+    "func_802251E8",
+    "func_8022532C",
+    "unk_arr_803E9960",
+    "unk_struct_804D49E8",
+    "unk_struct_804D49F0",
+    "StructStageIDWithUnks",
+    "StructNumberAndStage",
+    "StructPairWithStageID",
+    "StageInfo unk8C",
+    "S32Vec",
+    "func_80051EC8",
+    "func_801C2D24",
+    "func_801C28AC",
+    "HSD_Randi",
+    "lbvector_ApplyEulerRotation",
+    "0.5F regalloc",
+    "string declarations",
+    "e_files.mk",
+    "EPILOGUE_UNSCHEDULED"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that renamed func_80224E64, func_80224FDC, func_80225074, or unk_arr_803E9960 with better stage semantics.",
+    "Search for follow-up fixes to calc_unk_cam_y_bounds_80224BC4 and whether 0.5F was externed again for matching.",
+    "Look for later StageInfo layout expansions around offset 0x8C to replace unk8C and data padding.",
+    "Find PRs discussing moving assert strings or rodata/sdata declarations out of stage.s without changing DOL layout."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

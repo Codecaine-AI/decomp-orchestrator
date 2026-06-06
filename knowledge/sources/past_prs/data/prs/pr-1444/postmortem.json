@@ -1,0 +1,129 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1444",
+  "pr": {
+    "number": 1444,
+    "title": "Matches in sysdolphin/controller",
+    "url": "https://github.com/doldecomp/melee/pull/1444",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-09-06T22:28:00Z",
+    "merged_at": "2024-09-06T22:30:48Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched several controller-related functions in sysdolphin/baselib, most notably HSD_PadFlushQueue, HSD_PadRenewCopyStatus, and the function previously named HSD_PadZeroQueue after identifying it as HSD_PadRenewGameStatus. The PR also corrected the associated BSS object from HSD_PadRumbleData to HSD_PadGameStatus, updated external users in fighter code and lbcardgame assembly, and adjusted controller.h to expose the new game status array and function name.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "symbol-renaming",
+      "headers",
+      "bss-symbol-correction",
+      "controller-input"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "controller",
+      "fighter",
+      "asm",
+      "config"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/controller.c",
+    "src/sysdolphin/baselib/controller.h",
+    "asm/sysdolphin/baselib/controller.s",
+    "config/GALE01/symbols.txt",
+    "src/melee/ft/fighter.c",
+    "asm/melee/lb/lbcardgame.s"
+  ],
+  "what_changed": [
+    "Implemented HSD_PadFlushQueue in C, including merge, throwaway, and leave-one queue flush modes protected by OSDisableInterrupts/OSRestoreInterrupts.",
+    "Implemented HSD_PadRenewCopyStatus, copying master pad state into HSD_PadCopyStatus, zeroing fields on error, and maintaining last_button, trigger, release, repeat, and repeat_count behavior.",
+    "Renamed the previously labeled HSD_PadZeroQueue function to HSD_PadRenewGameStatus because the old name did not fit the matched behavior.",
+    "Implemented HSD_PadRenewGameStatus with logic parallel to HSD_PadRenewCopyStatus, but writing to the newly identified HSD_PadGameStatus array.",
+    "Updated HSD_PadRenewStatus to call HSD_PadRenewGameStatus after renewing raw, master, and copy status.",
+    "Corrected the BSS symbol at 0x804C21CC from HSD_PadRumbleData size 0x114 to HSD_PadGameStatus size 0x110 in symbols.txt and assembly labels.",
+    "Updated fighter input reads in Fighter_Spaghetti_8006AD10 from HSD_PadRumbleData to HSD_PadGameStatus for sticks, c-stick, analog triggers, and held buttons.",
+    "Removed support_rumble from HSD_PadStatus in controller.h, consistent with the corrected 0x44-byte status layout implied by the 4-entry 0x110 array.",
+    "Added extern declaration for HSD_PadGameStatus[4] and renamed the public prototype from HSD_PadZeroQueue to HSD_PadRenewGameStatus.",
+    "Updated an lbcardgame assembly callsite to use HSD_PadRenewGameStatus instead of HSD_PadZeroQueue."
+  ],
+  "smart_moves": [
+    "Used behavioral evidence from the decompiled function to reject the misleading HSD_PadZeroQueue name; the function renews a per-player game-visible pad status array rather than zeroing a queue.",
+    "Recognized that the BSS object previously named HSD_PadRumbleData was actually a fourth HSD_PadStatus[4]-sized array, HSD_PadGameStatus, and propagated that correction to fighter code and symbols.",
+    "Matched HSD_PadFlushQueue with a compact modulo-based queue pointer helper, replacing the earlier division-style expression while preserving ring-buffer behavior.",
+    "Kept interrupt masking around queue flush operations, which is important because the pad raw queue is shared with asynchronous input updates.",
+    "Matched copy-status and game-status renewal as near-parallel routines, which made the naming and data-flow relationship between HSD_PadMasterStatus, HSD_PadCopyStatus, and HSD_PadGameStatus clearer."
+  ],
+  "decomp_lessons": [
+    "Do not trust early placeholder names when the function body contradicts them; HSD_PadZeroQueue sounded plausible but the matched code updated HSD_PadGameStatus and repeat/trigger fields.",
+    "BSS object size is a strong clue for controller structs: HSD_PadStatus[4] at 0x44 bytes each gives 0x110 bytes, which supported removing the extra support_rumble byte and renaming the object.",
+    "When a global controller status array is renamed, update every external consumer and the symbol map together to avoid preserving stale semantic names in unrelated systems.",
+    "For pad status renewal, preserve the exact order of field copies and zeroing; these routines are sensitive to struct layout and codegen.",
+    "Button repeat logic depends on comparing last_button and button, resetting repeat_count on state changes, and using repeat_interval when the countdown reaches zero.",
+    "Queue-flush matching can require modeling ring-buffer state transitions exactly: qread, qwrite, qcount, qnum, and the selected flush policy all affect generated control flow.",
+    "Header corrections can be as important as function matching because one stray struct field changes array/object sizes and invalidates BSS symbol interpretation."
+  ],
+  "naming_conventions": [
+    "Use HSD_PadRenewGameStatus for the 0x80377B54 function, not HSD_PadZeroQueue.",
+    "Use HSD_PadGameStatus for the BSS array at 0x804C21CC, not HSD_PadRumbleData.",
+    "Controller renewal routines follow the HSD_PadRenew*Status naming pattern: HSD_PadRenewRawStatus, HSD_PadRenewMasterStatus, HSD_PadRenewCopyStatus, HSD_PadRenewGameStatus, HSD_PadRenewStatus.",
+    "Pad status globals use HSD_Pad*Status array names: HSD_PadMasterStatus, HSD_PadCopyStatus, HSD_PadGameStatus.",
+    "Flush enum names seen in the implementation are HSD_PAD_FLUSH_QUEUE_MERGE, HSD_PAD_FLUSH_QUEUE_THROWAWAY, and HSD_PAD_FLUSH_QUEUE_LEAVE1."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted HSD_PadRawMerge from four explicit button OR assignments into a for loop over four controller slots, matching the intended repeated pattern.",
+    "Used a modulo expression in HSD_PadRawQueueShift: *qptr = (*qptr + 1) % qnum.",
+    "Matched HSD_PadFlushQueue by keeping local qread and qdst PADStatus pointers and repeatedly merging queue entries while decrementing qcount.",
+    "Preserved the switch structure for HSD_PadFlushQueue over HSD_FlushType to separate merge, throwaway, and leave-one behavior.",
+    "Matched HSD_PadRenewCopyStatus and HSD_PadRenewGameStatus with explicit local pointers to master/copy or master/game status entries, which likely helped produce the target load/store pattern.",
+    "Assembly labels and .endfn names were updated in controller.s so the remaining asm reflected the corrected HSD_PadRenewGameStatus symbol."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR1444",
+    "Matches in sysdolphin/controller",
+    "PsiLupan",
+    "HSD_PadFlushQueue",
+    "HSD_PadRenewCopyStatus",
+    "HSD_PadRenewGameStatus",
+    "HSD_PadZeroQueue",
+    "HSD_PadGameStatus",
+    "HSD_PadRumbleData",
+    "HSD_PadMasterStatus",
+    "HSD_PadCopyStatus",
+    "HSD_PadLibData",
+    "HSD_PadRawQueueShift",
+    "HSD_PadRawMerge",
+    "HSD_PadRenewStatus",
+    "HSD_PAD_FLUSH_QUEUE_MERGE",
+    "HSD_PAD_FLUSH_QUEUE_THROWAWAY",
+    "HSD_PAD_FLUSH_QUEUE_LEAVE1",
+    "OSDisableInterrupts",
+    "OSRestoreInterrupts",
+    "HSD_PadStatus",
+    "support_rumble",
+    "Fighter_Spaghetti_8006AD10",
+    "controller.c",
+    "controller.h",
+    "symbols.txt",
+    "lbcardgame.s"
+  ],
+  "follow_up_queries": [
+    "Check later PRs for further controller.c matches around HSD_PadReset and HSD_PadInit.",
+    "Search for remaining stale references to HSD_PadRumbleData or HSD_PadZeroQueue after this rename.",
+    "Investigate whether HSD_PadCopyStatus and HSD_PadGameStatus have distinct gameplay semantics beyond being renewed from HSD_PadMasterStatus.",
+    "Verify whether any remaining HSD_PadStatus layout fields need documentation after removing support_rumble."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

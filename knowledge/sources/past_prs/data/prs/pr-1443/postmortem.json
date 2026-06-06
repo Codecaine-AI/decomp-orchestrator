@@ -1,0 +1,163 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1443",
+  "pr": {
+    "number": 1443,
+    "title": "Work on CObj",
+    "url": "https://github.com/doldecomp/melee/pull/1443",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-09-06T17:47:14Z",
+    "merged_at": "2024-09-06T17:50:09Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "CObj decompilation cleanup and matching pass focused on remaining stack/inlining issues, with the PR body specifically noting that it matched essentially all remaining affected functions and matched setupBottomHalfCamera. The changes implemented several previously stubbed CObj vector/roll helpers, adjusted camera bottom-half viewport/projection math for matching, moved reusable vector-normalization and WObj flag helpers into headers, and updated CObj public prototypes accordingly.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "camera-math",
+      "stub-implementation",
+      "inline-helper-extraction"
+    ],
+    "systems": [
+      "src/sysdolphin/baselib",
+      "CObj",
+      "WObj",
+      "util"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/sysdolphin/baselib/cobj.c",
+      "role": "Main CObj matching work: setupBottomHalfCamera rewrite, CObj eye/up/left/roll vector functions, direct use of shared helpers, line/assert adjustments, and default-class setter."
+    },
+    {
+      "path": "src/sysdolphin/baselib/cobj.h",
+      "role": "Updated public CObj API prototypes, including setters for interest/eye WObj, int return types for up/left vector getters, and HSD_CObjSetDefaultClass."
+    },
+    {
+      "path": "src/sysdolphin/baselib/util.h",
+      "role": "Added shared FLT_MIN and vec_normalize_check inline helper using fabsf_bitwise and PSVECNormalize."
+    },
+    {
+      "path": "src/sysdolphin/baselib/wobj.h",
+      "role": "Added inline HSD_WObjClearFlags so CObj code can reuse it instead of keeping a local inline."
+    }
+  ],
+  "what_changed": [
+    "Included util.h from cobj.c and relocated HSD_CObjInfo hsdCObj earlier in the file.",
+    "Removed a local HSD_FObjData typedef from cobj.c, suggesting the file no longer needed that private placeholder in this matching pass.",
+    "Reworked setupBottomHalfCamera local variables and math, including scissor/viewport handling, hscale calculation, GXSetViewport arguments, and projection matrix setup for PROJ_PERSPECTIVE, PROJ_FRUSTUM, and PROJ_ORTHO.",
+    "Changed HSD_Panic and multiple HSD_ASSERT call sites from hexadecimal literals to decimal line-number literals, including use of __FILE__ for the panic file argument.",
+    "Added HSD_CObjSetInterestWObj and HSD_CObjSetEyePositionWObj simple setters with assertions.",
+    "Changed HSD_CObjGetEyeVector and HSD_CObjGetEyeDistance to use VECSubtract/VECMag-style helpers and shared vec_normalize_check instead of local/private normalization logic.",
+    "Moved vector normalization guard logic into util.h as static inline vec_normalize_check with FLT_MIN and fabsf_bitwise zero-vector checks.",
+    "Moved HSD_WObjClearFlags into wobj.h as a static inline helper.",
+    "Replaced unused forced-active data/string block with static Vec3 constants orig, uy, and uy2 plus implemented upvec2roll.",
+    "Implemented roll2upvec with MTXRotAxisRad, PSMTXMultVecSR, VECNormalize, and a pointer-based fabsf_p helper to satisfy matching constraints.",
+    "Implemented HSD_CObjGetUpVector, HSD_CObjSetUpVector, HSD_CObjGetLeftVector, and HSD_CObjSetRoll, replacing NOT_IMPLEMENTED placeholders.",
+    "Simplified HSD_CObjGetViewingMtxPtr and HSD_CObjGetInvViewingMtxPtr to call HSD_CObjSetupViewingMtx and return the direct matrix pointer.",
+    "Added HSD_CObjSetDefaultClass with an hsdIsDescendantOf assertion when info is non-null.",
+    "Changed CObjLoad to use a local static default up vector instead of a file-scope HSD_CObj_8040631C symbol.",
+    "Updated cobj.h signatures so HSD_CObjGetUpVector and HSD_CObjGetLeftVector return int status codes rather than void/UNK_PARAMS."
+  ],
+  "smart_moves": [
+    "Centralized vec_normalize_check in util.h instead of keeping a CObj-local duplicate, making the zero-vector guard reusable for other baselib code.",
+    "Moved HSD_WObjClearFlags into wobj.h, which matches the helper's ownership better than defining it privately in cobj.c.",
+    "Used explicit fallback vectors for failed camera-vector calculations: eye defaults to {0, 0, -1}, up defaults to {0, 1, 0}, and left defaults to {1, 0, 0}. This preserves safe behavior while returning -1 on failure.",
+    "Preserved status-return semantics in vector getters: HSD_CObjGetUpVector and HSD_CObjGetLeftVector now return 0 for success and -1 for fallback/failure, which is more informative than the prior stubs/prototypes.",
+    "Kept matching-sensitive details visible in setupBottomHalfCamera with comments tied to assembly loads/comparisons, showing the rewrite was guided by instruction ordering and register behavior rather than only source-level clarity.",
+    "Used a pointer-taking fabsf_p wrapper around __fabsf for roll2upvec, indicating a deliberate tactic to reproduce compiler codegen for the absolute-value check.",
+    "Removed alternative SOLUTION preprocessor branches around matrix pointer accessors after settling on the setup function path, reducing local matching clutter."
+  ],
+  "decomp_lessons": [
+    "For remaining stack/inlining mismatches, moving small static inline helpers to the header that naturally owns them can help both code organization and codegen.",
+    "Camera setup functions may require source structured around exact load/order and temporary-variable lifetimes; readable algebraically equivalent code may not match.",
+    "When matching floating-point camera math, preserve apparently odd expressions such as `2.0f * hscale + -1.0f` if they reflect the target instruction sequence.",
+    "Fallback behavior in vector accessors should be implemented explicitly, not hidden behind NOT_IMPLEMENTED placeholders, because callers may rely on both output defaults and integer status codes.",
+    "Line-number assertions and panic file arguments can be matching-relevant; this PR changed HSD_ASSERT/HSD_Panic arguments to the expected decimal line values and __FILE__ form.",
+    "Small wrapper helpers such as fabsf_p can be useful when the compiler's chosen intrinsic/calling pattern differs from a straightforward inline expression.",
+    "Default data placement matters: replacing a file-scope static default Vec3 with a function-local static Vec3 in CObjLoad was part of the matching cleanup."
+  ],
+  "naming_conventions": [
+    "Public CObj functions keep the `HSD_CObj` prefix, e.g. `HSD_CObjSetInterestWObj`, `HSD_CObjSetEyePositionWObj`, `HSD_CObjGetUpVector`, and `HSD_CObjSetDefaultClass`.",
+    "WObj helper functions keep the `HSD_WObj` prefix and live in wobj.h when they operate directly on HSD_WObj fields, e.g. `HSD_WObjClearFlags`.",
+    "Reusable low-level utility helper is lowercase snake-style: `vec_normalize_check`.",
+    "Local vector names were clarified from stack-slot names like `sp48` and `sp3C` to semantic names like `eyepos`, `interest`, `eye`, `up`, and `left`.",
+    "Static default vectors use short conventional names in this diff: `orig`, `uy`, and `uy2`."
+  ],
+  "assembly_or_matching_tactics": [
+    "setupBottomHalfCamera was explicitly rearranged to match stack/inlining behavior, with local variables split into `top`, `bottom`, `left`, `right`, `width`, `height`, `hscale`, `t`, `b`, `w`, and `h`.",
+    "The setupBottomHalfCamera diff includes comments mapping source assignments to assembly operations such as `lfs` and `fcmpo`, showing instruction-order-guided source reconstruction.",
+    "A scoped block with an unused local in setupBottomHalfCamera was introduced around viewport/hscale calculation, likely to influence stack layout or variable lifetime.",
+    "Projection math preserved matching-sensitive expression shape, including `2.0f * hscale + -1.0f` and a temporary `h` before C_MTXFrustum in the PROJ_FRUSTUM case.",
+    "Local inline `_vec_normalize_check` and local `fabsf` were removed in favor of shared/header helpers, reducing inlining mismatches in cobj.c.",
+    "Used `MTXRotAxisRad` rather than `PSMTXRotAxisRad` in roll2upvec, and `VECNormalize`/`VECSubtract` rather than direct PS-prefixed calls in several places, indicating library wrapper choice affected matching.",
+    "Added `fabsf_p(f32* v)` returning `__fabsf(*v)` for a matching-sensitive absolute-value use in roll2upvec.",
+    "Replaced forced-active unused data/string with meaningful static Vec3 symbols used by new vector conversion helpers."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR1443",
+    "Work on CObj",
+    "PsiLupan",
+    "CObj",
+    "HSD_CObj",
+    "setupBottomHalfCamera",
+    "setupTopHalfCamera",
+    "HSD_CObjGetEyeVector",
+    "HSD_CObjGetEyeDistance",
+    "HSD_CObjGetUpVector",
+    "HSD_CObjSetUpVector",
+    "HSD_CObjGetLeftVector",
+    "HSD_CObjSetRoll",
+    "upvec2roll",
+    "roll2upvec",
+    "HSD_CObjSetInterestWObj",
+    "HSD_CObjSetEyePositionWObj",
+    "HSD_CObjSetDefaultClass",
+    "HSD_WObjClearFlags",
+    "vec_normalize_check",
+    "fabsf_bitwise",
+    "fabsf_p",
+    "FLT_MIN",
+    "VECSubtract",
+    "VECMag",
+    "VECNormalize",
+    "PSVECCrossProduct",
+    "C_MTXLookAt",
+    "C_MTXFrustum",
+    "C_MTXOrtho",
+    "GXSetViewport",
+    "GXSetScissor",
+    "GXProjectionType",
+    "PROJ_PERSPECTIVE",
+    "PROJ_FRUSTUM",
+    "PROJ_ORTHO",
+    "HSD_ASSERT",
+    "HSD_Panic",
+    "hsdIsDescendantOf",
+    "stack inlining issues",
+    "baselib util.h",
+    "baselib wobj.h",
+    "baselib cobj.c"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching HSD_CObjGetUpVector or HSD_CObjGetLeftVector to see whether the int-return prototypes remained stable.",
+    "Search for other local implementations of vec_normalize_check or FLT_MIN that should be consolidated into util.h.",
+    "Check subsequent CObj PRs for refinements to setupBottomHalfCamera or projection math.",
+    "Search for HSD_WObjClearFlags usage after this PR to confirm header placement enabled reuse.",
+    "Look for later review or matching notes on fabsf_p and fabsf_bitwise patterns in baselib math code."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

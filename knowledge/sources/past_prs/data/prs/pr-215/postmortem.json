@@ -1,0 +1,140 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-215",
+  "pr": {
+    "number": 215,
+    "title": "Sdata2 split, match random.c",
+    "url": "https://github.com/doldecomp/melee/pull/215",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-22T08:43:01Z",
+    "merged_at": "2021-12-22T08:43:20Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large mechanical/data-layout PR that deleted the monolithic asm/sdata2.s object, moved .sdata2 literals into their owning asm/source translation-unit files, updated build lists accordingly, split AX allocation assembly out of AX.s into AXAlloc.s, applied several Dolphin SDK symbol names, and matched src/sysdolphin/baselib/random.c by replacing inline assembly for HSD_Randf with C using a 65536 divisor.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "data-section-split",
+      "asm-reorganization",
+      "build-system",
+      "symbol-naming",
+      "headers"
+    ],
+    "systems": [
+      "Makefile",
+      "obj_files.mk",
+      "e_files.mk",
+      "asm/sdata2",
+      "asm/MSL",
+      "asm/dolphin/ax",
+      "asm/dolphin/ar",
+      "asm/dolphin/gx",
+      "asm/dolphin/mtx",
+      "asm/melee/gr",
+      "asm/melee/mn",
+      "src/sysdolphin/baselib",
+      "include/functions.h"
+    ]
+  },
+  "key_files": [
+    "Makefile",
+    "obj_files.mk",
+    "e_files.mk",
+    "asm/sdata2.s",
+    "asm/dolphin/ax/AX.s",
+    "asm/dolphin/ax/AXAlloc.s",
+    "asm/dolphin/ar/ar.s",
+    "asm/dolphin/mtx/mtx.s",
+    "asm/dolphin/mtx/mtx44.s",
+    "include/functions.h",
+    "src/sysdolphin/baselib/random.c",
+    "src/sysdolphin/baselib/aobj.c"
+  ],
+  "what_changed": [
+    "Removed SDATA2_O_FILES from the main O_FILES link list in Makefile and removed the SDATA2_O_FILES definition for asm/sdata2.o from obj_files.mk.",
+    "Deleted asm/sdata2.s, which had contained over 10000 lines of centralized .sdata2 data.",
+    "Added .section .sdata2 blocks to many owning assembly files, including MSL ansi_fp/math/printf, Dolphin AR/GX/JPEG/MTX files, stage files, menu files, and sysdolphin baselib assembly files.",
+    "Moved the bulk of AX allocation code out of asm/dolphin/ax/AX.s into a new asm/dolphin/ax/AXAlloc.s file and added AXAlloc.o to TEXT_O_FILES.",
+    "Updated AXInitEx callsites in AX.s from generic func_ labels to SDK-style internal names such as __AXAllocInit, __AXVPBInit, __AXSPBInit, __AXClInit, and __AXOutInit.",
+    "Renamed several known SDK functions in assembly/header comments, including func_80350E28 to ARFree, func_803422D0 to PSMTXTranspose, func_80342B50 to C_MTXFrustum, and corresponding include/functions.h entries.",
+    "Added src/sysdolphin/baselib/random.o to EPILOGUE_UNSCHEDULED in e_files.mk.",
+    "Matched HSD_Randf in src/sysdolphin/baselib/random.c by deleting the NON_MATCHING/asm implementation and using C: update seed with 214013 and 2531011, then return the upper 16 bits divided by 65536.",
+    "Removed external float constant declarations from random.c for lbl_804DE790 and lbl_804DE798 because the matched C no longer references those sdata2 labels directly."
+  ],
+  "smart_moves": [
+    "Treating .sdata2 as per-translation-unit data instead of a single global assembly object makes future source matches easier: constants live near the code that owns and references them.",
+    "The build-system change was paired with data movement: removing SDATA2_O_FILES only after relocating .sdata2 blocks prevents duplicate or missing small-data objects.",
+    "HSD_Randf was matched by recognizing that the assembly sequence implements conversion of the upper 16 random bits to float and division by 65536, avoiding the need for hand-written asm or explicit sdata2 externs.",
+    "Splitting AXAlloc.s from AX.s reduced an oversized assembly file while preserving AXInitEx behavior through renamed branch targets.",
+    "Applying SDK-style names to known Dolphin functions improves callsite readability and provides reusable anchors for future library decompilation."
+  ],
+  "decomp_lessons": [
+    "When replacing a monolithic data section, move constants into the same asm/source unit that the linker expects for that object; then remove the old aggregate object from the object list.",
+    "For sdata2 float/double constants, matching C may eliminate explicit extern label references if literals can be emitted by the compiler in the correct owning object.",
+    "A random-number function that returns a normalized float may match as `(f32)(seed >> 16) / 65536` even if the assembly uses the common PowerPC int-to-double conversion pattern with 0x4330 and a bias constant.",
+    "Large assembly reorganization can be combined with symbol naming, but the evidence here shows no review discussion, so future agents should verify each renamed SDK symbol against callsites and known library signatures.",
+    "Adding a source object to e_files.mk can be needed when a newly matched source file participates in epilogue/unscheduled processing."
+  ],
+  "naming_conventions": [
+    "Known Dolphin SDK functions were promoted from `func_` placeholders to official-style names: `ARFree`, `PSMTXTranspose`, `C_MTXFrustum`.",
+    "AX internals use double-underscore SDK-style names such as `__AXAllocInit`, `__AXVPBInit`, `__AXSPBInit`, `__AXClInit`, and `__AXOutInit`.",
+    "Unidentified data labels remained address-style `lbl_804D...` / `lbl_804DE...` globals when no semantic name was evidenced.",
+    "Assembly file split naming followed subsystem ownership: AX allocation code moved from `asm/dolphin/ax/AX.s` to `asm/dolphin/ax/AXAlloc.s`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted inline assembly for `HSD_Randf` after finding a C expression that reproduces the seed update and floating-point normalization.",
+    "Used a literal `65536` divisor in C rather than referencing sdata2 float labels directly.",
+    "Moved `.section .sdata2` blocks into many assembly files, preserving `.global lbl_...` labels and raw `.4byte` encodings.",
+    "Kept assembly comments/address annotations while renaming branch targets and function labels to known SDK symbols.",
+    "Reduced AX.s by extracting a 6128-line new AXAlloc.s object and updating AXInitEx branch labels to the extracted functions."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review bodies were present in the provided PR slice; there is no explicit reviewer rationale beyond the title and diff."
+  ],
+  "searchable_terms": [
+    "sdata2 split",
+    "asm/sdata2.s deleted",
+    "SDATA2_O_FILES",
+    "O_FILES",
+    "obj_files.mk",
+    "e_files.mk",
+    "random.c match",
+    "HSD_Rand",
+    "HSD_Randf",
+    "HSD_Randi",
+    "_HSD_RandForgetMemory",
+    "65536",
+    "214013",
+    "2531011",
+    "AXAlloc.s",
+    "AX.s",
+    "__AXAllocInit",
+    "__AXVPBInit",
+    "__AXSPBInit",
+    "__AXClInit",
+    "__AXOutInit",
+    "ARFree",
+    "PSMTXTranspose",
+    "C_MTXFrustum",
+    "include/functions.h",
+    "PsiLupan"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that replace remaining `lbl_804DE...` sdata2 constants with typed C constants.",
+    "Search for PRs that fully decompile AXAlloc or replace asm/dolphin/ax/AXAlloc.s with C.",
+    "Search for follow-up changes to random.c or HSD_Randf to confirm whether the 65536 literal remained stable.",
+    "Search for additional Dolphin SDK symbol naming PRs around PSMTXTranspose, C_MTXFrustum, ARFree, and AX internals.",
+    "Audit build changes around SDATA2_O_FILES removal to understand how per-object .sdata2 ownership affected later matching."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

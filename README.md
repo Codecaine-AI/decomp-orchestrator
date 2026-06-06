@@ -26,7 +26,7 @@ flowchart TD
 
             subgraph child["Child process: bootstrap / trigger-agent"]
                 direction TB
-                trigger["Trigger actor<br/>sleeps on durable state<br/>wakes director<br/>fills worker slots"]
+                trigger["Trigger actor<br/>sleeps on durable state<br/>refills queued work<br/>wakes director<br/>fills worker slots"]
                 director["Director Pi agent<br/>reads board snapshot<br/>chooses target packets"]
 
                 subgraph board["Middle layer: SQLite board + artifacts"]
@@ -59,7 +59,7 @@ flowchart TD
             direction LR
             refs["Docs, references,<br/>workflows"]
             resources["Decomp resources<br/>data sheets, PowerPC docs,<br/>external indexes"]
-            prlib["Past PR library<br/>knowledge/past_prs"]
+            prlib["Past PR library<br/>knowledge/sources/past_prs/data"]
         end
     end
 
@@ -169,6 +169,23 @@ Live agent sessions also need `@earendil-works/pi-coding-agent` from
 `bun install` and whatever provider/auth setup Pi needs for the selected
 `--provider`, `--model`, and `--thinking-level`.
 
+Project-specific provider keys belong in ignored `local.env`. For Codex LB,
+this repo hard-codes the project key there as `CODEX_LB_API_KEY=...`; the
+shared Pi provider config can reference `CODEX_LB_API_KEY` so each project can
+carry its own local key for spend attribution.
+
+This repo also uses ignored `.pi-agent/models.json` as the project-specific Pi
+agent config directory. `local.env` sets `PI_CODING_AGENT_DIR=.pi-agent`, so
+orchestrator-launched agents and past-PR CLI review agents resolve the local
+`codex-lb` provider instead of relying on global `~/.pi/agent/models.json`.
+Keep literal keys out of tracked files.
+
+The orchestrator persists live Pi session files under `.pi-sessions/` in this
+repo for local visibility. That directory is ignored by git. SDK-launched
+roles use `.pi-sessions/<role>/` through `SessionManager.create(cwd,
+sessionDir)`, and the past-PR CLI review path passes the same repo-local
+directory through `pi --session-dir`.
+
 Live Melee runs need a configured doldecomp/melee checkout with the normal
 toolchain, including `python configure.py`, `ninja`, `objdiff.json`,
 `build/GALE01/report.json`, and `build/tools/objdiff-cli`.
@@ -201,18 +218,52 @@ bun run orch -- --repo-root "$REPO_ROOT" --state-dir "$STATE_DIR" bootstrap \
 For long-running development runs, put the guardian around the system process:
 
 ```sh
-bun run orch -- --repo-root "$REPO_ROOT" --state-dir "$STATE_DIR" babysit \
+bun run orch -- --repo-root "$REPO_ROOT" --state-dir "$STATE_DIR" --agent-timeout-seconds 7200 babysit \
   --max-workers 16 \
   --idle-sleep-ms 5000 \
-  --agent-timeout-seconds 7200 \
   --worker-thinking-level low
 ```
 
-`bootstrap` is an alias for `trigger-agent`. It wakes the director when durable
-events exist, starts worker sessions until active leases reach the configured
-worker count, then sleeps when the board is quiet. `babysit` wraps that process,
-captures stdout/stderr/results under `state_dir/guardian/`, records incidents,
-runs lease recovery when appropriate, and restarts according to policy.
+`bootstrap` is an alias for `trigger-agent`. It reloads current board artifacts
+when the ready pool is low, refills queued targets toward the configured queue
+target, starts worker sessions until active leases reach the configured worker
+count, wakes the director for durable events, then sleeps when the board is
+quiet. `babysit` wraps that process, captures stdout/stderr/results under
+`state_dir/guardian/`, records incidents, runs lease recovery when appropriate,
+and restarts according to policy.
+
+For a high-parallelism run, keep worker count, queue target, and refill
+watermarks separate:
+
+```sh
+REPO_ROOT="/path/to/melee"
+STATE_DIR="$REPO_ROOT/.decomp-orchestrator-state/live-32-workers-low"
+
+bun run orch -- \
+  --repo-root "$REPO_ROOT" \
+  --state-dir "$STATE_DIR" \
+  --provider codex-lb \
+  --model gpt-5.5 \
+  --thinking-level medium \
+  babysit \
+  --max-workers 32 \
+  --worker-thinking-level low \
+  --candidate-limit 128 \
+  --queue-target-size 128 \
+  --candidate-window 512 \
+  --queue-low-watermark 32 \
+  --schedulable-low-watermark 32 \
+  --active-low-watermark 24 \
+  --force-recover-leases
+```
+
+In this shape, `--candidate-limit 128` remains the operator's ready-pool size
+when `--queue-target-size` is omitted. `--queue-target-size 128` makes that
+invariant explicit, and `--candidate-window 512` lets refills scan beyond the
+current pool for fresh candidates that have not already been queued, leased, or
+reported. Each refill reads the latest `build/GALE01/report.json` and
+`objdiff.json`; rebuilding those artifacts is the step that refreshes the
+underlying score data.
 
 Use bounded flags for local dry runs:
 
@@ -236,6 +287,7 @@ bun run orch -- --repo-root testdata/smoke_repo --state-dir "$(mktemp -d)" \
 | `babysit` | Process guardian that wraps `bootstrap`, records health incidents, recovers leases, and restarts the child when policy allows. |
 | `recover-leases` | Convert interrupted or expired active leases into durable stalled reports after operator confirmation. |
 | `regression-check` | Run the saved-baseline match-regression gate and write PR-ready report artifacts. |
+| `pr-split-plan` | Group branch/worktree changes into smaller subsystem-scoped PR slices, label independence risk, and emit isolation-check commands for review handoff. |
 | `status` | Print run, queue, lease, event, and report summaries. |
 
 ## Regression Gate
@@ -268,7 +320,7 @@ agent. Refresh it explicitly before live runs when recent PR knowledge matters:
 ```sh
 bun run pr:refresh:dry
 bun run pr:refresh
-bun run pr:postmortems -- --dump-root knowledge/past_prs/current --run-agent --rerun-existing --jobs 16
+bun run pr:postmortems -- --dump-root knowledge/sources/past_prs/data/current --run-agent --pending-only --complete-only --jobs 16
 ```
 
 For combined branch sync plus PR-library refresh:
@@ -313,14 +365,17 @@ it so runs can be inspected after the process exits.
 ## Current Boundaries
 
 - Smoke tests use dry-run Pi agents and do not edit Melee source.
-- Live worker sessions depend on the local Pi provider/auth setup.
+- Live worker sessions depend on ignored `local.env` plus the local Pi provider
+  registry. For `codex-lb`, `local.env` points Pi at ignored `.pi-agent/`, whose
+  `models.json` carries the project-specific provider config.
 - The trigger loop does not refresh PR knowledge or run global regression checks
   automatically.
 - `matched_code_percent` is the long-term progress metric. Run checkpoints such
   as `--goal-value 72` are batch pause/handoff thresholds, not the final project
   goal.
-- PR packaging is a separate handoff step. The orchestrator does not create one
-  PR per worker, lease, target, or file.
+- PR packaging is a separate handoff step. `pr-split-plan` can propose
+  directory-scoped review slices and isolation checks, but the orchestrator does
+  not publish PRs or create one PR per worker, lease, target, or file.
 
 ## Deeper Docs
 

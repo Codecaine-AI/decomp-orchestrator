@@ -1,0 +1,128 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1681",
+  "pr": {
+    "number": 1681,
+    "title": "Camera tweaks",
+    "url": "https://github.com/doldecomp/melee/pull/1681",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-07-11T04:31:48Z",
+    "merged_at": "2025-07-11T04:38:45Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Camera PR that made small matching-oriented fixes in the cm/camera unit: corrected callback and GObj-related prototypes, implemented Camera_80030688, adjusted expression ordering and stack/local typing for better codegen, cleaned up camera headers/includes, and rewrote several camera math constants using M_PI expressions. The author noted that some fixes only show up as \"Data value\" diffs in objdiff, meaning previously nonmatching data constants could look deceptively close without that view.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "fix",
+      "headers",
+      "prototype-correction",
+      "data-constant-matching"
+    ],
+    "systems": [
+      "camera",
+      "melee-core",
+      "baselib-gobj"
+    ]
+  },
+  "key_files": [
+    "src/melee/cm/camera.c",
+    "src/melee/cm/camera.h",
+    "src/melee/cm/camera.static.h",
+    "src/melee/cm/types.h"
+  ],
+  "what_changed": [
+    "Added camera.c includes for lb/lb_00F9.h and baselib GObj support headers: gobjgxlink.h, gobjobject.h, and gobjproc.h.",
+    "Changed Camera_8002EA64 local handling from a scalar f32 plus PAD_STACK and a temporary callback variable to a Vec3 local, calling cm_80452C68.x35C.cb directly and assigning the returned Vec3 to transform.target_position.",
+    "Updated Camera.x35C callback type in src/melee/cm/types.h from s32 (*)(f32*) to s32 (*)(Vec3*), matching the Camera_8002EA64 usage.",
+    "Changed fn_8002F360 from taking void* to HSD_GObj* in both camera.c and camera.h, and simplified the callback dispatch syntax.",
+    "Changed fn_800301D0 prototype in camera.h from unknown return/params to void fn_800301D0(HSD_GObj*, int).",
+    "Implemented Camera_80030688, creating a GObj with GObj_Create, storing it in cm_80452C68.gobj, creating CObj instances with lb_80013B14, attaching the object with HSD_GObjObject_80390A70, setting GX linkage with GObj_SetupGXLinkMax, and registering fn_8002F360 as a proc with HSD_GObjProc_8038FD54.",
+    "Reordered Stage_GetCamBoundsRightOffset and Stage_GetCamBoundsLeftOffset addition in fn_8002F908 and fn_8002FBA0, likely to match compiler evaluation or instruction ordering.",
+    "Moved/trimmed camera.h includes, removing direct cm/types.h and dolphin/types.h includes while retaining forward declarations and needed GX/MTX/CObj includes.",
+    "Added camera.static.h includes for melee/cm/types.h, sysdolphin/baselib/cobj.h, and math.h.",
+    "Replaced literal f64 constants for pi-derived values with M_PI / 8, M_PI / 16, M_PI * 2, and M_PI in camera.static.h."
+  ],
+  "smart_moves": [
+    "Used a typed Vec3 local and corrected the union callback signature instead of preserving a misleading f32* callback, aligning the struct type with actual target-position semantics.",
+    "Converted unknown function prototypes to concrete HSD_GObj-based signatures as soon as call sites provided evidence, improving type safety and reducing UNK usage.",
+    "Implemented Camera_80030688 with a scoped temporary HSD_CObj* variable around HSD_GObjObject_80390A70, a common decomp tactic when local lifetime or register allocation matters for matching.",
+    "Reordered commutative floating-point expressions rather than assuming source-equivalent math would match; this is important because evaluation order affects generated code and floating-point data flow.",
+    "Used M_PI-derived expressions for data constants, which documents intent and can also reproduce exact data values when the header macro definitions match the original constants.",
+    "Called out objdiff's \"Data value\" view as necessary evidence for some fixes, preventing reviewers from missing nonmatching data-only differences."
+  ],
+  "decomp_lessons": [
+    "For callback unions, verify the pointee type from the actual data being written or read; here x35C.cb needed Vec3* because the callback output feeds transform.target_position.",
+    "Do not leave public prototypes as void* or UNK_PARAMS once GObj/CObj call sites identify the expected types; propagating concrete signatures improves downstream matching and documentation.",
+    "In decompilation, algebraically equivalent expressions such as A + B versus B + A can still matter for matching, especially around function calls and floating-point operations.",
+    "Data constants deserve objdiff inspection, not just function matching; pi-derived f64 constants may be nonmatching even if the displayed decimal looks close.",
+    "Include-what-you-use cleanup should accompany prototype refinement: removing broad includes from public headers may require adding precise includes to static/private headers or implementation files.",
+    "Small local-variable changes, such as replacing PAD_STACK with a correctly typed Vec3 local, can remove artificial stack padding and reveal the original stack layout."
+  ],
+  "naming_conventions": [
+    "Kept unresolved camera globals and data labels in address-based form such as cm_80452C68, cm_804D6464, cm_803BCB18, and cm_803BCCA0.",
+    "Kept not-yet-named functions in address-based form such as fn_8002F360 and fn_800301D0 while improving their typed signatures.",
+    "Camera module public functions continue to use the Camera_800xxxxx address naming pattern, including Camera_80030688.",
+    "Camera struct unknown fields remain offset-style names such as x35C, x350, x368, and x374 until semantic names are known."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use objdiff \"Data value\" diffs for data constants; the PR body explicitly says some match fixes require that view to see prior nonmatches.",
+    "Try source operand reordering for commutative expressions when matching call/evaluation order, as shown with Stage_GetCamBoundsRightOffset plus Stage_GetCamBoundsLeftOffset.",
+    "Replace broad unknown callback/function signatures with exact HSD_GObj* and Vec3* types when call sites and assignments expose them.",
+    "Remove artificial PAD_STACK only after introducing a local whose size and type explains the stack use, as in Camera_8002EA64's Vec3 spC.",
+    "For GObj setup routines, preserve the sequence of create, store global/member pointer, create/attach object, setup GX link, and register proc; small ordering differences may affect matching.",
+    "Use mathematically named constants such as M_PI expressions when they reproduce the exact f64 data emitted by the compiler."
+  ],
+  "review_feedback": [
+    "No formal review comments were present in the provided slice.",
+    "The PR body/comment notes: \"Some of these match fixes require \\\"Data value\\\" diffs in objdiff to see that they were previously nonmatching.\""
+  ],
+  "searchable_terms": [
+    "Camera tweaks",
+    "camera.c",
+    "camera.h",
+    "camera.static.h",
+    "cm/types.h",
+    "Camera_8002EA64",
+    "Camera_80030688",
+    "fn_8002F360",
+    "fn_800301D0",
+    "cm_80452C68",
+    "x35C",
+    "Vec3 callback",
+    "s32 (*cb)(Vec3*)",
+    "HSD_GObj",
+    "HSD_CObj",
+    "GObj_Create",
+    "GObj_SetupGXLinkMax",
+    "HSD_GObjObject_80390A70",
+    "HSD_GObjProc_8038FD54",
+    "lb_80013B14",
+    "M_PI",
+    "M_PI_8",
+    "M_PI_16",
+    "objdiff Data value",
+    "Stage_GetCamBoundsLeftOffset",
+    "Stage_GetCamBoundsRightOffset",
+    "PAD_STACK",
+    "camera matching"
+  ],
+  "follow_up_queries": [
+    "Find other camera callbacks still typed as f32* or void* where Vec3* or HSD_GObj* can be inferred.",
+    "Search for remaining UNK_RET or UNK_PARAMS in src/melee/cm/camera.h after fn_800301D0 and Camera_80030688.",
+    "Audit pi-derived constants in camera.static.h and nearby modules using objdiff Data value mode.",
+    "Check whether Camera_800304E0 or other adjacent camera functions follow the same GObj/CObj setup pattern as Camera_80030688.",
+    "Search for commutative floating-point expressions involving Stage_GetCamBoundsLeftOffset and Stage_GetCamBoundsRightOffset that may need operand-order matching."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

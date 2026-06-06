@@ -1,0 +1,150 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1152",
+  "pr": {
+    "number": 1152,
+    "title": "Re-link `gr`",
+    "url": "https://github.com/doldecomp/melee/pull/1152",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-01-29T10:05:36Z",
+    "merged_at": "2024-01-29T10:15:12Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Re-linked the ground/stage (`gr`) library by changing build classification and object selection across many `gr` files, adding large asm fallbacks for `ground`, `grlib`, and `grticeclimber`, and marking many previously Unknown ground/stage files as Matching or NonMatching in `configure.py`. The PR also moved `InternalStageId` into `gr/forward.h`, added forward declarations for newly exposed stage data structs, expanded `gr/types.h` with archive/stage/BGM-related structs, and made broad header hygiene changes replacing direct `<stdbool.h>` includes with `<platform.h>`. There were no PR body notes or review comments in the slice, so intent beyond the title and diff is inferred from the build/link changes.",
+  "change_classification": {
+    "primary_type": "relink_build_configuration",
+    "categories": [
+      "headers",
+      "asm_fallback",
+      "build_config",
+      "type_forwarding",
+      "matching_status_update"
+    ],
+    "systems": [
+      "gr",
+      "stage",
+      "asm",
+      "fighter",
+      "item",
+      "dolphin_dvd",
+      "repo-root",
+      "src"
+    ]
+  },
+  "key_files": [
+    "configure.py",
+    "obj_files.mk",
+    "asm/melee/gr/ground.s",
+    "src/melee/gr/ground.c",
+    "asm/melee/gr/grlib.s",
+    "src/melee/gr/grlib.c",
+    "asm/melee/gr/grfigureget.s",
+    "src/melee/gr/grfigureget.c",
+    "asm/melee/gr/grticeclimber.s",
+    "src/melee/gr/grticeclimber.c",
+    "src/melee/gr/forward.h",
+    "src/melee/gr/types.h",
+    "src/melee/gr/stage.h",
+    "src/melee/gr/grdatfiles.h",
+    "src/melee/gr/grdatfiles.c",
+    "src/melee/gr/grdynamicattr.h",
+    "src/dolphin/dvd/dvdqueue.h"
+  ],
+  "what_changed": [
+    "`configure.py` changed many `melee/gr` object statuses from `Unknown` to either `Matching` or `NonMatching`; examples include `grdatfiles.c`, `grdynamicattr.c`, `grizumi.c`, `grstory.c`, `grshrine.c`, `grfigure1.c`, `grfigure2.c`, `grfigure3.c`, many Target Test stage files, and `grbattle.c` becoming `Matching`, while `ground.c`, `grlib.c`, `grfigureget.c`, and `grticeclimber.c` became `NonMatching`.",
+    "`obj_files.mk` stopped linking `src/melee/gr/ground.c.o`, `src/melee/gr/grlib.c.o`, and `src/melee/gr/grfigureget.c.o` directly, instead relying on asm objects such as `asm/melee/gr/ground.s.o`, `asm/melee/gr/grlib.s.o`, and `asm/melee/gr/grfigureget.s.o`.",
+    "Large asm files were added or regenerated for `gr`: `asm/melee/gr/ground.s` grew to an 8037-line asm body, `asm/melee/gr/grlib.s` was added, `asm/melee/gr/grticeclimber.s` was added, and `asm/melee/gr/grfigureget.s` was heavily replaced/regenerated with `.file \"grfigureget.c\"` and updated local symbols.",
+    "`src/melee/gr/ground.c` and `src/melee/gr/grlib.c` had large source deletions, consistent with moving link coverage for those units back to asm while keeping C stubs/nonmatching work in-tree.",
+    "`src/melee/gr/forward.h` gained forward declarations for `UnkArchiveStruct`, `UnkBgmStruct`, `UnkStage6B0`, `UnkStageDat`, and `UnkStageDatInternal`, and received the `InternalStageId` enum that had previously lived in `types.h`.",
+    "`src/melee/gr/types.h` removed `InternalStageId`, changed `StageInfo.param` from `struct _UnkStage6B0*` to `UnkStage6B0*`, and added definitions for stage/archive/audio-related structs including `UnkBgmStruct`, `UnkStage6B0`, `UnkStageDatInternal`, `UnkStageDat`, `UnkArchiveStruct`, and `grDynamicAttr_UnkStruct`.",
+    "Many headers in fighter, item, DVD, and ground code replaced explicit `<stdbool.h>` includes with `<platform.h>`, likely to centralize fixed-width/bool/platform typedef behavior needed by shared headers."
+  ],
+  "smart_moves": [
+    "Used asm fallbacks for large nonmatching or unstable `gr` translation units while still recording their decompilation status as `NonMatching` in `configure.py`, preserving linkability without pretending the C matched.",
+    "Separated widely needed declarations into `gr/forward.h`, especially `InternalStageId`, so headers can refer to stage IDs without pulling all of `gr/types.h` and triggering heavier include dependencies.",
+    "Promoted many small or already-stable stage modules from `Unknown` to `Matching`, reducing ambiguity in the build manifest and making future progress tracking more accurate.",
+    "Centralized bool/platform definitions by including `<platform.h>` instead of sprinkling `<stdbool.h>` through many project headers, which is useful in a decomp codebase with custom typedef and compiler-compatibility needs.",
+    "Kept stage-data structs with conservative `Unk*` names and offset-like field names (`x0`, `x4`, `xB0`, etc.), avoiding overnaming when the semantic evidence was not yet complete."
+  ],
+  "decomp_lessons": [
+    "For relink PRs, update both the high-level object status in `configure.py` and the concrete object list in `obj_files.mk`; mismatches between status and linked object source/asm can silently undermine reproducibility.",
+    "When a C file is useful for ongoing decomp but not safe to link, keep it as `NonMatching` and link the matching asm object instead of deleting the work or marking it `Unknown`.",
+    "Move enums or forward declarations to `forward.h` only when they are needed broadly and do not require full struct definitions; this reduces include cycles in large subsystems like `gr`/stage.",
+    "Use explicit placeholder struct names such as `UnkStageDat`, `UnkArchiveStruct`, and `UnkBgmStruct` when layout evidence exists but semantics remain weak; do not force premature domain names.",
+    "Header cleanups that replace standard-library includes with project platform headers can be necessary decomp infrastructure, especially when broad API headers expose `bool` or platform typedefs."
+  ],
+  "naming_conventions": [
+    "Ground/stage functions and files retain the `gr*` subsystem prefix, e.g. `grFigureGet`, `grlib`, `grticeclimber`, `grdatfiles`, and Target Test files such as `grtmario`, `grtness`, and `grtpichu`.",
+    "Forward-declared or incompletely understood stage structs use `Unk*` names: `UnkArchiveStruct`, `UnkBgmStruct`, `UnkStage6B0`, `UnkStageDat`, and `UnkStageDatInternal`.",
+    "Unknown struct fields use offset-like names such as `x0`, `x4`, `xB0`, `unk0`, `unk4`, and padding arrays like `x6_pad`, preserving layout without overclaiming semantics.",
+    "`InternalStageId` enum still contains mixed legacy names such as `CASTLE`, `RCRUISE`, `KONGO`, `InternalStageID_Unk23`, and `STAGEKIND_UNK31`; the diff retains the TODO to finish values and use PascalCase.",
+    "Build manifest statuses use the project's `Object(Matching, ...)`, `Object(NonMatching, ...)`, and `Object(Unknown, ...)` convention."
+  ],
+  "assembly_or_matching_tactics": [
+    "Added or regenerated asm fallback files for nonmatching `gr` units, notably `ground.s`, `grlib.s`, `grfigureget.s`, and `grticeclimber.s`.",
+    "Removed source object entries for `ground.c`, `grlib.c`, and `grfigureget.c` from `obj_files.mk` so the link uses asm objects for those translation units.",
+    "Classified `ground.c`, `grlib.c`, `grfigureget.c`, and `grticeclimber.c` as `NonMatching` in `configure.py`, documenting ongoing C work while avoiding a false matching claim.",
+    "Marked numerous previously Unknown ground/stage C files as `Matching`, including several ordinary stages, figure stages, and Break the Targets stages, improving progress accounting.",
+    "The asm diff for `grfigureget.s` includes `.file \"grfigureget.c\"`, local labels, `.obj` constants, and explicit global function labels such as `grFigureGet_802196F0`, showing generated/curated asm intended to match the original object layout."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "Re-link gr",
+    "ribbanya",
+    "configure.py",
+    "obj_files.mk",
+    "Object(Matching)",
+    "Object(NonMatching)",
+    "Object(Unknown)",
+    "asm/melee/gr/ground.s",
+    "asm/melee/gr/grlib.s",
+    "asm/melee/gr/grfigureget.s",
+    "asm/melee/gr/grticeclimber.s",
+    "src/melee/gr/ground.c",
+    "src/melee/gr/grlib.c",
+    "src/melee/gr/grfigureget.c",
+    "src/melee/gr/grticeclimber.c",
+    "src/melee/gr/forward.h",
+    "src/melee/gr/types.h",
+    "InternalStageId",
+    "UnkStage6B0",
+    "UnkStageDat",
+    "UnkStageDatInternal",
+    "UnkArchiveStruct",
+    "UnkBgmStruct",
+    "grDynamicAttr_UnkStruct",
+    "StageInfo.param",
+    "platform.h",
+    "stdbool.h",
+    "grdatfiles",
+    "grdynamicattr",
+    "grizumi",
+    "grstory",
+    "grshrine",
+    "grfigure1",
+    "grfigure2",
+    "grfigure3",
+    "grbattle",
+    "grtmario",
+    "grtness",
+    "grtpichu",
+    "grticeclimber"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that convert `ground.c`, `grlib.c`, `grfigureget.c`, or `grticeclimber.c` from NonMatching to Matching.",
+    "Search for later renames or refinements of `UnkStage6B0`, `UnkStageDat`, `UnkArchiveStruct`, and `UnkBgmStruct`.",
+    "Check whether `InternalStageId` was later renamed to PascalCase as the TODO suggests.",
+    "Look for subsequent PRs that remove the asm fallback entries for `asm/melee/gr/ground.s.o`, `asm/melee/gr/grlib.s.o`, or `asm/melee/gr/grfigureget.s.o`.",
+    "Search for additional broad `<platform.h>` header hygiene PRs to understand project-wide include policy."
+  ],
+  "confidence": 0.84,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

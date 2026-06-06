@@ -1,0 +1,137 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-348",
+  "pr": {
+    "number": 348,
+    "title": "Generate vanilla and profile .o files separately",
+    "url": "https://github.com/doldecomp/melee/pull/348",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-04-08T20:38:18Z",
+    "merged_at": "2022-04-08T20:41:32Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Reworked the build system so normal MWCC output and frank/profile-patched output are compiled as separate object trees under build/$(TARGET)/vanilla and build/$(TARGET)/profile, then merged into the final build objects. This replaced the old epilogue/ directory and deleted the manually maintained e_files.mk list of epilogue-unscheduled objects. The stated motivation was easier inspection of vanilla versus profile objects and faster builds because the two object variants can be generated independently and in parallel.",
+  "change_classification": {
+    "primary_type": "build-system-refactor",
+    "categories": [
+      "code-change",
+      "makefile",
+      "tooling",
+      "build-performance",
+      "object-generation",
+      "frank-epilogue-processing"
+    ],
+    "systems": [
+      "repo-root",
+      "Makefile",
+      "epilogue-processing",
+      "frank",
+      "mwcc",
+      "melee",
+      "sysdolphin"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "Makefile",
+      "role": "Refactored object generation rules, directory layout, dependency generation, frank invocation, and removed epilogue-dir special casing."
+    },
+    {
+      "path": "e_files.mk",
+      "role": "Deleted manual list of objects requiring unscheduled-epilogue/profile processing."
+    }
+  ],
+  "what_changed": [
+    "Introduced VANILLA_DIR := $(BUILD_DIR)/vanilla and PROFILE_DIR := $(BUILD_DIR)/profile instead of using a separate top-level epilogue/$(TARGET) directory.",
+    "Removed inclusion of e_files.mk and the E_FILES/EPILOGUE_UNSCHEDULED object list from the link dependencies.",
+    "Deleted e_files.mk, which had enumerated many melee and sysdolphin source objects needing epilogue processing.",
+    "Changed C object build flow so $(BUILD_DIR)/%.c.o depends on the vanilla object and copies it by default.",
+    "Added separate rules for $(VANILLA_DIR)/%.c.o and, when EPILOGUE_PROCESS is enabled, $(PROFILE_DIR)/%.c.o.",
+    "Changed frank processing to operate on paired vanilla/profile objects for all src/melee/%.c.o and src/sysdolphin/%.c.o build outputs rather than on a manually selected list.",
+    "Changed dependency generation into a dedicated $(BUILD_DIR)/%.c.dep rule whose -MT target names both the vanilla and profile object outputs.",
+    "Expanded ALL_DIRS so make creates corresponding vanilla and profile object directories mirroring the build directory object tree.",
+    "Removed clean-up of the old epilogue directory because the new profile objects live under build/$(TARGET).",
+    "Added -cwd source to CFLAGS and removed include/dolphin/mtx from SYSTEM_INCLUDE_DIRS in the shown diff.",
+    "Kept specific CC_EPI overrides for player.c, lbtime.c, dobj.c, and wobj.c, but retargeted them from $(EPILOGUE_DIR)/... to $(BUILD_DIR)/..."
+  ],
+  "smart_moves": [
+    "Separated vanilla and profile object outputs instead of modifying one object in place, making build artifacts easier to inspect and compare.",
+    "Made the vanilla/profile compilation steps independent, enabling make to compile them in parallel on many-core machines.",
+    "Eliminated a brittle hand-maintained list of epilogue-patched objects by applying frank broadly to melee and sysdolphin C sources.",
+    "Kept the final linked object paths under $(BUILD_DIR) stable, which limited downstream linker and obj_files.mk disruption.",
+    "Used dependency targets that mention both vanilla and profile outputs, avoiding stale dependency tracking when either compiled variant is rebuilt.",
+    "Mirrored directory creation for vanilla and profile trees using patsubst from existing object directories rather than manually listing paths."
+  ],
+  "decomp_lessons": [
+    "When a matching workaround needs both original compiler output and patched compiler output, preserve both artifacts in separate directories instead of overwriting one in place.",
+    "Avoid maintaining manual per-file workaround lists when a safe broad pattern rule can express the same transformation; manual object lists drift as decomp coverage changes.",
+    "Build-system refactors for decomp projects should preserve final linked object names where possible so linker scripts, object ordering files, and map generation do not need simultaneous churn.",
+    "Pattern rules are a useful way to scope special matching tools such as frank to known source roots like src/melee and src/sysdolphin.",
+    "Parallelizable object variants can significantly reduce build time once separated into independent make targets.",
+    "Generated dependency files need to account for all derived object variants, not just the canonical final object."
+  ],
+  "naming_conventions": [
+    "Use VANILLA_DIR for unmodified compiler outputs.",
+    "Use PROFILE_DIR for separately generated objects intended for frank/profile comparison or patching.",
+    "Keep final linkable objects under BUILD_DIR even when intermediate object variants live below build/$(TARGET)/vanilla and build/$(TARGET)/profile.",
+    "The deleted EPILOGUE_UNSCHEDULED name referred to manually listed files with unscheduled epilogues; this PR moved away from that naming/model.",
+    "The old EPILOGUE_DIR top-level epilogue/$(TARGET) convention was replaced by profile artifacts inside the target build tree."
+  ],
+  "assembly_or_matching_tactics": [
+    "Compile a vanilla object and a profile object separately, then invoke tools/frank.py with both objects to produce the final build object.",
+    "Apply frank to src/melee/%.c.o and src/sysdolphin/%.c.o pattern targets instead of enumerating individual epilogue-sensitive files.",
+    "Use CC_EPI per-target overrides for a small set of sources that still need the non-profile compiler path or special compiler selection.",
+    "Generate dependency files with -MT entries for both $(VANILLA_DIR)/$<.o and $(PROFILE_DIR)/$<.o so header changes trigger both variants.",
+    "For non-frank final C objects, copy the vanilla object into the canonical $(BUILD_DIR) output path.",
+    "Preserve ordinary assembly rule behavior for $(BUILD_DIR)/%.s.o; the diff does not show separate vanilla/profile assembly handling."
+  ],
+  "review_feedback": [
+    {
+      "type": "review-summary",
+      "text": "No issue comments or review comments were present in the supplied PR slice. The PR had one review and was merged quickly, but the dump provides no reviewer rationale or requested changes."
+    }
+  ],
+  "searchable_terms": [
+    "PR348",
+    "Generate vanilla and profile .o files separately",
+    "r-burns",
+    "Makefile",
+    "e_files.mk",
+    "deleted e_files.mk",
+    "VANILLA_DIR",
+    "PROFILE_DIR",
+    "EPILOGUE_DIR",
+    "EPILOGUE_PROCESS",
+    "EPILOGUE_UNSCHEDULED",
+    "frank.py",
+    "frank",
+    "profile objects",
+    "vanilla objects",
+    "unscheduled epilogues",
+    "MWCC 1.2.5",
+    "CC_EPI",
+    "parallel build",
+    "dependency generation",
+    "src/melee",
+    "src/sysdolphin",
+    "build/$(TARGET)/vanilla",
+    "build/$(TARGET)/profile"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify VANILLA_DIR or PROFILE_DIR build rules.",
+    "Find later PRs that change frank.py invocation semantics.",
+    "Find PRs that remove or alter EPILOGUE_PROCESS after this build refactor.",
+    "Find build failures related to dependency targets for vanilla/profile object outputs.",
+    "Find later uses of CC_EPI overrides for player.c, lbtime.c, dobj.c, or wobj.c."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

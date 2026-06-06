@@ -1,0 +1,134 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1148",
+  "pr": {
+    "number": 1148,
+    "title": "Re-link `lb`",
+    "url": "https://github.com/doldecomp/melee/pull/1148",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-01-29T01:21:43Z",
+    "merged_at": "2024-01-29T01:22:48Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Re-linked the lb library by updating configure.py object classifications and making small source/header/include fixes needed for lb files to participate in the normal link. The largest functional source addition was in lbanim.c: it introduced a partial C implementation around HSD_AObj/HSD_FObj/HSD_JObj handling, while the remaining lbanim assembly was reformatted/regenerated as relocatable-style asm with .fn/.endfn labels and local offset labels. No PR body or review comments were available, so rationale is inferred from the title and diff.",
+  "change_classification": {
+    "primary_type": "library relink/build-configuration cleanup",
+    "categories": [
+      "headers",
+      "configure",
+      "asm relabeling",
+      "partial decompilation",
+      "include hygiene"
+    ],
+    "systems": [
+      "lb",
+      "lbanim",
+      "lbfile",
+      "lbarchive",
+      "lb_00B0",
+      "build configuration",
+      "asm"
+    ]
+  },
+  "key_files": [
+    "configure.py",
+    "asm/melee/lb/lbanim.s",
+    "src/melee/lb/lbanim.c",
+    "src/melee/lb/lbanim.h",
+    "src/melee/lb/lb_00B0.c",
+    "src/melee/lb/lbfile.c",
+    "src/melee/lb/lbarchive.c"
+  ],
+  "what_changed": [
+    "Updated configure.py lb object statuses: lbcollision, lb_00B0, lbarchive, lbanim, and lbrefract moved from Unknown to NonMatching; lbvector and lbfile moved from Unknown to Matching.",
+    "Reformatted asm/melee/lb/lbanim.s to use `.file \"lbanim.c\"`, `.text`, `.balign 4`, `.fn ... global`, `.endfn`, and local offset-style labels such as `.L_00000024` instead of address-derived `.L_8001...` labels.",
+    "Kept lbanim assembly coverage for lbAnim_8001E560, an internal/newly globalized `fn_8001E60C`, lbAnim_8001E6D8, and lbAnim_8001E7E8, with call sites adjusted to use local relocatable branch placeholders in the asm excerpt.",
+    "Expanded src/melee/lb/lbanim.c from extern-only declarations into real C code using HSD_FObj, HSD_AObj, and HSD_JObj types.",
+    "Added a static `getFObj(s32, s8)` declaration for the function at 01E560 and implemented `lbAnim_8001E6D8` in C, including AObj removal/allocation, setting flags/rewind/end frame/FObj, assigning `jobj->aobj`, and setting or clearing JObj flag 8.",
+    "Added helper `foo(HSD_JObj*)` in lbanim.c to scan an AObj FObj linked list and move the first FObj whose `obj_type` is 12 to the head of the list.",
+    "Changed lbanim.h include guard from `melee_lb_lbanim_h` to address-style `GALE01_01E560`, added baselib forward declarations and placeholder include, and exported prototypes for `lbAnim_8001E60C` and `lbAnim_8001E7E8` using `UNK_T`.",
+    "Narrowed OS includes in lbarchive.c and lbfile.c from `<dolphin/os.h>` to `<dolphin/os/OSError.h>`.",
+    "Removed MUST_MATCH guards around the `#pragma push`, `#pragma dont_inline on`, and `#pragma pop` wrapping `lbFile_800161A0`, making the dont_inline pragma unconditional.",
+    "Adjusted lb_00B0.c include hygiene by adding `IWYU pragma: keep` to required includes and removing several now-unneeded baselib includes."
+  ],
+  "smart_moves": [
+    "The relink did not simply flip configure statuses; it paired status changes with targeted include and pragma fixes so the lb objects could be built in their new categories.",
+    "Using a small wrapper/helper in lbanim.c for the FObj linked-list reorder isolates a recognizable behavior from the larger animation setup routine and makes the partial decomp easier to reason about.",
+    "Keeping `getFObj` static while exposing only still-needed public/unknown prototypes in lbanim.h avoids leaking an internal helper into the header.",
+    "Switching broad `<dolphin/os.h>` includes to `<dolphin/os/OSError.h>` reduces dependency surface and can prevent accidental type/prototype availability from masking missing includes.",
+    "The asm regeneration with `.fn`/`.endfn` and offset labels makes the remaining assembly more compatible with linked object workflows and less tied to absolute address labels."
+  ],
+  "decomp_lessons": [
+    "When re-linking a library, expect a chain of small build hygiene fixes: configure object statuses, header guards/prototypes, include specificity, and pragmas may all need to line up together.",
+    "Object status changes in configure.py should reflect actual build/link behavior: this PR marks some lb units Matching, some NonMatching, rather than treating all formerly Unknown files uniformly.",
+    "For partially decompiled files, keep remaining asm symbols and C declarations synchronized. Here, lbanim.c declares a static helper corresponding to 01E560 while the header exposes only the unresolved external-facing routines.",
+    "Header cleanup can be part of matching work: adding forward includes and placeholder types let prototypes exist without over-including full baselib definitions.",
+    "Use unconditional pragmas if the matching/build behavior depends on them outside MUST_MATCH configurations; lbFile_800161A0 kept `dont_inline` active regardless of MUST_MATCH.",
+    "Relocatable-style asm labels and `.fn` blocks are useful when a file is being re-linked, because absolute-address labels can become awkward once the assembler/linker needs normal symbol boundaries."
+  ],
+  "naming_conventions": [
+    "Address-based include guards appear in this slice as `GALE01_01E560` for lbanim.h.",
+    "Unidentified public functions retain address-style names such as `lbAnim_8001E60C` and `lbAnim_8001E7E8`.",
+    "An internal assembly/C helper at 01E560 is named descriptively in C as `getFObj` while the asm symbol still appears as `lbAnim_8001E560` in the diff excerpt.",
+    "A still-unknown internal asm symbol is named `fn_8001E60C` in regenerated assembly.",
+    "Temporary or placeholder C names remain weak in this PR: the struct is named `asdf` and the helper is named `foo`, so future cleanup should not treat those as final semantic names."
+  ],
+  "assembly_or_matching_tactics": [
+    "Regenerate remaining lbanim assembly with `.file`, `.text`, `.balign 4`, `.fn`, and `.endfn` annotations for cleaner object boundaries.",
+    "Use local offset labels like `.L_00000150` instead of absolute address labels when converting asm into a form suitable for re-linking.",
+    "Preserve exact low-level behavior in partial C by manipulating HSD_FObj linked-list pointers directly rather than abstracting the operation away.",
+    "Use an explicit unused stack array (`u32 unused[2]`) in `lbAnim_8001E6D8`, likely to preserve stack layout/register allocation for matching; exact motivation is inferred from the diff.",
+    "Keep `#pragma dont_inline` around small functions such as `lbFile_800161A0` when inlining would alter object matching or link behavior."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR 1148",
+    "Re-link lb",
+    "ribbanya",
+    "configure.py lb library",
+    "Object Matching Unknown NonMatching",
+    "lbanim.c",
+    "lbanim.s",
+    "lbAnim_8001E560",
+    "getFObj",
+    "fn_8001E60C",
+    "lbAnim_8001E60C",
+    "lbAnim_8001E6D8",
+    "lbAnim_8001E7E8",
+    "HSD_FObj",
+    "HSD_AObj",
+    "HSD_JObj",
+    "HSD_AObjAlloc",
+    "HSD_AObjRemove",
+    "HSD_AObjSetFObj",
+    "HSD_JObjSetFlags",
+    "HSD_JObjClearFlags",
+    "obj_type 12",
+    "GALE01_01E560",
+    "IWYU pragma keep",
+    "dolphin/os/OSError.h",
+    "lbFile_800161A0",
+    "pragma dont_inline",
+    "lbarchive",
+    "lbfile",
+    "lb_00B0",
+    "lbvector matching"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename `foo` or `asdf` in src/melee/lb/lbanim.c.",
+    "Find later PRs that fully decompile `getFObj`, `lbAnim_8001E60C`, or `lbAnim_8001E7E8`.",
+    "Check whether the configure.py lb object statuses changed again after PR 1148.",
+    "Search for other relink PRs that replace `<dolphin/os.h>` with narrower Dolphin OS headers.",
+    "Search for other uses of address-style include guards like `GALE01_01E560`."
+  ],
+  "confidence": 0.78,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

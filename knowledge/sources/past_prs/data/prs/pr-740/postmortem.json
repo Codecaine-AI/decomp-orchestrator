@@ -1,0 +1,161 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-740",
+  "pr": {
+    "number": 740,
+    "title": "Use custom container for GitHub Actions",
+    "url": "https://github.com/doldecomp/melee/pull/740",
+    "state": "CLOSED",
+    "author": "ribbanya",
+    "created_at": "2023-02-19T12:41:01Z",
+    "merged_at": null
+  },
+  "agent_status": "agent_completed",
+  "summary": "Proposed moving the GitHub Actions build and publish jobs onto a prebuilt custom Docker container, `ribbanya/melee:20230219`, containing an upgraded Debian/devkitPro base, WiBo, patched MWCC tools, Python 3.11 virtualenv dependencies, and documentation tooling. The goal was to remove repeated CI setup work from workflows and simplify build/publish steps. The PR was closed unmerged and explicitly marked as superseded by #751.",
+  "change_classification": {
+    "primary_type": "ci-infrastructure",
+    "categories": [
+      "github-actions",
+      "docker-container",
+      "toolchain-setup",
+      "workflow-simplification",
+      "documentation-publish"
+    ],
+    "systems": [
+      ".github/workflows/build.yml",
+      ".github/workflows/publish.yml",
+      "Dockerfile",
+      "devkitPro",
+      "WiBo",
+      "MWCC",
+      "Doxygen",
+      "m2ctx"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "Dockerfile",
+      "change": "Added a multi-stage container build based on devkitpro/devkitppc:20230110, upgrading through Debian bullseye to bookworm, installing build packages, building WiBo, downloading and patching GC/Wii compilers, installing MWCC under /usr/local/bin, and creating a Python venv."
+    },
+    {
+      "path": ".github/workflows/build.yml",
+      "change": "Replaced per-run devkitPro/i386 package installation, WiBo checkout/build, and compiler download/patch steps with use of `container: ribbanya/melee:20230219`; build step now symlinks `/usr/local/bin/mwcc_compiler` into tools and uses `WINE=$WINE`."
+    },
+    {
+      "path": ".github/workflows/publish.yml",
+      "change": "Added the same custom container to the GitHub Pages documentation job, removed apt and setup-python steps, and consolidated Doxygen/nojekyll/context generation around the container-provided environment."
+    }
+  ],
+  "what_changed": [
+    "Added a Dockerfile defining a reusable CI image for Melee builds and documentation publishing.",
+    "Upgraded the devkitPro container base from an older Debian release path toward Debian testing/bookworm to support Python 3.11.",
+    "Moved WiBo cloning, CMake build, executable installation, and `WINE=/usr/local/bin/wibo` setup into the container.",
+    "Moved GC/Wii compiler download, `mwld_patch.py` patching, SHA1 validation, and MWCC installation into the container instead of doing it during every CI build.",
+    "Created `/usr/local/bin/mwcceppc` as a shell wrapper invoking the MWCC executable through `$WINE`.",
+    "Created a Python virtualenv at `/usr/local/share/venv` and installed project requirements during container build.",
+    "Simplified `.github/workflows/build.yml` by deleting repeated dependency, WiBo, and compiler setup steps.",
+    "Updated the build artifact upload action from `actions/upload-artifact@v2` to `actions/upload-artifact@v3`.",
+    "Simplified `.github/workflows/publish.yml` by relying on container-provided Doxygen/Python tooling and combining related shell commands.",
+    "Closed without merge because the proposal was superseded by PR #751."
+  ],
+  "smart_moves": [
+    "Prebaking expensive and fragile setup steps into a container would reduce CI runtime variance: WiBo compilation, compiler download, compiler patching, apt package installation, and Python setup would no longer repeat on every run.",
+    "Keeping the workflows small made the build intent clearer: checkout, build, upload map for build CI; checkout, generate docs/context, upload/deploy for publish CI.",
+    "The Dockerfile preserved toolchain integrity checks by retaining `sha1sum -c tools/mwld_prepatch.sha1` before patching and `sha1sum -c tools/mwld_postpatch.sha1` afterward.",
+    "Setting `WINE` as an environment variable in the image let the workflow call `make ... WINE=$WINE` instead of hardcoding a repository-local WiBo build path.",
+    "Adding the MWCC toolchain under `/usr/local/bin` and symlinking `mwcc_compiler` into `tools/` bridged the existing repository layout expectations with a container-level installation.",
+    "Building the image in named stages made the Dockerfile readable as a sequence of environment upgrades and toolchain setup phases."
+  ],
+  "decomp_lessons": [
+    "For decompilation CI, the Metrowerks compiler, wrapper emulator, exact patching process, and Python tooling are infrastructure dependencies; stabilizing them in a versioned image can be more maintainable than reassembling them inside each workflow.",
+    "When moving compiler assets into a container, keep repository scripts that assume `tools/mwcc_compiler` in mind; either preserve that path with symlinks or update scripts consistently.",
+    "CI changes that affect matching builds should continue to run both map-generation and nonmatching build configurations; this workflow preserved the matrix entries `GENERATE_MAP=1` and `NON_MATCHING=1`.",
+    "If documentation generation uses project Python tooling such as `tools/m2ctx/m2ctx.py`, the docs workflow also needs the same controlled Python dependency story as the build workflow.",
+    "A custom image owned by an individual account may be useful for experimentation, but project CI likely needs an image controlled by the organization; the PR body explicitly noted that doldecomp owners could create their own container.",
+    "Because this PR was superseded, future work should consult #751 before reusing this exact Dockerfile or image tag."
+  ],
+  "naming_conventions": [
+    {
+      "term": "ribbanya/melee:20230219",
+      "meaning": "Proposed custom Docker image tag used by both build and publish workflows."
+    },
+    {
+      "term": "WINE",
+      "meaning": "Environment variable set to `/usr/local/bin/wibo` so make can run MWCC through WiBo."
+    },
+    {
+      "term": "mwcc_compiler",
+      "meaning": "Directory name expected by existing Melee tooling for the downloaded GC compiler package."
+    },
+    {
+      "term": "mwcceppc",
+      "meaning": "Container-installed shell wrapper that invokes `/usr/local/bin/mwcc_compiler/1.2.5e/mwcceppc.exe` through `$WINE`."
+    },
+    {
+      "term": "setup-wibo, setup-melee, setup-mwcc, setup-venv",
+      "meaning": "Dockerfile stage names describing successive setup phases for CI tooling."
+    }
+  ],
+  "assembly_or_matching_tactics": [
+    "The PR did not change game C/assembly matching logic directly.",
+    "The build workflow retained the existing matching-related CI matrix modes, including `GENERATE_MAP=1` for producing `GALE01.map` and `NON_MATCHING=1` for nonmatching builds.",
+    "The Dockerfile preserved MWLD patch validation with prepatch and postpatch SHA1 checks, which is important for deterministic toolchain behavior.",
+    "Installing a wrapper for `mwcceppc` through WiBo is a CI tactic for running the Windows Metrowerks compiler under Linux without rebuilding WiBo per job."
+  ],
+  "review_feedback": [
+    {
+      "source": "issue comment",
+      "feedback": "The PR was superseded by #751.",
+      "evidence": "Comment excerpt: \"Superseded by #751.\""
+    },
+    {
+      "source": "review metadata",
+      "feedback": "No inline review comments were present in the provided slice.",
+      "evidence": "review_comments count was 0 and review_comments_excerpt was empty."
+    }
+  ],
+  "searchable_terms": [
+    "PR 740",
+    "Use custom container for GitHub Actions",
+    "ribbanya",
+    "ribbanya/melee:20230219",
+    "Dockerfile",
+    "GitHub Actions",
+    "build.yml",
+    "publish.yml",
+    "devkitpro/devkitppc",
+    "Debian bookworm",
+    "Python 3.11",
+    "WiBo",
+    "WINE",
+    "mwcc_compiler",
+    "mwcceppc",
+    "mwld_patch.py",
+    "mwld_prepatch.sha1",
+    "mwld_postpatch.sha1",
+    "GC_WII_COMPILERS.zip",
+    "GENERATE_MAP=1",
+    "NON_MATCHING=1",
+    "GALE01.map",
+    "Doxygen",
+    "m2ctx",
+    "GitHub Pages",
+    "superseded by #751"
+  ],
+  "follow_up_queries": [
+    "Inspect PR #751 to see the final or replacement approach for custom GitHub Actions containers.",
+    "Check whether the project later moved the Docker image from `ribbanya/melee` to an organization-owned image.",
+    "Search current workflows for `container:` and `WINE=$WINE` to see whether this workflow simplification survived.",
+    "Search current Dockerfiles or CI images for `mwcc_compiler`, `mwcceppc`, and `mwld_patch.py` to confirm the adopted toolchain layout.",
+    "Compare later CI changes for Python 3.11, Doxygen, and `tools/m2ctx/m2ctx.py` handling."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

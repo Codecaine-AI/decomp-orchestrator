@@ -1,0 +1,131 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-860",
+  "pr": {
+    "number": 860,
+    "title": "Partially match `ftCo_DamageIceJump`",
+    "url": "https://github.com/doldecomp/melee/pull/860",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-20T20:12:33Z",
+    "merged_at": "2023-05-20T20:18:57Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Moved the DamageIceJump-related block out of asm/ft_08A4.s into ftCo_DamageIce.c and partially decompiled the surrounding ftCommon ice-damage code. The PR fully matched small callbacks for DamageIceJump animation, IASA, physics, and collision, provided a C implementation for ftCo_80091854 with supporting type/header discoveries, kept difficult routines behind MUST_MATCH inline asm stubs, and improved report_score.py to print an aggregate file score. The report shows ftCo_DamageIceJump_Anim/IASA/Phys/Coll at 100%, while larger helpers ftCo_800914A4, ftCo_80091620, ftCo_80091854, and ftCo_80091030 remained partial or guarded.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "partial-decompilation",
+      "asm-migration",
+      "headers",
+      "struct-typing",
+      "tooling"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "DamageIce",
+      "DamageIceJump",
+      "asm",
+      "tooling"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_DamageIce.c",
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/chara/ftCommon/ftCo_DamageIce.h",
+    "src/melee/ft/chara/ftCommon/types.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/ft_08A4.h",
+    "tools/report_score.py"
+  ],
+  "what_changed": [
+    "Removed roughly the ftCo_800914A4 through ftCo_DamageIceJump_Coll assembly range from asm/melee/ft/ft_08A4.s and added corresponding code or guarded inline asm in src/melee/ft/chara/ftCommon/ftCo_DamageIce.c.",
+    "Made .L_803B74BC a named global symbol ftCo_803B74BC and exposed it as an extern Vec3 const in ftCo_DamageIce.h.",
+    "Added C versions for ftCo_DamageIceJump_Anim, ftCo_DamageIceJump_IASA, ftCo_DamageIceJump_Phys, and ftCo_DamageIceJump_Coll. The animation callback decrements fp->mv.co.damageicejump.x0 and calls ft_800CC730 when it reaches zero; physics delegates to ft_80084EEC; collision delegates to ft_800831CC(gobj, ft_80096CC8, ft_80082B1C); IASA is empty.",
+    "Added a partial C implementation of ftCo_80091854 that handles ft_800C5240/ftCo_800C5A98, clears fp->x2227_flag.bits.b5, changes to motion state 0x146, plays effect/sound-related calls, sets self velocity from stick/co_attrs fields, and initializes damageicejump.x0 from p_ftCommonData->x7A4.",
+    "Kept ftCo_800914A4 and ftCo_80091620 as MUST_MATCH inline asm with NOT_IMPLEMENTED fallbacks for non-matching builds, preserving progress without claiming full C matches.",
+    "Changed several existing DamageIce functions to use ftCo_GObj* instead of HSD_GObj* where the file already treats the object as a fighter common GObj.",
+    "Added ftCo_DamageIceJumpVars to ftCommon_MotionVars with a float at fp+2340, matching the timer field used by DamageIceJump_Anim.",
+    "Corrected inferred field types: p_ftCommonData->x7A4 changed from int to float, and ftCo_DatAttrs x140 at fp+268 changed from int to float.",
+    "Typed ftCo_800C5A98 as void ftCo_800C5A98(ftCo_GObj* gobj) in ft_08A4.h.",
+    "Added an m2c stack struct for ftCo_80091854 documenting sp24 and a Vec3 at stack offset 0x28.",
+    "Updated tools/report_score.py with calc_percent and aggregate file-current/file-max scoring, adding a **File** row to reports."
+  ],
+  "smart_moves": [
+    "Used a staged migration strategy: move the asm range into the C translation unit, fully decompile simple callbacks, and fence hard routines with MUST_MATCH inline asm plus NOT_IMPLEMENTED fallbacks rather than blocking all progress on large helpers.",
+    "Named the local zero vector as ftCo_803B74BC before using it from C, avoiding anonymous asm-local labels in source-level code.",
+    "Introduced a motion-vars substruct for damageicejump.x0 instead of continuing to access fp+2340 as a raw offset in the matched C callback.",
+    "Adjusted field types based on float load/store evidence from the disassembly, especially p_ftCommonData->x7A4 and co_attrs.x140.",
+    "Kept exact assembly available for ftCo_800914A4 and ftCo_80091620 under MUST_MATCH, preserving matchability while allowing the file to compile in other configurations with explicit NOT_IMPLEMENTED markers.",
+    "Improved the score-reporting tool at the same time as the decomp work so future PR bodies can show both per-function and whole-file progress."
+  ],
+  "decomp_lessons": [
+    "For ftCommon action callbacks, prefer ftCo_GObj* once the function body immediately treats gobj->user_data as ftCo_Fighter; this reduces casting ambiguity and helps signatures align across headers.",
+    "When an fp+2340 scratch slot is reused by a specific motion state, model it in ftCommon_MotionVars with an action-specific struct rather than leaving every use as a raw offset.",
+    "Float accesses in asm are strong evidence for correcting unknown int fields to float in shared data structs; this PR changed p_ftCommonData->x7A4 and ftCo_DatAttrs.x140 accordingly.",
+    "Small action callbacks are good first targets in a partially matched file: empty IASA, simple physics/collision forwarding, and timer-based anim callbacks can often reach 100% while larger transition/setup helpers remain partial.",
+    "If a C implementation still needs exact stack layout, capture inferred stack structs in headers under the existing m2c convention, including offsets and total size.",
+    "Converting anonymous asm data labels into named symbols can unlock C references to shared constants without duplicating data."
+  ],
+  "naming_conventions": [
+    "Common fighter action callbacks use ftCo_DamageIceJump_Anim, ftCo_DamageIceJump_IASA, ftCo_DamageIceJump_Phys, and ftCo_DamageIceJump_Coll.",
+    "Unidentified helper functions retain address-style names such as ftCo_800914A4, ftCo_80091620, and ftCo_80091854.",
+    "Anonymous asm data label .L_803B74BC was promoted to a project-style symbol ftCo_803B74BC.",
+    "Motion-state local vars were named under union ftCommon_MotionVars as damageicejump with member x0 at fp+2340.",
+    "Inferred m2c stack layout uses struct _m2c_stack_ftCo_80091854 with offset comments and /* inferred */ annotations."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed a contiguous assembly block from asm/melee/ft/ft_08A4.s but preserved exact asm for difficult functions inside ftCo_DamageIce.c under #if defined(MUST_MATCH) && !defined(WIP).",
+    "Used #pragma push/#pragma pop and clang-format off around inline asm to keep assembly stable.",
+    "Provided NOT_IMPLEMENTED fallbacks for guarded asm functions in non-MUST_MATCH builds, making partial migration explicit.",
+    "For ftCo_DamageIceJump_Anim, matched the asm pattern of comparing a float timer at fp+2340 against 0.0, subtracting 1.0, and calling ft_800CC730 once the timer becomes non-positive.",
+    "For ftCo_DamageIceJump_Coll, collapsed the assembly sequence loading ft_80096CC8 and ft_80082B1C into a direct call ft_800831CC(gobj, ft_80096CC8, ft_80082B1C).",
+    "The report in the PR body shows remaining nonzero scores for ftCo_800914A4, ftCo_80091620, ftCo_80091854, and ftCo_80091030, so these were not fully matched C despite the PR title focus."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "Because there is no reviewer discussion, no reviewer intent or requested follow-up can be inferred from this slice."
+  ],
+  "searchable_terms": [
+    "pr-860",
+    "ftCo_DamageIceJump",
+    "ftCo_DamageIceJump_Anim",
+    "ftCo_DamageIceJump_IASA",
+    "ftCo_DamageIceJump_Phys",
+    "ftCo_DamageIceJump_Coll",
+    "ftCo_DamageIce.c",
+    "ftCo_DamageIce.h",
+    "ft_08A4.s",
+    "ftCo_800914A4",
+    "ftCo_80091620",
+    "ftCo_80091854",
+    "ftCo_803B74BC",
+    "damageicejump.x0",
+    "fp+2340",
+    "p_ftCommonData->x7A4",
+    "ftCo_DatAttrs.x140",
+    "ftCo_800C5A98",
+    "MUST_MATCH",
+    "NOT_IMPLEMENTED",
+    "report_score.py",
+    "calc_percent",
+    "ribbanya"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully decompile ftCo_800914A4 or ftCo_80091620 after this partial inline-asm migration.",
+    "Search for later renames or field refinements for ftCo_DamageIceJumpVars.x0, p_ftCommonData->x7A4, and ftCo_DatAttrs.x140.",
+    "Check whether ftCo_803B74BC remains a zero Vec3 constant or is later renamed to a semantic effect offset.",
+    "Look for later improvements to report_score.py file-level scoring or report format."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,132 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-470",
+  "pr": {
+    "number": 470,
+    "title": "Fix some NON_MATCHINGs",
+    "url": "https://github.com/doldecomp/melee/pull/470",
+    "state": "MERGED",
+    "author": "BR-",
+    "created_at": "2022-08-21T10:43:04Z",
+    "merged_at": "2022-08-21T11:32:05Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Removed several NON_MATCHING assembly fallbacks by getting the C implementations to match in DSP init, PPC EABI C++ constructor init, ground stage position setup, and HSD shadow allocation. The PR deleted large inline-asm blocks and some companion asm data/sbss constants, replacing them with C-side declarations, pragmas, helper factoring, and literal/float-constant workarounds.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "fix",
+      "asm-removal",
+      "non-matching-cleanup"
+    ],
+    "systems": [
+      "dolphin/dsp",
+      "dolphin/os/init",
+      "melee/ground",
+      "sysdolphin/baselib/shadow",
+      "asm"
+    ]
+  },
+  "key_files": [
+    "src/dolphin/dsp/dsp.c",
+    "asm/dolphin/dsp/dsp.s",
+    "src/dolphin/os/init/__ppc_eabi_init.c",
+    "src/melee/gr/ground.c",
+    "src/sysdolphin/baselib/shadow.c",
+    "asm/sysdolphin/baselib/shadow.s"
+  ],
+  "what_changed": [
+    "Changed `__DSP_init_flag` in `src/dolphin/dsp/dsp.c` from `extern BOOL __DSP_init_flag;` to a definition `BOOL __DSP_init_flag;`, removing the need for the sbss definition in `asm/dolphin/dsp/dsp.s`.",
+    "Made `DSPInit` use C instead of its asm fallback. The old comment said it was non-matching due to externs; the fix defines the init flag in C and calls `__DSP_debug_printf` with explicit string literals for the build date/time instead of referencing `lbl_80400C08`, `__DATE__`, and `__TIME__`.",
+    "Deleted DSP asm-side data for `lbl_80400C08`, including the format string and the original build date/time strings, plus the asm-side `__DSP_init_flag` sbss allocation.",
+    "Converted `__init_cpp` in `src/dolphin/os/init/__ppc_eabi_init.c` from a NON_MATCHING guarded C/asm pair to C guarded by `#pragma push`, `#pragma peephole off`, and `#pragma pop`.",
+    "Removed the asm fallback for `func_801C4E70` in `src/melee/gr/ground.c`; the existing C body now stands as matching. The removed note cited an epilogue ordering bug in `@frank`.",
+    "Factored HSD shadow texture-object setup into a new C helper `makeShadowTObj`, which calls `allocShadowTObj`, initializes `src`, `wrap_s`, `wrap_t`, `flags`, and `imagedesc`, and returns the configured `HSD_TObj*`.",
+    "Converted `HSD_ShadowAlloc` in `src/sysdolphin/baselib/shadow.c` from a NON_MATCHING C/asm pair to C, using `makeShadowTObj()` and a local `f32 hack` to route viewport constants through existing labels.",
+    "Removed unused shadow asm constants `lbl_804DE768` and `lbl_804DE76C` for `0.5f` and `-0.5f` from `asm/sysdolphin/baselib/shadow.s`; the remaining viewport constants `lbl_804DE770` and `lbl_804DE774` are still referenced from C."
+  ],
+  "smart_moves": [
+    "Moved data ownership from asm to C where possible: defining `__DSP_init_flag` in C eliminated an extern-related mismatch and allowed the matching `DSPInit` C body to replace inline asm.",
+    "Used explicit historical build date/time literals (`\"Sep  8 2001\"`, `\"01:51:48\"`) rather than compiler `__DATE__`/`__TIME__`, preserving the target binary strings and avoiding nondeterministic build output.",
+    "Applied `#pragma peephole off` narrowly around `__init_cpp`, preserving a clean C implementation while controlling compiler optimization/codegen enough to match the target.",
+    "Factored `makeShadowTObj` out of `HSD_ShadowAlloc`, likely aligning call/register/lifetime behavior with the target and reducing the amount of code that needed to match in one large function.",
+    "Used a temporary `f32 hack` and existing float labels for `HSD_CObjSetViewportfx4` arguments, with an explicit TODO documenting that this is a matching workaround until the whole file can use normal float constants.",
+    "Removed redundant asm-side constants once C literals or C-owned definitions generated the required data, shrinking asm debt instead of merely hiding NON_MATCHING blocks."
+  ],
+  "decomp_lessons": [
+    "If a function is non-matching because globals are declared as `extern`, check whether the symbol should be defined in the C translation unit instead of allocated in an asm file.",
+    "For SDK/library functions that embed build timestamps, do not use live `__DATE__` and `__TIME__` macros when matching a fixed retail binary; use the exact target strings if evidenced by asm/data.",
+    "Small compiler pragmas can be an acceptable matching tactic when they are tightly scoped with push/pop around one sensitive function.",
+    "When a large allocation/init function does not match, splitting a coherent initialization subroutine into a helper can improve codegen and better reflect the original function boundaries.",
+    "Float constants can influence `.sdata2` layout and load behavior. Reusing existing labels or temporary locals may be necessary until a file is sufficiently converted for normal constants to land in the right places.",
+    "After replacing an asm fallback with matching C, also remove associated asm-only data and sbss symbols if C now owns or generates them; otherwise stale symbols can preserve unnecessary assembly dependencies."
+  ],
+  "naming_conventions": [
+    "`__DSP_init_flag` remains the Dolphin SDK-style double-underscore global name and was promoted from extern declaration to C definition.",
+    "New helper `makeShadowTObj` follows existing camelCase baselib naming near `allocShadowTObj` rather than introducing an HSD-prefixed public API name.",
+    "Existing unresolved labels such as `lbl_804DE770` and `lbl_804DE774` remained label-style names where the PR did not provide semantic names.",
+    "The temporary variable was named `hack` and annotated with a TODO, signaling that it is a deliberate matching workaround rather than meaningful domain terminology."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted inline asm implementations for `DSPInit`, `__init_cpp`, `func_801C4E70`, and `HSD_ShadowAlloc` after making their C implementations match.",
+    "Replaced asm data label `lbl_80400C08` usage with direct string literals in the `__DSP_debug_printf` call.",
+    "Used `#pragma peephole off` around `__init_cpp` to influence instruction generation for the constructor-loop function.",
+    "Removed asm-side sbss allocation for `__DSP_init_flag` after defining it in C.",
+    "Kept viewport float constants loaded via `lbl_804DE770`/`lbl_804DE774` and a local `f32 hack` to match call argument codegen for `HSD_CObjSetViewportfx4`.",
+    "Removed shadow `.sdata2` labels for `0.5f` and `-0.5f` after normal C assignments `shadow->scaleS = 0.5F;` and `shadow->scaleT = -0.5F;` became acceptable."
+  ],
+  "review_feedback": [
+    "No issue comments or review comments were present in the provided PR slice.",
+    "One review is recorded in counts, but no review body or actionable reviewer feedback is included in the excerpt."
+  ],
+  "searchable_terms": [
+    "NON_MATCHING",
+    "Fix some NON_MATCHINGs",
+    "BR-",
+    "DSPInit",
+    "__DSP_init_flag",
+    "__DSP_debug_printf",
+    "DSPInit(): Build Date: %s %s\\n",
+    "Sep  8 2001",
+    "01:51:48",
+    "DSPSendMailToDSP",
+    "DSPCheckInit",
+    "__init_cpp",
+    "__init_user",
+    "peephole off",
+    "func_801C4E70",
+    "stage_info.x16C",
+    "func_8000B1CC",
+    "HSD_ShadowAlloc",
+    "HSD_ShadowInitAllocData",
+    "makeShadowTObj",
+    "allocShadowTObj",
+    "HSD_ImageDescAlloc",
+    "HSD_CObjSetViewportfx4",
+    "HSD_CObjSetScissorx4",
+    "lbl_804DE770",
+    "lbl_804DE774",
+    "lbl_80400C08",
+    "shadow_alloc_data",
+    "asm removal",
+    "float constants",
+    "externs"
+  ],
+  "follow_up_queries": [
+    "Find other Dolphin SDK functions where NON_MATCHING is caused by asm-owned globals that should be C definitions.",
+    "Search for uses of `__DATE__` or `__TIME__` that should be replaced with fixed target build strings for matching.",
+    "Search for narrowly applicable `#pragma peephole off` opportunities around constructor/destructor table loops.",
+    "Audit remaining `shadow.c` float-label workarounds and remove `hack` once the whole file is converted enough to use normal float constants.",
+    "Search for remaining inline asm fallbacks with comments blaming compiler epilogue ordering or externs; they may be fixable with modern matching tactics."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

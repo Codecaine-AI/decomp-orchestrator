@@ -1,0 +1,139 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1253",
+  "pr": {
+    "number": 1253,
+    "title": "ftAction matches",
+    "url": "https://github.com/doldecomp/melee/pull/1253",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-02-19T09:48:04Z",
+    "merged_at": "2024-02-19T09:55:31Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched numerous ftAction command handlers by cleaning up incorrect casts, explicit command-word loads, bit masking, and stack padding. The PR also corrected a fighter data layout misunderstanding: ftData offset x4C was renamed/retyped from collision data to SFX data, propagating that change through common fighter, cliff, grab, item, and sound-related call sites.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "fix",
+      "headers",
+      "struct-layout",
+      "sound-effects"
+    ],
+    "systems": [
+      "fighter",
+      "ftAction",
+      "ftCommon",
+      "fighter-data"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/ftaction.c",
+    "src/melee/ft/types.h",
+    "src/melee/ft/forward.h",
+    "src/melee/ft/ft_0881.c",
+    "src/melee/ft/ft_0881.h",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/ftcliffcommon.c",
+    "src/melee/ft/ftlib.c",
+    "src/melee/ft/chara/ftCommon/ftCo_ItemGet.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Ottotto.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Passive.c",
+    "src/melee/ft/chara/ftCommon/ftCo_PassiveCeil.c",
+    "src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c",
+    "src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c"
+  ],
+  "what_changed": [
+    "Reworked many ftAction command readers to explicitly cast cmd->x8 to int*, u16*, or u8* before extracting bitfields, instead of relying on char-sized dereferences or ambiguous casts.",
+    "Introduced temporary locals such as hit_idx, ftcmd, masked, and cmd_x8 before masking with 0x03FFFFFF or extracting packed command fields, improving codegen and clarity for matching.",
+    "Replaced manual dummy stack arrays such as `u8 _[8] = { 0 };` with `PAD_STACK(8)` in ftAction handlers where stack padding was required for matching.",
+    "Corrected ftData field x4C from `FtCollisionData* x4C_collisionData` to `FtSFX* x4C_sfx` in `types.h`.",
+    "Removed the forward declaration for `FtCollisionData` and added one for `FtSFX` in `forward.h`.",
+    "Replaced the old `FtCollisionData` struct with SFX-specific definitions: `FtSFXArr` containing `num` and `sfx_ids`, and `FtSFX` containing `smash` plus SFX IDs/fields at offsets x18 through x34.",
+    "Changed `ft_800889F4` to take `FtSFXArr*` instead of `FtCollisionData*`, using `sfx->sfx_ids[HSD_Randi(sfx->num)]` for randomized SFX selection.",
+    "Updated SFX call sites across common fighter states from `fp->ft_data->x4C_collisionData->...` to `fp->ft_data->x4C_sfx->...`, including item get, Ottotto, passive states, cliff catch, grab processing, and ftLib lookups.",
+    "In `ftAction_80071CCC`, changed the previous collision-data interpretation to fetch `FtSFX* sfx = fp->ft_data->x4C_sfx`, use `sfx->smash`, and pass that SFX array to `ft_800889F4`.",
+    "Cleaned up several bitfield boolean assignments in ftAction handlers by assigning the loaded command word directly to bitfield members such as `x2218_b2`, `x221E_b4`, `x221E_b5`, `x221E_b1`, and `x2225_b2`, removing old M2C-style commented field writes."
+  ],
+  "smart_moves": [
+    "The PR fixed matching by addressing the source of type confusion rather than only patching individual call sites: ftData x4C was globally retyped as SFX data and all consumers were updated consistently.",
+    "Using `FtSFXArr` for the randomized smash SFX list captured the actual data shape behind the old `x0` and `x4` fields, making `HSD_Randi(sfx->num)` and `sfx->sfx_ids[...]` self-documenting.",
+    "Explicitly loading packed command data through typed pointers made the bit extraction intent clearer and likely helped the compiler produce the expected load sizes and instruction ordering.",
+    "Replacing fake local arrays with `PAD_STACK(8)` preserved required stack layout while documenting that the bytes are padding for matching rather than real logic.",
+    "Removing stale M2C comments after confirmed bitfield assignments reduced noise and helped the decompiled source converge toward maintainable C."
+  ],
+  "decomp_lessons": [
+    "When a field is repeatedly used as arguments to sound helper functions such as `ft_800881D8`, `ft_80088328`, and `ft_80088148`, reconsider whether the struct is actually collision data; call-site behavior can reveal the correct domain.",
+    "For packed command streams, the exact load width matters. Use typed pointer casts on the command cursor before masking or shifting so the decompiler source matches the original access pattern.",
+    "A field name like `x4C_collisionData` can propagate wrong assumptions across many files; once corrected, update the type, forward declarations, helper signatures, and all field accesses together.",
+    "Use project stack-padding macros instead of throwaway local arrays when padding is only there to satisfy matching.",
+    "Bitfield writes may match better as direct assignment from an integer command word than as manually reconstructed byte masks, depending on the surrounding struct bitfield definitions.",
+    "When replacing an unknown struct, preserve offset evidence in member names where meaning is still uncertain, but give meaningful names to fields whose behavior is clear, such as `num`, `sfx_ids`, and `smash`."
+  ],
+  "naming_conventions": [
+    "Renamed `FtCollisionData` to `FtSFX` because evidence showed ftData x4C stores sound-effect data rather than collision data.",
+    "Renamed `ftData::x4C_collisionData` to `ftData::x4C_sfx`.",
+    "Introduced `FtSFXArr` for an SFX array/list structure with `num` and `sfx_ids` members.",
+    "Kept unknown or not-yet-understood SFX fields as offset-style names such as `x18`, `x24`, `x28`, `x2C`, `x30`, and `x34`.",
+    "Used local names such as `ftcmd`, `hit_idx`, and `masked` for decoded command words in ftAction handlers."
+  ],
+  "assembly_or_matching_tactics": [
+    "Cast `cmd->x8` to `int*` before masking full command words with `0x03FFFFFF` or `0xFFFFFF`.",
+    "Cast `cmd->x8` to `u16*` or `u8*` for bitfield extraction when the original code appears to use halfword or byte loads.",
+    "Split expression-heavy calls into load, mask, then call sequences, e.g. load `int ftcmd = *(int*) cmd->x8; ftcmd &= 0x03FFFFFF;` before passing to a helper.",
+    "Use `PAD_STACK(8)` to replace dummy `u8 _[8]` padding arrays while retaining stack effects needed for matching.",
+    "For randomized SFX, model the data as a count plus ID pointer and call `HSD_Randi(sfx->num)` before indexing `sfx->sfx_ids`.",
+    "In hit capsule command parsing, use mixed-width reads from the command stream to match packed fields such as hit index, damage/flags, angle, element, sfx severity, and sfx kind."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR1253",
+    "ftAction matches",
+    "PsiLupan",
+    "ftaction.c",
+    "ftData x4C",
+    "x4C_sfx",
+    "x4C_collisionData",
+    "FtSFX",
+    "FtSFXArr",
+    "FtCollisionData",
+    "ft_800889F4",
+    "ft_800881D8",
+    "ft_80088328",
+    "ft_80088148",
+    "HSD_Randi",
+    "sfx_ids",
+    "smash SFX",
+    "PAD_STACK",
+    "cmd->x8",
+    "0x03FFFFFF",
+    "packed command stream",
+    "fighter SFX data",
+    "ftCo_ItemGet",
+    "ftCo_Ottotto",
+    "ftCo_Passive",
+    "ftCo_PassiveCeil",
+    "ftCo_PassiveStand",
+    "ftCo_PassiveWall",
+    "ftcliffcommon",
+    "ftlib",
+    "Fighter_UnkProcessGrab_8006CA5C"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that further rename or document `FtSFX` fields x18 through x34.",
+    "Search for remaining references to `x4C_collisionData` or `FtCollisionData` to verify the rename was completed project-wide.",
+    "Look for other ftAction handlers that still dereference `cmd->x8` as a byte when a full command word load may be needed.",
+    "Check later matching work around `ftAction_80071E04` hit capsule packed field extraction.",
+    "Search for additional uses of `PAD_STACK` replacing dummy stack arrays in fighter code."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

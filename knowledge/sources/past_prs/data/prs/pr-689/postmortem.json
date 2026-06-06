@@ -1,0 +1,131 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-689",
+  "pr": {
+    "number": 689,
+    "title": "Match dolphin PadClamp, axfx",
+    "url": "https://github.com/doldecomp/melee/pull/689",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-01-16T08:04:19Z",
+    "merged_at": "2023-01-16T08:07:12Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched two small Dolphin SDK areas by replacing assembly with C: PADClamp in the pad subsystem and AXFX allocation hook helpers in axfx. The PR removed asm/dolphin/pad/Padclamp.s and asm/dolphin/axfx/axfx.s from the build, added src/dolphin/axfx/axfx.c, extended src/dolphin/pad/PadClamp.c with PADClamp, and moved the __OSCurrHeap declaration into OSAlloc.h so AXFX code could use the OS allocator interface cleanly.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "build-list-update"
+    ],
+    "systems": [
+      "dolphin/pad",
+      "dolphin/axfx",
+      "dolphin/os",
+      "sysdolphin/baselib",
+      "obj_files.mk"
+    ]
+  },
+  "key_files": [
+    "asm/dolphin/pad/Padclamp.s",
+    "asm/dolphin/axfx/axfx.s",
+    "src/dolphin/pad/PadClamp.c",
+    "src/dolphin/axfx/axfx.c",
+    "src/dolphin/os/OSAlloc.h",
+    "src/sysdolphin/baselib/initialize.c",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted the hand-written assembly file asm/dolphin/pad/Padclamp.s after matching PADClamp in C.",
+    "Added PADClamp to src/dolphin/pad/PadClamp.c, iterating over PAD_CHANMAX controller status entries, skipping non-PAD_ERR_NONE entries, clamping main stick and substick via ClampStick, and applying min/max trigger clamping to triggerLeft and triggerRight.",
+    "Deleted asm/dolphin/axfx/axfx.s and replaced it with src/dolphin/axfx/axfx.c.",
+    "Implemented AXFXAllocFunction, AXFXFreeFunction, AXFXSetHooks, and the __AXFXAlloc/__AXFXFree function pointer globals in C.",
+    "AXFXAllocFunction and AXFXFreeFunction now call OSAllocFromHeap(__OSCurrHeap, size) and OSFreeToHeap(__OSCurrHeap, ptr), preserving the assembly behavior through the OS allocator API.",
+    "Updated obj_files.mk to remove the pad assembly object and use src/dolphin/axfx/axfx.c.o instead of asm/dolphin/axfx/axfx.s.o.",
+    "Changed src/dolphin/os/OSAlloc.h to expose extern volatile OSHeapHandle __OSCurrHeap instead of leaving it commented out.",
+    "Removed a local extern OSHeapHandle __OSCurrHeap declaration from src/sysdolphin/baselib/initialize.c, relying on the shared OSAlloc.h declaration instead."
+  ],
+  "smart_moves": [
+    "Kept AXFX allocation hooks very close to the original assembly: argument forwarding is simple, __OSCurrHeap is passed as the heap handle, and __AXFXAlloc/__AXFXFree are initialized directly to the default functions.",
+    "Reused the existing ClampStick helper and ClampRegion fields rather than duplicating stick math inside PADClamp.",
+    "Used PADStatus field names such as stickX, stickY, substickX, substickY, triggerLeft, triggerRight, and err to express the structure offsets that were formerly implicit in assembly.",
+    "Centralized the __OSCurrHeap declaration in OSAlloc.h, reducing ad hoc extern declarations and making allocator users include the correct Dolphin OS header.",
+    "Updated obj_files.mk alongside source additions/deletions, which is essential for decomp PRs that replace assembly with C objects."
+  ],
+  "decomp_lessons": [
+    "Small SDK wrapper functions are good candidates for direct asm-to-C replacement when the assembly is just register shuffling plus a call into an already-decompiled API.",
+    "For functions that walk arrays of SDK structs, matching can often be expressed naturally as a for loop over a named constant such as PAD_CHANMAX with pointer increment semantics.",
+    "Header cleanup can be part of a matching PR when a newly matched C file needs access to globals previously referenced only from assembly.",
+    "When replacing assembly that defines initialized small-data globals, ensure the C file defines the globals with equivalent initializers, as with __AXFXAlloc and __AXFXFree.",
+    "Preserve unsigned/signed behavior implied by byte loads and struct fields by using the existing SDK types and named fields where possible; the PR evidence shows PADClamp relies on PADStatus and ClampRegion definitions already present."
+  ],
+  "naming_conventions": [
+    "Dolphin SDK exported functions keep their uppercase SDK-style names: PADClamp, AXFXAllocFunction, AXFXFreeFunction, AXFXSetHooks.",
+    "Internal AXFX hook globals use double-underscore SDK names: __AXFXAlloc and __AXFXFree.",
+    "OS allocator global uses the SDK name __OSCurrHeap and is declared in the relevant OS header.",
+    "Pad constants and status fields use existing SDK-style names: PAD_CHANMAX, PAD_ERR_NONE, PADStatus, ClampRegion, ClampStick."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced assembly object entries in obj_files.mk only after adding matching C implementations.",
+    "Translated the PADClamp loop from an assembly counter/pointer loop into `for (i = 0; i < PAD_CHANMAX; i++, status++)`.",
+    "Translated assembly branch-over behavior for controller errors into `if (status->err != PAD_ERR_NONE) continue;`.",
+    "Mapped trigger clamp assembly to a clear two-branch pattern: zero when at or below minTrigger, otherwise cap to maxTrigger then subtract minTrigger.",
+    "Matched AXFX sdata function pointer initialization in C by defining `any_t (*__AXFXAlloc)(size_t) = AXFXAllocFunction;` and `void (*__AXFXFree)(any_t) = AXFXFreeFunction;`.",
+    "Used a typed allocator hook signature with `any_t` and `size_t`, matching the apparent assembly ABI without introducing extra wrapper logic."
+  ],
+  "review_feedback": [
+    "No issue comments or review comments were present in the provided PR slice.",
+    "The PR had one review recorded, but no review body or line-level feedback was included in the provided context."
+  ],
+  "searchable_terms": [
+    "PR689",
+    "r-burns",
+    "Match dolphin PadClamp axfx",
+    "PADClamp",
+    "PadClamp.c",
+    "Padclamp.s",
+    "ClampStick",
+    "ClampRegion",
+    "PADStatus",
+    "PAD_CHANMAX",
+    "PAD_ERR_NONE",
+    "stickX",
+    "stickY",
+    "substickX",
+    "substickY",
+    "triggerLeft",
+    "triggerRight",
+    "minTrigger",
+    "maxTrigger",
+    "AXFXAllocFunction",
+    "AXFXFreeFunction",
+    "AXFXSetHooks",
+    "__AXFXAlloc",
+    "__AXFXFree",
+    "__OSCurrHeap",
+    "OSAllocFromHeap",
+    "OSFreeToHeap",
+    "OSAlloc.h",
+    "obj_files.mk",
+    "asm-to-c",
+    "dolphin/pad",
+    "dolphin/axfx"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify PADClamp.c or ClampStick for additional matching or cleanup.",
+    "Find later PRs that add a public AXFX header or move AXFX hook declarations out of axfx.c.",
+    "Search for remaining ad hoc extern declarations of __OSCurrHeap after OSAlloc.h exposed it.",
+    "Check whether other Dolphin SDK assembly wrappers can be matched using the same allocator-hook pattern."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

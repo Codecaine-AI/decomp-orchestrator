@@ -1,0 +1,178 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2145",
+  "pr": {
+    "number": 2145,
+    "title": "bump ifStatus_802F4EDC to ~ 70% match",
+    "url": "https://github.com/doldecomp/melee/pull/2145",
+    "state": "MERGED",
+    "author": "malvarezcastillo",
+    "created_at": "2026-01-29T10:33:31Z",
+    "merged_at": "2026-01-31T16:56:24Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large first-pass decompilation of `ifStatus_802F4EDC`, replacing a `NOT_IMPLEMENTED` stub with HUD damage-percent update logic and raising the function match from near-zero to about 71.9%. The change also corrected prototypes for `ifStatus_802F4EDC` and `ifStatus_802F4B84`, added baselib/menu/lb includes, and introduced extern declarations for `.sdata2` color endpoints used in damage color interpolation. The PR explicitly framed the work as an honest partial match rather than a fake perfect match; remaining blockers were suspected inline expansion, missing stack struct/layout, CTR `bdnz` loop generation, and register allocation differences.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "cleanup",
+      "headers",
+      "types-structs",
+      "fix"
+    ],
+    "systems": [
+      "melee-core",
+      "interface-hud",
+      "ifstatus"
+    ]
+  },
+  "key_files": [
+    "src/melee/if/ifstatus.c",
+    "src/melee/if/ifstatus.h"
+  ],
+  "what_changed": [
+    "Implemented most of `ifStatus_802F4EDC(HSD_GObj* gobj)` instead of leaving it as `NOT_IMPLEMENTED`.",
+    "Changed `ifStatus_802F4EDC` prototype from `void(void)` to `void(HSD_GObj* gobj)` in both source and header.",
+    "Changed `ifStatus_802F4B84` prototype from `void(void)` to `void(IfDamageState* state, s32 is_stamina)` and updated the call site in `ifStatus_802F4EDC`.",
+    "Added baselib includes for AObj, DObj, JObj, MObj, and TObj access, plus `lb/lb_00B0.h` and `mn/mnmain.h` for helper calls used by the decompiled function.",
+    "Added extern declarations for `ifStatus_804D57A8[3]` and `ifStatus_804D57AC[3]`, described in the diff as low/high damage color endpoint arrays from `.sdata2`.",
+    "Added logic to find the matching `IfDamageState` by comparing `HUD_parent_entity` against the input `HSD_GObj`.",
+    "Handled the death/explode animation path by checking `state->flags.explode_animation` and calling `ifStatus_PercentOnDeathAnimationThink` before returning.",
+    "Added animation setup for the HUD root JObj and digit/percent TObj animations, including calls such as `HSD_JObjRemoveAnim`, `lb_8000C07C`, `HSD_JObjReqAnimAll`, `HSD_TObjAddAnimAll`, `HSD_TObjReqAnimAll`, `HSD_AObjSetRate`, `HSD_TObjAnim`, and `mn_8022F3D8`.",
+    "Updated ones, tens, hundreds, and percent sign digit texture animation frames from `state->damage_percent`, including hiding tens and hundreds JObjs when the corresponding digits are not needed.",
+    "Interpolated digit material diffuse colors based on normal damage range 0-300 or stamina range 0-100 and applied the resulting RGB values to hundreds, tens, ones, and percent materials.",
+    "Cached digit translations during a stamina/animation condition using JObj translate fields, with explicit `__assert` calls matching `jobj.h` line numbers.",
+    "Adjusted digit and percent sign x-positions when displayed digits are `1`, using the `0.5069F` spacing offset, and marked matrices dirty with `jobj_flagCheckSetMtxDirtySub`.",
+    "Handled forced digit shake by setting `frames_of_shake_remaining` to 10, called the still-unimplemented-or-partial `ifStatus_802F4B84(state, is_stamina)`, and applied a final root scale change when `ifStatus_804D6D60 >= 5`."
+  ],
+  "smart_moves": [
+    "Kept the function as an honest partial match instead of using broad fake or black-magic patterns to force a higher percentage.",
+    "Used a function-level loop index `i` for the player-finding loop and reordered declarations to improve register allocation, according to the author’s follow-up comment.",
+    "Introduced concrete parameter types for previously argument-less stubs, which makes downstream call sites and future matching work more informative.",
+    "Pulled in the exact baselib headers needed for direct traversal of JObj/DObj/MObj/TObj/AObj data, reducing reliance on opaque or guessed accesses.",
+    "Preserved recognizable target behavior such as HUD player lookup, death animation early return, damage digit texture selection, digit hiding, color interpolation, and matrix-dirty updates.",
+    "Documented known questionable matching tactics in the PR body, especially the register-allocation workaround of using `digit_jobj->u.dobj->mobj->tobj` instead of the already assigned `tobj` variable in one area."
+  ],
+  "decomp_lessons": [
+    "For very large unmatched functions, a 70% first pass can still be useful if it exposes real control flow, data flow, helper calls, and struct relationships for later refinement.",
+    "Avoid hiding known fakey constructs: the PR body explicitly called out the one suspect TObj access workaround and distinguished it from more legitimate patterns.",
+    "`PAD_STACK(96)` was considered a standard stack-alignment/matching technique in this context, but reviewer feedback suggested the unusually large padding might indicate a missing stack struct.",
+    "Large HUD update routines may need to be broken up conceptually into inline-equivalent helper patterns before they match well; the reviewer specifically mentioned the `found_player` control flow.",
+    "Generated C loops may fail to produce target `mtctr`/`bdnz` CTR-loop assembly even after trying different loop structures; this can become a fundamental blocker rather than a simple syntax issue.",
+    "Mismatch in saved registers, such as generated code saving `r22-r31` while target saves `r23-r31`, is a useful symptom of register allocation differences.",
+    "A large excess of generated calls compared to target calls can indicate missing inline expansion or incorrect inline boundaries; the author reported generated code had about 100 calls versus about 49 in target.",
+    "`jobj.h` asserts are likely inline-origin artifacts and can be located by matching the line numbers used in `__assert(\"jobj.h\", line, \"jobj\")`.",
+    "Material animation traversal chains like `mat_anim->child->next->next` and `mat_anim->child->next->next->next` were treated as real data-structure traversal rather than fake matching code."
+  ],
+  "naming_conventions": [
+    "Kept address-based names for unresolved functions and globals: `ifStatus_802F4EDC`, `ifStatus_802F4B84`, `ifStatus_804D57A8`, `ifStatus_804D57AC`, and `ifStatus_804D6D60`.",
+    "Used descriptive local names for HUD update roles, including `hud`, `state`, `digit_jobj`, `anim_base`, `ones_digit`, `tens_digit`, `hundreds_digit`, `clamped_damage`, and `factor`.",
+    "Used enum-like digit indices visible in the diff: `Percent`, `Ones`, `Tens`, and `Hundreds`.",
+    "Named boolean/mode state as `is_stamina`, reflecting the `lb_8000B09C(jobj)` result and the stamina-specific color interpolation path.",
+    "Flag fields were named according to observed behavior, including `explode_animation`, `animation_status_id`, `force_digit_shake`, and placeholder `unk10` where semantics remained uncertain."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `PAD_STACK(96)` for stack alignment/matching; later discussion suggested this may be compensating for an unidentified stack struct.",
+    "Used a `do { ... } while (--var_ctr != 0)` player search with `var_ctr = 6` and a `found_player` label to approximate the target player-finding control flow.",
+    "Added `(void) 0;` after the `found_player` label, described in the PR body as required C syntax rather than a fake matching trick.",
+    "Cached `hud = &ifStatus_HudInfo` and `anim_base = (HSD_MatAnimJoint**) &hud->janim_selection_joints` to shape variable lifetimes and pointer access patterns.",
+    "Reordered variable declarations and used a function-level `i` to improve register allocation, per the author’s comment.",
+    "One acknowledged questionable register-allocation workaround was using `digit_jobj->u.dobj->mobj->tobj` instead of the already assigned `tobj` variable for some TObj operations; the PR body said removing it dropped the match by about 1%.",
+    "Tried but did not solve generating the target `mtctr` plus `bdnz` loop; MWCC reportedly generated `addic.` plus `bne` regardless of attempted C loop structures.",
+    "Reviewer guidance pointed toward replacing hand-expanded patterns with missing inlines, especially around `found_player` and `jobj.h` assert-backed JObj accessors."
+  ],
+  "review_feedback": [
+    {
+      "author": "encounter",
+      "type": "build/match report",
+      "feedback": "Automated report showed `ifStatus_802F4EDC` improved from 0.18% to 71.92% and `.sdata2` improved from 52.78% to 59.57%."
+    },
+    {
+      "author": "reviewer excerpt quoted by malvarezcastillo",
+      "type": "matching guidance",
+      "feedback": "The first pass was considered quite acceptable, but the function likely needs to be broken into inline calls, including the `found_player` control flow."
+    },
+    {
+      "author": "reviewer excerpt quoted by malvarezcastillo",
+      "type": "types/stack guidance",
+      "feedback": "There is probably a missing struct on the stack causing the large padding value."
+    },
+    {
+      "author": "reviewer excerpt quoted by malvarezcastillo",
+      "type": "inline guidance",
+      "feedback": "`jobj.h` asserts are inlines and can be found by line number in `jobj.h`."
+    },
+    {
+      "author": "malvarezcastillo",
+      "type": "author follow-up",
+      "feedback": "After experimentation, the author reported reaching 71.92%, with remaining blockers including CTR `bdnz` loop generation, register allocation, and inline expansion differences."
+    }
+  ],
+  "searchable_terms": [
+    "PR2145",
+    "ifStatus_802F4EDC",
+    "ifStatus_802F4B84",
+    "ifstatus.c",
+    "ifstatus.h",
+    "IfDamageState",
+    "HudIndex",
+    "ifStatus_HudInfo",
+    "damage_percent",
+    "old_damage",
+    "HUD_parent_entity",
+    "explode_animation",
+    "force_digit_shake",
+    "frames_of_shake_remaining",
+    "animation_status_id",
+    "is_stamina",
+    "lb_8000B09C",
+    "lb_8000C07C",
+    "mn_8022F3D8",
+    "HSD_GObj",
+    "HSD_JObj",
+    "HSD_DObj",
+    "HSD_MObj",
+    "HSD_TObj",
+    "HSD_AObjSetRate",
+    "HSD_TObjAddAnimAll",
+    "HSD_TObjReqAnimAll",
+    "HSD_TObjAnim",
+    "HSD_JObjRemoveAnim",
+    "HSD_JObjReqAnimAll",
+    "HSD_JObjAnimAll",
+    "HSD_JObjSetFlagsAll",
+    "HSD_JObjClearFlagsAll",
+    "jobj_flagCheckSetMtxDirtySub",
+    "jobj.h assert",
+    "PAD_STACK(96)",
+    "bdnz",
+    "mtctr",
+    "register allocation",
+    "inline expansion",
+    "mat_anim child next next",
+    "ifStatus_804D57A8",
+    "ifStatus_804D57AC",
+    "sdata2 color endpoints",
+    "damage percent HUD",
+    "stamina mode",
+    "Percent Ones Tens Hundreds"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching `ifStatus_802F4EDC` to see whether the missing inlines, stack struct, or `bdnz` loop issue were resolved.",
+    "Search for later definitions or renames of `IfDamageState` fields such as `unk10`, `translation_x`, `translation_y`, and `jobjs`.",
+    "Search `jobj.h` inline accessors and assert line numbers 932, 993, and 1006 to replace explicit assert/access patterns with the correct inline forms.",
+    "Compare later changes to `ifStatus_802F4B84` to determine whether its new `(IfDamageState* state, s32 is_stamina)` signature remained correct.",
+    "Look for matching tactics in other PRs that successfully generate MWCC `mtctr`/`bdnz` loops in similar fixed-count searches.",
+    "Investigate whether `PAD_STACK(96)` was later reduced or replaced by a real stack struct in this function."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

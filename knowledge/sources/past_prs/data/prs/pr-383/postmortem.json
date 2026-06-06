@@ -1,0 +1,126 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-383",
+  "pr": {
+    "number": 383,
+    "title": "add PUSH_ATTRS macro for fighter chara OnLoad, works on the first 8 o…",
+    "url": "https://github.com/doldecomp/melee/pull/383",
+    "state": "MERGED",
+    "author": "snuffysasa",
+    "created_at": "2022-05-21T19:15:58Z",
+    "merged_at": "2022-05-22T00:04:27Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Introduced a reusable PUSH_ATTRS(ft, attributeName) macro in fighter.h for fighter character OnLoad routines that copy x10C_ftData->ext_attr into x2D8_specialAttributes2 and assign x2D4_specialAttributes. The PR used it across multiple fighters, moved several OnLoad/death routines from asm to C for Fox, Link, and Mewtwo, added ftlink.c to obj_files.mk, cleaned up Pikachu code/symbol names, and renamed several clone-specific OnLoad helpers such as ftCFalcon_OnLoadForGanon, ftFox_OnLoadForFalco, ftLink_OnLoadForCLink, ftMario_OnLoadForDrMario, ftKoopa_OnLoadForGKoopa, and ftMars_OnLoadForRoy. Author noted DOL was OK; there was no review discussion in the slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "cleanup",
+      "decomp-matching",
+      "headers",
+      "symbol-renaming",
+      "macro-introduction",
+      "asm-to-c"
+    ],
+    "systems": [
+      "fighter",
+      "fighter-chara",
+      "asm",
+      "include",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/fighter.h",
+    "src/melee/ft/chara/ftCaptain/ftCaptain_1.c",
+    "src/melee/ft/chara/ftfox.c",
+    "src/melee/ft/chara/ftlink.c",
+    "src/melee/ft/chara/ftlink.h",
+    "src/melee/ft/chara/ftmewtwo.c",
+    "src/melee/ft/chara/ftPikachu/ftpikachu1.c",
+    "asm/melee/ft/chara/ftfox.s",
+    "asm/melee/ft/chara/ftlink.s",
+    "asm/melee/ft/chara/ftmewtwo.s",
+    "asm/melee/ft/ftdata.s",
+    "include/functions.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Added PUSH_ATTRS(ft, attributeName) in src/melee/ft/fighter.h. The macro saves x2D8_specialAttributes2, casts x10C_ftData->ext_attr to the requested attribute struct, copies that struct into x2D8_specialAttributes2, and stores the backup pointer into x2D4_specialAttributes.",
+    "Replaced repeated hand-written attribute-copy boilerplate in multiple character OnLoad and clone-OnLoad routines with PUSH_ATTRS, including Captain/Falcon, Mars/Marth, MasterHand, Ness, Pikachu, Fox, Koopa, Link, Mario, Mewtwo, Peach, Sandbag, and Zako Boy/Girl files according to the diff matches.",
+    "Matched or moved ftFox_OnLoad, ftLink_OnLoad/related Link routines, and ftMewtwo_OnLoad out of asm: large blocks were deleted from asm/melee/ft/chara/ftfox.s, ftlink.s, and ftmewtwo.s while corresponding C files gained implementations.",
+    "Added src/melee/ft/chara/ftlink.c.o to obj_files.mk so the new Link C translation unit participates in the text object build.",
+    "Updated include/functions.h to replace several address-style names/comments with clearer character-specific names, including ftCFalcon_OnLoadForGanon, ftFox_OnLoadForFalco, ftLink_OnLoadForCLink, ftMario_OnLoadForDrMario, ftKoopa_OnLoadForGKoopa, ftMars_OnLoadForRoy, and Pikachu helper names.",
+    "Updated asm/melee/ft/ftdata.s function pointer tables to use renamed Pikachu symbols such as ftPikachu_UnkHeldItemAction_801244B8, ftPikachu_80124598, ftPikachu_UnkHeldItem_801245E0, ftPikachu_80124628, ftPikachu_8012467C, ftPikachu_801246C0, ftPikachu_801247A8, ftPikachu_801247EC, and ftPikachu_ScaleYAttributesArray_80124704.",
+    "Expanded fighter.h struct coverage around Link-related fighter fields in the x222C through x2248 region, based on the diff excerpt showing named u32 members added."
+  ],
+  "smart_moves": [
+    "Factored a common OnLoad pattern into a macro instead of duplicating per-fighter pointer casts and struct assignment code, reducing opportunities for mismatched local-variable ordering while preserving the exact attribute struct type at each call site.",
+    "Kept the macro type-explicit: each call passes the concrete attribute struct name, making the generated copy size follow the fighter-specific ext_attr struct instead of relying on an untyped memcpy-like helper.",
+    "Used clone-specific names for shared OnLoad helpers, e.g. ftCFalcon_OnLoadForGanon and ftLink_OnLoadForCLink, which records both the implementation owner and the consumer clone.",
+    "Renamed function pointer table entries together with the functions, preventing ftdata.s from retaining stale func_ address names after C-side cleanup.",
+    "Preserved unknown/uncertain semantics in Pikachu names by using address suffixes and Unk terms rather than overclaiming behavior."
+  ],
+  "decomp_lessons": [
+    "Many fighter OnLoad routines perform the same special-attribute push: copy x10C_ftData->ext_attr into x2D8_specialAttributes2 and set x2D4_specialAttributes to that storage. Reuse PUSH_ATTRS when decompiling similar character OnLoad code.",
+    "For clone characters, prefer names that describe the source character implementation and target clone usage: ftBase_OnLoadForClone is more searchable than a raw func_ address and avoids implying the helper belongs only to the clone.",
+    "When a symbol appears in data tables such as ft_OnItemPickup, ft_OnItemInvisible, ft_OnItemVisible, ft_OnItemRelease, ft_OnItemCatch, and knockback/item callback tables, rename the table entries in the same PR as the function declarations/definitions.",
+    "If exact semantics remain unclear, keep the address suffix in the new name, e.g. ftPikachu_80124598 or ftPikachu_ScaleYAttributesArray_80124704, to preserve traceability back to the original symbol.",
+    "Build integration matters for asm-to-C migration: after adding a new C translation unit such as ftlink.c, update obj_files.mk and remove only the corresponding asm ranges."
+  ],
+  "naming_conventions": [
+    "PUSH_ATTRS(ft, attributeName) is an all-caps macro name and takes the fighter pointer plus a concrete attribute struct type.",
+    "Clone OnLoad helpers use ft<sourceCharacter>_OnLoadFor<cloneCharacter>, as shown by ftCFalcon_OnLoadForGanon, ftFox_OnLoadForFalco, ftLink_OnLoadForCLink, ftMario_OnLoadForDrMario, ftKoopa_OnLoadForGKoopa, and ftMars_OnLoadForRoy.",
+    "Character OnLoad routines use ft<Character>_OnLoad, e.g. ftFox_OnLoad, ftLink_OnLoad, and ftMewtwo_OnLoad.",
+    "Pikachu cleanup names use ftPikachu_ prefixes and retain address suffixes for unclear callbacks, e.g. ftPikachu_80124628, while partially inferred behavior gets names such as ftPikachu_UnkHeldItemAction_801244B8.",
+    "The PR uses project-style fighter struct field names such as x10C_ftData, x2D8_specialAttributes2, and x2D4_specialAttributes rather than inventing new semantic names."
+  ],
+  "assembly_or_matching_tactics": [
+    "The deleted asm snippets show the common matching pattern: load ext_attr from fighter data, copy a fixed-size attribute struct with a counted bdnz loop, then store the destination pointer into x2D4_specialAttributes.",
+    "PUSH_ATTRS appears designed to emit compatible code for multiple OnLoad functions by forcing the compiler to perform a struct assignment of the exact attribute type.",
+    "The PR removed full asm bodies for ftFox_OnLoad, ftMewtwo_OnLoad, and substantial Link routines after matching them in C.",
+    "Function pointer table symbol renames in ftdata.s are low-risk matching changes because they alter labels/references without changing emitted data values.",
+    "The author explicitly stated 'DOL is OK', indicating the macro-based C replacements and symbol cleanups preserved the expected binary output for this PR."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PUSH_ATTRS",
+    "fighter OnLoad",
+    "specialAttributes",
+    "x2D8_specialAttributes2",
+    "x2D4_specialAttributes",
+    "x10C_ftData",
+    "ext_attr",
+    "ftCFalcon_OnLoadForGanon",
+    "ftFox_OnLoadForFalco",
+    "ftLink_OnLoadForCLink",
+    "ftMario_OnLoadForDrMario",
+    "ftKoopa_OnLoadForGKoopa",
+    "ftMars_OnLoadForRoy",
+    "ftFox_OnLoad",
+    "ftLink_OnLoad",
+    "ftMewtwo_OnLoad",
+    "ftPikachu_UnkHeldItemAction_801244B8",
+    "ftPikachu_ScaleYAttributesArray_80124704",
+    "ftdata.s",
+    "obj_files.mk",
+    "asm-to-C",
+    "DOL is OK"
+  ],
+  "follow_up_queries": [
+    "Where else are fighter OnLoad routines still open-coded instead of using PUSH_ATTRS?",
+    "Which later PRs refined the PUSH_ATTRS macro or replaced it with an inline/helper approach?",
+    "Were the Link x222C-x2248 fields later given semantic names?",
+    "Did later Pikachu decomp work resolve the UnkHeldItem callback names introduced here?",
+    "Which remaining clone OnLoad helpers still use func_ address names after PR 383?"
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

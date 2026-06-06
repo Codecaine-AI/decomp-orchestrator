@@ -1,0 +1,119 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-257",
+  "pr": {
+    "number": 257,
+    "title": "Bring over va_arg from SMB decomp",
+    "url": "https://github.com/doldecomp/melee/pull/257",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2022-02-07T19:24:43Z",
+    "merged_at": "2022-02-07T19:24:49Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Replaced the handwritten assembly object for Runtime __va_arg with a C implementation brought from the SMB decompilation, added a project stdarg.h defining va_list and va_start/va_arg/va_end support, and updated obj_files.mk to build src/Runtime/__va_arg.o instead of asm/Runtime/__va_arg.o. The PR body says this was added preemptively because multiple future matching targets were expected to need va_arg.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "runtime",
+      "headers",
+      "asm-to-c"
+    ],
+    "systems": [
+      "Runtime",
+      "include",
+      "build-system",
+      "asm"
+    ]
+  },
+  "key_files": [
+    "asm/Runtime/__va_arg.s",
+    "src/Runtime/__va_arg.c",
+    "include/stdarg.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted asm/Runtime/__va_arg.s, removing the 74-line assembly implementation of __va_arg.",
+    "Added src/Runtime/__va_arg.c with a 56-line C implementation of void *__va_arg(va_list v_list, unsigned char type).",
+    "Added include/stdarg.h with __va_list/va_list definitions, a non-MWERKS declaration for __builtin_va_info, a prototype for __va_arg, and macros for va_start, va_arg, and va_end.",
+    "Changed obj_files.mk so TEXT_O_FILES now references $(BUILD_DIR)/src/Runtime/__va_arg.o instead of $(BUILD_DIR)/asm/Runtime/__va_arg.o.",
+    "The C implementation preserves the observed runtime behavior from the assembly: type 4 uses 16-byte alignment and advances input_arg_area by 0x10; type 3 switches from gpr to fpr handling and uses an FPR save-area offset of 32; type 2 handles 8-byte values with even GPR alignment; type 0 dereferences the computed argument address before returning it."
+  ],
+  "smart_moves": [
+    "Used an existing solution from the SMB decompilation rather than re-deriving __va_arg from scratch, reducing risk for a low-level ABI/runtime helper.",
+    "Moved __va_arg from asm to C while keeping the build graph stable by changing only the object path in obj_files.mk.",
+    "Added stdarg.h at the same time as __va_arg.c, making the runtime helper usable by future C decompilation work that needs variadic functions.",
+    "Encoded alignment logic with a small ALIGN macro using uintptr_t, matching the pointer arithmetic needs of the original assembly while keeping the C code readable.",
+    "Modeled the compiler ABI state explicitly in __va_list using gpr, fpr, input_arg_area, and reg_save_area fields, which mirrors how the assembly manipulated the va_list state."
+  ],
+  "decomp_lessons": [
+    "When decompiling variadic functions, add the runtime/header support first so later matching work can use va_start and va_arg naturally instead of preserving awkward assembly or stubs.",
+    "For runtime support code, replacing an asm object with a C object requires both the source file and the object list update; otherwise the old asm object may continue to be built.",
+    "The PowerPC/MWCC va_list layout used here stores GPR and FPR cursor bytes plus pointers to the input argument area and register save area; future code using stdarg should rely on this shared header instead of redefining it locally.",
+    "The __va_arg implementation distinguishes argument classes by the unsigned char type value passed from _var_arg_typeof(t); future matching should preserve those type cases rather than treating va_arg as generic pointer arithmetic.",
+    "8-byte GPR arguments need even-register handling, and stack fallback needs explicit alignment before advancing input_arg_area.",
+    "Weak evidence note: the PR has no review comments, so no reviewer rationale or style feedback is available beyond the title, body, and diff."
+  ],
+  "naming_conventions": [
+    "Runtime source path mirrors the former asm path: asm/Runtime/__va_arg.s became src/Runtime/__va_arg.c.",
+    "The header uses include/stdarg.h with guard _STDARG_H_.",
+    "The internal va_list array typedef is named __va_list, with public typedef va_list.",
+    "The va_arg helper is named __va_arg and takes parameters named v_list and type.",
+    "Local variables in __va_arg.c use ABI-descriptive names: g_reg, maxsize, increment, even, fpr_offset, regsize, input_arg_area, and reg_save_area."
+  ],
+  "assembly_or_matching_tactics": [
+    "Recreated an assembly runtime helper in C and switched obj_files.mk from the asm object to the src object as the matching milestone.",
+    "Preserved assembly-visible control flow concepts as C cases based on type values 0, 2, 3, and 4.",
+    "Used ALIGN(addr, size) as (((uintptr_t)(addr) + ((size)-1)) & ~((size)-1)) to reproduce stack/input argument alignment.",
+    "For type 4, aligned input_arg_area to 16 bytes and advanced by 0x10, matching the old assembly path that rounded with 0xF and masked.",
+    "For FPR handling, selected &v_list->fpr, used v_list->fpr as the register index, set size to 8, fpr_offset to 32, and regsize to 8.",
+    "For 8-byte GPR handling, reduced maxsize from 8 to 7, set increment to 2, and conditionally advanced odd register indices to even alignment.",
+    "For register-save-area arguments, computed addr from reg_save_area plus fpr_offset plus g_reg * regsize, then wrote back the advanced register cursor.",
+    "For stack fallback, forced the relevant register cursor to 8, aligned input_arg_area to the argument size, and advanced input_arg_area by size."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR257",
+    "va_arg",
+    "__va_arg",
+    "stdarg.h",
+    "va_list",
+    "__va_list",
+    "va_start",
+    "va_end",
+    "_var_arg_typeof",
+    "__builtin_va_info",
+    "SMB decomp",
+    "Runtime",
+    "asm/Runtime/__va_arg.s",
+    "src/Runtime/__va_arg.c",
+    "obj_files.mk",
+    "TEXT_O_FILES",
+    "MWERKS",
+    "PowerPC ABI",
+    "input_arg_area",
+    "reg_save_area",
+    "gpr",
+    "fpr",
+    "fpr_offset",
+    "ALIGN",
+    "uintptr_t",
+    "variadic functions"
+  ],
+  "follow_up_queries": [
+    "Find later PRs or functions that began using include/stdarg.h, va_start, or va_arg after PR #257.",
+    "Check whether __va_arg.c stayed matching as compiler settings or include/stdarg.h evolved.",
+    "Look for future refinements to the va_list layout, _var_arg_typeof usage, or MWERKS/non-MWERKS handling.",
+    "Compare this __va_arg implementation against SMB decomp source if provenance or exact ABI behavior needs confirmation."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

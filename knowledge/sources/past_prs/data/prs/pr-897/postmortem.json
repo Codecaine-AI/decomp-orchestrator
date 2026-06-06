@@ -1,0 +1,135 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-897",
+  "pr": {
+    "number": 897,
+    "title": "Match `ftCo_CargoJump`",
+    "url": "https://github.com/doldecomp/melee/pull/897",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-29T11:16:54Z",
+    "merged_at": "2023-05-29T11:23:39Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common fighter cargo jump action by replacing the corresponding ft_08A4 assembly with a new C implementation and header, adding the new object to the build, and updating dependent fighter/common source files to include the corrected ft_08A4 declarations. The PR report shows `src/melee/ft/chara/ftCommon/ftCo_CargoJump.c` at 100% for the file and for `ftCo_8009BB1C`, `ftCo_8009BB64`, `ftCo_CargoJump_Anim`, `ftCo_CargoJump_IASA`, `ftCo_CargoJump_Phys`, and `ftCo_CargoJump_Coll`.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "build-system"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "Donkey Kong cargo",
+      "asm",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_CargoJump.c",
+    "src/melee/ft/chara/ftCommon/ftCo_CargoJump.h",
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/ft_08A4.h",
+    "src/melee/ft/ft_0877.h",
+    "obj_files.mk",
+    "src/melee/ft/chara/ftCommon/ftCo_CargoTurn.c",
+    "src/melee/ft/chara/ftCommon/ftCo_CargoWait.c",
+    "src/melee/ft/chara/ftCommon/ftCo_CargoWalk.c",
+    "src/melee/ft/chara/ftDonkey/ftDk_Init.c",
+    "src/melee/ft/chara/ftDonkey/ftDk_MS_345_0.c"
+  ],
+  "what_changed": [
+    "Removed the `ftCo_CargoJump` assembly block from `asm/melee/ft/ft_08A4.s`, including `ftCo_8009BB1C`, `ftCo_8009BB64`, `ftCo_CargoJump_Anim`, `ftCo_CargoJump_IASA`, `ftCo_CargoJump_Phys`, and `ftCo_CargoJump_Coll`.",
+    "Added `src/melee/ft/chara/ftCommon/ftCo_CargoJump.c` implementing the matched cargo jump logic in C.",
+    "Added `src/melee/ft/chara/ftCommon/ftCo_CargoJump.h` with declarations for the cargo jump functions and adjacent `ftCo_8009BC58` declaration.",
+    "Added `src/melee/ft/chara/ftCommon/ftCo_CargoJump.c.o` to `obj_files.mk` before the remaining `asm/melee/ft/ft_08A4.s.o`, preserving build order while splitting matched code out of the asm file.",
+    "Moved or exposed many fighter/common declarations through `src/melee/ft/ft_08A4.h`; the slice shows `src/melee/ft/ft_0877.h` losing 889 lines and `src/melee/ft/ft_08A4.h` gaining 885 lines.",
+    "Updated many fighter source files to include `ft/ft_08A4.h` where they still depended on symbols from the split header.",
+    "Updated cargo-related common files (`ftCo_CargoTurn.c`, `ftCo_CargoWait.c`, `ftCo_CargoWalk.c`) to include `ftCo_CargoJump.h` for direct cargo jump declarations.",
+    "Made a small control-flow cleanup in `ftDk_MS_345_0.c`, changing an `else { return false; }` after an early true return into a final `return false;`."
+  ],
+  "smart_moves": [
+    "Kept the new C file narrow: `ftCo_CargoJump.c` only contains the matched cargo jump entry/helpers/callbacks instead of mixing unrelated ft_08A4 functions into the same translation unit.",
+    "Preserved action-callback structure by implementing empty `Anim`, `IASA`, `Phys`, and `Coll` callbacks with calls matching the removed assembly: `ftCo_8009BF3C`, `ftCo_800CB438`, and `ftCo_CargoFall_Coll`.",
+    "Used existing helper routines rather than duplicating behavior: `ftCommon_8007D5D4`, `Fighter_ChangeMotionState`, `ftAnim_SetAnimRate`, `ftCo_800CB110`, and `ftCo_8009C5A4` are composed to reproduce `ftCo_8009BB64`.",
+    "Documented a matching-specific artifact in `ftCo_8009BB64` with `/// @todo Unused stack.` and a `#ifdef MUST_MATCH` dummy stack allocation, making the non-obvious match constraint visible.",
+    "Added direct feature-local includes (`ftCo_CargoJump.h`) to cargo wait/walk/turn files instead of relying only on large umbrella headers."
+  ],
+  "decomp_lessons": [
+    "When splitting matched functions out of a large assembly file, add the new C object before the remaining asm object in `obj_files.mk` so the original address/order context is maintained.",
+    "Header splits can cause widespread include churn. This PR appears to relocate many declarations from `ft_0877.h` to `ft_08A4.h`, requiring explicit `#include \"ft/ft_08A4.h\"` in many dependent fighter files.",
+    "For small action callback files, matching often depends on preserving apparently trivial callbacks: an empty animation callback, a single-call physics callback, and a collision callback forwarding to an existing fall collision routine.",
+    "Use `RETURN_IF(...)` macro style for IASA callbacks when the assembly is effectively a helper call followed by return; this can match short branch-and-return patterns cleanly.",
+    "Nonsemantic C refactors such as removing an unnecessary `else` after an early return can be part of include/header cleanup, but the evidence here does not show it as a central matching tactic.",
+    "If a function needs unused stack space only for matching, hide it behind `MUST_MATCH` and leave a clear TODO so future cleanup knows it is intentional."
+  ],
+  "naming_conventions": [
+    "Common fighter cargo action files use the `ftCo_Cargo<Action>` pattern, e.g. `ftCo_CargoJump.c`, `ftCo_CargoJump.h`, `ftCo_CargoWait.c`, `ftCo_CargoWalk.c`, and `ftCo_CargoTurn.c`.",
+    "Action callback names follow the common Melee convention `ftCo_CargoJump_Anim`, `ftCo_CargoJump_IASA`, `ftCo_CargoJump_Phys`, and `ftCo_CargoJump_Coll`.",
+    "Unidentified or address-based common functions remain named with the `ftCo_8009....` convention, such as `ftCo_8009BB1C`, `ftCo_8009BB64`, and `ftCo_8009BC58`.",
+    "Header guards in this slice use address-derived names such as `GALE01_09BB1C` for `ftCo_CargoJump.h`.",
+    "Fighter object typedefs vary by context in the added code: entry helpers use `ftCo_GObj*`, while callbacks use `Fighter_GObj*` or `HSD_GObj*` according to existing callback signatures."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted the matched assembly functions from `asm/melee/ft/ft_08A4.s` once the C implementation reported 100% matching.",
+    "Matched `ftCo_8009BB1C` as a boolean helper: call `ftCo_800CAE80(gobj)`, if true call `ftCo_8009B9C8(gobj, b)` and return true, otherwise return false.",
+    "Matched `ftCo_8009BB64` by reading `fp = gobj->user_data`, calling `ftCommon_8007D5D4(fp)`, changing motion state to `fp->x2CC->x4_motion_state + 7`, setting animation rate to zero, calling `ftCo_800CB110(gobj, 1, 1)`, then forcing the interacted fighter to `ftCo_MS_ShoulderedWait` via `ftCo_8009C5A4(fp->x1A58_interactedFighter, ftCo_MS_ShoulderedWait)`.",
+    "Used `NULL`, `0`, and `1` argument values in `Fighter_ChangeMotionState`, `ftAnim_SetAnimRate`, and `ftCo_800CB110` to reproduce the literal constants previously visible in assembly (`NULL`, `1.0`, and zero values).",
+    "Kept a `MUST_MATCH`-guarded unused 16-byte local array in `ftCo_8009BB64` to satisfy stack layout when required.",
+    "Matched tiny wrappers directly: `ftCo_CargoJump_Anim` is empty, `ftCo_CargoJump_Phys` calls `ftCo_800CB438`, and `ftCo_CargoJump_Coll` calls `ftCo_CargoFall_Coll`."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR context.",
+    "The only human text excerpt is the generated match report showing 100.00% for the new `ftCo_CargoJump.c` file and its functions."
+  ],
+  "searchable_terms": [
+    "pr-897",
+    "ftCo_CargoJump",
+    "ftCo_8009BB1C",
+    "ftCo_8009BB64",
+    "ftCo_CargoJump_Anim",
+    "ftCo_CargoJump_IASA",
+    "ftCo_CargoJump_Phys",
+    "ftCo_CargoJump_Coll",
+    "ftCo_8009BC58",
+    "ftCo_CargoFall_Coll",
+    "ftCo_CargoKneebend",
+    "ftCo_CargoWait",
+    "ftCo_CargoWalk",
+    "ftCo_CargoTurn",
+    "ft_08A4",
+    "ft_0877",
+    "Fighter_ChangeMotionState",
+    "ftAnim_SetAnimRate",
+    "ftCo_800CB110",
+    "ftCo_8009C5A4",
+    "ftCo_MS_ShoulderedWait",
+    "ftCommon_8007D5D4",
+    "ftCo_800CAE80",
+    "ftCo_8009B9C8",
+    "ftCo_8009BF3C",
+    "ftCo_800CB438",
+    "MUST_MATCH",
+    "unused stack",
+    "Donkey cargo jump",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Inspect later PRs touching `ftCo_CargoJump.h` or `ftCo_8009BB64` to see whether the `MUST_MATCH` unused stack TODO was removed or better understood.",
+    "Search for follow-up header cleanup around `ft_0877.h` and `ft_08A4.h` to understand why many declarations were moved between those headers.",
+    "Compare neighboring cargo PRs for `ftCo_CargoKneebend`, `ftCo_CargoFall`, `ftCo_CargoWait`, `ftCo_CargoWalk`, and `ftCo_CargoTurn` to reuse callback and build-order patterns.",
+    "Look for later symbol renames of `ftCo_8009BB1C`, `ftCo_8009BB64`, and `ftCo_8009BC58` if their behavior became understood."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

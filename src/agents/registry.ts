@@ -1,3 +1,4 @@
+import { knowledgeCuratorAgent } from "./knowledge-curator/index.js";
 import { prReviewAgent } from "./pr-review/index.js";
 
 export const agentRegistry = {
@@ -12,6 +13,7 @@ export const agentRegistry = {
     purpose: "Execute one leased Melee decomp target and return a durable worker report.",
   },
   "pr-review": prReviewAgent,
+  "knowledge-curator": knowledgeCuratorAgent,
 } as const;
 
 export type RegisteredAgentId = keyof typeof agentRegistry;

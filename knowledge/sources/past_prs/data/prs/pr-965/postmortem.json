@@ -1,0 +1,127 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-965",
+  "pr": {
+    "number": 965,
+    "title": "dvdfs match",
+    "url": "https://github.com/doldecomp/melee/pull/965",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2023-09-14T01:12:09Z",
+    "merged_at": "2023-09-14T01:26:19Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched Dolphin DVD filesystem code by replacing asm/dolphin/dvd/dvdfs.s with src/dolphin/dvd/dvdfs.c, reportedly pulling the match over from Pikmin. The PR also expanded DVD and OS boot headers needed for the C implementation, switched obj_files.mk to build the C object, and documented a real stack-size bug in lbFile_8001634C caused by the newly correct DVDFileInfo layout being 4 bytes larger due to its callback field.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "library-port",
+      "headers",
+      "types-structs",
+      "bug-documentation"
+    ],
+    "systems": [
+      "dolphin/dvd",
+      "dolphin/os",
+      "melee/lb",
+      "build"
+    ]
+  },
+  "key_files": [
+    "asm/dolphin/dvd/dvdfs.s",
+    "src/dolphin/dvd/dvdfs.c",
+    "src/dolphin/dvd/dvdfs.h",
+    "src/dolphin/dvd/dvd.h",
+    "src/dolphin/os/OSBootInfo.h",
+    "src/melee/lb/lbfile.c",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted the 414-line assembly implementation asm/dolphin/dvd/dvdfs.s.",
+    "Added a 207-line C implementation at src/dolphin/dvd/dvdfs.c covering __DVDFSInit, DVDConvertPathToEntrynum, DVDFastOpen, DVDClose, DVDReadAsyncPrio, and the static cbForReadAsync callback wrapper.",
+    "Updated obj_files.mk to build $(BUILD_DIR)/src/dolphin/dvd/dvdfs.c.o instead of $(BUILD_DIR)/asm/dolphin/dvd/dvdfs.s.o.",
+    "Added FSTEntry to src/dolphin/dvd/dvdfs.h with isDirAndStringOff, parentOrPosition, and nextEntryOrLength fields.",
+    "Expanded DVDFileInfo in src/dolphin/dvd/dvd.h with a callback field at offset 0x38, added DVD state/result constants, DVD_MIN_TRANSFER_SIZE, DVD_FILEINFO constants, DVD_AIS_SUCCESS, and extern OSThreadQueue __DVDThreadQueue.",
+    "Added src/dolphin/os/OSBootInfo.h with OSBootInfo fields including DVDDiskID, magic, version, memorySize, consoleType, arenaLo, arenaHi, FSTLocation at 0x38, and FSTMaxLength.",
+    "Changed lbFile_8001634C to use a local OldDVDFileInfo and casts to DVDFileInfo* for DVDFastOpen and DVDClose, preserving the old stack allocation size while documenting the out-of-bounds write caused by the real DVDFileInfo size."
+  ],
+  "smart_moves": [
+    "Reused a known matching implementation from Pikmin rather than re-solving the whole Dolphin dvdfs translation from scratch.",
+    "Kept the build graph simple and verifiable by replacing only the dvdfs object path in obj_files.mk.",
+    "Modeled FST entries with compact accessor macros such as entryIsDir, stringOff, parentDir, nextDir, filePosition, and fileLength, matching the original bit-packed filesystem table behavior without overcomplicating the struct.",
+    "Made DVDFileInfo layout more accurate by adding the callback field used by DVDReadAsyncPrio and cbForReadAsync.",
+    "Handled the discovered lbFile_8001634C stack mismatch explicitly with an OldDVDFileInfo compatibility struct and a BUG comment instead of hiding the issue behind a conditional.",
+    "Preserved matching-sensitive behavior in DVDReadAsyncPrio, including panic line numbers and DVD_MIN_TRANSFER_SIZE bounds checks."
+  ],
+  "decomp_lessons": [
+    "When a library struct becomes more accurate, audit existing stack locals that used the old incomplete layout; matching code may rely on the old allocation size even if the callee writes the full real struct.",
+    "Document known original-game undefined behavior directly when it is required for matching and future maintainers should not 'fix' it accidentally.",
+    "Cross-project decomp matches can be valuable for shared Dolphin SDK code, but still need local integration fixes for headers, object lists, and game-specific call sites.",
+    "For packed SDK data such as the DVD FST, small helper macros can express bitfield interpretation while keeping generated code close to the original.",
+    "Accurate callback fields matter for async APIs: DVDReadAsyncPrio stores the user callback in DVDFileInfo and the internal cbForReadAsync retrieves it through the embedded DVDCommandBlock."
+  ],
+  "naming_conventions": [
+    "Kept SDK-style public symbols: __DVDFSInit, DVDConvertPathToEntrynum, DVDFastOpen, DVDClose, DVDReadAsyncPrio, __DVDThreadQueue, __DVDLongFileNameFlag.",
+    "Used lowercase static/internal helper names matching source intent, such as cbForReadAsync and isSame.",
+    "Named FST-related globals after their original roles: BootInfo, FstStart, FstStringStart, MaxEntryNum, currentDirectory.",
+    "Used offset-annotated struct comments for DVDFileInfo and OldDVDFileInfo fields.",
+    "The PR uses the misspelled local names extention and extentionStart in DVDConvertPathToEntrynum, likely because those names helped preserve the matched translation rather than being polished API names."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted the entire dvdfs.s assembly unit to C in one object replacement, keeping symbol coverage aligned with the removed assembly.",
+    "Used OSPhysicalToCached(0) and OSBootInfo->FSTLocation in __DVDFSInit to reproduce the assembly's boot-info/FST initialization behavior.",
+    "Preserved static small-data globals corresponding to the removed .sbss symbols, including BootInfo, FstStart, FstStringStart, MaxEntryNum, currentDirectory, and __DVDLongFileNameFlag.",
+    "Used goto next_hier in DVDConvertPathToEntrynum to mirror the original control-flow shape for path traversal.",
+    "Maintained OSPanic strings and line constants, including dvdfs.c line 376 for 8.3-format path validation and lines 739/745 for out-of-file DVDReadAsync checks.",
+    "Used casts in lbFile_8001634C from OldDVDFileInfo* to DVDFileInfo* to keep the caller stack frame matching while still calling the corrected DVD API signature."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The PR body itself notes the important discovered bug: lbFile_800163D8/lbFile_8001634C required the old DVDFileInfo struct length, so DVDFastOpen writes 4 bytes past the local stack allocation when using the real struct layout; the author chose a BUG comment rather than an #ifdef UB wrapper."
+  ],
+  "searchable_terms": [
+    "pr-965",
+    "dvdfs match",
+    "PsiLupan",
+    "Pikmin",
+    "asm/dolphin/dvd/dvdfs.s",
+    "src/dolphin/dvd/dvdfs.c",
+    "__DVDFSInit",
+    "DVDConvertPathToEntrynum",
+    "DVDFastOpen",
+    "DVDClose",
+    "DVDReadAsyncPrio",
+    "cbForReadAsync",
+    "__DVDLongFileNameFlag",
+    "__DVDThreadQueue",
+    "FSTEntry",
+    "OSBootInfo",
+    "FSTLocation",
+    "DVDFileInfo callback",
+    "OldDVDFileInfo",
+    "lbFile_8001634C",
+    "lbFile_800163D8",
+    "stack allocation bug",
+    "4 bytes past",
+    "DVD_MIN_TRANSFER_SIZE",
+    "OSPanic",
+    "8.3 format",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that remove OldDVDFileInfo or revisit the lbFile_8001634C DVDFileInfo stack overflow documentation.",
+    "Search for other call sites allocating DVDFileInfo before this PR's callback field was added.",
+    "Compare future Dolphin DVD SDK matches for reuse of OSBootInfo.h, FSTEntry, and DVD state/result constants.",
+    "Look for later cleanup of the OSBootInfo include guard, since the added header shows #ifndef DOLPHIN_OS_OSBOOTINFO_H_ but no visible #define in the provided diff."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

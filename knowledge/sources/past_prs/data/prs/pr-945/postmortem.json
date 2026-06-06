@@ -1,0 +1,140 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-945",
+  "pr": {
+    "number": 945,
+    "title": "Impove jobj inlines",
+    "url": "https://github.com/doldecomp/melee/pull/945",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-06-30T03:44:15Z",
+    "merged_at": "2023-06-30T04:39:21Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Adjusted JObj inline definitions and matrix-access naming after discovering that HSD_JObjSetupMatrix failed to inline into lbcoll and that the old HSD_JObjGetMtx helper was really a matrix-pointer getter. The PR replaced an asm MUST_MATCH copy in lbcollision with a C wrapper matching the inlined setup-matrix behavior, renamed HSD_JObjGetMtx to HSD_JObjGetMtxPtr with a MtxPtr return, and used that helper to simplify/improve matches in fighter and Purin code.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "inline-refactor",
+      "naming-cleanup",
+      "asm-removal"
+    ],
+    "systems": [
+      "fighter",
+      "library",
+      "sysdolphin",
+      "baselib",
+      "lbcollision",
+      "ftPurin"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/jobj.h",
+    "src/melee/lb/lbcollision.c",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/chara/ftPurin/ftPr_Init.c"
+  ],
+  "what_changed": [
+    "Changed HSD_JObjSetupMatrix in jobj.h from a static inline with a positive conditional to an inline function with early return: return when jobj is NULL or HSD_JObjMtxIsDirty is false, otherwise call HSD_JObjSetupMatrixSub.",
+    "Renamed/redefined HSD_JObjGetMtx as HSD_JObjGetMtxPtr, returning MtxPtr instead of void. The helper still asserts the JObj, calls lbColl_JObjSetupMatrix, then returns jobj->mtx.",
+    "Updated ftPr_Init_UnkMtxFunc0 to use MtxPtr and HSD_JObjGetMtxPtr directly, removing a MUST_MATCH unused stack workaround and the manual `(0, &bone_jobj->mtx)` pattern.",
+    "Updated Fighter_UnkApplyTransformation_8006C0F0 to pass HSD_JObjGetMtxPtr(jobj) into HSD_MtxInverse, removing comments and temporary code that existed to work around inline/stack matching behavior.",
+    "In lbcollision.c, replaced an inline PowerPC asm MUST_MATCH implementation of lbColl_JObjSetupMatrix with C code using a new static inline lbColl_JObjMtxIsDirty helper and a C lbColl_JObjSetupMatrix wrapper.",
+    "Changed lbColl_804D3700 and lbColl_804D3708 extern declarations from `char*` to fixed char arrays of size 8, matching their use as assertion strings/data.",
+    "Updated local matrix helpers in lbcollision, including mtxConcat and pickMtx, to use HSD_JObjGetMtxPtr and MtxPtr instead of taking addresses of jobj->mtx through temporary HSD_JObj variables.",
+    "Adjusted lbColl_80008248 call site so pickMtx returns the matrix pointer directly instead of requiring dereference of an Mtx pointer."
+  ],
+  "smart_moves": [
+    "Used the failed inline of HSD_JObjSetupMatrix into lbcoll as evidence that the header definition shape needed to change rather than forcing more local matching hacks.",
+    "Recognized that HSD_JObjGetMtx was misnamed: its observable purpose was to prepare and return access to the JObj matrix pointer, not merely perform a void getter side effect.",
+    "Converted awkward decomp patterns like `HSD_JObjGetMtx(jobj); jobj->mtx` and `(0, &bone_jobj->mtx)` into a typed helper, reducing fake temporaries and unused stack padding.",
+    "Kept the lbcoll-specific lbColl_JObjSetupMatrix symbol as a temporary stand-in because linker deduplication apparently kept the lbcoll definition, while documenting that it should be renamed back once lbcoll is matched.",
+    "Removed a large MUST_MATCH asm block by expressing the same dirty-matrix predicate and setup call in C, improving maintainability while preserving the matching intent."
+  ],
+  "decomp_lessons": [
+    "If an inline fails to appear in a deeply nested function, compare the local emitted code against the header inline shape; small control-flow differences such as early return versus nested conditionals can decide whether matches work.",
+    "A helper that exists mainly for its side effect may still need to return a value if original code used the prepared field immediately afterward; naming should reflect the actual value flow.",
+    "Prefer using project typedefs such as MtxPtr when the code is passing matrix pointers around. This avoids misleading `Mtx*` usage and can eliminate artificial dereferences.",
+    "Manual comma-expression/address patterns and unused stack MUST_MATCH pads are signs that a missing inline or wrong helper signature may be the real problem.",
+    "When a decompiled inline depends on an lbcoll-local copy because of linker deduplication, keep the temporary symbol explicit and document the eventual rename path rather than hiding the dependency.",
+    "Reconstructing small inline predicates, such as JObj matrix dirty checks, can remove asm while preserving the exact call gate into lower-level routines like HSD_JObjSetupMatrixSub."
+  ],
+  "naming_conventions": [
+    {
+      "old": "HSD_JObjGetMtx",
+      "new": "HSD_JObjGetMtxPtr",
+      "reason": "The helper returns `jobj->mtx` as an MtxPtr after asserting/setup, so `GetMtxPtr` better describes the value returned."
+    },
+    {
+      "name": "lbColl_JObjMtxIsDirty",
+      "reason": "Local lbcoll copy of the JObj dirty-matrix predicate used to mirror the inlined setup-matrix behavior."
+    },
+    {
+      "name": "lbColl_JObjSetupMatrix",
+      "reason": "Kept as a temporary lbcoll-specific symbol because the PR notes the inline was kept there by linker deduplication; comments say to rename it back to HSD_JObjSetupMatrix once lbcoll is matched."
+    },
+    {
+      "name": "MtxPtr",
+      "reason": "Preferred type for matrix pointer returns and parameters where code passes the matrix buffer directly."
+    }
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced a full MUST_MATCH asm version of lbColl_JObjSetupMatrix with C by matching the assert, dirty-flag predicate, early return, and HSD_JObjSetupMatrixSub call.",
+    "Changed HSD_JObjSetupMatrix control flow to early-return form, which better matched the lbcoll inlined copy.",
+    "Used HSD_JObjGetMtxPtr to combine matrix setup and pointer retrieval, improving matches in melee/ft according to the PR body.",
+    "Removed unused stack padding in ftPr_Init_UnkMtxFunc0 after the correct matrix pointer helper made the match cleaner.",
+    "Removed temporary-variable/address-taking patterns around jobj->mtx in fighter and lbcollision to better express original pointer flow.",
+    "The evidence mentions linker deduplication keeping the lbcoll definition, so the PR temporarily exposes lbColl_JObjSetupMatrix from jobj.h despite noting that jobj.h should not permanently depend on lbcollision."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR945",
+    "Impove jobj inlines",
+    "r-burns",
+    "HSD_JObjSetupMatrix",
+    "HSD_JObjSetupMatrixSub",
+    "HSD_JObjMtxIsDirty",
+    "HSD_JObjGetMtx",
+    "HSD_JObjGetMtxPtr",
+    "HSD_JObjCopyMtx",
+    "HSD_JObjSetMtxDirty",
+    "lbColl_JObjSetupMatrix",
+    "lbColl_JObjMtxIsDirty",
+    "JOBJ_USER_DEF_MTX",
+    "JOBJ_MTX_DIRTY",
+    "MtxPtr",
+    "MUST_MATCH",
+    "lbcollision.c",
+    "jobj.h",
+    "fighter.c",
+    "ftPr_Init.c",
+    "ftPr_Init_UnkMtxFunc0",
+    "Fighter_UnkApplyTransformation_8006C0F0",
+    "lbColl_80007BCC",
+    "lbColl_80008248",
+    "mtxConcat",
+    "pickMtx",
+    "PSMTXConcat",
+    "HSD_MtxInverse",
+    "linker deduplication",
+    "inline failed",
+    "asm removal"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename lbColl_JObjSetupMatrix back to HSD_JObjSetupMatrix after lbcoll matching.",
+    "Search for remaining uses of HSD_JObjGetMtx or manual `jobj->mtx` access that should become HSD_JObjGetMtxPtr.",
+    "Check whether other JObj inline helpers have control-flow shapes that prevent inlining into deeply nested functions.",
+    "Look for remaining MUST_MATCH unused stack pads near matrix helpers; they may indicate missing inline return values or wrong typedefs."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

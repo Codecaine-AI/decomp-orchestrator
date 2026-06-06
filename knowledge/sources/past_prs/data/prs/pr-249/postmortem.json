@@ -1,0 +1,123 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-249",
+  "pr": {
+    "number": 249,
+    "title": "Match HSD_CObjRemoveAnim",
+    "url": "https://github.com/doldecomp/melee/pull/249",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2022-02-02T19:30:13Z",
+    "merged_at": "2022-02-02T19:30:23Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the SysDolphin baselib camera-object animation removal routine by replacing the assembly implementation of func_80367874 with C as HSD_CObjRemoveAnim, adding a small inline helper HSD_CObjRemoveAnimByFlags, wiring cobj.o into the epilogue build list, and promoting related WObj accessor symbols from anonymous func_8036862C/func_8036866C names to HSD_CObjGetInterestWObj and HSD_CObjGetEyePositionWObj. No PR body or review comments were present in the slice, so intent beyond the diff is inferred from the title and code changes.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-renaming",
+      "build-list-update"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "cobj",
+      "asm",
+      "include",
+      "src",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/cobj.c",
+    "asm/sysdolphin/baselib/cobj.s",
+    "src/sysdolphin/baselib/cobj.h",
+    "include/functions.h",
+    "e_files.mk",
+    "asm/melee/gm/code_801601C4.s"
+  ],
+  "what_changed": [
+    "Removed the assembly body for func_80367874 from asm/sysdolphin/baselib/cobj.s and implemented the matched routine in src/sysdolphin/baselib/cobj.c as HSD_CObjRemoveAnim.",
+    "Added inline HSD_CObjRemoveAnimByFlags(HSD_CObj* cobj, u32 flags), which null-checks cobj, removes cobj->aobj via HSD_AObjRemove, clears cobj->aobj to NULL, then removes animation from the eye-position and interest WObj values returned by HSD_CObjGetEyePositionWObj and HSD_CObjGetInterestWObj.",
+    "HSD_CObjRemoveAnim now null-checks cobj and calls HSD_CObjRemoveAnimByFlags(cobj, 0x7FF). The flags parameter is present but unused in the shown implementation, apparently to match the original call shape or expected library API pattern.",
+    "Renamed assembly globals func_8036862C and func_8036866C to HSD_CObjGetInterestWObj and HSD_CObjGetEyePositionWObj respectively, and updated callsites in cobj.s to use the new names.",
+    "Updated asm/melee/gm/code_801601C4.s to call HSD_CObjRemoveAnim instead of func_80367874 at lbl_801879C4.",
+    "Added cobj.o to EPILOGUE_UNSCHEDULED in e_files.mk, enabling src/sysdolphin/baselib/cobj.c to contribute matched code in the epilogue object list.",
+    "Updated src/sysdolphin/baselib/cobj.h to include aobj.h and wobj.h and declare HSD_CObjRemoveAnim plus the two HSD_CObj WObj accessor functions.",
+    "Updated include/functions.h comments to reflect the newly identified HSD_CObjRemoveAnim, HSD_CObjGetInterestWObj, and HSD_CObjGetEyePositionWObj names."
+  ],
+  "smart_moves": [
+    "Kept the C implementation structurally close to the removed assembly: explicit null guard, HSD_AObjRemove on offset-backed cobj->aobj, store NULL back to cobj->aobj, then two WObj accessor calls followed by HSD_WObjRemoveAnim.",
+    "Used #pragma push, #pragma peephole on, and #pragma pop around the matched C code, indicating a localized compiler/codegen control tactic rather than globally affecting the file.",
+    "Introduced meaningful HSD_CObjGetEyePositionWObj and HSD_CObjGetInterestWObj names before using them in the new C implementation, reducing reliance on anonymous func_* symbols and making the camera-object animation logic readable.",
+    "Preserved assembly callsite documentation by changing branch labels/comments from func_* to HSD_* names while leaving instruction bytes and addresses intact.",
+    "Added the necessary baselib includes in cobj.h so HSD_AObj and HSD_WObj types/functions are available through proper headers instead of relying only on loose declarations."
+  ],
+  "decomp_lessons": [
+    "When matching a small wrapper/removal routine, it can be useful to factor the original behavior into an inline ByFlags helper even if a parameter is unused, because the original library API may have separate public and flag-based internal entry points.",
+    "For HSD object cleanup routines, match both the removal call and the state mutation: HSD_CObjRemoveAnim removes the AObj and then explicitly clears cobj->aobj to NULL before touching associated WObjs.",
+    "Promoting nearby accessor functions to real names can be a prerequisite for cleanly matching a caller in C; here the CObj WObj accessors were named and declared alongside HSD_CObjRemoveAnim.",
+    "Build integration is part of matching: after moving code from asm to src, the corresponding object must be added to the epilogue object list or the decompiled function will not replace the assembly version.",
+    "Localized pragma use is an accepted matching tactic in this slice, especially #pragma peephole on around sensitive baselib code."
+  ],
+  "naming_conventions": [
+    "func_80367874 was identified as HSD_CObjRemoveAnim.",
+    "func_8036862C was identified as HSD_CObjGetInterestWObj.",
+    "func_8036866C was identified as HSD_CObjGetEyePositionWObj.",
+    "Camera-object baselib symbols use the HSD_CObj* prefix; world-object animation removal uses HSD_WObjRemoveAnim; animation-object removal uses HSD_AObjRemove.",
+    "The helper follows the library-style suffix pattern HSD_CObjRemoveAnimByFlags, while the public wrapper is HSD_CObjRemoveAnim."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed a complete assembly function only after adding the matched C equivalent in src/sysdolphin/baselib/cobj.c.",
+    "Used #pragma peephole on around HSD_CObjRemoveAnimByFlags and HSD_CObjRemoveAnim, suggesting peephole optimization was needed for the desired PowerPC output.",
+    "Implemented HSD_CObjRemoveAnim as a wrapper that passes constant 0x7FF into an inline helper, likely shaping codegen to match the original routine sequence.",
+    "Kept null-check early returns in both the helper and wrapper, matching the removed assembly's branch-to-epilogue behavior for NULL cobj.",
+    "Updated symbolic branch targets in remaining assembly rather than leaving stale func_* names, improving cross-file disassembly readability without changing machine instructions."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-249",
+    "PsiLupan",
+    "HSD_CObjRemoveAnim",
+    "HSD_CObjRemoveAnimByFlags",
+    "HSD_CObjGetEyePositionWObj",
+    "HSD_CObjGetInterestWObj",
+    "HSD_AObjRemove",
+    "HSD_WObjRemoveAnim",
+    "HSD_CObj",
+    "HSD_WObj",
+    "HSD_AObj",
+    "cobj.c",
+    "cobj.s",
+    "cobj.h",
+    "functions.h",
+    "e_files.mk",
+    "EPILOGUE_UNSCHEDULED",
+    "sysdolphin",
+    "baselib",
+    "func_80367874",
+    "func_8036862C",
+    "func_8036866C",
+    "lbl_801879C4",
+    "code_801601C4.s",
+    "#pragma peephole on",
+    "0x7FF"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that implement or use HSD_CObjRemoveAnimByFlags with meaningful flag handling, since this slice shows the flags parameter but does not use it.",
+    "Check subsequent cobj.c matching work for whether HSD_CObjGetEyePositionWObj and HSD_CObjGetInterestWObj were moved from assembly to C.",
+    "Search for other HSD_*RemoveAnim routines to compare the wrapper-plus-ByFlags matching pattern and null-clearing behavior.",
+    "Verify whether adding cobj.o to EPILOGUE_UNSCHEDULED remained the final build strategy or was later reorganized as more cobj functions matched."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

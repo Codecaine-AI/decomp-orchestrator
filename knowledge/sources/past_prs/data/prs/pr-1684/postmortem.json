@@ -1,0 +1,142 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1684",
+  "pr": {
+    "number": 1684,
+    "title": "gmvsmelee matches",
+    "url": "https://github.com/doldecomp/melee/pull/1684",
+    "state": "MERGED",
+    "author": "sadkellz",
+    "created_at": "2025-07-12T18:11:51Z",
+    "merged_at": "2025-07-13T00:15:03Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched several previously stubbed gmvsmelee functions and tightened related game-mode, menu, and audio prototypes. The PR turns multiple `UNK_RET`/`UNK_PARAMS` declarations into typed signatures, implements CSS/SSS/match/sudden-death/results transition helpers, and clarifies KO star count handling, match-end flow, and audio mask setup for VS Melee scenes.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "prototype-correction",
+      "scene-flow"
+    ],
+    "systems": [
+      "game-mode",
+      "vs-melee",
+      "menu",
+      "audio",
+      "melee-core"
+    ]
+  },
+  "key_files": [
+    "src/melee/gm/gmvsmelee.c",
+    "src/melee/gm/gmvsmelee.h",
+    "src/melee/gm/gm_1601.h",
+    "src/melee/gm/gm_1B03.h",
+    "src/melee/lb/lbaudio_ax.h",
+    "src/melee/mn/types.h"
+  ],
+  "what_changed": [
+    "Implemented previously unmatched gmvsmelee functions including `gm_801A5360`, `gm_801A5680`, `gm_801A57A8`, `gm_801A583C`, `gm_801A5C3C`, and `gm_801A5F64`.",
+    "Changed `gm_804D6730` from an extern scalar `u8` to `u8 gm_804D6730[6]`, and updated KO star count users to pass the array pointer directly instead of `&gm_804D6730`.",
+    "Typed `gm_801A5250` as returning `u8*` and documented it as returning KO star counts.",
+    "Added CSS and SSS scene transition logic: CSS exit copies `CSSData` back to `VsModeData` and configures audio masks; SSS exit either starts the game and configures stage-related audio or returns to a pending minor scene.",
+    "Added match entry setup that initializes `StartMeleeData` from `VsModeData`, copies rules and player init data, applies optional callbacks, calls `gm_801B0348`, checks rumble through `gm_8016F088`, and invokes `gm_80168FC4`.",
+    "Added sudden-death entry setup similar to match entry, but ending with `gm_801B0474(match_start_data, &gm_80479D98.match_end)`.",
+    "Implemented results-exit style logic in `gm_801A5F64`, including match-end processing, loser selection, pending minor-scene decisions, unlock/check calls, and cleanup calls to `lb_8001C550`, `lb_8001D164`, and `lb_8001CE00`.",
+    "Corrected assignment direction in `gm_801A5F00` so `gm_80479D98.match_end = *exit_info` after `gm_80177724(exit_info)`.",
+    "Updated many prototypes in `gm_1601.h` from unknown signatures to typed arguments and return values, especially around `MatchEnd`, `VsModeData`, `SSSData`, `StartMeleeData`, and game-mode helper functions.",
+    "Updated `gm_1B03.h` with `StartMeleeData*` and `MatchEnd*` signatures for `gm_801B0348` and `gm_801B0474`.",
+    "Typed audio helper prototypes `lbAudioAx_80026E84(s8)` and `lbAudioAx_80026EBC(u32)` as returning `u64`, matching their use as bitmasks passed to `lbAudioAx_8002702C`.",
+    "Changed `struct SSSData::start_game` from `bool` to `u8`, matching code that tests it as a byte flag."
+  ],
+  "smart_moves": [
+    "The match work was paired with prototype cleanup across dependent headers, reducing reliance on `UNK_RET` and `UNK_PARAMS` and making callsites more self-documenting.",
+    "The PR inferred `gm_804D6730` as a six-entry KO star count array, consistent with repeated loops over six player slots and CSS data storing `ko_star_counts`.",
+    "Audio setup was matched by recognizing that `lbAudioAx_80026E84` and `lbAudioAx_80026EBC` produce `u64` masks, which are accumulated or passed into `lbAudioAx_8002702C`.",
+    "The implementation preserved optional callback hooks for match and sudden-death setup, then copied all six `PlayerInitData` entries, matching the six-slot player model used elsewhere in the function.",
+    "The loser-selection helper `gm_801A5360` handles team and non-team standings differently, combining player and team small-loser fields for teams and asserting if no active loser candidate is found.",
+    "Scene-transition functions were named/commented in `gmvsmelee.h` with lifecycle roles such as `CSS_Enter`, `CSS_Exit`, `SSS_Enter`, `SSS_Exit`, `Match_Enter`, and tentative results/sudden-death labels, improving future navigation without overclaiming uncertain names."
+  ],
+  "decomp_lessons": [
+    "When matching scene-manager glue, propagate type discoveries into all related headers immediately; typed signatures for `MatchEnd`, `VsModeData`, `StartMeleeData`, `SSSData`, and callback function pointers make downstream functions much easier to match.",
+    "Repeated loops over six player slots are strong evidence for array dimensions and can expose incorrect extern declarations such as scalar-versus-array globals.",
+    "Menu scene data often stores a full copy of mode data; matching enter/exit functions may require identifying whether the function copies from global mode state into scene-local data or from scene-local data back to global mode state.",
+    "Audio helper functions that feed mask arguments should be typed by their use at aggregation sites; here the functions needed `u64` returns because masks are ORed and passed to a `u64` audio API.",
+    "Use narrow field types when evidence supports them. `SSSData::start_game` became `u8` rather than `bool`, matching the structure layout and byte-flag access implied by the code.",
+    "For transition code with unlock/result checks, keep temporary labels conservative. The PR uses comments like `SuddenDeath_Enter ??` and `Results_Exit ??`, which is preferable to asserting uncertain semantic names."
+  ],
+  "naming_conventions": [
+    "Kept address-based function names such as `gm_801A5680`, `gm_801A57A8`, and `gm_801A5F64` while adding lifecycle comments instead of inventing symbol names.",
+    "Used `minor_data`, `vs_data`, `match_start_data`, `match_end`, and `exit_info` as descriptive local names for scene and match structures.",
+    "Documented known or suspected roles in trailing comments: `/// Returns KO Star Counts`, `/// Zeroes KO Star Counts`, `/// CSS_Enter`, `/// CSS_Exit`, `/// SSS_Enter`, `/// SSS_Exit`, `/// Match_Enter`, and tentative `??` labels for uncertain sudden-death/results functions.",
+    "Retained `fn_` prefixes for still-unknown local/static-style symbols and `gm_` prefixes for game-mode functions, matching existing project convention.",
+    "Used typed forward declarations rather than full includes where possible, adding `mn/forward.h` for `StartMeleeData`, `VsModeData`, and menu-related types."
+  ],
+  "assembly_or_matching_tactics": [
+    "Matched several functions by replacing placeholder `/// #function` stubs with C implementations that preserve six-iteration player loops and exact scene-control branching.",
+    "Used array typing for `gm_804D6730[6]` to make KO star count pointer arithmetic and CSS storage match naturally.",
+    "Preserved explicit casts and integer constants visible in the diff, such as `0x14`, `0x18`, `0x80`, `0xC0`, `0x21`, `0x148`, and `0xFFFF`, which likely helped alignment with original control flow.",
+    "Used function pointer callback signatures in `gm_801A583C` and `gm_801A5C3C` to match optional transformation hooks for `StartMeleeData` and per-player `PlayerInitData` copies.",
+    "For team-mode loser selection, constructed a temporary `losers[6]` array combining player loser state with team loser state shifted by 8, then selected the smallest active-player value.",
+    "Matched audio setup by building a `u64 mask` through repeated ORs of `lbAudioAx_80026E84((u32)css_data->data.data.players[i].x0)` and then flushing through `lbAudioAx_80026F2C`, `lbAudioAx_8002702C`, and `lbAudioAx_80027168`."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR context.",
+    "The diff itself contains an inline TODO in `gm_801A5F64`: `not sure how to match this, maybe gm_804D6730 is the wrong type?`, indicating unresolved uncertainty around updating KO star counts through `*gm_804D6730` inside a player loop."
+  ],
+  "searchable_terms": [
+    "gmvsmelee",
+    "gm_801A5360",
+    "gm_801A5680",
+    "gm_801A57A8",
+    "gm_801A583C",
+    "gm_801A5C3C",
+    "gm_801A5F64",
+    "gm_804D6730",
+    "KO Star Counts",
+    "CSS_Enter",
+    "CSS_Exit",
+    "SSS_Enter",
+    "SSS_Exit",
+    "Match_Enter",
+    "SuddenDeath_Enter",
+    "Results_Exit",
+    "MatchEnd",
+    "VsModeData",
+    "StartMeleeData",
+    "PlayerInitData",
+    "SSSData",
+    "CSSData",
+    "MinorScene",
+    "lbAudioAx_80026E84",
+    "lbAudioAx_80026EBC",
+    "lbAudioAx_8002702C",
+    "gm_801B0348",
+    "gm_801B0474",
+    "gm_8016F088",
+    "gm_801743A4",
+    "gm_801736E8",
+    "gm_80172DD4",
+    "gm_80172D78",
+    "gm_80172E74",
+    "gm_80172F00",
+    "gm_801721EC"
+  ],
+  "follow_up_queries": [
+    "Check later PRs touching `gm_804D6730` to see whether the KO star count array type or update logic in `gm_801A5F64` was revised.",
+    "Search for later renames or comments that confirm the tentative `SuddenDeath_Enter`, `SuddenDeath_Exit`, `Results_Enter`, and `Results_Exit` labels in `gmvsmelee.h`.",
+    "Look for subsequent matches around `gm_80172DD4`, `gm_80172D78`, `gm_80172E74`, `gm_80172F00`, and `gm_801721EC` to clarify the unlock/minor-scene branch in `gm_801A5F64`.",
+    "Verify whether `SSSData::start_game` remains `u8` in later structure cleanup PRs.",
+    "Search later audio PRs for more precise names or semantics of `lbAudioAx_80026E84` and `lbAudioAx_80026EBC`."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

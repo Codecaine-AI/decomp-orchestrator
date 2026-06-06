@@ -1,0 +1,173 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-753",
+  "pr": {
+    "number": 753,
+    "title": "Clean up fighter vars union",
+    "url": "https://github.com/doldecomp/melee/pull/753",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-03-06T04:47:55Z",
+    "merged_at": "2023-03-06T08:38:18Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Reworked the Fighter state-vars region around 0x2340 from a collection of zero-sized per-fighter arrays and loose anonymous unions into one explicit union containing per-fighter state-var structs plus a legacy anonymous struct for unmigrated x2340-style fields. This removed widespread `fp->foxVars[0]`/`fp->nessVars[0]` access patterns in favor of `fp->foxVars`/`fp->nessVars`, added a `ftMasterhandStateVars` header, and migrated many Master Hand raw offset fields into `fp->masterhandVars`. The PR was accepted as an improvement, but reviewer discussion noted long-term unease with a large central `ft/types.h` union and explored casting or generic array-based state vars; later comments found pointer casting did not match everywhere and could affect stack/matching.",
+  "change_classification": {
+    "primary_type": "types-structs cleanup",
+    "categories": [
+      "cleanup",
+      "headers",
+      "types-structs",
+      "decomp-matching",
+      "fighter-state-vars"
+    ],
+    "systems": [
+      "fighter",
+      "fighter state variables",
+      "Captain",
+      "Fox",
+      "Ness",
+      "Mewtwo",
+      "Luigi",
+      "Mario",
+      "GameWatch",
+      "Sheik",
+      "MasterHand",
+      "CrazyHand"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/types.h",
+    "src/melee/ft/ftstatevars.h",
+    "src/melee/ft/chara/ftMasterHand/ftMasterhand_StateVars.h",
+    "src/melee/ft/chara/ftCaptain/ftCaptain_SpecialS.c",
+    "src/melee/ft/chara/ftFox/ftFox_SpecialHi.c",
+    "src/melee/ft/chara/ftFox/ftFox_SpecialLw.c",
+    "src/melee/ft/chara/ftFox/ftFox_SpecialS.c",
+    "src/melee/ft/chara/ftNess/ftNess_SpecialHi.c",
+    "src/melee/ft/chara/ftNess/ftNess_SpecialN.c",
+    "src/melee/ft/chara/ftMasterHand/ftMasterHand_03.c",
+    "src/melee/ft/chara/ftMasterHand/ftMasterHand_14.c",
+    "src/melee/ft/chara/ftCrazyHand/ftcrazyhand.c"
+  ],
+  "what_changed": [
+    "In `struct Fighter`, replaced the prior comment-described temporary hack of many individual unions containing zero-sized arrays like `ftFoxStateVars foxVars[0]` with a single `union { ... }` at 0x2340 containing concrete members such as `ftFoxStateVars foxVars`, `ftNessStateVars nessVars`, and `ftMasterhandStateVars masterhandVars`.",
+    "Kept a legacy nested anonymous struct inside the new state-var union for unmigrated raw fields such as `x2340_stateVar1`, `x2344_stateVar2`, `x2348_stateVar3`, `x234C_pos`, `x2358_stateVar7`, and later x2360/x2370-style fields, with a warning comment to avoid adding members and migrate them into character-specific structs instead.",
+    "Updated many fighter source files to remove zero-sized array indexing: examples include `fp->captainVars[0].SpecialS.gravity` becoming `fp->captainVars.SpecialS.gravity`, `fp->foxVars[0].SpecialHi.gravityDelay` becoming `fp->foxVars.SpecialHi.gravityDelay`, and analogous changes for Ness, Mewtwo, Luigi, Mario, GameWatch, and Sheik state vars.",
+    "Added `src/melee/ft/chara/ftMasterHand/ftMasterhand_StateVars.h` defining `typedef struct ftMasterhandStateVars` with fields from x2340 through x2380, including `x2344_callback`, `x234C_pos`, `x2358`, `x2360`, `x2368`, `x236C`, `x2370`, `x2374`, `x2378`, `x237C`, and `x2380`.",
+    "Migrated a number of Master Hand and Crazy Hand raw `Fighter` offset accesses into `fp->masterhandVars`, for example `fp->x2370` to `fp->masterhandVars.x2370`, `r31_fp->x2344_callback` to `r31_fp->masterhandVars.x2344_callback`, and `r31_fp->x234C_pos` to `r31_fp->masterhandVars.x234C_pos`.",
+    "Added the Master Hand state-vars include to the fighter state-var include chain so `ftMasterhandStateVars` can be used by `ft/types.h`."
+  ],
+  "smart_moves": [
+    "Converted a compiler/size workaround into a more explicit fixed-region union, preserving the known 0x2340 state-var overlay while making the access syntax type-directed rather than dependent on zero-sized array indexing.",
+    "Kept compatibility for not-yet-migrated offset-style state vars inside a clearly marked fallback struct instead of forcing all raw fields to be understood in one PR.",
+    "Used a broad mechanical rename from `vars[0]` to `vars`, which reduces noisy pointer/array semantics while keeping member names and offsets mostly stable.",
+    "Introduced `ftMasterhandStateVars` to group Master Hand-specific raw fields without needing to fully name every field immediately; many fields remain offset-based but now live under a character-specific namespace.",
+    "The discussion explicitly considered matching side effects of alternate designs. Pointer casting was attractive for localizing state structs, but comments record that it did not match everywhere and could consume stack, so the merged approach favored safer layout preservation."
+  ],
+  "decomp_lessons": [
+    "When a fixed region of a large struct is reused by many action states, a single explicit union can be safer than scattered zero-sized array hacks because it makes the overlay intentional and centralizes layout pressure.",
+    "Avoid adding new raw fields to the generic fallback area once character-specific state-var structs exist; migrate state-specific or character-specific data under members like `foxVars`, `nessVars`, or `masterhandVars` instead.",
+    "Strongly typed state-var structs improve readability, but putting every character and every state union into `ft/types.h` can create header-direction and dependency problems. Future work should watch include direction carefully.",
+    "Pointer casts are not automatically a matching-neutral substitute for unions in this codebase; reviewer testing mentioned `ftNess_SpecialNHold_Anim` decrement statements as a case where casting attempts did not match.",
+    "Even semantically small type-access cleanups can affect generated code in decompilation. Stack usage from helper locals or casts can be enough to break matches, so check codegen before replacing overlays with pointer-cast abstractions.",
+    "Special attributes and state variables should not necessarily use the same modeling strategy: reviewer discussion notes that `SpecialAttrs` are definitely their own structs, often because they contain references like `GObj`, while state vars may need a different overlay strategy."
+  ],
+  "naming_conventions": [
+    "Per-character state-var fields in `Fighter` use lower camel-case character prefixes ending in `Vars`, such as `commonVars`, `marioVars`, `captainVars`, `foxVars`, `nessVars`, `mewtwoVars`, `gameWatchVars`, and `masterhandVars`.",
+    "Per-character state-var types use the form `ft<Character>StateVars`, shown by the new `ftMasterhandStateVars` typedef.",
+    "State-specific submembers continue to use action/state names such as `SpecialS`, `SpecialHi`, `SpecialLw`, `AppealS`, with lower camel-case fields such as `gravity`, `gravityDelay`, `travelFrames`, `releaseLag`, `isRelease`, `turnFrames`, and `rotateModel`.",
+    "Unidentified Master Hand fields were left as offset-derived names like `x2340_unk`, `x2348`, `x2358`, `x2368`, `x2374`, and `x2380` rather than inventing semantic names.",
+    "Fallback raw state-var aliases retain offset/type suffix conventions such as `x2340_stateVar1`, `x2340_stateVar1_u32`, `x2340_f32`, `x2344_stateVar2_s32`, and `x2348_stateVar3_f32`."
+  ],
+  "assembly_or_matching_tactics": [
+    "The main matching-preserving tactic was to keep the state-vars storage at the same fixed `Fighter` offset, 0x2340, and only change C access paths from zero-sized arrays to union members.",
+    "Avoided pointer-cast rewrites as the merged solution because discussion found casting did not work everywhere and could introduce stack usage that breaks matches.",
+    "Used concrete union members to represent overlapped storage rather than local temporary casts, reducing risk of extra stack temporaries in sensitive functions.",
+    "For existing unknown state-var offsets, retained anonymous unions and primitive aliases so functions can still select the type spelling that matches generated code.",
+    "Reviewer discussion specifically mentions `ftNess_SpecialNHold_Anim` decrement statements as a matching-sensitive area where attempted casts failed."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "ribbanya",
+      "state": "COMMENTED",
+      "feedback": "Did not mind merging because the change was better, but preferred investigating `HSD_JOBJ`-style casts instead of unions."
+    },
+    {
+      "reviewer": "ribbanya",
+      "state": "APPROVED",
+      "feedback": "Approved for now while planning a proof-of-concept PR for casting instead of unions."
+    },
+    {
+      "reviewer": "ribbanya",
+      "state": "discussion",
+      "feedback": "Suggested that a generic union of typed arrays for state vars, such as `u8[]`, `s32[]`, `u32[]`, and `f32[]`, might be saner than reinventing per-fighter state-var unions."
+    },
+    {
+      "reviewer": "ribbanya",
+      "state": "discussion",
+      "feedback": "Raised concern that the current design requires `ft/types.h` to include vars unions for every fighter and several states per fighter; if header direction could be inverted, strongly typed state vars would be more acceptable."
+    },
+    {
+      "reviewer": "r-burns",
+      "state": "discussion",
+      "feedback": "Explained the motivation as cleaning up a weird zero-sized array hack for a fixed region of `Fighter`, and argued a union was marginally safer than casting."
+    },
+    {
+      "reviewer": "ribbanya",
+      "state": "discussion",
+      "feedback": "Later reported that pointer casting did not work everywhere and may be unavoidable to keep unions in some form."
+    },
+    {
+      "reviewer": "r-burns",
+      "state": "discussion",
+      "feedback": "Noted that the casting approach can consume stack, which can mess up matches."
+    }
+  ],
+  "searchable_terms": [
+    "fighter vars union",
+    "fighter state vars",
+    "zero-sized array hack",
+    "ft/types.h",
+    "struct Fighter 0x2340",
+    "ftstatevars.h",
+    "ftMasterhand_StateVars.h",
+    "ftMasterhandStateVars",
+    "masterhandVars",
+    "foxVars[0]",
+    "foxVars.SpecialHi",
+    "nessVars[0]",
+    "captainVars.SpecialS.gravity",
+    "ftNess_SpecialNHold_Anim",
+    "pointer casting does not match",
+    "HSD_JOBJ-style casts",
+    "state vars union of arrays",
+    "SpecialAttrs",
+    "stack usage breaks matches",
+    "x2340_stateVar1",
+    "x2344_callback",
+    "x234C_pos",
+    "x2358_stateVar7",
+    "x2370",
+    "x2374",
+    "x2378",
+    "x237C",
+    "x2380"
+  ],
+  "follow_up_queries": [
+    "Search later PRs for a proof-of-concept replacing fighter state-var unions with casts or `HSD_JOBJ`-style accessors.",
+    "Find whether `ftNess_SpecialNHold_Anim` was later matched with casts, unions, or another state-var representation.",
+    "Audit remaining additions to the generic fallback state-var struct in `ft/types.h`; migrate them to character-specific state-var headers where possible.",
+    "Check whether Master Hand state-var fields in `ftMasterhandStateVars` later received semantic names beyond offset-based placeholders.",
+    "Investigate whether a generic typed-array `StateVars` union was ever adopted or rejected in later decomp work."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

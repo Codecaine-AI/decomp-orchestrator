@@ -1,0 +1,163 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1808",
+  "pr": {
+    "number": 1808,
+    "title": "Misc gm code cleanup",
+    "url": "https://github.com/doldecomp/melee/pull/1808",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-08-08T01:51:24Z",
+    "merged_at": "2025-08-08T01:58:22Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Miscellaneous game-mode cleanup that improved names, constants, struct fields, and helper usage without changing generated code for GALE01. The PR replaced hard-coded controller counts with PAD_MAX_CONTROLLERS, clarified time parameters as seconds, renamed gmMainLib_8046B0F0 fields for reset/progressive state, converted boolean integer writes to true/false, represented adjacent callback fields as an array, removed no-longer-needed dont_inline pragmas, and switched manual tick/second math to Dolphin OS time conversion helpers.",
+  "change_classification": {
+    "primary_type": "cleanup",
+    "categories": [
+      "cleanup",
+      "headers",
+      "naming",
+      "struct-refinement",
+      "constant-replacement",
+      "matching-preserving-refactor"
+    ],
+    "systems": [
+      "game-mode",
+      "gm",
+      "gmmain_lib",
+      "controller-input",
+      "movie-playback",
+      "progressive-scan",
+      "lbtime",
+      "library"
+    ]
+  },
+  "key_files": [
+    "src/melee/gm/types.h",
+    "src/melee/gm/gm_1A36.c",
+    "src/melee/gm/gm_1A36.static.h",
+    "src/melee/gm/gm_1A3F.c",
+    "src/melee/gm/gm_1A45.c",
+    "src/melee/gm/gm_1A45.static.h",
+    "src/melee/gm/gmmain_lib.c",
+    "src/melee/gm/gm_16AE.c",
+    "src/melee/lb/lbtime.c",
+    "src/melee/lb/lbtime.h"
+  ],
+  "what_changed": [
+    "Renamed gm_801692E8 and lbTime_8000B028 parameters from ticks to secs, reflecting that the values are seconds rather than raw OS ticks.",
+    "Changed lbTime_8000AFBC to use OSTicksToSeconds(OSGetTime()) instead of manual division by the bus clock-derived value at 0x800000F8.",
+    "Changed lbTime_8000B028 to use OSSecondsToTicks before OSTicksToCalendarTime instead of open-coded multiplication.",
+    "Replaced many hard-coded controller loop bounds of 4 with PAD_MAX_CONTROLLERS across gm_16AE.c, gm_1A36.c, gm_1A45.c, and gm_1ADD.c.",
+    "Changed the controller aggregate slot in gm_1A36 from literal index 4 to PAD_MAX_CONTROLLERS and declared controller_map.x0 as PAD_MAX_CONTROLLERS + 1 in gm_1A36.static.h.",
+    "Converted repeated assignments over controller_map.x0[0..3] or [0..4] into loops over PAD_MAX_CONTROLLERS or <= PAD_MAX_CONTROLLERS.",
+    "Named gmMainLib_8046B0F0.x4 as resetting and gmMainLib_8046B0F0.x8 as progressive in src/melee/gm/types.h, then updated uses in gm_1A3F.c, gmmain_lib.c, and gmprogressive.c.",
+    "Changed gmMainLib_8046B0F0.xC from part of an int declaration to a bool field with a tentative comment: movie playback done, maybe?",
+    "Updated xC assignments and tests to use boolean style, such as gmMainLib_8046B0F0.xC = true/false and direct truth checks.",
+    "Simplified gmMainLib_8015FCC0 initialization by assigning x0 from OSGetResetCode() == 0x80000000 and setting resetting/progressive to false.",
+    "Refined gm_80479D58_t in gm_1A45.static.h by replacing separate callback members unk_14 and unk_18 with bool (*unk_14[2])(void), and updated gm_801A4B08/gm_801A4D34 call sites.",
+    "Changed gm_801A48A4 to iterate with ARRAY_SIZE(gm_803DA888) instead of literal 8, and removed a dont_inline pragma around it.",
+    "Removed a dont_inline pragma block around gm_801B9A3C in gmhomerun.c.",
+    "Changed a bit-clear operation from &= 0xFFFFFFFE to &= ~1 in gm_801A4970.",
+    "Renamed a temporary variable in gm_801A4D34 from temp_r3 to pad_queue_count, clarifying the lb_80019894 return value."
+  ],
+  "smart_moves": [
+    "Using PAD_MAX_CONTROLLERS centralized the controller-count assumption and made the special fifth aggregate controller slot explicit as PAD_MAX_CONTROLLERS rather than magic index 4.",
+    "Declaring controller_map.x0 as PAD_MAX_CONTROLLERS + 1 documents that the map stores four physical controllers plus one aggregate/all-controllers entry.",
+    "Renaming reset/progressive fields in gmMainLib_8046B0F0 tied anonymous offsets to observed behavior while preserving unknown names where evidence was weaker, such as x0 and xC.",
+    "Replacing manual timebase math with OSTicksToSeconds and OSSecondsToTicks made the code clearer and less error-prone while keeping the same behavior according to the decomp.dev report.",
+    "Converting repeated assignments into loops reduced duplication in controller setup while retaining matching output.",
+    "Representing two adjacent function pointers as an array allowed call sites to pass temp_r25->unk_14 directly instead of casting &temp_r25->unk_14 to void*.",
+    "Using ARRAY_SIZE(gm_803DA888) improved resilience to table-size changes and documented the loop as table-driven rather than a raw eight-iteration transform.",
+    "Removing dont_inline pragmas only after confirming the output stayed unchanged kept matching constraints from fossilizing into unnecessary source noise."
+  ],
+  "decomp_lessons": [
+    "Prefer platform constants like PAD_MAX_CONTROLLERS over literals when the literal represents a Dolphin/HSD API limit.",
+    "When a data structure has an extra aggregate/sentinel slot after per-controller entries, encode it as CONSTANT + 1 and use the constant as the aggregate index.",
+    "Offset-based struct members can often be safely renamed when all uses agree on behavior; here x4 became resetting and x8 became progressive.",
+    "Only promote an unknown field to a named boolean when uses support it; the PR left xC mostly anonymous but changed its type to bool and added a tentative comment.",
+    "Use bool values and direct boolean tests for bool fields instead of 0/1 comparisons when it does not disturb matching.",
+    "Adjacent callback fields may indicate an array; changing separate members to unk_14[2] can remove casts and better model call patterns.",
+    "Library or SDK helper macros/functions are preferable to open-coded hardware-register math when the helper expresses the same conversion.",
+    "Variable names like pad_queue_count can encode inferred semantics from producer functions and make frame-loop code easier to review.",
+    "Before preserving pragmas such as dont_inline, test whether the function still matches without them; stale pragmas can be removed as cleanup."
+  ],
+  "naming_conventions": [
+    "Use semantic bool field names for gmMainLib_8046B0F0 members when behavior is known: resetting for reset-switch state and progressive for progressive/interlaced video mode.",
+    "Use secs rather than ticks when an integer time value represents seconds, including matching header prototypes.",
+    "Use PAD_MAX_CONTROLLERS for physical controller loops and PAD_MAX_CONTROLLERS + 1 for arrays that include an aggregate controller entry.",
+    "Prefer descriptive local names such as pad_queue_count over temp register-style names when the value's role is clear.",
+    "Use ARRAY_SIZE(table) for loops over static tables such as gm_803DA888.",
+    "Use boolean literals true and false for bool fields, and direct checks such as if (field) or if (!field)."
+  ],
+  "assembly_or_matching_tactics": [
+    "The decomp.dev bot reported for GALE01: No changes, indicating the cleanup was matching-preserving.",
+    "Loops replaced repeated scalar assignments in gm_1A36 while still matching, showing that some manual unrolling was not required.",
+    "dont_inline pragmas were removed around gm_801A48A4 and gm_801B9A3C without reported codegen changes.",
+    "Manual OS timebase arithmetic was replaced with OSTicksToSeconds and OSSecondsToTicks without reported codegen changes.",
+    "Changing integer boolean assignments/comparisons to true/false and direct boolean conditions did not produce reported output changes.",
+    "Changing 0xFFFFFFFE to ~1 preserved the mask intent and apparently did not disturb matching."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided PR slice.",
+    "The only visible issue comment was the decomp.dev bot report: 'Report for GALE01 ... No changes.'"
+  ],
+  "searchable_terms": [
+    "pr-1808",
+    "Misc gm code cleanup",
+    "r-burns",
+    "gmMainLib_8046B0F0",
+    "resetting",
+    "progressive",
+    "xC",
+    "movie playback done maybe",
+    "PAD_MAX_CONTROLLERS",
+    "controller_map",
+    "gm_controller_map",
+    "PAD_MAX_CONTROLLERS + 1",
+    "gm_801A36E0",
+    "gm_801A3A74",
+    "gm_801A3E88",
+    "gm_801A4014",
+    "gm_801A4510",
+    "gm_801A46F4",
+    "gm_801A47E4",
+    "gm_801A48A4",
+    "gm_801A4970",
+    "gm_801A4B08",
+    "gm_801A4D34",
+    "gm_80479D58_t",
+    "unk_14[2]",
+    "pad_queue_count",
+    "lbTime_8000AFBC",
+    "lbTime_8000B028",
+    "OSTicksToSeconds",
+    "OSSecondsToTicks",
+    "OSGetResetCode",
+    "HSD_PadGetResetSwitch",
+    "gmprogressive",
+    "gmmain_lib",
+    "gm_1A36.static.h",
+    "gm_1A45.static.h",
+    "dont_inline",
+    "ARRAY_SIZE",
+    "decomp.dev No changes"
+  ],
+  "follow_up_queries": [
+    "Search for remaining hard-coded controller loop bounds `i < 4` in gm or HSD pad code that could use PAD_MAX_CONTROLLERS.",
+    "Search for remaining literal controller aggregate index `4` in controller_map or gm_801A36A0 call sites.",
+    "Audit gmMainLib_8046B0F0.x0 and xC for stronger semantic names once more call sites are understood.",
+    "Search for open-coded OS timebase conversions using address 0x800000F8 that can be replaced with OSTicksToSeconds or OSSecondsToTicks.",
+    "Search for stale `#pragma dont_inline` blocks around already-matching functions that can be removed."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,147 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-34",
+  "pr": {
+    "number": 34,
+    "title": "Switch lcf to use template and refactor build system to use template.",
+    "url": "https://github.com/doldecomp/melee/pull/34",
+    "state": "MERGED",
+    "author": "RevoSucks",
+    "created_at": "2020-08-06T05:36:08Z",
+    "merged_at": "2020-08-06T05:36:56Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Refactored the early Melee build/link pipeline so object link order moved out of the linker script into a new obj_files.mk, while ldscript.lcf switched from a long hand-maintained section/object listing to a template-style LCF with grouped aligned sections. The PR also adjusted elf2dol to account for sdata/sbss program-header sizes when computing DOL BSS size, marked __mem functions into .init, and changed asm/bss.s sizing to remove the previous sdata/sbss placement hack.",
+  "change_classification": {
+    "primary_type": "build_tooling_refactor",
+    "categories": [
+      "tooling",
+      "build_system",
+      "linker_script",
+      "object_order",
+      "headers",
+      "asm_data_layout"
+    ],
+    "systems": [
+      "repo-root",
+      "tooling",
+      "asm",
+      "src",
+      "linker"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "Makefile",
+      "role": "Includes obj_files.mk, constructs O_FILES from per-section object lists, and passes SDATA_PDHR/SBSS_PDHR indices to elf2dol."
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "New canonical linker-order file grouping objects by section lists such as INIT_O_FILES, TEXT_O_FILES, DATA_O_FILES, BSS_O_FILES, SDATA_O_FILES, and SDATA2_O_FILES."
+    },
+    {
+      "path": "ldscript.lcf",
+      "role": "Replaced a large object-by-object linker script with a shorter template-style MEMORY/SECTIONS layout using aligned grouped sections and FORCEFILES."
+    },
+    {
+      "path": "tools/elf2dol.c",
+      "role": "Changed ELF segment reading to accept sdata/sbss program-header indices and add their sizes into the generated DOL BSS size."
+    },
+    {
+      "path": "src/__mem.h",
+      "role": "Annotated memset and __fill_mem with __declspec(section \".init\") so they link into the init section."
+    },
+    {
+      "path": "asm/bss.s",
+      "role": "Reduced a BSS skip from 0x3530 to 0x830, preserving the old value as a comment, matching the removal of the 0x2D00 sdata placement hack."
+    }
+  ],
+  "what_changed": [
+    "The Makefile stopped deriving O_FILES directly from all C_FILES and S_FILES and instead includes obj_files.mk, then concatenates ordered per-section variables into O_FILES.",
+    "A new obj_files.mk records explicit linker order outside the LCF, including mixed asm and decompiled src/sysdolphin object paths in TEXT_O_FILES.",
+    "ldscript.lcf dropped the previous BEGIN_SEG/END_SEG macro-heavy object listing and now uses a compact template-like MEMORY/SECTIONS structure with GROUP, ALIGN(0x20), .init, extab_, extabindex_, .text, .ctors, .dtors, .rodata, .data, .bss, .sdata, .sbss, .sdata2, .sbss2, and .stack.",
+    "The old LCF comments and hacks around sbss not being recognized by elf2dol and positioning sdata using _bssSegmentEnd - 0x2D00 were removed.",
+    "Makefile introduced SDATA_PDHR := 9 and SBSS_PDHR := 10, documented as needed by elf2dol to calculate sbss correctly, and passes them to elf2dol.",
+    "elf2dol.c now tracks global sdataSize and sbssSize, accepts sdata_pdhr and sbss_pdhr parameters in read_elf_segments, detects those program header indices while scanning ELF segments, and increments the byte-swapped DOL bss_size by those sizes.",
+    "src/__mem.h moved memset and __fill_mem declarations into the .init section via __declspec(section \".init\").",
+    "asm/bss.s adjusted lbl_804D2E70 storage from .skip 0x3530 to .skip 0x830, with the old .skip 0x3530 commented out."
+  ],
+  "smart_moves": [
+    "Separated object ordering from linker-script section layout. This makes link-order maintenance easier as asm files are replaced by C objects, because future work can update obj_files.mk without rewriting LCF section declarations.",
+    "Preserved exact link ordering explicitly in obj_files.mk rather than relying on filesystem glob order or broad C_FILES/S_FILES enumeration.",
+    "Grouped object lists by output section, matching how the DOL/linker layout is reasoned about in decomp work: init, extab, extabindex, text, ctors, dtors, rodata, data, bss, sdata, sbss, and sdata2.",
+    "Moved the previous hard-coded sdata/sbss layout workaround into elf2dol logic that is closer to the actual DOL BSS-size calculation problem.",
+    "Used Makefile constants for program-header indices instead of burying the values entirely inside elf2dol.c, making the build-time assumptions visible."
+  ],
+  "decomp_lessons": [
+    "For matching-oriented decomp projects, keep linker order as a first-class, reviewable artifact. A dedicated object-order makefile scales better than duplicating object names inside a linker script.",
+    "When replacing asm with C, make sure the new object path is inserted at the exact old link-order position; this PR shows mixed entries such as src/sysdolphin/aobj.o among asm objects.",
+    "Small-data and small-BSS sections can affect generated DOL metadata differently from normal ELF segment layout. If converter tooling does not understand sbss, fix or parameterize the converter rather than compensating with fragile linker-script address hacks.",
+    "Section placement annotations in headers can be necessary for early boot/init functions; here memset and __fill_mem are explicitly declared into .init.",
+    "Changing BSS sizes should be tied back to linker and converter behavior. The 0x3530 to 0x830 reduction corresponds to removal of a 0x2D00 layout hack, so future BSS edits should document similar arithmetic."
+  ],
+  "naming_conventions": [
+    "Per-section object-list variables use uppercase section prefixes and the suffix _O_FILES, e.g. INIT_O_FILES, EXTAB_O_FILES, EXTABINDEX_O_FILES, TEXT_O_FILES, CTORS_O_FILES, DTORS_O_FILES, RODATA_O_FILES, DATA_O_FILES, BSS_O_FILES, SDATA_O_FILES, SBSS_O_FILES, and SDATA2_O_FILES.",
+    "Makefile program-header-index constants are named SDATA_PDHR and SBSS_PDHR in uppercase.",
+    "The linker script retains section names matching Metrowerks/DOL conventions such as .init, extab_, extabindex_, .text, .ctors, .dtors, .rodata, .data, .bss, .sdata, .sbss, .sdata2, .sbss2, and .stack.",
+    "Anonymous/unidentified labels in asm/bss.s retain the lbl_XXXXXXXX style, e.g. lbl_804D2E70."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replace linker-script object enumeration with object-list variables while preserving exact order to avoid shifting addresses.",
+    "Use section-specific object lists to allow decompiled C objects and remaining asm objects to coexist in the same link position.",
+    "Use __declspec(section \".init\") to force C declarations/functions into the same section as the original binary's init code.",
+    "For DOL generation, account for sdata and sbss sizes explicitly when the ELF-to-DOL converter's default BSS detection is insufficient.",
+    "Adjust raw .skip sizes in BSS only in coordination with linker-script/converter fixes; this PR reduced one skip by 0x2D00 after removing an old sdata positioning hack."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review bodies were present in the provided PR slice, so there is no direct reviewer feedback to extract."
+  ],
+  "searchable_terms": [
+    "PR34",
+    "lcf_refactor",
+    "ldscript.lcf",
+    "obj_files.mk",
+    "Makefile",
+    "elf2dol",
+    "SDATA_PDHR",
+    "SBSS_PDHR",
+    "sdataSize",
+    "sbssSize",
+    "increment_bss_size",
+    "read_elf_segments",
+    "FORCEFILES",
+    "GROUP",
+    "ALIGN(0x20)",
+    "BEGIN_SEG",
+    "END_SEG",
+    "_sdataSegmentStartHack",
+    "_sdata2SegmentStartHack",
+    "__declspec(section \".init\")",
+    "memset",
+    "__fill_mem",
+    "asm/bss.s",
+    "lbl_804D2E70",
+    "0x2D00",
+    "0x3530",
+    "0x830",
+    "linker order",
+    "program header",
+    "sbss calculation",
+    "DOL BSS size"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify obj_files.mk to see how object-order maintenance evolved after this refactor.",
+    "Search for subsequent elf2dol.c changes around sbss, sdata, bss_size, or program-header handling to determine whether the SDATA_PDHR/SBSS_PDHR approach was kept or replaced.",
+    "Search for later ldscript.lcf template updates, especially changes to .sbss2, .stack, FORCEFILES, or alignment behavior.",
+    "Look for PRs replacing asm/sysdolphin objects with src/sysdolphin C objects to reuse the obj_files.mk insertion pattern."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

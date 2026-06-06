@@ -1,0 +1,143 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-303",
+  "pr": {
+    "number": 303,
+    "title": "calcprogress now compatible with devkitPPC r40",
+    "url": "https://github.com/doldecomp/melee/pull/303",
+    "state": "MERGED",
+    "author": "camthesaxman",
+    "created_at": "2022-02-22T14:58:36Z",
+    "merged_at": "2022-02-22T15:04:51Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Updated the build object naming scheme so generated object files keep the original source suffix, e.g. C sources build to `.c.o` and assembly sources build to `.s.o`. The Makefile pattern rules, linker object lists, and epilogue object list were adjusted to use those names. `tools/calcprogress.py` was also hardened to skip empty split results and ignore symbols whose object field ends in `.s.o`, making progress output consistent between devkitPPC r39 and r40.",
+  "change_classification": {
+    "primary_type": "tooling-build-compatibility",
+    "categories": [
+      "tooling",
+      "build-system",
+      "progress-reporting",
+      "object-file-naming",
+      "devkitPPC-compatibility"
+    ],
+    "systems": [
+      "repo-root",
+      "Makefile",
+      "calcprogress",
+      "linker-object-lists",
+      "epilogue-processing"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "Makefile",
+      "role": "Changed build pattern rules from `%.o` to `%.c.o` and `%.s.o`, and updated per-object compiler/epilogue overrides to the new names."
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "Updated the linker order object list so C-derived and assembly-derived objects carry `.c.o` or `.s.o` suffixes."
+    },
+    {
+      "path": "e_files.mk",
+      "role": "Updated the unscheduled epilogue object list to use the new source-suffixed object names."
+    },
+    {
+      "path": "tools/calcprogress.py",
+      "role": "Added parsing guards and skipped `.s.o` object symbols so calcprogress reports the same output under devkitPPC r39 and r40."
+    }
+  ],
+  "what_changed": [
+    "Object outputs now encode their source language in the filename: `example.c` becomes `example.c.o`, and `example.s` becomes `example.s.o`.",
+    "The Makefile assembly rule changed from `$(BUILD_DIR)/%.o: %.s` to `$(BUILD_DIR)/%.s.o: %.s`.",
+    "The Makefile C rule changed from `$(BUILD_DIR)/%.o: %.c` to `$(BUILD_DIR)/%.c.o: %.c`.",
+    "Epilogue-processing rules were updated similarly, including the C epilogue rule depending on `$(BUILD_DIR)/%.c.o` instead of `$(BUILD_DIR)/%.o`.",
+    "Special-case object-specific settings such as `CC_EPI` overrides and `lbvector` CFLAGS overrides were renamed to target `.c.o` outputs.",
+    "The large linker-order list in `obj_files.mk` was mechanically renamed so assembly entries generally use `.s.o` and C entries use `.c.o`.",
+    "The epilogue unscheduled list in `e_files.mk` was renamed to the new object naming scheme.",
+    "`tools/calcprogress.py` gained a `split()`-based guard for empty symbol lines and skips lines whose final word ends with `.s.o`.",
+    "The calcprogress script file mode changed from non-executable `100644` to executable `100755`."
+  ],
+  "smart_moves": [
+    "Encoding `.c` versus `.s` in object filenames gives tooling a direct way to distinguish decompiled C from remaining assembly without inferring from paths or duplicate basenames.",
+    "The Makefile rule change preserves parallel C and assembly objects with the same basename, such as cases where both `src/.../lbfile.c` and `asm/.../lbfile.s` produce linked objects.",
+    "Updating `obj_files.mk` rather than relying on implicit renaming keeps the Metrowerks linker order explicit and stable.",
+    "Updating epilogue-specific lists and overrides at the same time avoids stale references to old `.o` target names.",
+    "The calcprogress change filters by the final token ending in `.s.o`, matching the new naming convention rather than relying on older devkitPPC map formatting behavior.",
+    "Adding `len(words) == 0` before inspecting the final token makes the map parser tolerate blank or whitespace-only lines."
+  ],
+  "decomp_lessons": [
+    "When build products need to serve decomp progress tooling, choose names that preserve provenance: `.c.o` means decompiled source, `.s.o` means assembly fallback.",
+    "Global object naming changes must update every consumer: compile rules, assemble rules, dependency generation, linker lists, epilogue-processing rules, and per-object flag overrides.",
+    "Progress scripts should classify objects from stable naming conventions instead of fragile assumptions about map file formatting across toolchain versions.",
+    "Compatibility with devkitPPC versions can require normalizing or ignoring map output differences rather than changing matching code.",
+    "For mixed C/ASM decomp projects, avoiding plain `basename.o` reduces ambiguity when the same logical file has both source and assembly contributions.",
+    "Mechanical renames in linker-order files are high-risk because a single stale object name can break builds or progress accounting; future similar changes should be checked with generated lists or grep-based validation."
+  ],
+  "naming_conventions": [
+    {
+      "convention": "C source object naming",
+      "pattern": "`path/to/file.c` -> `$(BUILD_DIR)/path/to/file.c.o` or `$(EPILOGUE_DIR)/path/to/file.c.o`",
+      "evidence": "PR body explicitly gives `example.c` -> `example.c.o`; Makefile changes `%.c.o: %.c`."
+    },
+    {
+      "convention": "Assembly source object naming",
+      "pattern": "`path/to/file.s` -> `$(BUILD_DIR)/path/to/file.s.o` or `$(EPILOGUE_DIR)/path/to/file.s.o`",
+      "evidence": "PR body explicitly gives `example.s` -> `example.s.o`; Makefile changes `%.s.o: %.s`."
+    },
+    {
+      "convention": "Progress tooling treats `.s.o` as assembly/not decompiled",
+      "pattern": "Skip calcprogress map symbols whose final split token ends with `.s.o`.",
+      "evidence": "`tools/calcprogress.py` added `if words[-1].endswith('.s.o'): continue`."
+    }
+  ],
+  "assembly_or_matching_tactics": [
+    "Use object filename suffixes as a decomp status signal: `.s.o` identifies assembly-backed code and `.c.o` identifies C-backed code.",
+    "Keep both assembly and C objects in linker order when both exist for a module, but make them distinguishable by `.s.o` versus `.c.o` to avoid basename collisions.",
+    "For progress calculation, discard symbols belonging to `.s.o` objects so remaining counted symbols reflect decompiled C progress rather than assembly stubs.",
+    "The PR is primarily tooling/build infrastructure; it does not provide evidence of new function-level matching tricks or symbol renames."
+  ],
+  "review_feedback": [
+    {
+      "type": "no_review_comments",
+      "detail": "The PR context contains zero issue comments, zero review comments, and zero reviews, so no reviewer guidance or requested changes are available."
+    }
+  ],
+  "searchable_terms": [
+    "PR303",
+    "calcprogress",
+    "devkitPPC r40",
+    "devkitPPC r39",
+    "object file suffix",
+    ".c.o",
+    ".s.o",
+    "source language object names",
+    "Makefile %.c.o",
+    "Makefile %.s.o",
+    "obj_files.mk",
+    "e_files.mk",
+    "EPILOGUE_UNSCHEDULED",
+    "EPILOGUE_PROCESS",
+    "CC_EPI",
+    "Metrowerks linker order",
+    "progress reporting",
+    "assembly object filtering",
+    "map parser",
+    "camthesaxman"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rely on `.c.o` and `.s.o` naming in calcprogress or build scripts.",
+    "Search for stale plain `.o` object references after PR #303, especially in `obj_files.mk`, `e_files.mk`, and Makefile target-specific overrides.",
+    "Investigate whether any exceptions to the `.c.o`/`.s.o` convention remained intentionally, such as object names visible in the diff excerpt that did not receive a source suffix.",
+    "Look for subsequent devkitPPC r40 compatibility fixes in map parsing, linker output handling, or progress scripts."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

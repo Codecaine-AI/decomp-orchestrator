@@ -1,0 +1,144 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1575",
+  "pr": {
+    "number": 1575,
+    "title": "Match mcc",
+    "url": "https://github.com/doldecomp/melee/pull/1575",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-07T01:37:31Z",
+    "merged_at": "2025-06-07T01:47:04Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Dolphin MCC library objects by updating mcc stream-control logic, extending MCC_ChannelInfo, switching dolphin/mcc/mcc.c and dolphin/mcc/fio.c from NonMatching to Matching in configure.py, and correcting GALE01 split/symbol metadata. The decomp.dev report recorded 18 new function matches in main/dolphin/mcc/mcc and a +7604 byte matched-code improvement.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-map",
+      "splits",
+      "external-sdk"
+    ],
+    "systems": [
+      "dolphin/mcc",
+      "dolphin/fio",
+      "config/GALE01",
+      "configure.py",
+      "MetroTRK-adjacent-splits"
+    ]
+  },
+  "key_files": [
+    "extern/dolphin/src/dolphin/mcc/mcc.c",
+    "extern/dolphin/include/dolphin/mcc.h",
+    "configure.py",
+    "config/GALE01/symbols.txt",
+    "config/GALE01/splits.txt"
+  ],
+  "what_changed": [
+    "Marked dolphin/mcc/mcc.c and dolphin/mcc/fio.c as Matching objects in configure.py instead of NonMatching.",
+    "Added a new field at offset 0x14 to MCC_ChannelInfo, named unk in the PR, expanding the known channel-info layout.",
+    "Updated callbackEventStream so event 0x100, in addition to event 2, sets isStreamConnection.",
+    "Changed MCCStreamOpen to clear the new unk field before clearing isStreamConnection and isStreamDone.",
+    "Changed MCCStreamClose to clear the new unk field before calling MCCClose.",
+    "Restructured MCCStreamWrite so the first stream write sets the new unk flag, later writes call MCCNotify(chID, 0), and the existing WaitAMinute/MCCGetChannelInfo/MCCWrite transfer flow is nested after that state handling.",
+    "Adjusted splits around MetroTRK/main_TRK.c, MetroTRK/dolphin_trk_glue.c, and dolphin/mcc/mcc.c to account for data/bss boundary changes.",
+    "Updated symbols.txt with many scope corrections from global to local for MCC internals such as callbackEventStream, LoadChannelInfo, FlushChannelInfo, SetChannelInfoDirty, MakeMemoryMap, SearchFreeBlocks, NotifyCompulsorily, WaitAMinute, MailboxCheck, MCCExiCallback, MCCTxCallback, MCCRxCallback, mccInitializeCheck, fioMccChannelEvent, and fioPacket* helpers.",
+    "Refined MCC data/bss symbols by splitting the previous broad MCC_FIO_80400918 and gChannelInfo/gBuf-style symbols into local string labels, gStreamWork, m_szAdapterMode, m_szInitCode, channelInfo, and local MCC state variables.",
+    "Added align:16 metadata to __THPPrepBitStream in symbols.txt, alongside broader symbol-map cleanup for nearby SDK libraries."
+  ],
+  "smart_moves": [
+    "The fix was not limited to code shape: it paired source changes with header layout, split boundaries, and symbol visibility corrections, which is necessary when matching an SDK object with static data and local helper functions.",
+    "Adding the 0x14 field to MCC_ChannelInfo explains the new per-channel stream state used by MCCStreamOpen, MCCStreamClose, and MCCStreamWrite instead of forcing an incorrect reuse of existing fields.",
+    "Handling event 0x100 in callbackEventStream preserved the stream connection wait path while matching the expected callback behavior.",
+    "The MCCStreamWrite state-machine tweak distinguishes first-use setup from subsequent MCCNotify calls, a useful tactic for matching communication/handshake code where observable behavior is spread across callbacks and waits.",
+    "Converting numerous helper functions and data objects from global to local scope reduced symbol-map noise and better reflected file-static SDK internals."
+  ],
+  "decomp_lessons": [
+    "When an SDK library object is close but not matching, check whether struct sizes are incomplete; a missing trailing field can alter stores, ordering, and bss layout.",
+    "For communication libraries, callback event constants and handshake flags can be the key to matching more code than simple control-flow reshuffling.",
+    "Promoting an object to Matching should be accompanied by configure.py changes plus symbols/splits updates; otherwise decomp progress may not be counted correctly.",
+    "Correct local/global scope in symbols.txt matters for matching and for future symbol hygiene, especially in external SDK code where many helpers are file-static.",
+    "Data and bss boundaries in splits.txt may need small shifts after identifying hidden fields or separating previously lumped symbols.",
+    "Local anonymous labels such as @126, @131, and ...data.0 can be preferable to invented global names when the evidence only supports compiler/local data identity."
+  ],
+  "naming_conventions": [
+    "Public MCC API symbols remain globally named with MCC/FIO prefixes, e.g. MCCInit, MCCStreamOpen, MCCStreamClose, MCCStreamWrite, MCCRead, MCCWrite, MCCCheckAsyncDone, FIOInit, FIOFopen, FIOFwrite.",
+    "Internal MCC helpers were marked local while retaining descriptive names where known, e.g. LoadChannelInfo, FlushChannelInfo, MakeMemoryMap, MailboxCheck, mccInitializeCheck.",
+    "Unknown or compiler-local data in symbols.txt was represented with local labels such as @126, @131, @27, @49, and ...data.0 rather than broad invented names.",
+    "The newly discovered MCC_ChannelInfo field was named unk, indicating the layout requirement is known but semantic confidence is low.",
+    "Callback names follow SDK-style channel/event naming, e.g. callbackEventStream, MCCExiCallback, MCCTxCallback, MCCRxCallback."
+  ],
+  "assembly_or_matching_tactics": [
+    "Added a missing struct member to change field offsets and enable matched stores in MCC stream functions.",
+    "Introduced an event == 0x100 branch in callbackEventStream to match the expected condition setting isStreamConnection.",
+    "Changed stream write control flow by adding a per-channel one-time flag and a subsequent MCCNotify(chID, 0) path before WaitAMinute.",
+    "Reordered/expanded field initialization in MCCStreamOpen to include the new field and match expected write sequence.",
+    "Reset the new per-channel state in MCCStreamClose to match teardown behavior.",
+    "Corrected symbol scopes to local for static helpers and local data, preventing the matcher from treating private SDK internals as exported globals.",
+    "Adjusted split boundaries for .data and .bss after identifying the actual allocation of MetroTRK and MCC data."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided PR slice.",
+    "The only comment evidence was the decomp.dev bot report showing +0.20% matched code, +0.31% linked code, and 18 new matches for main/dolphin/mcc/mcc."
+  ],
+  "searchable_terms": [
+    "Match mcc",
+    "MCC",
+    "FIO",
+    "dolphin/mcc/mcc.c",
+    "dolphin/mcc/fio.c",
+    "MCC_ChannelInfo",
+    "callbackEventStream",
+    "MCCStreamOpen",
+    "MCCStreamClose",
+    "MCCStreamWrite",
+    "MCCNotify",
+    "WaitAMinute",
+    "LoadChannelInfo",
+    "FlushChannelInfo",
+    "MakeMemoryMap",
+    "MailboxCheck",
+    "mccInitializeCheck",
+    "MCCInit",
+    "MCCRead",
+    "MCCWrite",
+    "MCCClose",
+    "MCCCheckAsyncDone",
+    "fioMccChannelEvent",
+    "fioPacketMakeHeader",
+    "fioPacketSendPacket",
+    "fioPacketReceiveResult",
+    "fioPacketReceiveDone",
+    "fioPacketWrite",
+    "fioPacketResultWrite",
+    "config/GALE01/symbols.txt",
+    "config/GALE01/splits.txt",
+    "configure.py",
+    "NonMatching to Matching",
+    "event 0x100",
+    "gChannelInfo",
+    "gStreamWork",
+    "m_szAdapterMode",
+    "m_szInitCode",
+    "channelInfo",
+    "__THPPrepBitStream align:16"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename MCC_ChannelInfo.unk with a semantic field name.",
+    "Find PRs touching dolphin/mcc/fio.c after this one to see whether FIO packet helpers gained clearer names.",
+    "Search for other SDK matching PRs where missing struct tail fields fixed bss layout and enabled a Matching configure.py change.",
+    "Check whether event 0x100 in MCC callbacks is documented in Dolphin SDK headers or later comments.",
+    "Look for subsequent symbol cleanup around MCC_FIO_80400918, gStreamWork, m_szAdapterMode, m_szInitCode, and channelInfo."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

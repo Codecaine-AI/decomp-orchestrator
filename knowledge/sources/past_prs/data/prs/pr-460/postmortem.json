@@ -1,0 +1,174 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-460",
+  "pr": {
+    "number": 460,
+    "title": "restore item2.c",
+    "url": "https://github.com/doldecomp/melee/pull/460",
+    "state": "MERGED",
+    "author": "VetriTheRetri",
+    "created_at": "2022-08-13T12:13:45Z",
+    "merged_at": "2022-08-19T16:57:32Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Restored src/melee/it/item2.c into the build by adding item2.c.o and removing a large matching assembly chunk from asm/melee/it/code_80266F3C.s. The PR specifically handled two item2.c functions that were known to break Frank by making branches out of bounds: NON_MATCHING builds used peephole-off patched C/ASM paths, while matching builds used hybrid inline ASM where necessary. The slice also includes substantial collateral decomp/header work, especially moving Mewtwo Shadow Ball code out of asm/melee/ft/chara/ftmewtwo.s into C, adding Mewtwo SpecialN prototypes/state vars/action flags, renaming several Mewtwo Shadow Ball functions, and applying broad fighter state-var/member naming cleanup.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "naming-cleanup",
+      "build-system"
+    ],
+    "systems": [
+      "item",
+      "fighter",
+      "mewtwo",
+      "fox",
+      "ness",
+      "headers",
+      "asm",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "src/melee/it/item2.c",
+    "asm/melee/it/code_80266F3C.s",
+    "obj_files.mk",
+    "src/melee/ft/chara/ftMewtwo/ftMewtwo_SpecialN.c",
+    "asm/melee/ft/chara/ftmewtwo.s",
+    "src/melee/ft/chara/ftMewtwo/ftmewtwo.h",
+    "src/melee/ft/chara/ftMewtwo/ftMewtwo_StateVars.h",
+    "src/melee/ft/fighter.h",
+    "include/functions.h",
+    "include/common_structs.h",
+    "asm/melee/ft/chara/ftfox.s",
+    "asm/melee/ft/chara/ftNess/ftNess_data.s"
+  ],
+  "what_changed": [
+    "Added $(BUILD_DIR)/src/melee/it/item2.c.o to obj_files.mk, placing item2.c back into the text object list after item.c.o and before the remaining item asm files.",
+    "Deleted approximately 1600 lines from asm/melee/it/code_80266F3C.s, indicating that item2.c now covers a large range that had previously remained in assembly.",
+    "Adjusted src/melee/it/item2.c around func_8026B924 and func_8026B960 to control #pragma peephole placement across NON_MATCHING and matching paths.",
+    "Replaced func_8026B960's full inline ASM implementation with a hybrid C implementation containing small embedded __asm branches for the problematic matching path; NON_MATCHING uses normal C and literals such as -1.0f.",
+    "Replaced external float labels in item2.c with direct constants where shown: lbl_804DC688 became -1.0f, and lbl_804DC68C became 0.5f in ECB/position helper code.",
+    "Expanded func_8026B9A8 in item2.c by inlining the previous helper-like What logic into the function body, preserving item state-desc animation setup and cleanup behavior.",
+    "Moved a large Mewtwo Shadow Ball/SpecialN range out of asm/melee/ft/chara/ftmewtwo.s and into src/melee/ft/chara/ftMewtwo/ftMewtwo_SpecialN.c.",
+    "Added Mewtwo Neutral Special prototypes to ftmewtwo.h, including ftMewtwo_SpecialN_CheckShadowBallRemove, CheckShadowBallCancel, SetNULL, OnTakeDamage, OnDeath, ReleaseShadowBall, PlayChargeSFX, StartAction, air/ground anim/IASA/phys/coll callbacks, and Shoot.",
+    "Added ftMewtwoSpecialN state vars with fields such as isFull, releaseLag, and chargeLevel, and added SpecialN to ftMewtwoStateVars.",
+    "Renamed Mewtwo SpecialAttrs field x2230 from an unnamed u32 to HSD_GObj* x2230_shadowHeldGObj, documenting it as the held Shadow Ball GObj.",
+    "Updated references in ftmewtwo.c from func_80146E30/func_80146ED0 to named Mewtwo SpecialN lifecycle functions, though the visible diff suggests OnDeath2 calls ftMewtwo_SpecialN_OnTakeDamage and OnTakeDamage calls ftMewtwo_SpecialN_OnDeath.",
+    "Renamed several fighter state-var union members to capitalized action names across multiple characters, such as ftNess AttackHi4/AttackLw4/SpecialN/SpecialHi/SpecialLw and Mewtwo SpecialHi.",
+    "Added HSD_BUTTON_LR as 0x80000000 in include/common_structs.h for digital L/R input.",
+    "Removed rodata/sdata fragments from Fox and Ness assembly files after equivalent data moved to C or elsewhere; reviewers specifically pointed out preserving final .4byte NULL/newline formatting.",
+    "Updated Yoshi item-kind registration from raw numeric constants to It_Kind_Yoshi_EggThrow, It_Kind_Yoshi_Star, and It_Kind_Yoshi_EggLay."
+  ],
+  "smart_moves": [
+    "The PR did not force all of item2.c into idealized C when the compiler/backend could not safely match it; it used separate NON_MATCHING and matching code paths with peephole pragmas and hybrid ASM to avoid Frank branch-generation failures.",
+    "For func_8026B960, the matching path retained only the fragile branch shape in inline __asm while leaving most control flow and item-data access in C, making the function more maintainable than a full inline assembly body.",
+    "Replacing anonymous float label externs with direct constants (-1.0f and 0.5f) reduced dependence on data labels where the semantic constant was clear in the local item helper code.",
+    "Adding item2.c.o before deleting the old asm body from code_80266F3C.s kept the build mapping explicit and searchable.",
+    "Mewtwo Shadow Ball work paired C restoration with header prototypes, state-var struct fields, and cross-file callsite renames, which made the newly decompiled code easier to reuse from item/projectile code.",
+    "The broad switch to conventional Fighter* fp local names and capitalized per-action state-var members reduces friction when porting matching snippets across fighter special files."
+  ],
+  "decomp_lessons": [
+    "When Frank or the compiler emits invalid/out-of-range branches for a matched function, isolate only the branch-sensitive part with inline ASM or pragmas instead of reverting the entire file to asm.",
+    "Keep #pragma peephole boundaries tight and explicit around NON_MATCHING versus matching sections; misplaced peephole directives can change codegen outside the intended workaround.",
+    "Restoring a source file often requires deleting the corresponding asm chunk and adding the source object in obj_files.mk in the correct link order.",
+    "For fighter special decomp, matching is often coupled to correct state-var union layout and field names; add minimal structs and comments before relying on offsets such as Mewtwo's x2230/x2234/x2238/x2350.",
+    "Use named item-kind enum constants instead of raw item IDs when the enum is available; it improves reviewability without necessarily hurting matching.",
+    "Converting leftover rodata/sdata from asm to C should include cleanup of now-empty labels and sections, but keep table terminators like .4byte NULL and file-final newlines tidy.",
+    "Function renaming should be propagated into headers and external asm callsites where possible; the diff shows item projectile asm calls renamed Mewtwo Shadow Ball helpers.",
+    "Large fighter struct changes may need temporary layout hacks; this PR explicitly notes zero-length array union hacks in Fighter as temporary until the larger state-var struct mess is cleaned up."
+  ],
+  "naming_conventions": [
+    "Use fp for local Fighter* variables instead of fighter_data in fighter special/death/onload functions.",
+    "Use ftMewtwo_SpecialN_* prefixes for Mewtwo Shadow Ball helpers and callbacks rather than raw func_80146xxx names.",
+    "Use descriptive SpecialAttrs field names for character-specific GObj pointers, e.g. x2230_shadowHeldGObj instead of x2230.",
+    "Capitalize fighter state-var union members by action family, e.g. SpecialN, SpecialHi, AttackHi4, AttackLw4, rather than lower camel-case specialN/specialHi/attackHi4.",
+    "Prefer It_Kind_* enum names over numeric item kind constants when registering or comparing item kinds.",
+    "Action flag macros use character and move prefixes, e.g. FTMEWTWO_SPECIALN_ACTION_FLAG and FTMEWTWO_SPECIALN_COLL_FLAG."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use #ifdef NON_MATCHING to keep straightforward C where exact codegen is not required, and a separate matching path when exact branch layout is needed.",
+    "Use #pragma peephole on/off around fragile codegen regions; the PR body says peephole was disabled for patched NON_MATCHING builds and hybrid ASM was used for matching builds.",
+    "For func_8026B960, replace full inline ASM with C plus an embedded __asm block containing cmpwi, beq, bgelr, bnelr, lwz, and beqlr instructions to preserve the branch behavior that the compiler would not generate correctly.",
+    "Use register-qualified locals in fragile matching code when binding operands for inline assembly, as shown by register HSD_GObj*, register s32 itemID, register Item*, and register f32 unk_timer in func_8026B960.",
+    "When moving C into the build, delete the overlapping assembly implementation from the corresponding asm file rather than leaving duplicate symbols.",
+    "For data migration out of asm, remove obsolete rodata/sdata labels but retain valid terminators such as .4byte NULL."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "path": "asm/melee/ft/chara/ftNess/ftNess_data.s",
+      "feedback": "Suggested keeping a clean final .4byte NULL line after removing obsolete rodata, implying formatting/newline cleanup mattered."
+    },
+    {
+      "author": "ribbanya",
+      "path": "asm/melee/ft/chara/ftfox.s",
+      "feedback": "Suggested keeping .4byte NULL formatting after removing Fox data labels."
+    },
+    {
+      "author": "ribbanya",
+      "path": "include/functions.h",
+      "feedback": "Suggested removing the include/functions.h hunk that renamed commented-out unknown Mewtwo prototypes; likely because commented prototypes were unnecessary or should not be maintained there."
+    },
+    {
+      "author": "ribbanya",
+      "path": "asm/melee/ft/chara/ftfox.s",
+      "feedback": "Asked, \"This can be converted to C too, right?\" about a remaining Fox assembly/data section, encouraging further C conversion rather than leaving trivial asm leftovers."
+    }
+  ],
+  "searchable_terms": [
+    "restore item2.c",
+    "item2.c",
+    "code_80266F3C.s",
+    "func_8026B924",
+    "func_8026B960",
+    "func_8026B9A8",
+    "peephole",
+    "Frank",
+    "hybrid ASM",
+    "NON_MATCHING",
+    "out of bounds branch",
+    "ftMewtwo_SpecialN",
+    "Shadow Ball",
+    "ftMewtwo_SpecialN_CheckShadowBallRemove",
+    "ftMewtwo_SpecialN_CheckShadowBallCancel",
+    "ftMewtwo_SpecialN_SetNULL",
+    "ftMewtwo_SpecialN_OnTakeDamage",
+    "ftMewtwo_SpecialN_OnDeath",
+    "ftMewtwo_SpecialN_ReleaseShadowBall",
+    "ftMewtwo_SpecialN_PlayChargeSFX",
+    "ftMewtwo_SpecialN_Shoot",
+    "x2230_shadowHeldGObj",
+    "x2234_shadowBallCharge",
+    "x2238_shadowBallGObj",
+    "chargeLevel",
+    "FTMEWTWO_SPECIALN_ACTION_FLAG",
+    "FTMEWTWO_SPECIALN_COLL_FLAG",
+    "HSD_BUTTON_LR",
+    "It_Kind_Yoshi_EggThrow",
+    "It_Kind_Yoshi_Star",
+    "It_Kind_Yoshi_EggLay",
+    "obj_files.mk",
+    "fp naming convention",
+    "state vars capitalized"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that remove the hybrid inline ASM or peephole workaround in func_8026B960.",
+    "Find PRs that fully convert remaining Fox asm/data sections after ribbanya's review question.",
+    "Audit whether ftMewtwo_OnDeath2 and ftMewtwo_OnTakeDamage kept the intended ftMewtwo_SpecialN_OnTakeDamage/OnDeath call mapping after this PR.",
+    "Find the PR that replaces the temporary Fighter zero-length array state-var union hack with a cleaner union layout.",
+    "Search later item2.c work for more raw float label replacements and It_Kind enum migrations."
+  ],
+  "confidence": 0.84,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

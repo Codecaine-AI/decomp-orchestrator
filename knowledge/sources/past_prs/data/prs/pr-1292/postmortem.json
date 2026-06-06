@@ -1,0 +1,147 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1292",
+  "pr": {
+    "number": 1292,
+    "title": "Match grtpurin",
+    "url": "https://github.com/doldecomp/melee/pull/1292",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-02-21T06:13:04Z",
+    "merged_at": "2024-02-21T06:16:52Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Target Test Purin/Jigglypuff ground module by replacing asm/melee/gr/grtpurin.s with C source and enabling src/melee/gr/grtpurin.c as Matching in the build. The PR also added the grtpurin header, declared the stage callback table and StageData, recreated stage initialization and callback behavior, and adjusted related Ground/mpLib prototypes from s16 callbacks/IDs to s32 where needed for the new match. There were no PR body notes or review comments, so intent beyond matching grtpurin is inferred from the diff.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "prototype-fix",
+      "build-system"
+    ],
+    "systems": [
+      "stage",
+      "ground",
+      "mplib",
+      "melee-core",
+      "asm",
+      "build"
+    ]
+  },
+  "key_files": [
+    "asm/melee/gr/grtpurin.s",
+    "src/melee/gr/grtpurin.c",
+    "src/melee/gr/grtpurin.h",
+    "configure.py",
+    "obj_files.mk",
+    "src/melee/gr/ground.c",
+    "src/melee/gr/ground.h",
+    "src/melee/mp/mplib.h",
+    "src/melee/mp/mplib.dox"
+  ],
+  "what_changed": [
+    "Deleted the 393-line assembly implementation asm/melee/gr/grtpurin.s.",
+    "Added a 228-line C implementation in src/melee/gr/grtpurin.c for grTPurin_80223160 through grTPurin_80223578.",
+    "Added src/melee/gr/grtpurin.h with prototypes for the grTPurin functions and forward includes for Vec3, HSD_GObj, HSD_JObj, and lb_UnkAnimStruct.",
+    "Changed configure.py to mark Object(Matching, \"melee/gr/grtpurin.c\") instead of NonMatching.",
+    "Changed obj_files.mk so TEXT_O_FILES builds src/melee/gr/grtpurin.c.o instead of asm/melee/gr/grtpurin.s.o.",
+    "Recreated grTPr_803E9338 as a StageCallbacks array and grTPr_803E9394 as StageData with stage ID 58, file path \"/GrTPr.dat\", init callbacks, anim callback, and flag bit 0.",
+    "Recreated grTPr_804D6B10 as a typed global pointer to a small local grTPrSpecialParams struct containing lb_UnkAnimStruct* x0.",
+    "Implemented stage startup to call Ground_801C49F8, set stage_info.unk8C.b4 false and b5 true, spawn IDs 0, 1, and 2 via grTPurin_8022320C, then run Ground_801C39C0, Ground_801C3BB4, Ground_801C4210, and Ground_801C42AC.",
+    "Implemented gobj creation in grTPurin_8022320C using Ground_801C14D0, HSD_GObjGetUserData, GObj_SetupGXLink, callback table dispatch, HSD_GObjProc_8038FD54, and the original OSReport error string on failure.",
+    "Implemented ground animation callbacks that call Ground_801C2ED0, grAnime_801C8138, and Ground_801C2FE0.",
+    "Implemented grTPurin_80223388 collision/line toggling logic over IDs 0x37, 0x39, 0x3B, 0x3D, 0x3F, 0x41, 0x43, ending at -1, using Ground_801C32D4, Ground_801C3FA4, lb_8000B1CC, mpLib_80057638, mpLib_80057BC0, lb_800115F4, and Ground_801C2FE0.",
+    "Implemented grTPurin_802234F8 to map an mpLib result from mpLib_80056B6C and mpLib_80054C6C to grTPr_804D6B10->x0 for cases 0 and 1, otherwise returning 0.",
+    "Changed Ground_801C3128's function pointer parameter type from void (*)(s16) to void (*)(s32) in ground.c and ground.h.",
+    "Changed mpLib_80057424, mpLib_80057638, and mpLib_80057BC0 parameter types from s16 to s32 in mplib.h and mplib.dox.",
+    "Included a small formatting alignment cleanup in Ground_803DFEDC for the grTCLink/grTDk/grTDr row."
+  ],
+  "smart_moves": [
+    "Kept the original symbol-address naming for unknown functions and globals, allowing the matched C to land without requiring semantic renames.",
+    "Used the existing StageCallbacks and StageData abstractions rather than raw pointer arrays, making the former data section readable while preserving layout intent.",
+    "Converted the asm rodata list of map/collision IDs into a local s16 values[8] sentinel array, preserving the -1 terminator pattern used by the original loop.",
+    "Used GET_GROUND and HSD_GObjGetUserData where appropriate to express the same user-data access pattern in decompiled C.",
+    "Added PAD_STACK(8) in the animation setup callbacks, indicating stack-shape management was necessary for matching.",
+    "Updated build metadata in both configure.py and obj_files.mk in the same PR as the source replacement, completing the asm-to-C handoff.",
+    "Adjusted nearby prototypes to s32 so the matched code could pass values from Ground_801C32D4/mpLib paths without artificial casts or narrower callback types."
+  ],
+  "decomp_lessons": [
+    "When matching stage modules, replace the asm object and flip both configure.py and obj_files.mk; doing only one build switch is incomplete.",
+    "Stage callback tables often become clean StageCallbacks arrays with NULL-terminated entries and per-entry callback0 through callback3 fields plus flags.",
+    "StageData entries should preserve the stage ID, dat filename, lifecycle callback order, anim callback, and flags exactly; for grtpurin this was ID 58 and \"/GrTPr.dat\".",
+    "Bitfield writes from rlwimi into stage_info can often decompile naturally as stage_info.unk8C.b4/b5 assignments when the struct is known.",
+    "Small rodata tables may need to remain local stack arrays or specific element widths to match codegen; here the ID list was represented as s16 values with a 0xFFFF terminator.",
+    "Prototype corrections in shared headers can be part of a matching PR when the old signature forces mismatched argument extension or callback types.",
+    "OSReport strings and line numbers are useful anchors for recreating failure paths; this PR preserved the text \"%s:%d: couldn t get gobj(id=%d)\\n\" with \"grtpurin.c\" and line 203.",
+    "Matching simple stub callbacks should still use the correct return type and parameter list, even when the body is just return, return false, or return true."
+  ],
+  "naming_conventions": [
+    "Function symbols retained the module prefix grTPurin_ followed by the address, for example grTPurin_8022320C and grTPurin_80223388.",
+    "Data symbols retained the shorter asset/module prefix grTPr_, for example grTPr_803E9338, grTPr_803E9394, and grTPr_804D6B10.",
+    "The local special-parameter struct was named grTPrSpecialParams and exposed an x0 field matching the unknown-data style used elsewhere.",
+    "Header guard used the lower-case module name form _grtpurin_h_.",
+    "Unknown or not-yet-renamed engine functions remained address-based names such as Ground_801C32D4 and mpLib_80057638."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed the asm file only after the C source matched and switched the object list to the C object.",
+    "Used PAD_STACK(8) in grTPurin_80223330 and grTPurin_8022347C to reproduce required stack layout.",
+    "Used a comma-expression condition in grTPurin_80223388, `(lb_8000B1CC(jobj, NULL, &vec), (vec.x < 130.0f))`, matching the original call-then-compare flow.",
+    "Represented 130.0f as a float comparison against vec.x, corresponding to the original sdata2 constant 0x43020000.",
+    "Represented bit constants as `(1 << 0)`, `(0 << 0)`, and `(1 << 0)` in places where the assembly used immediate 1 or comparisons against 0/1.",
+    "Preserved callback registration order: setup GX link, optionally set x1C_callback, call callback0, then optionally register callback2 as a proc with priority/kind 4.",
+    "Adjusted shared function signatures from s16 to s32 to align with generated code and avoid sign/width mismatch around map or line IDs."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1292",
+    "Match grtpurin",
+    "PsiLupan",
+    "grtpurin",
+    "grTPurin",
+    "grTPr",
+    "Target Test Purin",
+    "Jigglypuff target test",
+    "asm/melee/gr/grtpurin.s",
+    "src/melee/gr/grtpurin.c",
+    "src/melee/gr/grtpurin.h",
+    "grTPr_803E9338",
+    "grTPr_803E9394",
+    "grTPr_804D6B10",
+    "grTPrSpecialParams",
+    "StageCallbacks",
+    "StageData",
+    "Ground_801C3128",
+    "mpLib_80057424",
+    "mpLib_80057638",
+    "mpLib_80057BC0",
+    "Ground_801C32D4",
+    "Ground_801C3FA4",
+    "lb_8000B1CC",
+    "lb_800115F4",
+    "PAD_STACK",
+    "GObj_SetupGXLink",
+    "HSD_GObjProc_8038FD54",
+    "OSReport",
+    "GrTPr.dat",
+    "configure.py Matching",
+    "obj_files.mk TEXT_O_FILES"
+  ],
+  "follow_up_queries": [
+    "Check adjacent target test ground modules such as grtpichu, grtpikachu, and grtpeach for reusable StageCallbacks/StageData patterns.",
+    "Search for remaining mpLib_80057424/mpLib_80057638/mpLib_80057BC0 declarations or callsites that still assume s16.",
+    "Review Ground_801C3128 callsites to confirm the s32 callback parameter type is consistently propagated.",
+    "Look for future opportunities to semantically rename grTPurin_8022320C and grTPurin_80223388 once neighboring modules reveal their roles.",
+    "Compare other grT* stage modules for the same OSReport gobj failure string and callback setup helper structure."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

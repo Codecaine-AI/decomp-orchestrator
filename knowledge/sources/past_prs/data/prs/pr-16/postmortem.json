@@ -1,0 +1,144 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-16",
+  "pr": {
+    "number": 16,
+    "title": "Initial sysdolphin structs and matching of id.c and object.c",
+    "url": "https://github.com/doldecomp/melee/pull/16",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2020-07-03T19:53:09Z",
+    "merged_at": "2020-07-04T00:06:05Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Introduced the first sysdolphin C/header groundwork for class/object/ID allocation data, matched the small ID and object initialization routines in C, and propagated newly identified symbol names through assembly callsites. The PR added src/sysdolphin to the build, removed the now-matched object.s, split remaining ID assembly to id_asm.s, and renamed func_8037AD48 to HSD_ObjAllocInit and func_80381C18 to hsdInitClassInfo across many asm files.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "symbol-renaming",
+      "build-system"
+    ],
+    "systems": [
+      "sysdolphin",
+      "object",
+      "id",
+      "objalloc",
+      "class",
+      "asm",
+      "include",
+      "ldscript",
+      "makefile"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/class.h",
+    "src/sysdolphin/objalloc.h",
+    "src/sysdolphin/object.h",
+    "src/sysdolphin/object.c",
+    "src/sysdolphin/id.h",
+    "src/sysdolphin/id.c",
+    "src/sysdolphin/hash.h",
+    "asm/object.s",
+    "asm/id_asm.s",
+    "asm/objalloc.s",
+    "asm/code_8037E708.s",
+    "include/functions.h",
+    "Makefile",
+    "ldscript.lcf"
+  ],
+  "what_changed": [
+    "Added sysdolphin headers defining core HSD class/object/allocation types: HSD_Class, HSD_ClassInfoHead, HSD_ClassInfo, HSD_FreeList, HSD_MemoryEntry, HSD_ObjAllocLink, HSD_ObjAllocData, HSD_Obj, HSD_ObjInfo, IDEntry, and HSD_IDTable.",
+    "Added object.c with ObjInfoInit, calling hsdInitClassInfo with extern class info/string symbols and sizeof(HSD_ObjInfo) / sizeof(HSD_Obj), replacing the deleted asm/object.s implementation.",
+    "Added id.c with HSD_IDGetAllocData, HSD_IDInitAllocData, and HSD_IDSetup; the remaining ID assembly was renamed from asm/id.s to asm/id_asm.s after removing the matched functions.",
+    "Added hash.h with hash(s) defined as s % 0x65, aligning with the 101-entry HSD_IDTable.",
+    "Updated Makefile to compile src/sysdolphin/*.c and include src/sysdolphin/ in compiler include paths.",
+    "Updated ldscript.lcf to include id_asm.o after id.o so the matched C object and remaining asm preserve link order.",
+    "Renamed func_8037AD48 to HSD_ObjAllocInit in asm/objalloc.s, include/functions.h, and many assembly callsites.",
+    "Renamed func_80381C18 to hsdInitClassInfo in asm/code_8037E708.s and many class-initialization callsites across sysdolphin-related asm."
+  ],
+  "smart_moves": [
+    "Matched small, high-leverage sysdolphin functions first while adding the structural headers needed by many future sysdolphin objects.",
+    "Kept unmatched ID code in a renamed id_asm.s and added it to the linker script, allowing partial C migration without disrupting section ordering.",
+    "Used #pragma force_active around HSD_IDGetAllocData because it was unused until loaded into a GetAllocData function table; the source comment explicitly notes this was required to match.",
+    "Captured an odd but matching behavior in HSD_IDSetup with memset(&lbl_804C23EC, 0, 0x194) and a source comment that the partial memset does not quite make sense but matches.",
+    "Propagated meaningful names for central helper routines across existing assembly, improving searchability and making later object/class init decompilation easier.",
+    "Defined object/class macros in headers, such as HSD_CLASS_INFO, HSD_CLASS_METHOD, HSD_PARENT_INFO, HSD_OBJECT_INFO, HSD_OBJECT_METHOD, and HSD_OBJECT_PARENT_INFO, to encode access patterns for future C ports."
+  ],
+  "decomp_lessons": [
+    "For broad systems like sysdolphin, establishing central structs can unlock many later matches even if only a few functions are converted in the PR.",
+    "Partial decompilation can be kept link-safe by splitting a file into matched C plus a renamed asm remainder and explicitly preserving object order in ldscript.lcf.",
+    "Do not simplify suspicious constants or memset sizes when they are required for matching; document the oddity in the C source instead.",
+    "Unused functions that the original binary still contains may need force_active pragmas until their indirect table references or call graph are fully represented.",
+    "Renaming a central helper in assembly is useful decomp metadata: HSD_ObjAllocInit and hsdInitClassInfo clarified many callsites before all callers were converted to C.",
+    "Expose provisional externs for still-unnamed data symbols when matching small functions, but keep comments tying them to likely semantic names, such as alloc_data, default_table, hsdObj, hsdClass, and string literals."
+  ],
+  "naming_conventions": [
+    "HSD object allocation API uses HSD_ObjAllocInit and HSD_ObjAllocData naming.",
+    "Class initialization helper was named hsdInitClassInfo with lowercase hsd prefix, matching the PR's assembly rename.",
+    "Object info initializer was named ObjInfoInit rather than HSD_ObjInfoInit in this slice.",
+    "ID functions use HSD_ID* names: HSD_IDGetAllocData, HSD_IDInitAllocData, and HSD_IDSetup.",
+    "Struct tags use underscore-prefixed names, such as struct _HSD_ClassInfo and struct _IDEntry, with typedef aliases like HSD_ClassInfo and IDEntry.",
+    "Header guards in this early slice use lowercase underscore style such as _class_h_, _objalloc_h_, _object_h_, _id_h_, and _hash_h_.",
+    "Still-unknown data symbols remained as lbl_ addresses with explanatory comments rather than invented definitive names."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted asm/object.s after replacing func_8037E6C4 with ObjInfoInit in C.",
+    "Renamed asm/id.s to asm/id_asm.s and removed the matched ID functions from it, leaving remaining unmatched assembly intact.",
+    "Added id_asm.o to ldscript.lcf immediately after id.o to maintain expected text ordering.",
+    "Used sizeof(IDEntry), sizeof(HSD_ObjInfo), and sizeof(HSD_Obj) in C to reproduce constants observed in assembly, depending on newly defined struct layouts.",
+    "Used #pragma push / #pragma force_active on / #pragma pop for HSD_IDGetAllocData because it was currently unused but required in the binary.",
+    "Retained exact memset size 0x194 for HSD_IDSetup rather than replacing it with an inferred full-table size expression.",
+    "Renamed assembly branch labels/calls from func_8037AD48 to HSD_ObjAllocInit and from func_80381C18 to hsdInitClassInfo without changing code bytes."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR16",
+    "sysdolphin_base",
+    "sysdolphin structs",
+    "HSD_Class",
+    "HSD_ClassInfo",
+    "HSD_ClassInfoHead",
+    "HSD_Obj",
+    "HSD_ObjInfo",
+    "HSD_ObjAllocData",
+    "HSD_ObjAllocInit",
+    "HSD_ObjAllocLink",
+    "HSD_IDTable",
+    "IDEntry",
+    "HSD_IDGetAllocData",
+    "HSD_IDInitAllocData",
+    "HSD_IDSetup",
+    "ObjInfoInit",
+    "hsdInitClassInfo",
+    "func_8037AD48",
+    "func_80381C18",
+    "func_8037E6C4",
+    "func_8037CD8C",
+    "object.s deleted",
+    "id_asm.s",
+    "force_active",
+    "partial memset 0x194",
+    "hash(s) s % 0x65",
+    "src/sysdolphin",
+    "ldscript id_asm.o"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that refine HSD_ClassInfo or HSD_Obj struct layouts introduced in PR16.",
+    "Find later decomp work that removes lbl_804C23C0 or lbl_804C23EC extern names from id.c.",
+    "Find later PRs that replace hsdInitClassInfo assembly with C or update its prototype.",
+    "Find later PRs that convert objalloc.s and fully define HSD_ObjAllocInit in C.",
+    "Find later changes to ObjInfoInit naming or HSD object/class initialization macros."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

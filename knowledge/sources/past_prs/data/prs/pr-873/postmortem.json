@@ -1,0 +1,135 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-873",
+  "pr": {
+    "number": 873,
+    "title": "Match `ftCo_DownAttack`",
+    "url": "https://github.com/doldecomp/melee/pull/873",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-27T09:18:35Z",
+    "merged_at": "2023-05-27T09:25:41Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the ftCommon DownAttack slice by replacing ft_08A4 assembly with a new C implementation and header for `ftCo_DownAttack`. The matched report shows 100% for the file and all listed functions, including `ftCo_800984D4`, `ftCo_8009856C`, `ftCo_DownAttack_Anim`, `ftCo_DownAttack_Phys`, `ftCo_DownAttack_Coll`, `ft_80098634`, `ftCo_800986B0`, and `ftCo_8009872C`. The PR also performed broad cleanup around the global GObj entity list, renaming `HSD_GObj_804D782C` to `HSD_GObj_Entities` and giving the fighter/item list fields typed names.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-renaming",
+      "struct-typing",
+      "asm-to-c"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "downattack",
+      "baselib-gobj",
+      "item",
+      "assembly"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_DownAttack.c",
+    "src/melee/ft/chara/ftCommon/ftCo_DownAttack.h",
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/ft_08A4.h",
+    "obj_files.mk",
+    "src/sysdolphin/baselib/gobj.h",
+    "src/sysdolphin/baselib/gobjplink.c",
+    "src/melee/it/types.h",
+    "src/melee/ft/ftdynamics.c",
+    "src/placeholder.h"
+  ],
+  "what_changed": [
+    "Added `src/melee/ft/chara/ftCommon/ftCo_DownAttack.c` with C implementations for the DownAttack transition, animation, IASA, physics, collision, fighter-list copy helper, and down-attack condition helpers.",
+    "Added `src/melee/ft/chara/ftCommon/ftCo_DownAttack.h` and moved the relevant prototypes out of the broader `ft_08A4.h` where appropriate.",
+    "Removed the matched DownAttack assembly from `asm/melee/ft/ft_08A4.s`; the file-level matching report shows `0/19100` score and 100.00%.",
+    "Added the new C object to `obj_files.mk` immediately before the remaining `ft_08A4.s.o` object.",
+    "Renamed the global GObj list symbol from `HSD_GObj_804D782C` to `HSD_GObj_Entities` across many asm and C references.",
+    "Renamed `HSD_GObjList` fields from `x20_fighters` and `x24_items` to typed `fighters` and `items`, using `Fighter_GObj*` and `Item_GObj*` in `gobj.h`.",
+    "Updated existing fighter and item loops to use `HSD_GObj_Entities->fighters` and `HSD_GObj_Entities->items` instead of raw offset-style names.",
+    "Expanded `HSD_ObjAllocUnk2` in `src/melee/it/types.h` with named float/int/Vec3 fields through `x150`, supporting the matched `ft_80098634` layout.",
+    "Moved the `{ 14, 0, -3, 3 }` Vec4 constant used by `ft_80098634` into the DownAttack C file as a local static `unk_vec4`, and removed `ftDynamics_803C5710` from `ftdynamics.c`.",
+    "Added `CONV_LO` and `CONV_HI` constants to `placeholder.h`; the exact downstream matching role is not explicit in the excerpt."
+  ],
+  "smart_moves": [
+    "Used a small `static inline bool inlineA0(ftCo_Fighter* fp)` to preserve the assembly shape for the A/B input check while keeping the high-level code readable.",
+    "Kept the empty IASA callback as `void ftCo_DownAttack_IASA(ftCo_GObj* gobj) {}` rather than forcing unnecessary logic, matching the original `blr` behavior.",
+    "For motion-state selection, expressed the up/down DownAttack choice with a ternary against `ftCo_MS_DownWaitU`, mapping to `ftCo_MS_DownAttackU` or `ftCo_MS_DownAttackD`.",
+    "Matched `ft_80098634` by treating the passed allocation object through multiple typed views (`Vec4*` and `Vec3*`) to reproduce the original strided writes.",
+    "Improved global list readability at the same time as matching by introducing `HSD_GObj_Entities`, `fighters`, and `items`, reducing future reliance on magic offsets `0x20` and `0x24`.",
+    "Preserved a known matching artifact in `ftCo_8009872C` with a guarded `MUST_MATCH` unused stack array instead of contaminating normal builds."
+  ],
+  "decomp_lessons": [
+    "When matching small fighter state files, split the completed functions into a dedicated `ftCo_*` C file and leave unrelated unmatched assembly in the original asm object.",
+    "A precise GObj-list type pays off across subsystems: replacing `x20_fighters` and `x24_items` with `fighters` and `items` makes loops self-documenting and helps later decompilation.",
+    "Object-allocation structs can be partially named only as far as needed for a match; `HSD_ObjAllocUnk2` was expanded around the offsets used by `ft_80098634` without requiring a full reverse-engineered type.",
+    "For callbacks that simply delegate, high-level wrappers such as `ftCo_DownAttack_Phys -> ft_80084F3C` and `ftCo_DownAttack_Coll -> ft_80084104` can match cleanly and document action-state behavior.",
+    "If a global constant was previously parked in an unrelated translation unit only because assembly referenced it, move it next to the matched C code once its local role is known.",
+    "Retain evidence of matching hacks, such as `#ifdef MUST_MATCH` unused stack padding, so future cleanup can distinguish required codegen artifacts from intended gameplay logic."
+  ],
+  "naming_conventions": [
+    "`HSD_GObj_804D782C` was renamed to the semantic global `HSD_GObj_Entities`.",
+    "`HSD_GObjList::x20_fighters` was renamed to `fighters` and typed as `Fighter_GObj*`.",
+    "`HSD_GObjList::x24_items` was renamed to `items` and typed as `Item_GObj*`.",
+    "DownAttack callbacks follow the common action callback naming pattern: `ftCo_DownAttack_Anim`, `ftCo_DownAttack_IASA`, `ftCo_DownAttack_Phys`, and `ftCo_DownAttack_Coll`.",
+    "Unknown address-based helpers remained address named where behavior was not fully named, such as `ftCo_800984D4`, `ftCo_800986B0`, `ftCo_8009872C`, and `ft_80098634`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced a contiguous set of functions in `asm/melee/ft/ft_08A4.s` with C while leaving remaining assembly in place, using object ordering in `obj_files.mk` to preserve layout.",
+    "Used `Fighter_ChangeMotionState(gobj, msid, Ft_MF_None, NULL, 0, 1, 0)` followed by `ftAnim_8006EBA4(gobj)` to match `ftCo_8009856C`.",
+    "Used `ftAnim_IsFramesRemaining` with a negated check and fallback to `ft_8008A2BC` to match the DownAttack animation-end transition.",
+    "Used a guarded unused stack block in `ftCo_8009872C` under `#ifdef MUST_MATCH` to satisfy stack/codegen requirements.",
+    "Matched fighter-list traversal through `HSD_GObj_Entities->fighters` and `cur_gobj = cur_gobj->next` rather than raw `lwz` offsets.",
+    "The new `HSD_ObjAllocUnk2` layout let the C code write floats at the front, copy fighter position data into later Vec3 slots, and store a count at `x150`."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-873",
+    "Match ftCo_DownAttack",
+    "ribbanya",
+    "ftCo_DownAttack.c",
+    "ftCo_DownAttack.h",
+    "ft_08A4.s",
+    "ftCo_800984D4",
+    "ftCo_8009856C",
+    "ftCo_DownAttack_Anim",
+    "ftCo_DownAttack_IASA",
+    "ftCo_DownAttack_Phys",
+    "ftCo_DownAttack_Coll",
+    "ft_80098634",
+    "ftCo_800986B0",
+    "ftCo_8009872C",
+    "ftCo_800987D0",
+    "HSD_GObj_Entities",
+    "HSD_GObj_804D782C",
+    "HSD_GObjList",
+    "x20_fighters",
+    "x24_items",
+    "fighters",
+    "items",
+    "HSD_ObjAllocUnk2",
+    "ftDynamics_803C5710",
+    "unk_vec4",
+    "MUST_MATCH unused stack",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or document `ftCo_800984D4`, `ftCo_800986B0`, `ftCo_8009872C`, or `ft_80098634`.",
+    "Search for subsequent cleanup of `HSD_ObjAllocUnk2` and whether its fields get a real domain-specific type.",
+    "Check later PRs for further migration from `HSD_GObj_804D782C` to `HSD_GObj_Entities` in remaining assembly.",
+    "Investigate whether `CONV_LO` and `CONV_HI` added to `placeholder.h` were later replaced by a shared integer-to-double conversion convention.",
+    "Review later `ftCommon` Down/DownStand/DownBound PRs for reuse of the DownAttack state callback and motion-state patterns."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

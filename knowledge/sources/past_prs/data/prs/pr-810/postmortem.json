@@ -1,0 +1,120 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-810",
+  "pr": {
+    "number": 810,
+    "title": "Clean up `ftKirby` motion definitions",
+    "url": "https://github.com/doldecomp/melee/pull/810",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-04-23T14:58:29Z",
+    "merged_at": "2023-04-23T15:18:43Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Refactored Kirby's motion-state table and related fighter motion flag definitions away from raw numeric constants and enum-typed flag groups toward named `static u32 const ... ATTRIBUTE_USED` bitmask constants. The main payoff was making `ftKb_Init_MotionStateTable` searchable and maintainable by replacing hex flag fields and move-id values with symbolic `ftKb_MF_*` and `FtMoveId_*` expressions, while standardizing similar motion-flag constants across many fighter `forward.h` headers.",
+  "change_classification": {
+    "primary_type": "header_and_motion_table_cleanup",
+    "categories": [
+      "headers",
+      "refactor",
+      "constant_naming",
+      "motion_state_table_cleanup"
+    ],
+    "systems": [
+      "fighter",
+      "ftKirby",
+      "motion_state",
+      "state_change_flags"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftKirby/ftKb_Init.c",
+    "src/melee/ft/chara/ftKirby/forward.h",
+    "src/melee/ft/forward.h",
+    "src/melee/ft/chara/ftCaptain/forward.h",
+    "src/melee/ft/chara/ftDonkey/forward.h",
+    "src/melee/ft/chara/ftFox/forward.h",
+    "src/melee/ft/chara/ftGameWatch/forward.h",
+    "src/melee/ft/chara/ftLink/forward.h",
+    "src/melee/ft/chara/ftPeach/forward.h"
+  ],
+  "what_changed": [
+    "Added a large set of Kirby-specific motion flag constants to `src/melee/ft/chara/ftKirby/forward.h`, including `ftKb_MF_MultiJump`, `ftKb_MF_AttackDash`, many copied neutral-B variants such as `ftKb_MF_SpecialNMr`, `ftKb_MF_SpecialNFx`, `ftKb_MF_SpecialNGw`, and their air/loop variants.",
+    "Updated `ftKb_Init.c` to include `forward.h` and replace raw motion-state table bitmasks like `0x0000006A` and packed move-id values like `0x01000000` with named constants such as `ftKb_MF_MultiJump` and `FtMoveId_Unk01 << 24`.",
+    "Converted many fighter `*_MotionFlags` enum definitions into `static u32 const ... ATTRIBUTE_USED` constants in fighter `forward.h` files, including Captain, CLink, DrMario, Fox, GameWatch, Link, Peach, Donkey, and others listed in the PR file set.",
+    "Changed several local transition flag declarations from `Fighter_MotionStateChangeFlags const` to `u32 const`, for example in Captain special move files and other fighter special files.",
+    "Preserved existing bitwise compositions of `FtStateChange_*` flags while making the intermediate combinations reusable and directly named."
+  ],
+  "smart_moves": [
+    "Used symbolic bitmask composition instead of leaving large opaque hex values in Kirby's motion table; this makes future motion-state auditing much easier.",
+    "Introduced factorized base constants such as `ftKb_MF_18_20_21`, `ftKb_MF_4_18_20_21`, and `ftKb_MF_5_18_20_21` so repeated Kirby flag combinations only need to be reasoned about once.",
+    "Applied `ATTRIBUTE_USED` to header-level `static u32 const` flag constants so constants can live in headers without being dropped or triggering unused issues in build configurations.",
+    "Standardized flag constants as `u32` rather than enum types or `Fighter_MotionStateChangeFlags`, matching the underlying use as bitmask values in motion-state data.",
+    "Kept air-state constants mechanically related to ground-state constants by adding `FtStateChange_SkipUpdateParasol`, e.g. `ftKb_MF_SpecialAirN = ftKb_MF_SpecialN | FtStateChange_SkipUpdateParasol`."
+  ],
+  "decomp_lessons": [
+    "When cleaning motion-state tables, first name the flag masks and move-id fields, then replace raw table literals; this improves readability without changing behavior.",
+    "For bitmask constants that combine other bitmask constants, `static u32 const` is safer and clearer than enum members when the values are not conceptually a closed enumeration.",
+    "Header-level motion flag definitions need careful linkage/usage treatment; this PR's pattern is `static u32 const <fighter>_MF_<Name> ATTRIBUTE_USED = ...;`.",
+    "Copied-character systems such as Kirby benefit from explicit per-source-fighter suffixes in constants because many similar neutral-B states differ only by a few `FtStateChange_*` bits.",
+    "Mechanical refactors across all fighter headers help keep per-character cleanup consistent, but the evidence shows no human review discussion explaining hidden matching constraints."
+  ],
+  "naming_conventions": [
+    "`ftKb_MF_*` names are used for Kirby motion flag constants.",
+    "`MF` abbreviates motion flags in fighter headers, e.g. `ftCa_MF_SpecialN`, `ftFx_MF_SpecialAirLwLoop`, `ftDk_MF_CargoThrowF`.",
+    "Kirby copied neutral-B flags use source-fighter suffixes such as `Mr`, `Kp`, `Pe`, `Ys`, `Lg`, `Zd`, `Dr`, `Gk`, `Fx`, `Lk`, `Sk`, `Ns`, `Pp`, `Pk`, `Ss`, `Mt`, `Cl`, `Fc`, `Pc`, `Gw`, `Ca`, `Dk`, `Pr`, `Ms`, `Gn`, and `Fe`.",
+    "Air variants are named by inserting `Air`, e.g. `ftKb_MF_SpecialN` to `ftKb_MF_SpecialAirN`.",
+    "Loop and charged variants keep semantic suffixes such as `Loop`, `Charged`, `Start`, and `Rebound`.",
+    "Some factorized constants use bit-position-style names such as `ftKb_MF_18_20_21`; these are explicitly marked by a nearby `@todo Clean up factorization`, so they are a transitional convention rather than a final semantic naming style."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced literal bitmasks with named constants while preserving the exact bitwise `FtStateChange_*` composition, a low-risk cleanup tactic for matching-sensitive motion tables.",
+    "Used `FtMoveId_Unk01 << 24` style expressions to express packed move-id fields instead of raw shifted hex constants.",
+    "Changed flag constant types to `u32 const`, likely to reflect the actual table field width and avoid enum/type artifacts; the diff evidence supports the type change but does not include reviewer rationale.",
+    "Kept constants `static` in headers to avoid external symbol emission while using `ATTRIBUTE_USED` to keep compiler behavior stable."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, reviews, or PR body text were present in the provided PR slice.",
+    "No explicit reviewer rationale was available; conclusions are based on the title, file list, and diff excerpt."
+  ],
+  "searchable_terms": [
+    "pr-810",
+    "ftKirby",
+    "ftKb_Init_MotionStateTable",
+    "ftKirby forward.h",
+    "motion definitions",
+    "motion flags",
+    "MotionState",
+    "FtStateChange",
+    "Fighter_MotionStateChangeFlags",
+    "static u32 const",
+    "ATTRIBUTE_USED",
+    "FtMoveId_Unk01",
+    "FtStateChange_SkipUpdateParasol",
+    "ftKb_MF_MultiJump",
+    "ftKb_MF_SpecialN",
+    "ftKb_MF_SpecialAirN",
+    "ftKb_MF_SpecialNLoop",
+    "copied neutral B",
+    "Kirby copy abilities",
+    "ftCa_MF",
+    "ftDk_MF",
+    "ftFx_MF",
+    "ftGw_MF"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that resolve the `@todo Clean up factorization` in `ftKirby/forward.h`.",
+    "Search for additional replacements of raw motion-state table hex constants with `FtStateChange_*` and `FtMoveId_*` names.",
+    "Compare later conventions for `Fighter_MotionStateChangeFlags` versus `u32` in motion flag declarations.",
+    "Look for PRs that rename numeric-style constants such as `ftKb_MF_18_20_21` to semantic names."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

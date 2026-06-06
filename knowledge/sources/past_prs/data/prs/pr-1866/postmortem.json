@@ -1,0 +1,149 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1866",
+  "pr": {
+    "number": 1866,
+    "title": "Match most of ftmetal, and rename related struct members",
+    "url": "https://github.com/doldecomp/melee/pull/1866",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-08-24T02:00:47Z",
+    "merged_at": "2025-08-24T02:09:06Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched most of the previously empty ftmetal.c implementation and propagated metal-mode semantics through Fighter, common data, player/game-mode flags, draw/material code, walk/damage logic, and headers. The PR replaced several anonymous fields with meaningful metal-related names, added needed FighterBone/ftData/HSD_DObj typing, corrected symbol string boundaries for nearby data, and documented metal material usage. No substantive review discussion was present in the provided slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "naming",
+      "types-structs",
+      "fighter-state",
+      "rendering-materials"
+    ],
+    "systems": [
+      "fighter",
+      "ftmetal",
+      "ftcommon",
+      "player",
+      "game-mode",
+      "baselib",
+      "config-symbols"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/ftmetal.c",
+    "src/melee/ft/ftmetal.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Damage.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Walk.c",
+    "src/melee/ft/ftdrawcommon.c",
+    "src/melee/ft/ftmaterial.c",
+    "src/melee/pl/player.c",
+    "src/melee/pl/player.h",
+    "src/melee/gm/gm_16AE.c",
+    "src/melee/gm/types.h",
+    "src/sysdolphin/baselib/mobj.h",
+    "config/GALE01/symbols.txt"
+  ],
+  "what_changed": [
+    "Implemented roughly 250 lines in src/melee/ft/ftmetal.c, including ft_800C8170, ftCo_800C8348, ftCo_800C8438, ftCo_800C8540, ft_800C85B8, and static inline helpers for enabling metal state and DObj traversal.",
+    "Renamed Fighter metal-state fields: fp->x2223_b7 became fp->is_metal, fp->x2223_b6 became fp->is_always_metal, fp->x2028 became fp->metal_timer, and fp->x202C became fp->metal_health.",
+    "Renamed ftCommonData->unk_armor to ftCommonData->metal_armor and updated damage knockback armor logic to add metal armor only when fp->is_metal is set.",
+    "Updated fighter initialization, per-frame metal timer expiration, damage handling, copy/transfer logic, material selection, drawing, sound-effect selection, walk acceleration, and action cleanup paths to use the new metal field names.",
+    "Added struct typing needed by ftmetal matching: ftData gained HSD_Joint* x5C; FighterBone gained bitfields flags2_b0 through flags2_b7 plus xD; Fighter x2040 was typed as HSD_DObj**.",
+    "Updated ftmetal.h include guard to MELEE_FT_METAL_H, switched to <melee/ft/forward.h>, and named ftCo_800C8348 parameters as timer and health.",
+    "Added comments documenting ft_804D6580 as the metal material and game-mode/player match-info metal bits.",
+    "Adjusted config/GALE01/symbols.txt entries around lbl_803C6D24/lbl_803C6D30/lbl_803C6D54 and ftCo_804D3C90 to split/mark string data with corrected sizes.",
+    "Added a TODO near ft_800C80A4 noting it may share an inline with ftmetal functions.",
+    "Changed Player_SetFlagsBit5 call sites in gm_16AE.c from integer literals 1/0 to true/false, consistent with its apparent boolean meaning as the always-metal flag."
+  ],
+  "smart_moves": [
+    "The PR did not just match ftmetal.c in isolation; it renamed all observed consumers of the same fields, making the semantic proof stronger across damage, rendering, audio, walking, player flags, and cleanup behavior.",
+    "Using is_metal versus is_always_metal captures an important distinction: temporary metal state can expire or be removed, while always-metal fighters such as classic Metal Mario should remain metal after ftCo_800C8540-style cleanup.",
+    "Naming metal_timer and metal_health reflects both expiration conditions observed in Fighter_8006A360 and damage decrement behavior in Fighter_TakeDamage_8006CC7C, reducing ambiguity around the old x2028/x202C fields.",
+    "The implementation preserves matching-sensitive idioms such as PAD_STACK calls, explicit NULL checks, ternary next-pointer traversal, and local inline helpers rather than over-cleaning control flow.",
+    "Splitting symbol table data into individual string labels avoids treating adjacent strings as one opaque object, which can be necessary for correct data references and matching.",
+    "Adding render/material-related bitfields to FighterBone made ftmetal.c able to reconstruct JObj flags from stored per-bone state instead of hard-coding unexplained behavior everywhere."
+  ],
+  "decomp_lessons": [
+    "When a matched function reveals a struct member’s semantics, propagate the name across all users in the same PR so later matching work benefits immediately and stale xNNNN names do not obscure behavior.",
+    "Temporary status effects often need separate fields for active state, permanent/default state, timer, and remaining health; avoid collapsing these when naming fighter state.",
+    "Rendering-state restoration functions can expose latent struct bitfields: ft_800C8170 uses FighterBone flags2_b0 through flags2_b4 to rebuild JOBJ_LIGHTING, JOBJ_TEXGEN, JOBJ_SPECULAR, and related flags after metal mode.",
+    "For matching, keep compiler-shaped constructs such as PAD_STACK, redundant NULL checks, explicit local variables, and small static inline helpers if they are part of the codegen solution.",
+    "Symbol-table cleanup is part of decomp progress: correcting object sizes and marking data:string can unblock or stabilize matches involving nearby literals.",
+    "A boolean player/game-mode flag may become semantically identifiable only after tracing it into Fighter initialization; here Player_GetFlagsBit5 maps to Fighter::is_always_metal."
+  ],
+  "naming_conventions": [
+    "Use positive boolean names for fighter bitfields when semantics are clear: is_metal and is_always_metal replaced x2223_b7 and x2223_b6.",
+    "Use domain-prefixed names for status-effect fields: metal_timer, metal_health, and metal_armor replaced anonymous x2028, x202C, and unk_armor.",
+    "Use parameter names in headers once semantics are known: ftCo_800C8348(Fighter_GObj*, int timer, int health).",
+    "Use file-scope include guards based on project path/name, as ftmetal.h changed from GALE01_0C8170 to MELEE_FT_METAL_H.",
+    "Document inferred fields with concise comments when useful, such as is_always_metal meaning classic Metal Mario and gm match-info x4_b0 meaning metal."
+  ],
+  "assembly_or_matching_tactics": [
+    "ftmetal.c matching used PAD_STACK(8) and PAD_STACK(0x10) in multiple functions to satisfy stack layout/codegen constraints.",
+    "Static inline helpers such as enableMetal and dobj_next were introduced, likely to share exact code patterns and keep call sites/codegen manageable; a nearby TODO suggests ft_800C80A4 may use a shared inline with ftmetal functions.",
+    "The DObj traversal code preserves repeated NULL-safe ternary expressions like dobj = dobj != NULL ? dobj->next : NULL, which is a common matching tactic when simpler loops alter codegen.",
+    "ft_800C8170 reconstructs JObj flags from FighterBone bitfields, clears flags with 0x50180, sets computed flags, and switches on mobj->rendermode & RENDER_BLENDING to choose HSD_DObjModifyFlags parameters, with OSReport/HSD_Panic on unexpected blending flags.",
+    "ft_800C85B8 uses HSD_IDInsertToTable, ftAnim_GetNextJointInTree, HSD_DObjLoadDesc, HSD_DObjResolveRefsAll, HSD_JObjAddDObj/lb_8000CE30, hsdChangeClass(mobj, &ftMObj), and assert/report guards for DObj count limits.",
+    "Data-symbol matching included splitting lbl_803C6D24 into several string labels and correcting ftCo_804D3C90 from a 4-byte local object to a 1-byte local string-like object."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1866",
+    "ftmetal",
+    "metal mode",
+    "is_metal",
+    "is_always_metal",
+    "metal_timer",
+    "metal_health",
+    "metal_armor",
+    "ftCo_800C8348",
+    "ftCo_800C8438",
+    "ftCo_800C8540",
+    "ft_800C8170",
+    "ft_800C85B8",
+    "ft_804D6580",
+    "FighterBone flags2_b0",
+    "FighterBone flags2_b1",
+    "FighterBone flags2_b2",
+    "FighterBone flags2_b3",
+    "FighterBone flags2_b4",
+    "FighterBone xD",
+    "ftData x5C",
+    "HSD_Joint",
+    "HSD_DObj",
+    "HSD_MObj",
+    "ftMObj",
+    "JOBJ_LIGHTING",
+    "JOBJ_TEXGEN",
+    "JOBJ_SPECULAR",
+    "RENDER_BLENDING",
+    "RENDER_XLU",
+    "RENDER_NO_ZUPDATE",
+    "Player_GetFlagsBit5",
+    "Player_SetFlagsBit5",
+    "classic metal mario",
+    "symbols.txt lbl_803C6D24",
+    "ftCo_804D3C90"
+  ],
+  "follow_up_queries": [
+    "Search for remaining uses of x2223_b6, x2223_b7, x2028, x202C, or unk_armor to verify the metal naming propagation is complete.",
+    "Investigate the TODO in ft_0C31.c: determine whether ft_800C80A4 and ftmetal functions can share an inline without hurting matching.",
+    "Audit Fighter::x2040 typing: the diff shows HSD_DObj** but ft_800C85B8 stores DObj pointers into x2040[index], so confirm the intended declaration and downstream users.",
+    "Continue naming FighterBone flags2_b0 through flags2_b7 based on their observed JObj flag meanings and ftmetal loading behavior.",
+    "Look for remaining player flag bit names around Player_GetFlagsBit6/7 and Player_GetMoreFlagsBit1 that can be semantically identified from similar propagation."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

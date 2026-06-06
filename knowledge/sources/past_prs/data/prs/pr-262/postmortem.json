@@ -1,0 +1,143 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-262",
+  "pr": {
+    "number": 262,
+    "title": "Player.C is finshed and DOL is OK!",
+    "url": "https://github.com/doldecomp/melee/pull/262",
+    "state": "MERGED",
+    "author": "snuffysasa",
+    "created_at": "2022-02-10T03:46:27Z",
+    "merged_at": "2022-02-11T11:03:44Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large player-system decompilation PR that moved most of asm/melee/pl/player.s into src/melee/pl/player.c, added player data definitions, exposed many Player_* symbols, and updated many remaining assembly callsites to use the new names. The PR body says all player.s functions were matching player.c except one register-different function, and the title says the DOL was OK. There was no recorded review discussion in the slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "symbol-renaming",
+      "data-migration",
+      "build-system"
+    ],
+    "systems": [
+      "melee/pl",
+      "player",
+      "fighter",
+      "camera",
+      "interface",
+      "stage",
+      "debug",
+      "include",
+      "build"
+    ]
+  },
+  "key_files": [
+    "src/melee/pl/player.c",
+    "src/melee/pl/player.h",
+    "asm/melee/pl/player.s",
+    "include/functions.h",
+    "include/variables.h",
+    "Makefile",
+    "e_files.mk",
+    "asm/melee/cm/camera.s",
+    "asm/melee/db/code_80225374.s",
+    "asm/melee/ft/chara/ftcrazyhand.s",
+    "asm/melee/ft/chara/ftmasterhand.s",
+    "asm/melee/ft/code_8008521C.s",
+    "asm/melee/gm/code_801601C4.s",
+    "asm/melee/pl/code_8003715C.s"
+  ],
+  "what_changed": [
+    "Added 8388 lines to src/melee/pl/player.c and deleted 5924 lines from asm/melee/pl/player.s, effectively relocating the player module implementation from assembly to C.",
+    "Added player module data in C, including lbl_803BCDC0 as \"PdPm.dat\", lbl_803BCDCC as \"plLoadCommonData\", ftMapping lbl_803BCDE0[33], StaticPlayer player_slots[6] replacing lbl_80453080, and an HSD object allocation storage object at lbl_804587E0.",
+    "Expanded src/melee/pl/player.h substantially, with changed-file counts showing 217 added and 33 deleted lines.",
+    "Renamed many unresolved func_8003xxxx player symbols to Player_* names in include/functions.h and in remaining assembly callsites, including Player_GetPlayerId, Player_GetEntity, Player_GetPlayerCharacter, Player_GetPlayerSlotType, Player_GetEntityAtIndex, Player_GetTotalAttackCountPtr, Player_InitOrResetPlayer, and Player_InitAllPlayers.",
+    "Updated include/variables.h to refer to player_slots instead of lbl_80453080.",
+    "Added src/melee/pl/player.o to EPILOGUE_UNSCHEDULED in e_files.mk and added a Makefile per-object override setting $(EPILOGUE_DIR)/src/melee/pl/player.o: CC_EPI := $(CC).",
+    "Touched many dependent assembly files only to update branch labels/callee names after the player symbols became named, including camera, debug, fighter character files, interface files, ground files, and game-mode asm.",
+    "The PR body explicitly called out uncertainty around moving .data, .bss, and .sdata out of player.s; the merged diff shows at least some of that data was moved or renamed into player.c."
+  ],
+  "smart_moves": [
+    "Kept cross-module callsites compiling by doing a broad mechanical rename from anonymous func_8003xxxx labels to Player_* symbols in all dependent asm files.",
+    "Renamed the core player slot array from lbl_80453080 to player_slots and propagated that name into variables.h and player.c, making the central BSS object searchable and semantically useful.",
+    "Used a per-object compiler override for player.o and added it to the Epilogue unscheduled list, isolating build settings needed for this newly decompiled translation unit instead of changing global flags.",
+    "Preserved address-derived names for still-uncertain functions, such as Player_800326CC, while giving clear semantic names where behavior was understood, such as Player_GetEntity and Player_GetPlayerSlotType.",
+    "Documented scratch links and matching uncertainty inline for some functions, which makes later cleanup and exact matching easier to resume.",
+    "Grouped known data around the player module in player.c, including string data, mapping tables, BSS, and object allocator data, rather than leaving all references as anonymous extern labels."
+  ],
+  "decomp_lessons": [
+    "When moving a whole assembly module to C, expect a second pass that updates every remaining asm caller to use the new symbol names; otherwise the decompiled file may build but the symbol graph stays hard to search.",
+    "Data migration is often the hard part of finishing a module: PR evidence specifically mentions .data, .bss, and .sdata concerns, and the diff shows strings, mapping tables, BSS arrays, and allocator state being introduced in C.",
+    "A central global like lbl_80453080 should be renamed only when all callsites and headers are updated consistently; this PR changed it to player_slots in player.c and include/variables.h.",
+    "Per-object compiler settings can be a safe way to land one difficult translation unit without destabilizing the rest of the project.",
+    "For uncertain decompilation, preserve exact-address fallback names with a subsystem prefix rather than inventing semantics; Player_80031DC8-style names are still more searchable than raw func_80031DC8 names.",
+    "Do not over-claim a file is perfectly cleaned up just because the DOL matches: this diff still contains TODO comments, NON_MATCHING guards, and uncertain helper structs, which are useful evidence for future cleanup."
+  ],
+  "naming_conventions": [
+    "Player subsystem functions use the prefix Player_.",
+    "Known getters and setters use descriptive names like Player_GetEntity, Player_GetEntityAtIndex, Player_GetPlayerId, Player_GetPlayerCharacter, Player_GetPlayerSlotType, Player_SetStocks, and Player_SetTeam.",
+    "Unknown or partially understood player functions keep the address in the name but still gain the subsystem prefix, for example Player_800326CC, Player_80036CF0, and Player_80037054.",
+    "The anonymous BSS label lbl_80453080 was renamed to player_slots.",
+    "The player character mapping table was represented as ftMapping lbl_803BCDE0[33], preserving the original label while giving the element type a semantic name.",
+    "Some names in this slice are not final-polished, such as Player_SetSlottype and Player_GetSomePos; future work should verify spelling and semantics before reusing them as canonical APIs."
+  ],
+  "assembly_or_matching_tactics": [
+    "Mass callsite updates in assembly changed branch comments and targets from func_8003345C to Player_GetPlayerId, func_80034110 to Player_GetEntity, func_80032330 to Player_GetPlayerCharacter, and func_8003241C to Player_GetPlayerSlotType.",
+    "The diff keeps many C implementations paired with #else asm versions under NON_MATCHING guards, suggesting the author used inline assembly fallbacks or comparison scaffolding while working through exact matches.",
+    "The PR body states one remaining function was off by one register and links a decomp.me scratch, which is a typical register-allocation-focused matching problem.",
+    "Data layout was handled by recreating tables and globals in C with original labels retained in comments, such as player_slots for lbl_80453080 and ftMapping lbl_803BCDE0.",
+    "A specific matching workaround appears in player.c comments: an offset array is derived from &lbl_803BCDE0[0].extra_internal_id because a more natural line was reportedly off by one byte.",
+    "Build integration used EPILOGUE_UNSCHEDULED plus a CC_EPI override for player.o, indicating the object needed a specific compiler path/settings to preserve DOL output."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided slice.",
+    "The only human text is the PR body, where the author asked for help with moving player.s data sections and said they could fix functions after the data move if issues appeared."
+  ],
+  "searchable_terms": [
+    "Player.C is finshed and DOL is OK",
+    "player.c",
+    "player.s",
+    "Player_GetEntity",
+    "Player_GetEntityAtIndex",
+    "Player_GetPlayerId",
+    "Player_GetPlayerCharacter",
+    "Player_GetPlayerSlotType",
+    "Player_GetTotalAttackCountPtr",
+    "Player_InitOrResetPlayer",
+    "Player_InitAllPlayers",
+    "player_slots",
+    "lbl_80453080",
+    "lbl_803BCDC0",
+    "lbl_803BCDCC",
+    "lbl_803BCDE0",
+    "ftMapping",
+    "StaticPlayer",
+    "PdPm.dat",
+    "plLoadCommonData",
+    "NON_MATCHING",
+    "EPILOGUE_UNSCHEDULED",
+    "CC_EPI",
+    "one register",
+    "data bss sdata"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that remove NON_MATCHING guards or inline asm from src/melee/pl/player.c.",
+    "Find later cleanup of player_slots, StaticPlayer, ftMapping, lbl_803BCDE0, or the temporary Unk_Struct_w_Array struct.",
+    "Search for correction or canonicalization of Player_SetSlottype spelling.",
+    "Search for later review or commits explaining why player.o needed CC_EPI := $(CC).",
+    "Find subsequent PRs that move or type the remaining player-related data labels lbl_803BCE44, lbl_803BCE60, lbl_804D3940, lbl_804D7F10, and lbl_804D7F14.",
+    "Search for the decomp.me scratch 1KLIF or psnmG/eQam5/ZBVvR references to identify which functions were still register- or byte-off."
+  ],
+  "confidence": 0.82,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

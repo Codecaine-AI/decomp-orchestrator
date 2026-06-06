@@ -1,0 +1,156 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-883",
+  "pr": {
+    "number": 883,
+    "title": "Match `ftCo_EscapeAir`",
+    "url": "https://github.com/doldecomp/melee/pull/883",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-28T07:55:15Z",
+    "merged_at": "2023-05-28T08:16:09Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common fighter EscapeAir code by adding `src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c` and its header, removing the corresponding hand-written assembly from `asm/melee/ft/ft_08A4.s`, wiring the new C object into `obj_files.mk`, and adding the motion-variable/common-data fields needed to express air-dodge behavior. The PR report shows the new file and all listed functions at 100.00% match.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-typing",
+      "build-system"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "EscapeAir",
+      "asm",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c",
+      "role": "New matched C implementation for EscapeAir functions."
+    },
+    {
+      "path": "src/melee/ft/chara/ftCommon/ftCo_EscapeAir.h",
+      "role": "New declarations for `ftCo_80099A58`, `ftCo_80099A9C`, EscapeAir callbacks, and the landing callback helper."
+    },
+    {
+      "path": "asm/melee/ft/ft_08A4.s",
+      "role": "Removed the matched EscapeAir assembly block and updated remaining assembly callsites from local label `.L_80099A58` to symbol `ftCo_80099A58`."
+    },
+    {
+      "path": "src/melee/ft/chara/ftCommon/types.h",
+      "role": "Added `mv.co.escapeair` motion vars with `timer` and saved `Vec3 self_vel`; also changed several named nested structs in the union to anonymous structs."
+    },
+    {
+      "path": "src/melee/ft/types.h",
+      "role": "Typed ftCommonData offsets used by EscapeAir as `escapeair_deadzone`, `escapeair_force`, `escapeair_decay`, and adjacent floats/ints."
+    },
+    {
+      "path": "src/melee/ft/chara/ftCommon/ftCo_ItemThrow.h",
+      "role": "Tightened prototypes for related helpers from `HSD_GObj*` to `ftCo_GObj*` so EscapeAir can call them cleanly."
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "Added `ftCo_EscapeAir.c.o` to `TEXT_O_FILES` before the remaining `ft_08A4.s.o`."
+    }
+  ],
+  "what_changed": [
+    "Added matched implementations for `ftCo_80099A58`, `ftCo_80099A9C`, `ftCo_EscapeAir_Anim`, `ftCo_EscapeAir_IASA`, `ftCo_EscapeAir_Phys`, `ftCo_EscapeAir_Coll`, and `ftCo_80099D70`.",
+    "`ftCo_80099A58` checks shoulder-button input with `fp->input.x668 & (HSD_PAD_R | HSD_PAD_L)`, starts EscapeAir through `ftCo_80099A9C(gobj, p_ftCommonData->x334)`, and returns a bool.",
+    "`ftCo_80099A9C` saves current self velocity into `fp->mv.co.escapeair.self_vel`, computes EscapeAir launch velocity from stick direction using `ftCommon_8007D9D4`, `cosf`, and `sinf`, or zeros velocity if stick input is within `escapeair_deadzone`.",
+    "EscapeAir state setup clears `cmd_vars[cmd_skip_decay]`, stores the timer in `fp->mv.co.escapeair.timer`, changes motion state to `ftCo_MS_EscapeAir`, calls `ftAnim_8006EBA4`, and sets common state via `ftCommon_8007EBAC(fp, 23, 0)`.",
+    "`ftCo_EscapeAir_Anim` transitions out through `ft_80096900` when animation frames are exhausted, using `p_ftCommonData->x340` and `p_ftCommonData->x344`.",
+    "`ftCo_EscapeAir_IASA` handles the timer window, calls `ft_80095328`, optionally restores saved self velocity, decrements the timer after `ftCo_800D705C`, and applies a `0.1f` horizontal velocity multiplier when `ftCo_800C3B10` succeeds.",
+    "`ftCo_EscapeAir_Phys` either decays x/y self velocity by `p_ftCommonData->escapeair_decay` or delegates to `ft_80084DB0` depending on `cmd_vars[cmd_skip_decay]`.",
+    "`ftCo_EscapeAir_Coll` now calls `ft_80082C74(gobj, ftCo_80099D70)`, and `ftCo_80099D70` calls `ft_800D5CB0(gobj, 0, p_ftCommonData->x344)`.",
+    "Removed sdata2 constants for `0.0f`, `1.0f`, and `0.1f` from the remaining assembly block because the matched C file now owns those constants.",
+    "Changed multiple assembly branch-and-link references in `ft_08A4.s` from `.L_80099A58` to the named C symbol `ftCo_80099A58` for callsites in pass, bury jump, passive wall, jump, aerial jump, parasol fall, rebirth wait, and capture jump related code."
+  ],
+  "smart_moves": [
+    "Introduced a small local enum `cmd_var_idx` with `cmd_skip_decay` instead of using a raw command-var index throughout the new file.",
+    "Used a static inline helper (`inlineA0`) to isolate the EscapeAir velocity setup while preserving the matched call/stack behavior of `ftCo_80099A9C`.",
+    "Typed previously unknown common-data fields only where the new decomp needed evidence: `escapeair_deadzone` as `Vec2`, `escapeair_force` and `escapeair_decay` as floats, while leaving less-certain neighbors as generic names like `x334`, `x340`, and `x344`.",
+    "Added explicit motion-variable storage for EscapeAir at fp+2340/fp+2344, matching the assembly pattern where a timer and saved velocity are stored and later reused.",
+    "Kept `MUST_MATCH` guarded unused stack arrays where necessary, documenting them with `@todo Unused stack` instead of hiding matching artifacts.",
+    "Renamed external assembly callsites to the new C symbol immediately, which makes future slices easier to search and avoids dangling local-label references after partial asm removal."
+  ],
+  "decomp_lessons": [
+    "When moving a block out of a large assembly file, update all remaining assembly callsites to the new exported C symbol, not the old local label.",
+    "For common action-state code, model fp+2340 motion variables in `ftCommon_MotionVars` as a named union member once the state-specific meaning is clear.",
+    "Prefer evidence-backed field names for common-data offsets that are directly used by the matched code, but avoid overnaming adjacent fields whose semantics are not proven.",
+    "Small `MUST_MATCH` stack-padding arrays can be acceptable when the function otherwise cleanly expresses behavior and the padding is clearly marked as an unused-stack matching artifact.",
+    "Use existing project typedefs (`ftCo_GObj`, `Fighter_GObj`, `Vec2`, `Vec3`) to make function prototypes and struct fields reflect observed usage rather than leaving everything as `HSD_GObj*` or `UNK_T`.",
+    "Common fighter state transitions often require both motion-state change and auxiliary calls (`ftAnim_8006EBA4`, `ftCommon_8007EBAC`); preserving call order is part of matching."
+  ],
+  "naming_conventions": [
+    "New file and public callbacks follow the common-action naming style: `ftCo_EscapeAir.c`, `ftCo_EscapeAir.h`, `ftCo_EscapeAir_Anim`, `ftCo_EscapeAir_IASA`, `ftCo_EscapeAir_Phys`, and `ftCo_EscapeAir_Coll`.",
+    "Unidentified but address-stable functions are kept as address names such as `ftCo_80099A58`, `ftCo_80099A9C`, and `ftCo_80099D70`.",
+    "New semantic common-data names use action prefixes: `escapeair_deadzone`, `escapeair_force`, and `escapeair_decay`.",
+    "Motion vars are accessed as `fp->mv.co.escapeair.timer` and `fp->mv.co.escapeair.self_vel`, matching the ftCommon union member naming pattern.",
+    "Header declarations include address comments like `/* 099A58 */`, consistent with the project’s function-address annotation style.",
+    "The header guard uses the address-style guard `GALE01_099A58`, matching nearby generated/decomp headers."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed 254 lines from `asm/melee/ft/ft_08A4.s` corresponding to the matched EscapeAir functions while leaving unrelated assembly in place.",
+    "Added `ftCo_EscapeAir.c.o` to `TEXT_O_FILES` before the residual `ft_08A4.s.o`, allowing the new C object to replace only the matched text range.",
+    "Used `ABS(fp->input.lstick.x)` and `ABS(fp->input.lstick.y)` deadzone checks to reproduce the assembly’s compare/fneg behavior around stick magnitude.",
+    "Used `cosf` and `sinf` from `<MSL/trigf.h>` to reproduce the velocity projection in the original assembly.",
+    "Represented `0.1f` directly in C for the IASA horizontal velocity dampening, corresponding to the removed `.L_804D8688` sdata2 constant.",
+    "Used guarded dummy stack bytes in `ftCo_80099A9C`, `ftCo_EscapeAir_Anim`, and `ftCo_EscapeAir_IASA` to satisfy stack-layout requirements under `MUST_MATCH`.",
+    "The PR's generated report lists the file and each function at `0` score / `100.00%`, indicating a complete match for the submitted C file."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-883",
+    "ribbanya",
+    "Match ftCo_EscapeAir",
+    "ftCo_EscapeAir.c",
+    "ftCo_EscapeAir.h",
+    "ftCo_80099A58",
+    "ftCo_80099A9C",
+    "ftCo_EscapeAir_Anim",
+    "ftCo_EscapeAir_IASA",
+    "ftCo_EscapeAir_Phys",
+    "ftCo_EscapeAir_Coll",
+    "ftCo_80099D70",
+    "ft_08A4.s",
+    "ftCommon_MotionVars",
+    "escapeair",
+    "escapeair_deadzone",
+    "escapeair_force",
+    "escapeair_decay",
+    "cmd_skip_decay",
+    "MUST_MATCH unused stack",
+    "ft_80095328",
+    "ft_80096900",
+    "ft_80084DB0",
+    "ft_80082C74",
+    "ft_800D5CB0",
+    "ftCo_800D705C",
+    "ftCommon_8007D9D4",
+    "Fighter_ChangeMotionState",
+    "ftCo_MS_EscapeAir",
+    "cosf",
+    "sinf",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or further type `p_ftCommonData->x334`, `x340`, or `x344` after EscapeAir.",
+    "Search for other uses of `cmd_vars[cmd_skip_decay]` or command variable index 0 in EscapeAir animation command handling.",
+    "Look for later cleanup removing the `MUST_MATCH` unused stack arrays in `ftCo_EscapeAir.c`.",
+    "Search for PRs that continue decompiling the remaining functions in `asm/melee/ft/ft_08A4.s` around `ft_80099D9C`."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

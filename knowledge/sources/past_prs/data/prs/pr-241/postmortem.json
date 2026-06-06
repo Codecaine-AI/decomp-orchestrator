@@ -1,0 +1,198 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-241",
+  "pr": {
+    "number": 241,
+    "title": "label most math.s functions from Pikmin map",
+    "url": "https://github.com/doldecomp/melee/pull/241",
+    "state": "MERGED",
+    "author": "EpochFlame",
+    "created_at": "2022-01-12T18:48:45Z",
+    "merged_at": "2022-01-12T18:56:51Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Labeled a large cluster of MSL math/trig assembly symbols using the Pikmin map, split the original asm/MSL/math.s into separate math_1.s and trigf.s units, and propagated the newly named trig calls across many asm files. The main unidentified trig internals func_80326240 and func_803263D4 became cosf and sinf, wrapper-style symbols became cos__Ff and sin__Ff, func_803261B4 became fabsf__Ff, and trig data tables were renamed to descriptive names such as __sincos_on_quadrant, __sincos_poly, tmp_float, and __four_over_pi_m1. The author noted uncertainty about whether lbl_80400770 and lbl_80400774 belonged in trigf.s, while saying the global data order was correct.",
+  "change_classification": {
+    "primary_type": "asm_symbol_labeling",
+    "categories": [
+      "symbol_renaming",
+      "asm_file_split",
+      "build_config_update",
+      "library_function_identification",
+      "callsite_relabeling"
+    ],
+    "systems": [
+      "MSL",
+      "math",
+      "trigf",
+      "asm",
+      "dolphin",
+      "melee",
+      "sysdolphin_baselib",
+      "fighters",
+      "items",
+      "stages"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "asm/MSL/math.s",
+      "role": "Original MSL math assembly file; many trig-related functions and data were removed into split files, and rodata labels __sincos_on_quadrant and __sincos_poly were named."
+    },
+    {
+      "path": "asm/MSL/math_1.s",
+      "role": "New split MSL math file containing frexp and fabsf__Ff."
+    },
+    {
+      "path": "asm/MSL/trigf.s",
+      "role": "New split MSL trig file containing tanf, cos__Ff, sin__Ff, cosf, sinf, __sinit_trigf_c, tmp_float, lbl_80400770, lbl_80400774, and __four_over_pi_m1."
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "Build object list updated to include asm/MSL/math_1.o and asm/MSL/trigf.o before asm/MSL/math.o."
+    },
+    {
+      "path": "asm/dolphin/os/init/__ppc_eabi_init.s",
+      "role": "Initializer table updated to reference __sinit_trigf_c."
+    },
+    {
+      "path": "asm/melee/ft/code_8008521C.s",
+      "role": "Representative high-volume callsite relabeling from anonymous trig functions to cosf/sinf."
+    },
+    {
+      "path": "asm/melee/it/code_8027CF30.s",
+      "role": "Representative high-volume item-system callsite relabeling from anonymous trig functions to cosf/sinf."
+    },
+    {
+      "path": "asm/sysdolphin/baselib/code_80391580.s",
+      "role": "Representative baselib callsite relabeling from anonymous trig functions to cosf/sinf."
+    }
+  ],
+  "what_changed": [
+    "Split MSL math assembly further by moving frexp into new asm/MSL/math_1.s and moving trig-related code into new asm/MSL/trigf.s.",
+    "Added asm/MSL/math_1.o and asm/MSL/trigf.o to obj_files.mk before asm/MSL/math.o, preserving object ordering around the split.",
+    "Renamed func_80326240 to cosf and func_803263D4 to sinf.",
+    "Renamed wrapper symbols func_80326200 and func_80326220 to cos__Ff and sin__Ff.",
+    "Renamed func_803261B4 to fabsf__Ff.",
+    "Relabeled tanf internals so its calls now branch to cos__Ff and sin__Ff rather than anonymous func_80326200/func_80326220.",
+    "Relabeled many external callsites across camera, fighter, item, stage, text, baselib, and Dolphin asm files from func_80326240/func_803263D4 to cosf/sinf.",
+    "Renamed rodata tables lbl_803B9358 and lbl_803B9378 to __sincos_on_quadrant and __sincos_poly.",
+    "Moved/renamed trig-related data including tmp_float and __four_over_pi_m1 into trigf.s.",
+    "Updated the initializer reference to __sinit_trigf_c."
+  ],
+  "smart_moves": [
+    "Used the Pikmin map as external evidence to replace anonymous address-based function labels with library-style MSL trig names.",
+    "Did not only label function definitions; the PR also updated every visible callsite, making future grep/search results reflect semantic function names across the codebase.",
+    "Preserved object order by adding math_1.o and trigf.o immediately before math.o in obj_files.mk, an important tactic when splitting asm while keeping link layout stable.",
+    "Separated frexp and trigf code into smaller assembly units, reducing the size and ambiguity of asm/MSL/math.s for later decompilation.",
+    "Named supporting trig tables, not just functions, which makes later sin/cos polynomial reconstruction easier.",
+    "Explicitly called out uncertainty about two global data labels instead of overclaiming their placement."
+  ],
+  "decomp_lessons": [
+    "When a known SDK/library map is available, use it to label both definitions and all downstream branch targets; this turns anonymous call graphs into searchable semantic APIs.",
+    "File splits in assembly must be paired with object-list updates that preserve link order.",
+    "For math-library decompilation, table labels such as quadrant tables and polynomial coefficient tables are often as useful as function labels.",
+    "Wrapper symbols can coexist with core C/library symbols: this PR distinguished cos__Ff/sin__Ff wrappers from cosf/sinf implementations.",
+    "If data placement is uncertain, document the uncertainty and preserve proven ordering rather than inventing stronger claims.",
+    "A broad callsite relabeling pass can touch many unrelated gameplay systems without changing behavior; classify such PRs as symbol/name hygiene rather than gameplay changes."
+  ],
+  "naming_conventions": [
+    {
+      "pattern": "MSL single-precision trig implementations use standard names cosf and sinf.",
+      "examples": [
+        "func_80326240 -> cosf",
+        "func_803263D4 -> sinf"
+      ]
+    },
+    {
+      "pattern": "Some float wrapper functions use C++-mangled-style suffixes in asm labels.",
+      "examples": [
+        "cos__Ff",
+        "sin__Ff",
+        "fabsf__Ff"
+      ]
+    },
+    {
+      "pattern": "Internal trig data tables use double-underscore descriptive names.",
+      "examples": [
+        "__sincos_on_quadrant",
+        "__sincos_poly",
+        "__four_over_pi_m1",
+        "__sinit_trigf_c"
+      ]
+    },
+    {
+      "pattern": "Uncertain or still-unknown globals may remain as address labels even after adjacent known data is named.",
+      "examples": [
+        "lbl_80400770",
+        "lbl_80400774"
+      ]
+    }
+  ],
+  "assembly_or_matching_tactics": [
+    "Split asm/MSL/math.s into math_1.s and trigf.s while adding corresponding objects to obj_files.mk to maintain link order.",
+    "Replaced branch targets in asm comments and labels from func_80326240/func_803263D4 to cosf/sinf across many object files without altering instruction bytes.",
+    "Renamed table references from lbl_803B9358/lbl_803B9378 to __sincos_on_quadrant/__sincos_poly while preserving the same addresses and data contents.",
+    "Kept global data order intact despite uncertainty about specific labels, according to the author's note.",
+    "Moved trig initializer code into trigf.s and updated the init table entry to __sinit_trigf_c."
+  ],
+  "review_feedback": [
+    {
+      "source": "PR body",
+      "text": "Author said the PR also split files further and was not sure about two global data labels, but believed the order was correct."
+    },
+    {
+      "source": "issue comment",
+      "text": "Author specifically noted uncertainty about whether lbl_80400770 and lbl_80400774 should be in trigf.s."
+    },
+    {
+      "source": "review",
+      "text": "RevoSucks approved the PR with no written review comments."
+    }
+  ],
+  "searchable_terms": [
+    "PR241",
+    "Pikmin map",
+    "MSL math",
+    "math.s",
+    "math_1.s",
+    "trigf.s",
+    "frexp",
+    "tanf",
+    "cosf",
+    "sinf",
+    "cos__Ff",
+    "sin__Ff",
+    "fabsf__Ff",
+    "func_80326240",
+    "func_803263D4",
+    "func_80326200",
+    "func_80326220",
+    "func_803261B4",
+    "__sincos_on_quadrant",
+    "__sincos_poly",
+    "__four_over_pi_m1",
+    "__sinit_trigf_c",
+    "tmp_float",
+    "lbl_80400770",
+    "lbl_80400774",
+    "obj_files.mk",
+    "asm symbol labeling",
+    "trig callsite relabeling"
+  ],
+  "follow_up_queries": [
+    "Check later PRs for whether lbl_80400770 and lbl_80400774 were confirmed, renamed, or moved out of trigf.s.",
+    "Search later decomp work for source equivalents of asm/MSL/trigf.s, especially cosf, sinf, tanf, __sincos_poly, and __four_over_pi_m1.",
+    "Look for additional Pikmin map based labeling passes in MSL or Dolphin libraries.",
+    "Verify whether cos__Ff and sin__Ff wrappers remain as asm labels or are later represented as C/C++ declarations."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

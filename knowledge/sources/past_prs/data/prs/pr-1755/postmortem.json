@@ -1,0 +1,124 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1755",
+  "pr": {
+    "number": 1755,
+    "title": "ZeldaDinFirexplode work",
+    "url": "https://github.com/doldecomp/melee/pull/1755",
+    "state": "MERGED",
+    "author": "lukechampine",
+    "created_at": "2025-07-28T04:40:02Z",
+    "merged_at": "2025-07-28T08:49:05Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Decompiled initial Zelda Din's Fire explosion item behavior by replacing several placeholder functions in itzeldadinfireexplode.c with typed item spawn, teardown, initialization, scaling, hitbox, effect, camera, and debug logic. The PR also introduced item-specific xDD4 item-var and special-attribute structs, wired the item-var union, and upgraded header prototypes from UNK_RET/UNK_PARAMS to concrete signatures. decomp.dev reported one new full match, it_802C4670, and three large partial improvements for it_802C4580, it_802C46C4, and it_802C4820.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "item-behavior",
+      "struct-layout",
+      "prototype-cleanup"
+    ],
+    "systems": [
+      "item",
+      "character-items",
+      "Zelda",
+      "Din's Fire",
+      "effects",
+      "camera",
+      "collision"
+    ]
+  },
+  "key_files": [
+    "src/melee/it/items/itzeldadinfireexplode.c",
+    "src/melee/it/items/itzeldadinfireexplode.h",
+    "src/melee/it/itCharItems.h",
+    "src/melee/it/types.h"
+  ],
+  "what_changed": [
+    "Implemented it_802C4580 as a Zelda Din's Fire explosion spawner that fills a SpawnItem for It_Kind_Zelda_DinFire_Explode, copies the requested position with z forced to 0.0f, initializes velocity and parent fields, calls Item_80268B18, clears item command vars, stores scale and parent in xDD4_itemVar.zeldadinfireexplode, then calls it_802C46C4.",
+    "Implemented it_802C4670 cleanup logic: calls it_802725D4, clears ip->owner, destroys all effects with efLib_DestroyAll, and resets the zeldadinfireexplode xDE0 flag. This was the only function reported by decomp.dev as a new 100% match.",
+    "Implemented it_802C46C4 initialization/update setup for the explosion: fetches JObj and special attributes, initializes item state, starts animation update, sets lifetime to 60.0f, spawns effect 0x4FA, updates scale/hitbox via it_802C4820, chooses hit/collision parameters based on scale thresholds, triggers camera shake for larger explosions, and calls db_80225DD8.",
+    "Implemented it_802C4820 scale and hitbox resizing logic using itZeldaDinFireExplodeAttributes fields x0, x4, x8, xC, and x10, HSD_JObjSetScale, it_80272460, cached base hitbox scale in xDD8, and it_80273130.",
+    "Added itZeldaDinFireExplode_ItemVars to itCharItems.h with offsets for xDD4, xDD8, xDDC, and xDE0, and added itZeldaDinFireExplodeAttributes with five float fields.",
+    "Added zeldadinfireexplode to the Item xDD4_itemVar union in src/melee/it/types.h.",
+    "Replaced unknown prototypes in itzeldadinfireexplode.h for it_802C4580, it_802C46C4, and it_802C4820 with typed Item_GObj/Item/HSD_GObj/Vec3/f32 signatures."
+  ],
+  "smart_moves": [
+    "The patch did not just write local C; it first made item-specific state explicit in itCharItems.h and the Item union, enabling readable accesses like ip->xDD4_itemVar.zeldadinfireexplode.xDD4 instead of raw offsets.",
+    "Spawn initialization mirrors the item engine's expected SpawnItem pattern: set kind, pos/prev_pos, facing direction, zero damage and velocity, set both parent fields, set b0 flag, then call Item_80268B18 before item-var initialization.",
+    "The scale update separates article special attributes from runtime item vars, which is a reusable pattern for character items whose behavior depends on per-article tuning data.",
+    "Caching the initial hitbox scale in xDD8 only when it is 0.0f preserves a base value before applying the dynamic JObj scale multiplier.",
+    "Camera feedback is tied only to larger scale thresholds, matching the apparent behavior split between smaller and larger Din's Fire explosions.",
+    "The PR kept partially matching functions in C rather than leaving placeholders; bot evidence shows large improvements even where full matching was not yet reached."
+  ],
+  "decomp_lessons": [
+    "For item work, matching often requires adding the correct item-var union member before the implementation becomes tractable; raw xDD4 offsets hide control flow and make prototype recovery harder.",
+    "Special attribute structs can be introduced with placeholder field names when only layout and usage are known. The evidence supports five f32 fields for Din's Fire explosion attributes, but not semantic names yet.",
+    "Spawner functions should initialize all SpawnItem fields that affect codegen, including previous position, parent pointers, zeroed velocity, x40, and spawn flags.",
+    "Effect, animation, hitbox, camera, and debug calls may all be part of a single item initialization function; include dependencies should be widened to the subsystems directly referenced.",
+    "Partial matches are still useful PR units when they expose real prototypes and struct layouts; here three functions moved from 0% to roughly 83-84% while one small function fully matched.",
+    "Use the decomp.dev report as matching evidence, not as proof that all introduced code fully matches: only it_802C4670 reached 100% in this slice."
+  ],
+  "naming_conventions": [
+    "Item-specific runtime vars use the project pattern itZeldaDinFireExplode_ItemVars and are accessed through ip->xDD4_itemVar.zeldadinfireexplode.",
+    "Item special attributes use a parallel type name, itZeldaDinFireExplodeAttributes.",
+    "Unknown fields retained offset-style names such as xDD4, xDD8, xDDC, xDE0, x0, x4, x8, xC, and x10 because the PR evidence did not establish semantic meanings.",
+    "Function symbols stayed at address-derived names such as it_802C4580, it_802C4670, it_802C46C4, and it_802C4820.",
+    "Header prototypes move away from UNK_RET/UNK_PARAMS once argument and return types are known, using Item_GObj*, HSD_GObj*, Item*, Vec3*/Point3d*, and f32."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used PAD_STACK(4) in it_802C4580, indicating stack-shape padding was needed for matching or near-matching the spawner.",
+    "Forced spawn.pos.z to 0.0f after copying the input position, then copied spawn.pos into spawn.prev_pos, a detail likely important for instruction order and item behavior.",
+    "Chained assignment for zeroing velocity components and scale components appears in the implementation and may help match compiler output.",
+    "Float threshold constants 0.4375f, 0.625f, and 0.8125f drive the branch structure in it_802C46C4; larger branches call Camera_80030E44 with levels 2 and 3.",
+    "The exact call order in it_802C46C4 is important: item setup calls, animation update, lifetime, effect spawn, state flag, Item_802694CC, scale/hitbox update, threshold hit setup, then db_80225DD8.",
+    "decomp.dev results: it_802C4670 improved from 0.00% to 100.00% (+84 bytes); it_802C4820 to 84.09% (+295 bytes); it_802C46C4 to 82.76% (+288 bytes); it_802C4580 to 83.33% (+199 bytes)."
+  ],
+  "review_feedback": [
+    "No human review comments or PR body were present in the provided slice.",
+    "The only comment was an automated decomp.dev GALE01 report showing one new match and three unmatched-function improvements."
+  ],
+  "searchable_terms": [
+    "pr-1755",
+    "ZeldaDinFirexplode work",
+    "Zelda Din Fire Explode",
+    "itzeldadinfireexplode",
+    "it_802C4580",
+    "it_802C4670",
+    "it_802C46C4",
+    "it_802C4820",
+    "It_Kind_Zelda_DinFire_Explode",
+    "itZeldaDinFireExplode_ItemVars",
+    "itZeldaDinFireExplodeAttributes",
+    "xDD4_itemVar.zeldadinfireexplode",
+    "SpawnItem",
+    "Item_80268B18",
+    "efSync_Spawn",
+    "efLib_DestroyAll",
+    "HSD_JObjSetScale",
+    "HitCapsule_Disabled",
+    "Camera_80030E44",
+    "db_80225DD8",
+    "ITEM_ANIM_UPDATE",
+    "PAD_STACK",
+    "decomp.dev GALE01"
+  ],
+  "follow_up_queries": [
+    "Check later PRs touching src/melee/it/items/itzeldadinfireexplode.c for full matches of it_802C4580, it_802C46C4, and it_802C4820.",
+    "Search for semantic naming of itZeldaDinFireExplodeAttributes fields x0, x4, x8, xC, and x10 in later item or article-data work.",
+    "Search for follow-up cleanup around the it_802C4580 header prototype using Vec3* while the C definition uses Point3d* in this diff excerpt.",
+    "Compare similar character projectile explosion spawners for reusable SpawnItem initialization and hitbox scaling patterns."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

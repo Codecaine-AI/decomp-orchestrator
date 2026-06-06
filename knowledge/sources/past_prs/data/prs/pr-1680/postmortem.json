@@ -1,0 +1,155 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1680",
+  "pr": {
+    "number": 1680,
+    "title": "gmvsmelee work",
+    "url": "https://github.com/doldecomp/melee/pull/1680",
+    "state": "MERGED",
+    "author": "sadkellz",
+    "created_at": "2025-07-11T04:00:41Z",
+    "merged_at": "2025-07-11T04:26:37Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Decompiled several gmvsmelee routines around VS melee setup, match-end handling, CSS/SSS minor-scene data transfer, and KO-star/result bookkeeping. The PR replaced multiple UNK_RET/UNK_PARAMS declarations with typed prototypes, introduced MatchPlayerData, MatchTeamData, MatchEnd, MatchExitInfo, and SSSData structures, and added a gmvsmelee static header for the static MatchExitInfo storage at gm_80479D98. No review comments or PR body rationale were available in the provided slice, so the reasoning is inferred from the diff.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-definition",
+      "prototype-cleanup",
+      "game-mode-flow"
+    ],
+    "systems": [
+      "game-mode",
+      "melee-core",
+      "vs-mode",
+      "minor-scenes",
+      "menus"
+    ]
+  },
+  "key_files": [
+    "src/melee/gm/gmvsmelee.c",
+    "src/melee/gm/gmvsmelee.h",
+    "src/melee/gm/gmvsmelee.static.h",
+    "src/melee/gm/types.h",
+    "src/melee/gm/gm_1601.h",
+    "src/melee/gm/forward.h",
+    "src/melee/mn/types.h",
+    "src/melee/mn/forward.h"
+  ],
+  "what_changed": [
+    "Implemented gm_801A5258 to update KO-star/count data for active player slots using lbTime_8000AF74 and MatchEnd.player_standings.",
+    "Implemented gm_801A52D0 as a boolean scan over MatchEnd player_standings to detect whether any slot_type == 0 active player exists.",
+    "Implemented gm_801A55C4 and gm_801A55EC_OnLoad as memzero resets of the six-byte gm_804D6730 KO-star/count storage.",
+    "Renamed gm_801A5618 parameters from generic arg names to minor_data, vs_data, and match_type, while preserving behavior: fetch CSSData with gm_801A427C, set match_type, point ko_star_counts at gm_804D6730, copy VsModeData, and call lbDvd_800174BC.",
+    "Implemented gm_801A5754 to populate SSSData from a MinorScene, copy VsModeData into it, and call gm_80167FC4.",
+    "Implemented gm_801A5AF0, marked in the header comment as Match_Exit, to process MatchExitInfo, record per-character and match result data through gm_80162574/gm_8016260C/gm_801628C4, and choose a pending minor scene based on gm_80167140.",
+    "Implemented gm_801A5EC8 to copy or merge match-end data from a MinorScene MatchExitInfo into static gm_80479D98.match_end via gm_80166CCC.",
+    "Implemented gm_801A5F00 to call gm_80177724 on a MatchEnd buffer from minor scene data and then assign gm_80479D98.match_end into it.",
+    "Added gmvsmelee.static.h containing static MatchExitInfo gm_80479D98 at address comment 479D98.",
+    "Added MatchTeamData, MatchPlayerData, MatchEnd, and MatchExitInfo definitions to gm/types.h with explicit fields, arrays, and padding to support typed decompilation of match-end structures.",
+    "Added SSSData to mn/types.h and its forward declaration to mn/forward.h.",
+    "Added MatchPlayerData, MatchEnd, and MatchExitInfo forward declarations to gm/forward.h.",
+    "Updated gm_1601.h prototypes for several helper functions used by gmvsmelee, including gm_80162574, gm_8016260C, gm_80162800, gm_801628C4, gm_80166CCC, gm_80167140, and gm_80177724.",
+    "Updated gmvsmelee.h prototypes from UNK_RET/UNK_PARAMS to typed signatures for the newly implemented gmvsmelee functions."
+  ],
+  "smart_moves": [
+    "The PR first gave match-end memory a typed shape, then used that structure in gmvsmelee functions, reducing reliance on raw offsets and UNK_PARAMS.",
+    "Forward declarations were added for newly shared gm and menu types, avoiding heavier include coupling where only pointers are needed.",
+    "The static data symbol gm_80479D98 was isolated in gmvsmelee.static.h, matching the project pattern of keeping file-local/static data declarations separate from public headers.",
+    "The match-exit routine was expressed through semantically named locals such as match_exit_info, active_player, minor_data, vs_data, css_data, and sss_data, making scene flow and data ownership easier to audit.",
+    "Function prototypes in gm_1601.h were tightened only where the diff showed concrete uses, allowing downstream gmvsmelee code to call helper routines with typed MatchEnd pointers and scalar arguments.",
+    "The implementation preserves explicit six-entry loops over player standings, which is useful evidence for the fixed match player slot count used by these structures."
+  ],
+  "decomp_lessons": [
+    "When a decompiled routine repeatedly indexes the same large match-end buffer, defining a partial struct with named fields and padding can unlock several adjacent functions at once.",
+    "Replacing UNK_RET/UNK_PARAMS in headers should be paired with callsite evidence; this PR demonstrates deriving prototypes from concrete gmvsmelee uses such as MatchEnd* arguments and u8/u32 scalar bookkeeping calls.",
+    "MinorScene payload accessors such as gm_801A427C and gm_801A4284 can return different logical data types depending on scene context; typed locals in each function clarify whether the payload is CSSData, SSSData, MatchEnd, or MatchExitInfo.",
+    "Static game-mode state that is not public API belongs in a static header or file-local declaration, not in the exported gmvsmelee.h interface.",
+    "For match-end structures, preserve unknown bytes and large padding ranges when field meaning is not yet known; the added MatchEnd and MatchPlayerData structs keep named fields only where evidence exists and pad the rest.",
+    "Boolean helper decompilation can often be simplified to explicit active-slot scans, but the exact condition should remain tied to observed slot_type values rather than guessed enum names unless those enums exist.",
+    "Data-transfer scene hooks commonly have simple copy semantics: CSS/SSS setup copies VsModeData into scene-specific data, while match-exit hooks copy MatchEnd data between scene payloads and static storage."
+  ],
+  "naming_conventions": [
+    "New match-end structs use PascalCase names: MatchTeamData, MatchPlayerData, MatchEnd, MatchExitInfo.",
+    "Known callback-style functions keep suffixes such as OnInit, OnLoad, and OnUnload in gmvsmelee.h.",
+    "Locals were renamed from arg0/arg1/arg2 to role-based snake_case names such as minor_data, vs_data, match_type, css_data, sss_data, exit_info, match_exit_info, active_player, and end_info.",
+    "Unknown struct fields retain offset-based names such as x0, x5, xC, x20, x24, _x448, pad_x44C, and pad_x186C rather than speculative semantic names.",
+    "The header comment for gm_801A5AF0 adds a tentative semantic marker, '// Match_Exit', while preserving the address-based symbol name.",
+    "Forward declarations follow the project typedef pattern: typedef struct MatchPlayerData MatchPlayerData; typedef struct MatchEnd MatchEnd; typedef struct MatchExitInfo MatchExitInfo; typedef struct SSSData SSSData."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used fixed-size loops from i = 0 to i < 6 for player_standings and winners-related match data, matching the six-player/slot layout present in the structures.",
+    "Used explicit slot_type == 0 checks as the active-player predicate in gm_801A5258, gm_801A52D0, and gm_801A5AF0.",
+    "Kept casts where likely needed for matching, such as casting n_ko[i] to u32 before lbTime_8000AF74 and dividing frame_count by 60 before passing to gm_801628C4.",
+    "Preserved an explicit active_player variable and break-based loop in gm_801A5AF0 instead of collapsing the logic into a helper, which may help maintain compiler-compatible control flow.",
+    "Represented unknown large tail regions in MatchEnd and MatchPlayerData with padding arrays, enabling correct offsets without overnaming unverified fields.",
+    "Used direct struct assignment for VsModeData and MatchEnd copies, indicating the matching source likely performed aggregate copies rather than field-by-field assignments."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "No PR body rationale was available; conclusions about intent are inferred from changed files and diff content."
+  ],
+  "searchable_terms": [
+    "pr-1680",
+    "gmvsmelee work",
+    "sadkellz",
+    "gmvsmelee.c",
+    "gmvsmelee.h",
+    "gmvsmelee.static.h",
+    "gm_801A5258",
+    "gm_801A52D0",
+    "gm_801A55C4",
+    "gm_801A55EC_OnLoad",
+    "gm_801A5618",
+    "gm_801A5754",
+    "gm_801A5AF0",
+    "gm_801A5EC8",
+    "gm_801A5F00",
+    "Match_Exit",
+    "MatchPlayerData",
+    "MatchTeamData",
+    "MatchEnd",
+    "MatchExitInfo",
+    "SSSData",
+    "CSSData",
+    "VsModeData",
+    "MinorScene",
+    "gm_80479D98",
+    "gm_804D6730",
+    "gm_80162574",
+    "gm_8016260C",
+    "gm_80162800",
+    "gm_801628C4",
+    "gm_80166CCC",
+    "gm_80167140",
+    "gm_80177724",
+    "gm_801A427C",
+    "gm_801A4284",
+    "gm_SetScenePendingMinor",
+    "lbTime_8000AF74",
+    "lbDvd_800174BC",
+    "player_standings",
+    "slot_type",
+    "ko_star_counts",
+    "frame_count"
+  ],
+  "follow_up_queries": [
+    "Search for later PRs that refine MatchEnd, MatchPlayerData, MatchTeamData, or MatchExitInfo field names and sizes.",
+    "Check whether gm_801A5360, gm_801A5680, gm_801A57A8, gm_801A583C, gm_801A5C3C, and gm_801A5F64 were subsequently decompiled using these structs.",
+    "Look for later review or cleanup around gmvsmelee.static.h and whether static MatchExitInfo gm_80479D98 remained file-local or moved.",
+    "Search for enum definitions or constants that replace slot_type == 0, match result fields, and active-player magic values.",
+    "Verify whether SSSData fields unk_stage, no_lras, force_stage_id, and start_game were later renamed with stronger menu-system evidence."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

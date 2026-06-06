@@ -109,7 +109,7 @@
     <inputs>
         - `<current_state_json>`: target packet, lease, write set, worker log
           directory, state directory, budget, stop rule, and any queued facts or
-          blockers, including `selected_knowledge_references`.
+          blockers, including `selected_agent_context_references`.
         - `<primary_file_to_read>`: primary leased source path.
         - `<files_to_read_first_json>`: source/report/objdiff/resource files the
           runner expects the worker to inspect before choosing a tactic.
@@ -126,21 +126,26 @@
             <steps>
                 1. Read `current_state_json`, `primary_file_to_read`, and
                    `files_to_read_first_json`.
-                2. Read the selected worker knowledge references before
+                2. Read the selected worker agent context before
                    choosing a tactic. If `experimental_search` or
                    `permuter_handoff` is enabled, read the optional
-                   experimental workflow references before creating or
-                   modifying any `decomp-runs/` artifact.
-                3. Confirm the target unit, symbol, source path, lease id, and
+                   last-resort sweep context before creating or modifying any
+                   `decomp-runs/` artifact.
+                3. If `current_state.repair_request` is present, treat it as
+                   the top-priority task. Inspect the referenced runner gate
+                   artifact, fix or remove only your own retained unsafe hunks,
+                   add missing validation evidence, and return the final JSON
+                   report again.
+                4. Confirm the target unit, symbol, source path, lease id, and
                    `write_set`.
-                4. Before the first source edit, save the pre-existing dirty
+                5. Before the first source edit, save the pre-existing dirty
                    diff for every write-set path to an artifact in the worker
                    log directory, for example
                    `git diff -- <write_set_paths> > <worker_log_dir>/preexisting_write_set.diff`.
                    Treat that snapshot as work to preserve.
-                5. If a required path is missing, record the exact path as a
+                6. If a required path is missing, record the exact path as a
                    blocker and continue only with safe research.
-                6. If editing is not covered by the active `write_set`, do not
+                7. If editing is not covered by the active `write_set`, do not
                    edit; produce a research or blocker report.
             </steps>
         </phase>
@@ -179,7 +184,7 @@
                 1. Choose among context packaging, type/symbol resolution,
                    scratch/history reconnaissance, isolated check loop,
                    duplicate adaptation, focused source editing, fact research,
-                   sweep batches, permuter handoff, and review cleanup.
+                   last-resort sweep/permuter handoff, and review cleanup.
                 2. Apply source standardization checks before last-mile matching
                    tricks: repeated code should be considered as a loop,
                    pointer offsets should become fields, union arms, temporary
@@ -256,6 +261,15 @@
                    Either undo the worker's own regressing hunks or report
                    `stalled_no_useful_guess` / `needs_fact` with the regression
                    evidence and no retained regressing patch.
+                   The orchestrator will downgrade `progress` or
+                   `score_candidate` to a stall unless
+                   `local_regression_check.status` is `passed`, target
+                   regression is false, neighbor regressions are empty, and the
+                   baseline/final validation artifacts are named in the report
+                   and present on disk.
+                   If the runner rejects the return, it may send a
+                   `repair_request`; fix the named issues within the remaining
+                   repair budget before the lease is released.
                 9. Do not regenerate `build/GALE01/report.json`, run
                    `ninja build/GALE01/report.json`, run
                    `ninja all_source build/GALE01/report.json`, or generate a
@@ -296,12 +310,12 @@
     - Local analogs: search target source, nearby `src/` files, headers,
       `docs/glossary.md`, asserts, OSReport strings, callbacks, structs, unions,
       macros, and matched siblings.
-    - Past PRs: start with `decomp-orchestrator/knowledge/past_prs/prs/index.jsonl`; its rows contain
+    - Past PRs: start with `decomp-orchestrator/knowledge/sources/past_prs/data/prs/index.jsonl`; its rows contain
       `pr`, `title`, `summary`, `searchable_terms`, and `postmortem_json`.
-      Inspect `decomp-orchestrator/knowledge/past_prs/prs/pr-<number>/postmortem.json` and the
+      Inspect `decomp-orchestrator/knowledge/sources/past_prs/data/prs/pr-<number>/postmortem.json` and the
       current analysis files only after a row is relevant.
     - Data sheets: use
-      `decomp-orchestrator/knowledge/decomp_resources/data_sheets/ssbm_data_sheet_1_02/csv/cells.csv`
+      `decomp-orchestrator/knowledge/sources/ssbm_data_sheet/data/csv/cells.csv`
       for global search, then per-sheet CSVs for context.
     - External mirrors and community resources are hints. Validate all names,
       offsets, and layouts against local source, assembly, symbols, splits, and
@@ -309,10 +323,9 @@
 </resource_policy>
 
 <past_pr_search_examples>
-    - `rg -n "<symbol>|<source_path>|<subsystem>|<mismatch_term>" decomp-orchestrator/knowledge/past_prs/prs/index.jsonl decomp-orchestrator/knowledge/past_prs/prs/known_fixes.md`
-    - `jq 'select(.file=="<source_path>")' decomp-orchestrator/knowledge/past_prs/current/analysis/changed_files.jsonl`
-    - `jq 'select(.pr == <number>)' decomp-orchestrator/knowledge/past_prs/current/analysis/text_corpus.jsonl`
-    - `jq 'select(.pr == <number>)' decomp-orchestrator/knowledge/past_prs/current/analysis/diff_lines.jsonl`
+    - `rg -n "<symbol>|<source_path>|<subsystem>|<mismatch_term>" decomp-orchestrator/knowledge/sources/past_prs/data/prs/index.jsonl decomp-orchestrator/knowledge/sources/past_prs/data/prs/known_fixes.md`
+    - `jq 'select(.file=="<source_path>")' decomp-orchestrator/knowledge/sources/past_prs/data/current/analysis/changed_files.jsonl`
+    - `jq 'select(.pr == <number>)' decomp-orchestrator/knowledge/sources/past_prs/data/current/analysis/text_corpus.jsonl`
 </past_pr_search_examples>
 
 <capabilities>

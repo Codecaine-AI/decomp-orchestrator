@@ -1,0 +1,154 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-966",
+  "pr": {
+    "number": 966,
+    "title": "ftPurin matches",
+    "url": "https://github.com/doldecomp/melee/pull/966",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2023-09-18T19:56:51Z",
+    "merged_at": "2023-09-18T20:08:53Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched a set of Jigglypuff/Purin fighter functions by replacing multiple MWERKS_GEKKO inline asm blocks in ftPr_Init.c with C implementations, plus small header/type updates needed to express those implementations. The PR body only says it matched some inline-asm functions, and there were no review comments, but the diff shows substantial decomp progress across Purin SpecialLw, SpecialS, and SpecialN physics/collision helpers.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "inline-asm-removal",
+      "headers",
+      "fighter-logic",
+      "struct-typing"
+    ],
+    "systems": [
+      "fighter",
+      "ftPurin",
+      "Jigglypuff",
+      "motion-states",
+      "special-moves"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/chara/ftPurin/ftPr_Init.c",
+      "role": "Main matching work; replaced many inline asm functions with C implementations for Purin special move animation, physics, and collision logic."
+    },
+    {
+      "path": "src/melee/ft/chara/ftPurin/types.h",
+      "role": "Expanded Purin motion vars and attributes so C code could use named fields instead of raw offsets."
+    },
+    {
+      "path": "src/melee/ft/chara/ftPurin/ftPr_Init.h",
+      "role": "Updated function prototypes, including the OnItemPickup parameter rename and the typed signature for ftPr_SpecialS_8013DA24."
+    }
+  ],
+  "what_changed": [
+    "Renamed the boolean parameter of ftPr_Init_OnItemPickup from the invalid/confusing name `bool` to `flag` in both source and header.",
+    "Converted ftPr_SpecialLw_Enter and ftPr_SpecialAirLw_Enter from inline asm to C, selecting left/right motion states from facing_dir, calling ftAnim_8006EBA4, clearing cmd_vars[0], and setting x21BC_callback_Accessory4 to ftPr_SpecialHi_8013CE7C.",
+    "Converted ftPr_SpecialLw_8013D104 and ftPr_SpecialLw_8013D19C to C for ground/air transitions, using ftCommon_8007D5D4 or ftCommon_8007D7FC and preserving cur_anim_frame with motion flags 0x0C4C508E.",
+    "Converted SpecialS anim/phys/collision helpers to C, including ftPr_SpecialS_Anim, ftPr_SpecialAirS_Anim, ftPr_SpecialS_Phys, ftPr_SpecialS_Coll, ftPr_SpecialAirS_Coll, ftPr_SpecialS_8013D590, ftPr_SpecialS_8013D5F0, and ftPr_SpecialS_8013D8B0.",
+    "Replaced simple one-call asm wrappers with direct C calls such as ftPr_SpecialS_Phys calling ft_80084FA8 and ftPr_SpecialS_8013D8B0 calling ft_80089824 then ft_800892A0.",
+    "Converted several SpecialN physics routines from asm to C: ftPr_SpecialNStart_Phys, ftPr_SpecialNLoop_Phys, ftPr_SpecialNFull_Phys, ftPr_SpecialNEnd_Phys, ftPr_SpecialAirNStart_Phys, ftPr_SpecialAirNChargeLoop_Phys, ftPr_SpecialAirNChargeFull_Phys, ftPr_SpecialAirNEnd_Phys, and ftPr_SpecialNHit_Phys.",
+    "Added a C version of ftPr_SpecialNStart_Coll under the non-MUST_MATCH path while keeping the asm fallback under MUST_MATCH because the C version was documented as non-matching due to float allocation.",
+    "Converted ftPr_SpecialNEnd_Coll and ftPr_SpecialAirNEnd_Coll to C, using ft_80082708/ft_80081D0C ground-air checks and forwarding to ftPr_SpecialS_8013DA24 with typed arguments.",
+    "Updated the ftPr_SpecialS_8013DA24 prototype from an untyped single-argument form to `HSD_GObj* gobj, bool unk, MotionFlags flags, f32 anim_start`.",
+    "Turned `union ftPurin_MotionVars` into a typedef and added `specialn` storage with `x34`, used by SpecialN collision logic.",
+    "Expanded ftPurinAttributes with x30, x34, x38, x3C, and x40 fields, allowing air SpecialN physics helpers to read `da->x3C` and `da->x40` rather than opaque offsets."
+  ],
+  "smart_moves": [
+    "Used named motion-state constants such as ftPr_MS_SpecialLwL, ftPr_MS_SpecialAirLwR, ftPr_MS_SpecialAirS, and ftPr_MS_SpecialS instead of preserving magic state IDs in new C code where known.",
+    "Preserved matching-sensitive dummy stack allocation with `#ifdef MUST_MATCH` and `u8 _[8]` in functions where the old asm indicated stack/register pressure mattered.",
+    "Kept the asm version for ftPr_SpecialNStart_Coll under MUST_MATCH and documented the C attempt as non-matching due to float allocation, avoiding a false match claim while still recording useful readable C.",
+    "Converted repeated raw dat_attrs offsets into ftPurinAttributes fields, which made the repeated SpecialAirN physics helpers simple calls to ftCommon_8007D494(fp, da->x3C, da->x40).",
+    "Retyped ftPr_SpecialS_8013DA24 before using it from converted collision functions, reducing ambiguity around the bool, MotionFlags, and animation-start arguments."
+  ],
+  "decomp_lessons": [
+    "For fighter move code, many inline asm functions can be expressed as small patterns around `Fighter_ChangeMotionState`, ground/air conversion helpers, frame-remaining checks, and callback assignment.",
+    "When converting asm that reloads the Fighter pointer after a helper call, preserve that reload in C if it may affect matching or callback assignment ordering; this PR reloads `fp = gobj->user_data` after ftAnim_8006EBA4 in SpecialLw enter functions.",
+    "Ground/air checks can often be clarified with GA_Ground comparisons, but the exact branch sense matters: this PR uses `ft_800827A0(gobj) == GA_Ground`, `ft_80081D0C(gobj) != GA_Ground`, and similar checks according to the asm.",
+    "If a matched or near-matched function needs previously unknown struct fields, add the minimal fields to the character-specific types header instead of continuing with raw offsets.",
+    "A nonmatching C implementation can still be valuable when guarded behind MUST_MATCH asm and clearly annotated with the known mismatch cause."
+  ],
+  "naming_conventions": [
+    "Avoid using C type names as parameter names; `bool bool` was renamed to `bool flag`.",
+    "Character-specific motion vars and attributes follow the ftPurin prefix, e.g. `ftPurin_MotionVars`, `ftPurinAttributes`, and nested names like `specialhi` and `specialn`.",
+    "Unknown but offset-backed fields were named conservatively by offset, e.g. `x30`, `x34`, `x38`, `x3C`, and `x40`, rather than inventing semantic names without evidence.",
+    "Converted function parameters often use `Fighter_GObj* gobj` when the implementation immediately treats the object as a fighter object.",
+    "Existing address-style names such as ftPr_SpecialLw_8013D104, ftPr_SpecialS_8013D590, and ftPr_SpecialN_8014222C were retained where semantic names were not available."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed many `#ifdef MWERKS_GEKKO` inline asm blocks and replaced them with C while keeping equivalent call order and constants.",
+    "Used exact motion flag constants with unsigned suffixes, such as `0x0C4C508EU`, `0x0C4C508AU`, and `0x0C4C5092U`, to match codegen and preserve semantics.",
+    "Matched old float loads through extern f32 constants like ftPr_Init_804D9C20, ftPr_Init_804D9C24, ftPr_Init_804D9C28, ftPr_Init_804D9C30, ftPr_Init_804D9C38, ftPr_Init_804D9C48, ftPr_Init_804D9C50, and ftPr_Init_804D9C64.",
+    "Used `#ifdef MUST_MATCH` dummy stack arrays in several C functions to preserve stack shape where needed.",
+    "Left ftPr_SpecialNStart_Coll as asm under MUST_MATCH because the C version was explicitly non-matching due to float allocation.",
+    "Translated simple asm wrappers to direct calls, e.g. animation completion checks with `ftAnim_IsFramesRemaining(gobj) == 0` and collision transition wrappers around ftCommon ground/air helpers."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-966",
+    "ftPurin matches",
+    "PsiLupan",
+    "ftPr_Init.c",
+    "ftPr_Init.h",
+    "types.h",
+    "Jigglypuff",
+    "Purin",
+    "inline asm removal",
+    "MWERKS_GEKKO",
+    "MUST_MATCH",
+    "unused stack",
+    "float allocation",
+    "decomp.me/scratch/OYlcJ",
+    "ftPr_SpecialLw_Enter",
+    "ftPr_SpecialAirLw_Enter",
+    "ftPr_SpecialLw_8013D104",
+    "ftPr_SpecialLw_8013D19C",
+    "ftPr_SpecialS_Anim",
+    "ftPr_SpecialAirS_Anim",
+    "ftPr_SpecialS_Phys",
+    "ftPr_SpecialS_Coll",
+    "ftPr_SpecialAirS_Coll",
+    "ftPr_SpecialS_8013D590",
+    "ftPr_SpecialS_8013D5F0",
+    "ftPr_SpecialS_8013D8B0",
+    "ftPr_SpecialS_8013DA24",
+    "ftPr_SpecialNStart_Phys",
+    "ftPr_SpecialNLoop_Phys",
+    "ftPr_SpecialNFull_Phys",
+    "ftPr_SpecialNEnd_Phys",
+    "ftPr_SpecialAirNStart_Phys",
+    "ftPr_SpecialAirNChargeLoop_Phys",
+    "ftPr_SpecialAirNChargeFull_Phys",
+    "ftPr_SpecialAirNEnd_Phys",
+    "ftPr_SpecialNHit_Phys",
+    "ftPr_SpecialNStart_Coll",
+    "ftPr_SpecialNEnd_Coll",
+    "ftPr_SpecialAirNEnd_Coll",
+    "Fighter_ChangeMotionState",
+    "ftCommon_8007D5D4",
+    "ftCommon_8007D7FC",
+    "ftCommon_8007D494",
+    "ftAnim_IsFramesRemaining",
+    "ftPurinAttributes",
+    "ftPurin_MotionVars",
+    "MotionFlags",
+    "GA_Ground"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match ftPr_SpecialNStart_Coll or resolve the documented float allocation mismatch.",
+    "Search for subsequent renames of ftPurinAttributes fields x30, x34, x38, x3C, and x40 to semantic names.",
+    "Look for other ftPurin PRs that remove the remaining MWERKS_GEKKO asm blocks in ftPr_Init.c.",
+    "Compare other character SpecialN physics helpers that call ftCommon_8007D494 with dat_attrs fields to confirm naming and typing patterns."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

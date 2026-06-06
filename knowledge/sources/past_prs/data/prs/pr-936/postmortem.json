@@ -1,0 +1,143 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-936",
+  "pr": {
+    "number": 936,
+    "title": "Remove ItemStateContainer type",
+    "url": "https://github.com/doldecomp/melee/pull/936",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-06-23T07:35:28Z",
+    "merged_at": "2023-06-23T07:52:26Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Removed the artificial ItemStateContainer wrapper type from the item system and represented item state data directly as ItemStateTable arrays/pointers. The PR updated ItemLogicTable::states and Item::xBC_itemStateContainer to ItemStateTable*, changed many externs from ItemStateContainer symbols to ItemStateTable arrays, removed address-of uses in item logic tables, simplified state lookup in Item_80268E5C, and moved the capsule spawn/init function it_8027CF00 from handwritten asm into C.",
+  "change_classification": {
+    "primary_type": "type-struct cleanup",
+    "categories": [
+      "headers",
+      "types-structs",
+      "data-table typing",
+      "asm-to-c migration"
+    ],
+    "systems": [
+      "item",
+      "common-items",
+      "character-items",
+      "asm"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/it/types.h",
+      "why": "Removed struct ItemStateContainer and changed ItemLogicTable::states and Item::xBC_itemStateContainer to ItemStateTable*."
+    },
+    {
+      "path": "src/melee/it/forward.h",
+      "why": "Removed the forward declaration typedef for ItemStateContainer."
+    },
+    {
+      "path": "src/melee/it/it_803F1418.c",
+      "why": "Updated common item state table externs to ItemStateTable arrays and changed ItemLogicTable initializers from &it_803Fxxxx to it_803Fxxxx."
+    },
+    {
+      "path": "src/melee/it/it_803F3100.c",
+      "why": "Applied the same direct ItemStateTable array typing and initializer changes across character-specific item logic tables."
+    },
+    {
+      "path": "src/melee/it/item.c",
+      "why": "Changed state lookup from xBC_itemStateContainer->stateTable[msid] to xBC_itemStateContainer[msid]."
+    },
+    {
+      "path": "src/melee/it/items/itcapsule.c",
+      "why": "Added the C implementation of it_8027CF00 and kept capsule state table it_803F5468 as an ItemStateTable array."
+    },
+    {
+      "path": "src/melee/it/items/itcapsule.h",
+      "why": "Declared extern ItemStateTable it_803F5468[] and void it_8027CF00(Item_GObj*)."
+    },
+    {
+      "path": "asm/melee/it/it_266F.s",
+      "why": "Removed the old handwritten assembly version of it_8027CF00."
+    }
+  ],
+  "what_changed": [
+    "Deleted the ItemStateContainer forward declaration from src/melee/it/forward.h.",
+    "Deleted struct ItemStateContainer from src/melee/it/types.h; the removed type only wrapped an unknown-sized ItemStateTable stateTable array.",
+    "Changed ItemLogicTable::states from ItemStateContainer* to ItemStateTable*.",
+    "Changed Item::xBC_itemStateContainer from ItemStateContainer* to ItemStateTable*.",
+    "Replaced common item extern declarations such as extern ItemStateContainer it_803F54D8; with extern ItemStateTable it_803F54D8[]; in src/melee/it/it_803F1418.c.",
+    "Replaced character-specific item extern declarations such as extern ItemStateContainer it_803F6788; with extern ItemStateTable it_803F6788[]; in src/melee/it/it_803F3100.c.",
+    "Removed address-of operators in ItemLogicTable initializers because array names now decay directly to ItemStateTable*; examples include &it_803F5850 becoming it_803F5850 and &it_803F8320 becoming it_803F8320.",
+    "Simplified Item_80268E5C state-table indexing from &item_data->xBC_itemStateContainer->stateTable[msid] to &item_data->xBC_itemStateContainer[msid].",
+    "Implemented it_8027CF00 in src/melee/it/items/itcapsule.c, setting capsule item variables x0 and x4 to zero before calling it_8027D148.",
+    "Removed the corresponding it_8027CF00 assembly block from asm/melee/it/it_266F.s.",
+    "Added capsule declarations to itcapsule.h for it_803F5468[] and it_8027CF00(Item_GObj*)."
+  ],
+  "smart_moves": [
+    "Eliminated a fake wrapper struct whose only known purpose was to contain an unknown-sized array, making the real data model clearer: item states are contiguous ItemStateTable arrays.",
+    "Changed both producer-side declarations and consumer-side fields together, avoiding a half-converted state where table symbols would still require misleading address-of syntax.",
+    "Used array declarations, e.g. ItemStateTable it_803F54D8[], for state table symbols so initializers can pass the array name directly as an ItemStateTable*.",
+    "Paired the type cleanup with a small asm-to-C migration for it_8027CF00, reducing dead assembly and anchoring the capsule init callback near the capsule item implementation.",
+    "The C implementation of it_8027CF00 directly mirrors the removed assembly behavior: clear two capsule item-var words and tail into the existing it_8027D148 path."
+  ],
+  "decomp_lessons": [
+    "Do not preserve wrapper structs merely to model an unknown-sized trailing array when the observed use sites treat the symbol as an array base; direct ItemStateTable* typing can be more accurate and cleaner.",
+    "When a table field points to an array, table symbols should usually be declared as T symbol[] and assigned as symbol, not declared as a wrapper object and assigned as &symbol.",
+    "After removing a wrapper struct, audit all indexing expressions: former container->array[index] accesses often become pointer[index].",
+    "Type cleanup can unlock clearer function prototypes and local ownership: it_8027CF00 belongs with the capsule item implementation rather than remaining as an anonymous asm symbol.",
+    "Header and forward-declaration cleanup should be part of type removal; otherwise stale typedefs can hide dead abstractions."
+  ],
+  "naming_conventions": [
+    "Retained address-based data symbol names such as it_803F5468, it_803F14C4, and it_803F3100 where semantic names were not established.",
+    "Kept existing item-system type names ItemStateTable and ItemLogicTable rather than introducing a replacement wrapper for ItemStateContainer.",
+    "Used array extern style for state tables: extern ItemStateTable it_803Fxxxx[].",
+    "Used item-specific header ownership for capsule symbols: itcapsule.h now declares the capsule state table it_803F5468[] and init callback it_8027CF00(Item_GObj*)."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed the handwritten asm implementation of it_8027CF00 from asm/melee/it/it_266F.s after adding a matching C implementation in itcapsule.c.",
+    "The decompiled it_8027CF00 matches the assembly sequence by loading item_gobj->user_data, zeroing the two capsule item-var fields corresponding to offsets 0xDD4 and 0xDD8, then calling it_8027D148.",
+    "The broad initializer edits are type-directed rather than behavioral: replacing &state_container_symbol with state_table_array_symbol preserves the pointer value while matching the new ItemStateTable* field type."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR936",
+    "Remove ItemStateContainer type",
+    "ItemStateContainer",
+    "ItemStateTable",
+    "ItemLogicTable",
+    "xBC_itemStateContainer",
+    "stateTable",
+    "Item_80268E5C",
+    "it_803F1418.c",
+    "it_803F3100.c",
+    "it_803F14C4",
+    "it_803F3100",
+    "it_803F5468",
+    "it_8027CF00",
+    "it_8027D148",
+    "itcapsule",
+    "itcapsule.c",
+    "itcapsule.h",
+    "it_266F.s",
+    "asm removal",
+    "state table arrays",
+    "unknown size array",
+    "UNK_SIZE_ARRAY"
+  ],
+  "follow_up_queries": [
+    "Find remaining uses of xBC_itemStateContainer to verify all code treats it as ItemStateTable*.",
+    "Search for other wrapper structs that only contain UNK_SIZE_ARRAY fields and may be removable.",
+    "Audit item state table extern declarations for consistency with extern ItemStateTable symbol[] style.",
+    "Look for other item callback functions still living in asm/melee/it that can be moved into their item-specific C files."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

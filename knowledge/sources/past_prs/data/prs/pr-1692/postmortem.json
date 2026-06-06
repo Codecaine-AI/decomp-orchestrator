@@ -1,0 +1,146 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1692",
+  "pr": {
+    "number": 1692,
+    "title": " Split out gm_16F1",
+    "url": "https://github.com/doldecomp/melee/pull/1692",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-07-15T02:06:35Z",
+    "merged_at": "2025-07-15T02:24:07Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Split the game-mode translation unit formerly embedded in gm_16AE.c at address 0x8016F180 into new files gm_16F1.c and gm_16F1.static.h, with matching split metadata and build configuration updates. The move transferred gm_16F1 text/data/bss/sdata2 ownership, cleaned gm_16AE.static.h down to only the remaining gm_16AE-owned declarations/data, and preserved/re-established matches for 14 functions in the new gm_16F1 unit while gm_80173EEC became an 84.24% unmatched function in that new unit.",
+  "change_classification": {
+    "primary_type": "translation-unit-split",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "build-config",
+      "section-splits"
+    ],
+    "systems": [
+      "game-mode",
+      "config",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "config/GALE01/splits.txt",
+    "configure.py",
+    "src/melee/gm/gm_16AE.c",
+    "src/melee/gm/gm_16AE.static.h",
+    "src/melee/gm/gm_16F1.c",
+    "src/melee/gm/gm_16F1.static.h",
+    "src/melee/gm/gm_1601.h",
+    "src/melee/gm/gm_1601.static.h",
+    "src/melee/gm/gmresult.c",
+    "src/melee/gm/gmresultplayer.c"
+  ],
+  "what_changed": [
+    "Added a new build object, Object(NonMatching, \"melee/gm/gm_16F1.c\"), in configure.py.",
+    "Updated config/GALE01/splits.txt so gm_16AE.c ends at text address 0x8016F180 and new gm_16F1.c owns text 0x8016F180-0x80174274.",
+    "Moved gm_16F1-related .data, .bss, .sbss, .sdata2, and rodata ranges out of the old gm_16AE split range: gm_16AE now owns data 0x803D5620-0x803D5648, bss 0x8046B6A0-0x8046DBC8, sdata2 0x804DA298-0x804DA2E8; gm_16F1 owns data 0x803D5648-0x803D6488, bss 0x8046DBC8-0x8046DBE8, sbss 0x804D65A0-0x804D65B8, sdata2 0x804DA2E8-0x804DA300, and rodata 0x803B7A60-0x803B7B18.",
+    "Created src/melee/gm/gm_16F1.c containing functions previously at the tail of gm_16AE.c, including fn_8016F180, gmDecisionGetType, fn_8016F1F0, gm_8016F208, fn_8016F280, gm_8016F2F8, fn_8016F344, fn_80171AD4, gm_801701A0, fn_801701AC, fn_801701B8, fn_801724C8, gm_801736DC, gm_801737D8, and gm_80173EEC.",
+    "Created src/melee/gm/gm_16F1.static.h for gm_16F1-owned statics, including lbl_8046DBC8, lbl_8046DBD8, lbl_803D5648, lbl_803D5A4C, and lbl_804D65A0.",
+    "Reduced src/melee/gm/gm_16AE.static.h from a large mixed static header to a much smaller gm_16AE-local header, removing gm_16F1-owned structs, arrays, and prototypes.",
+    "Moved some formerly static declarations into the public gm_1601.h interface: fn_80160840(u8), gm_801736DC(void), and changed gm_80160854's return type from u8 to int.",
+    "Removed static declarations for fn_80160840 and gm_801736DC from gm_1601.static.h.",
+    "Stopped gmresult.c and gmresultplayer.c from including gm_16AE.static.h; gmresult.c now declares its local lbl_8046DBE8_t and static lbl_8046DBE8, while gmresultplayer.c declares static int lbl_8046E38C[4].",
+    "In remaining gm_16AE.c, removed the lblanguage include and introduced small helper functions get_unk_float and direction, with minor float literal capitalization and PAD_STACK adjustment in nearby functions."
+  ],
+  "smart_moves": [
+    "The split was done at both source and binary-section levels: configure.py added the new object, and splits.txt carved the original gm_16AE ranges at exact text/data/bss/sdata2 boundaries instead of only moving C code.",
+    "The author avoided retaining cross-file dependencies on gm_16AE.static.h by giving gmresult.c and gmresultplayer.c their own local static data declarations.",
+    "Pulling fn_80160840 and gm_801736DC into gm_1601.h acknowledged that after the split these symbols could no longer remain purely static/private in the old TU layout.",
+    "The static data relocation into gm_16F1.static.h kept large address-owned tables such as lbl_803D5648 adjacent to the functions that index them, which makes the new object easier to reason about.",
+    "The bot report shows the expected unit migration pattern: 14 functions became 100% matched in gm_16F1 and the same functions are reported as broken in gm_16AE because they no longer belong to that unit."
+  ],
+  "decomp_lessons": [
+    "When splitting a monolithic TU, update splits.txt for every affected section, not just .text; this PR split .data, .bss, .sbss, and .sdata2 alongside text.",
+    "A static header that has become a catch-all can hide incorrect ownership. After a TU split, remove unrelated structs/prototypes/data from the old .static.h and create a new per-TU static header.",
+    "If another file was including a .static.h only to access one local type or BSS object, prefer moving that local declaration into the consumer file rather than preserving a broad private-header dependency.",
+    "Expect decomp.dev to report moved matches as both 'new matches' in the new unit and 'broken matches' in the old unit; read those as ownership migration rather than a true regression when the byte counts mirror each other.",
+    "Small helper extraction can be used around split work to keep nearby codegen stable or clearer, but the evidence here only shows the helpers get_unk_float and direction were introduced, not reviewer rationale."
+  ],
+  "naming_conventions": [
+    "New split files follow the address-derived game-mode file naming convention: gm_16F1.c and gm_16F1.static.h for code beginning at 0x8016F180.",
+    "Unknown/internal functions retain address-derived names such as fn_8016F180, fn_8016F280, fn_8016F344, and gm_801737D8.",
+    "Known semantic names are preserved when available, such as gmDecisionGetType.",
+    "Static/global labels retain linker-address-style names such as lbl_803D5648, lbl_803D5A4C, lbl_8046DBC8, lbl_8046DBD8, and lbl_804D65A0.",
+    "The PR uses .static.h suffixes for translation-unit-private declarations/data and gm_1601.h for declarations that need to cross source-file boundaries."
+  ],
+  "assembly_or_matching_tactics": [
+    "Exact object-boundary split: gm_16AE text end changed from 0x80174274 to 0x8016F180 and gm_16F1 text begins at 0x8016F180.",
+    "Data-boundary split: the array/table starting at 0x803D5648 was moved to gm_16F1.static.h while gm_16AE keeps only the earlier 0x803D5620-0x803D5648 data.",
+    "BSS-boundary split: gm_16F1.static.h owns lbl_8046DBC8 and lbl_8046DBD8, matching the new bss range 0x8046DBC8-0x8046DBE8.",
+    "Public prototype fixes can be part of matching a split: fn_80160840 became externally declared and gm_80160854's return type changed to int.",
+    "Local helper get_unk_float replaces an inline/dontinline pattern around gm_8016B41C/gm_8016B558 and returns 1.0F, 1.1F, or 1.2F depending on mode values.",
+    "Local helper direction(float x) centralizes the sign-to-facing-direction mapping used by Player_SetFacingDirection.",
+    "Stack padding was adjusted from PAD_STACK(0x10) to PAD_STACK(0xC) in fn_8016E2BC after removing a local float variable."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the slice.",
+    "decomp.dev bot reported 14 new 100% matches in main/melee/gm/gm_16F1 and corresponding 14 broken matches in main/melee/gm/gm_16AE, consistent with moving those functions between units.",
+    "decomp.dev bot reported gm_80173EEC in gm_16F1 improved from 0.00% to 84.24%, while the old gm_16AE unit lost that same partial match because the function moved."
+  ],
+  "searchable_terms": [
+    "pr-1692",
+    "Split out gm_16F1",
+    "gm_16F1.c",
+    "gm_16F1.static.h",
+    "gm_16AE.c",
+    "gm_16AE.static.h",
+    "config/GALE01/splits.txt",
+    "configure.py",
+    "Object(NonMatching, \"melee/gm/gm_16F1.c\")",
+    "0x8016F180",
+    "0x80174274",
+    "0x803D5648",
+    "0x8046DBC8",
+    "fn_8016F180",
+    "gmDecisionGetType",
+    "fn_8016F1F0",
+    "gm_8016F208",
+    "fn_8016F280",
+    "gm_8016F2F8",
+    "fn_8016F344",
+    "fn_80171AD4",
+    "gm_801701A0",
+    "fn_801701AC",
+    "fn_801701B8",
+    "fn_801724C8",
+    "gm_801736DC",
+    "gm_801737D8",
+    "gm_80173EEC",
+    "lbl_803D5648",
+    "lbl_803D5A4C",
+    "lbl_8046DBC8",
+    "lbl_8046DBD8",
+    "lbl_804D65A0",
+    "get_unk_float",
+    "direction",
+    "gm_80160854",
+    "fn_80160840",
+    "gmresult.c",
+    "gmresultplayer.c"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that continue decompiling gm_16F1 functions after gm_80173EEC reached 84.24%.",
+    "Search for later renames or type refinement of lbl_803D5A4C_t and the decision table used by gmDecisionGetType and gm_8016F208.",
+    "Check whether gm_80160854's return type change to int was reused or further refined in subsequent gm PRs.",
+    "Look for later removal of TODO comment 'this is the start of a data section' on lbl_803D5648.",
+    "Inspect later PRs that split additional gm_* translation units using the same splits.txt plus configure.py pattern."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

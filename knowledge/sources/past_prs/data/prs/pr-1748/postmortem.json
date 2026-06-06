@@ -1,0 +1,149 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1748",
+  "pr": {
+    "number": 1748,
+    "title": "gm_1601 matches",
+    "url": "https://github.com/doldecomp/melee/pull/1748",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-07-26T23:44:12Z",
+    "merged_at": "2025-07-26T23:56:32Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched a cluster of gm_1601 and gmmain_lib functions by replacing placeholder stubs and weak M2C/UNK signatures with typed implementations, struct field accesses, bool-return helpers, mask manipulation, and persistent fighter data cleanup. The PR also refined game-mode data structs and headers so gm_1601, gm_16AE, gmmain_lib, and one fighter caller use consistent boolean and typed pointer interfaces.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-typing",
+      "signature-cleanup",
+      "mask-logic"
+    ],
+    "systems": [
+      "game-mode",
+      "fighter",
+      "persistent-fighter-data",
+      "match-end"
+    ]
+  },
+  "key_files": [
+    "src/melee/gm/gm_1601.c",
+    "src/melee/gm/gm_1601.h",
+    "src/melee/gm/gm_1601.static.h",
+    "src/melee/gm/gmmain_lib.c",
+    "src/melee/gm/gmmain_lib.h",
+    "src/melee/gm/types.h",
+    "src/melee/gm/gm_16AE.c",
+    "src/melee/gm/gm_16AE.static.h",
+    "src/melee/ft/ft_0D14.c"
+  ],
+  "what_changed": [
+    "Implemented many previously stubbed gm_1601 functions around addresses 80163D24 through 801641E4, including boolean scans over 0x19 persistent fighter entries, KO/stat total accumulation helpers, item mask queries, item mask remapping, and stage mask toggling.",
+    "Implemented gm_801693BC as a bool function checking special player conditions and character IDs against CKIND_BOY through CKIND_GIRL, with the comment identifying the behavior as detecting whether a player is Fighting Wireframe.",
+    "Implemented gm_801694A0, gm_8016A164, and gm_8016A1F8, covering active/player-state counting, single-player/match-state reset, slot type reset for players 1 through 5, and a boolean accessor for lbl_8046B488.unk_10_b1.",
+    "Replaced M2C_FIELD accesses with named struct fields, including MatchEnd.n_winners, lbl_8046B488.x7, and lbl_8046B488.xF.",
+    "Changed fn_80169364 from UNK_T to returning struct lbl_8046B488_t* and exposed the forward declaration in gm_1601.h while removing a redundant static declaration from gm_16AE.static.h.",
+    "Expanded struct lbl_8046B488_t in gm_1601.static.h to name byte fields at offsets 0x7, 0x8, and 0xF before the existing bitfields at offset 0x10.",
+    "Added the static item remap table lbl_803B7844 used by fn_801640B0 to translate 32 item bits, with 0x23 treated as a sentinel skip value.",
+    "Restructured struct gmm_x1F2C in gm/types.h so the data from offset 0x7C onward is represented as a nested x7C struct containing bitfields and the former x7E through xA8 fields; this drove corresponding access changes in gmmain_lib.c.",
+    "Updated gmmain_lib functions to access persistent fighter fields through base[arg0].x7C.*, changed several return types to bool, and changed KO/stat pointer accessors gmMainLib_8015D74C and gmMainLib_8015D7A4 to return u16*.",
+    "Implemented gmMainLib_8015EEC8 to zero each fighter's x7C persistent data for 0x19 entries and then clear a 0xD8-byte range starting at thing.x1A68.",
+    "Simplified boolean call sites in ft_0D14.c and gm_16AE.c by using direct truthiness or logical negation instead of temporary int comparisons."
+  ],
+  "smart_moves": [
+    "Used struct refinements to eliminate M2C_FIELD and raw offset accesses, making matched code cleaner and creating reusable type knowledge for later gm_1601 work.",
+    "Changed signatures from UNK_RET/UNK_PARAMS and s32-return booleans to bool/u8/u16 pointer types where the implementation showed binary flag semantics, reducing casts and improving call-site readability.",
+    "Nested the 0x7C persistent fighter data block inside gmm_x1F2C rather than leaving many flat fields, allowing memzero(&data->x7C, sizeof(data->x7C)) to match a whole substructure cleanup pattern.",
+    "Preserved matching-sensitive stack padding with PAD_STACK in functions such as gm_801693BC, gm_801694A0, gm_8016A164, and gmMainLib_8015EEC8.",
+    "Used simple bounded loops with explicit constants already visible in surrounding code, especially 0x19 for persistent fighter slots and 0x20 for item mask bits, which likely helped match loop codegen.",
+    "Modeled item mask conversion with a static remap table and sentinel check instead of open-coded switch logic, matching the data-driven shape implied by lbl_803B7844."
+  ],
+  "decomp_lessons": [
+    "When a group of accessor functions all index the same persistent data base, matching one set of offsets can reveal a nested substructure; update the struct first and then propagate field accesses through all accessors.",
+    "Boolean helper functions should usually be typed as bool once callers use them only as predicates; this can remove temporary variables and produce cleaner matching conditionals.",
+    "Replacing M2C_FIELD with named fields is often coupled to header/static-header cleanup: add forward declarations or concrete struct fields only where needed, and remove stale local extern/static declarations.",
+    "For reset functions, look for memzero over a substructure instead of individual field clears; grouping fields into a named nested struct can make the source match the binary memory-clear pattern.",
+    "Mask manipulation code can require 64-bit constants such as 1LL << item for item masks, while stage masks may use 32-bit shifts; preserve the width used by the backing field.",
+    "Use evidence from nearby accessors to choose signedness: this PR changed KO/stat halfword accessors from s16* to u16* and matching gm_1601 wrappers return u16."
+  ],
+  "naming_conventions": [
+    "Kept address-based function names such as gm_80163DE8, gm_8016403C, gm_801693BC, and gmMainLib_8015EEC8 where semantic names were not available.",
+    "Used fn_ prefix for local/unknown-purpose helpers such as fn_80163D24, fn_80163D74, fn_80163FA4, fn_801640B0, and fn_80169364.",
+    "Used x-offset field names for partially understood globals and structs, including lbl_8046B488.x7, x8, xF, and gmm_x1F2C.x7C.xA0.",
+    "Added a semantic comment for gm_801693BC: \"Player is Fighting Wireframe\"; this is the clearest behavior label present in the diff.",
+    "Named mask parameters by domain where clear from use, such as item, item_mask, stage, and enable."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used PAD_STACK to preserve stack frame shape in newly matched functions.",
+    "Converted `if (func() == 0)` to `if (!func())` after bool return typing, as seen with gm_8016A1F8 in gm_16AE.c.",
+    "Removed a temporary return variable in ftCo_800D3680 and tested gm_801693BC directly, likely relying on the new bool signature for matching and readability.",
+    "Used `ckind -= CKIND_BOY; if (ckind <= CKIND_GIRL - CKIND_BOY)` range-check form in gm_801693BC, a common decomp tactic for matching compiler output for contiguous enum ranges.",
+    "Used assignment inside a conditional in fn_801640B0, `if ((shift = lbl_803B7844[(u8) i]) != 0x23)`, preserving a compact table-lookup-and-branch structure.",
+    "Used `memzero(&data->x7C, sizeof(data->x7C))` and `memzero(&gmMainLib_804D3EE0->thing.x1A68, 0xD8)` to match block clears instead of hand-written field resets."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided slice.",
+    "There was one issue comment counted in the PR metadata, but the excerpt contains no human comment body, so no reviewer intent or requested changes can be inferred."
+  ],
+  "searchable_terms": [
+    "gm_1601 matches",
+    "gm_80163D24",
+    "fn_80163D24",
+    "fn_80163D74",
+    "gm_80163DC4",
+    "gm_80163DE8",
+    "gm_80163E3C",
+    "gm_80163E60",
+    "gm_80163EB4",
+    "gm_80163ED8",
+    "gm_80163F2C",
+    "gm_80163F50",
+    "fn_80163FA4",
+    "gm_8016403C",
+    "fn_801640B0",
+    "gm_801641E4",
+    "gm_801693BC",
+    "gm_801694A0",
+    "gm_8016A164",
+    "gm_8016A1F8",
+    "gmMainLib_8015CEFC",
+    "gmMainLib_8015D710",
+    "gmMainLib_8015D74C",
+    "gmMainLib_8015D764",
+    "gmMainLib_8015D7A4",
+    "gmMainLib_8015EEC8",
+    "gmm_x1F2C",
+    "gmm_x1CB0",
+    "lbl_8046B488_t",
+    "lbl_803B7844",
+    "MatchEnd.n_winners",
+    "M2C_FIELD replacement",
+    "Fighting Wireframe",
+    "CKIND_BOY",
+    "CKIND_GIRL",
+    "Player_GetFlagsBit1",
+    "Player_GetPlayerCharacter",
+    "persistent fighter data",
+    "item_mask",
+    "stage_mask",
+    "PAD_STACK"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename lbl_8046B488_t fields x7, x8, and xF to semantic names.",
+    "Find later PRs touching gmm_x1F2C.x7C to validate the nested persistent fighter data layout.",
+    "Search for gm_801693BC callers to confirm all call sites treat it as the Fighting Wireframe predicate.",
+    "Search for lbl_803B7844 or fn_801640B0 to determine the semantic item order represented by the item mask remap table.",
+    "Check later gmmain_lib matching work around gmMainLib_8015EF30 and the cleanup/reset functions following gmMainLib_8015EEC8."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

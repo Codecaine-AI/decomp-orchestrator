@@ -1,0 +1,152 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2134",
+  "pr": {
+    "number": 2134,
+    "title": "Wip/logf decompilation",
+    "url": "https://github.com/doldecomp/melee/pull/2134",
+    "state": "MERGED",
+    "author": "malvarezcastillo",
+    "created_at": "2026-01-26T19:45:00Z",
+    "merged_at": "2026-01-26T21:21:05Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Decompiled and substantially improved matching for MSL math logf by rewriting the function around explicit IEEE-754 bit manipulation and moving math lookup tables out of src/MSL/math.c into a new src/MSL/math_data.c compilation unit. The PR accepted a known .rodata regression because separating the tables prevented mwcc from hoisting shared array base addresses, raising logf from about 59.82% to 99.80% matched with all 91 target instructions identical except for a stack-frame-size mismatch.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "data-layout",
+      "types-structs",
+      "config-splits",
+      "math-library"
+    ],
+    "systems": [
+      "MSL",
+      "MSL/math",
+      "config/GALE01"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/MSL/math.c",
+      "role": "Reworked logf implementation and replaced in-file lookup table definitions with extern declarations for tables and bit-pattern coefficients."
+    },
+    {
+      "path": "src/MSL/math_data.c",
+      "role": "New compilation unit holding __ln_F, __one_over_F, __sincos_on_quadrant, __sincos_poly, and logf coefficient bit constants."
+    },
+    {
+      "path": "config/GALE01/splits.txt",
+      "role": "Moved the MSL math .rodata range from MSL/math.c to new MSL/math_data.c split entry."
+    }
+  ],
+  "what_changed": [
+    "Added a new MSL/math_data.c file containing math lookup tables previously defined in math.c: __ln_F, __one_over_F, __sincos_on_quadrant, and __sincos_poly.",
+    "Updated config/GALE01/splits.txt so the .rodata range 0x803B8F50-0x803B93A0 belongs to MSL/math_data.c instead of MSL/math.c.",
+    "Changed math.c to declare the lookup tables as extern const float arrays instead of defining them locally.",
+    "Added extern u32 bit-pattern constants __logf_C0_bits and __logf_C1_bits for logf Taylor-series coefficients, with comments indicating they are intended to produce lwz global loads before reinterpretation as floats.",
+    "Rewrote logf(float x) to use explicit raw exponent, mantissa, and sign-bit handling, including exp_bits, mant_bits, raw_fm/raw_fM construction, table-index m, and special cases for NaN, +/-inf, subnormal, and zero.",
+    "Introduced a FloatU32 union typedef, though the shown diff primarily continues to use pointer casts and the F32_BIT_CAST macro.",
+    "Changed the polynomial expression structure for the normal-number path into named temporaries such as C0, C1, new_var, poly, and h2_poly to influence mwcc codegen.",
+    "Removed extensive old inline assembly-address comments from math.c and replaced them with higher-level comments explaining why tables live in math_data.c."
+  ],
+  "smart_moves": [
+    "Separated lookup-table data into its own compilation unit to alter compiler codegen: the PR notes that tables in math.c caused mwcc to hoist array base addresses, while external tables forced separate address loads closer to the target.",
+    "Accepted a localized data-section regression as an explicit trade-off because it dramatically improved the function match: tables in math.c gave .rodata 100% and logf 81%, while tables in math_data.c gave .rodata 0% and logf 99.8%.",
+    "Stored logf coefficients as u32 bit patterns rather than float literals so mwcc would emit integer global loads followed by float reinterpretation, matching the target load style more closely.",
+    "Used explicit mantissa and exponent masks and intermediate raw float bit patterns to keep the source aligned with the target algorithm and instruction ordering.",
+    "Documented the remaining mismatch precisely: all 91 instructions were reported identical, with only stack frame size differing, attributed to mwcc allocating stack for float temporaries that should live in registers."
+  ],
+  "decomp_lessons": [
+    "For MSL math functions, placing lookup tables in the same C file as the function can change optimization behavior by allowing base-address hoisting; moving tables to a separate compilation unit can improve function matching even if it hurts data matching.",
+    "A decomp PR may reasonably trade .rodata matching for text matching when the trade-off is documented and the remaining mismatch is well understood.",
+    "When float constants need target-like load behavior, define them as u32 bit patterns and reinterpret them locally instead of relying on float literals or local float arrays.",
+    "Small expression-structure changes and named temporaries can matter for mwcc register allocation, stack allocation, and instruction ordering in math code.",
+    "Track section ownership in splits.txt whenever data is moved between compilation units; otherwise match reports will conflate code progress with data-regression side effects.",
+    "For bit-level float routines, macros for exponent, mantissa, sign bit, and raw-float casting provide a reusable framework for matching original IEEE-754 manipulation code."
+  ],
+  "naming_conventions": [
+    "Lookup-table symbols use double-underscore MSL-style names: __ln_F, __one_over_F, __sincos_on_quadrant, __sincos_poly.",
+    "Bit-pattern constants for float coefficients were named with a _bits suffix: __logf_C0_bits and __logf_C1_bits.",
+    "Raw integer representations of floats use raw_ prefixes, as in raw_x, raw_fm, and raw_fM.",
+    "Intermediate exponent and mantissa variables use descriptive names such as exp_bits and mant_bits.",
+    "Float bit-helper macros use uppercase F32_* names: F32_BIT_CAST, F32_UNBIASED_EXPONENT, F32_HIGH_MANTISSA_BITS, and F32_LOW_MANTISSA_BITS.",
+    "The separated data file was named math_data.c, matching its role as a companion compilation unit for MSL math table data."
+  ],
+  "assembly_or_matching_tactics": [
+    "Move const tables out of the function's compilation unit to prevent mwcc from hoisting shared array base addresses.",
+    "Use extern table references so each table access may generate separate address loads more like the original code.",
+    "Represent float coefficients as u32 globals to force lwz-style loads before casting to float.",
+    "Order assignments deliberately: load __logf_C0_bits, read raw_x, then load __logf_C1_bits, then derive mantissa/exponent fields.",
+    "Break polynomial math into temporaries rather than one large expression to guide instruction ordering and register allocation.",
+    "Use raw bit masks EXP_MASK, MANT_MASK, SIGN_BIT, EXP_ZERO, and high/low mantissa extraction to match target branch and table-index logic.",
+    "Known remaining issue was stack frame size: reported 64 bytes generated versus 40 bytes target, likely from mwcc stack allocation for float temporaries."
+  ],
+  "review_feedback": [
+    {
+      "source": "match report/comment excerpt",
+      "feedback": "The PR had a known .rodata regression: matched data dropped by 1104 bytes and main/MSL/math .rodata went from 100.00% to 0.00%."
+    },
+    {
+      "source": "match report/comment excerpt",
+      "feedback": "The same report showed logf improving from 59.82% to 99.80%, with all 91 instructions identical and only stack frame size differing."
+    },
+    {
+      "source": "author/comment excerpt",
+      "feedback": "Future work suggested exploring ways to prevent address hoisting while keeping tables in math.c, possibly via volatile, different array access patterns, or linker tricks."
+    },
+    {
+      "source": "review metadata",
+      "feedback": "No inline review comments were present in the supplied slice; specific reviewer intent beyond the merge and report excerpt is not evidenced."
+    }
+  ],
+  "searchable_terms": [
+    "PR2134",
+    "Wip/logf decompilation",
+    "logf",
+    "MSL math",
+    "src/MSL/math.c",
+    "src/MSL/math_data.c",
+    "config/GALE01/splits.txt",
+    "__ln_F",
+    "__one_over_F",
+    "__sincos_on_quadrant",
+    "__sincos_poly",
+    "__logf_C0_bits",
+    "__logf_C1_bits",
+    "FloatU32",
+    "F32_BIT_CAST",
+    "F32_UNBIASED_EXPONENT",
+    "F32_HIGH_MANTISSA_BITS",
+    "F32_LOW_MANTISSA_BITS",
+    "EXP_MASK",
+    "MANT_MASK",
+    "SIGN_BIT",
+    "EXP_ZERO",
+    "mwcc address hoisting",
+    "array base address hoisting",
+    "lookup tables separate compilation unit",
+    "rodata regression",
+    "stack frame size mismatch",
+    "lwz float coefficient bit patterns",
+    "GALE01 splits",
+    "malvarezcastillo"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that solve the logf stack frame size mismatch of 64 vs 40 bytes.",
+    "Search for later changes that move MSL math lookup tables back into math.c without address hoisting.",
+    "Look for other decomp PRs using u32 bit-pattern globals to force lwz loads for float constants.",
+    "Search for uses of volatile, alternative array indexing, or linker tricks to prevent mwcc table base hoisting.",
+    "Check whether src/MSL/math_data.c remains split separately or is later consolidated."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

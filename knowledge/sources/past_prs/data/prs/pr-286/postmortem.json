@@ -1,0 +1,147 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-286",
+  "pr": {
+    "number": 286,
+    "title": "Matched all ftKoopa inline asm functions",
+    "url": "https://github.com/doldecomp/melee/pull/286",
+    "state": "MERGED",
+    "author": "Tri-Wing",
+    "created_at": "2022-02-19T22:12:32Z",
+    "merged_at": "2022-02-19T22:29:34Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Converted the remaining inline assembly in Bowser/ftKoopa into C, backed by expanded Koopa attribute and fighter struct definitions. The PR removed large asm blocks from ftkoopa.c, matched lifecycle and helper routines such as ftKoopa_OnDeath, ftKoopa_OnLoad, func_80132B3C, and func_80132E30, and exposed offsets needed for matching in ftkoopa.h and fighter.h. There was no PR body or review discussion; the only recorded review was an approval.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "inline-asm-removal",
+      "headers",
+      "struct-layout",
+      "fighter"
+    ],
+    "systems": [
+      "fighter",
+      "ftKoopa",
+      "items",
+      "throw-flags"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftkoopa.c",
+    "src/melee/ft/chara/ftkoopa.h",
+    "src/melee/ft/fighter.h"
+  ],
+  "what_changed": [
+    "Replaced multiple ftKoopa inline asm functions with C implementations, including ftKoopa_OnDeath, func_80132A64, func_80132A84, ftKoopa_OnLoad, func_80132B38, func_80132B3C, func_80132C1C, func_80132C64, func_80132CAC, func_80132D00, and func_80132E30.",
+    "Converted asm copy loops over Koopa special attributes into direct struct copies such as *sA2 = *ext_attr, then assigned x2D4_specialAttributes to the copied x2D8_specialAttributes2 storage.",
+    "Expanded ftKoopaAttributes from a partially padded struct with unk34 through unk4C into a mostly offset-named layout from x0 through x9C, including u32 fields at x4, x20, x2C, and unk50.",
+    "Added ftKoopaVars with two f32 fields, used by ftKoopa_OnDeath as an overlay on Fighter offset x222C for values loaded from Koopa attributes x10 and x18.",
+    "Changed Koopa attribute accessors from unk34/unk38/unk3C/unk40/unk44/unk48/unk4C to offset-style names x34/x38/x3C/x40/x44/x48/x4C.",
+    "Added Fighter fields needed by the matched C: x2C_facing_direction, x18B0, and x1A58, replacing portions of filler while preserving offsets.",
+    "Expressed item-state logic in func_80132B3C as a switch over func_8026B320(ft->x1974_heldItem), mapping cases 1, 2, 3, and 4 to func_80070FB4 argument values 1, 0, 2, and 3 respectively.",
+    "Matched held-item guard helpers by testing func_8026B2B4(ft->x1974_heldItem) == 0 before calling func_80070CC4 or func_80070C48.",
+    "Matched func_80132E30 by using x2210_ThrowFlags.b4, flipping x2C_facing_direction when set, writing x234C_stateVar4, and clearing x2200_ftcmd_var0 after calls involving x1A58."
+  ],
+  "smart_moves": [
+    "Recognized the repeated mtctr 0x14 / 8-byte copy loop as a full ftKoopaAttributes struct copy, which simplified several functions and justified expanding the header layout.",
+    "Introduced only the Fighter fields needed at exact offsets instead of overhauling the entire Fighter struct, minimizing unrelated header churn while enabling C to address known offsets directly.",
+    "Used existing bitfield names where available, such as x2226_flag.bits.b1 and x2210_ThrowFlags.b4, to replace rlwimi/rlwinm bit manipulation from the asm.",
+    "Preserved low-level offset-based naming for uncertain fields, which kept the match grounded without inventing semantic names for Koopa attributes whose meanings were not documented.",
+    "Translated branch-table-style item logic into a compact switch, making the control flow understandable while retaining the observed case-to-argument mapping.",
+    "Kept small matching artifacts visible in the C, such as unused locals in some functions, rather than over-cleaning code that may have been necessary for code generation."
+  ],
+  "decomp_lessons": [
+    "When an asm loop copies a fixed number of words from ext_attr into per-fighter special attributes, check whether the loop size corresponds exactly to a character attribute struct and replace it with struct assignment.",
+    "For fighter character files, matching often depends on adding precise Fighter fields at offsets referenced by asm rather than relying on raw filler or casts.",
+    "Offset-style names like x34, x4C, and x9C are preferable to arbitrary unk names when the field offset is known but the semantic purpose is not.",
+    "Bitfield definitions can turn rlwimi/rlwinm sequences into straightforward C assignments and tests, but the exact bit index must come from the instruction behavior and existing struct layout.",
+    "Switch statements can naturally match compare/branch ladders over small integer item states, especially when cases map to repeated calls with only one changing argument.",
+    "Do not remove apparently unused locals automatically in decomp work; their presence may be intentional for register allocation or stack/codegen matching unless reviewers later request cleanup."
+  ],
+  "naming_conventions": [
+    "Character attribute structs use the ftCharacterAttributes pattern: ftKoopaAttributes.",
+    "Unknown but offset-known fields in structs are named with hexadecimal offset-style members such as x0, x10, x4C, and x9C.",
+    "Fighter fields follow offset-prefixed names with limited semantic suffixes where known, e.g. x2C_facing_direction, x1974_heldItem, x18B0, and x1A58.",
+    "Per-character runtime variable overlays can be named ftKoopaVars and addressed by casting a known Fighter offset such as &ft->x222C.",
+    "Existing generic function symbols remained unnamed where no semantic name was established, e.g. func_80132B3C, func_8026B2B4, and func_80070FB4."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced mtctr 0x14 plus paired lwz/stw copy loop with a single ftKoopaAttributes struct assignment; 0x14 iterations of 8 bytes implies a 0xA0-byte attribute struct.",
+    "Mapped offset 0x2D8 to x2D8_specialAttributes2 as the destination copy buffer and 0x2D4 to x2D4_specialAttributes as the active attribute pointer.",
+    "Replaced a trivial branch wrapper at func_80132A64 with a direct call to func_80134D78(gobj) followed by return.",
+    "Matched a no-op asm function at func_80132B38 as an empty void function returning immediately.",
+    "Translated item status tests around func_8026B2B4 and func_8026B320 into nested if and switch constructs.",
+    "Translated throw flag handling in func_80132E30 into a BOOL flag_set temporary, clearing x2210_ThrowFlags.b4 before negating x2C_facing_direction and setting x234C_stateVar4.",
+    "Translated asm loads/stores at Fighter offsets 0x18B0, 0x222C, 0x2230, 0x2200, and 0x1A58 into typed field accesses or casts."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "RevoSucks",
+      "state": "APPROVED",
+      "submitted_at": "2022-02-19T22:24:36Z",
+      "body": "",
+      "notes": "No review comments or rationale were present in the slice."
+    }
+  ],
+  "searchable_terms": [
+    "PR286",
+    "ftKoopa",
+    "Koopa",
+    "Bowser",
+    "inline asm",
+    "asm removal",
+    "ftKoopa_OnDeath",
+    "ftKoopa_OnLoad",
+    "func_80132A64",
+    "func_80132A84",
+    "func_80132B3C",
+    "func_80132C1C",
+    "func_80132C64",
+    "func_80132CAC",
+    "func_80132D00",
+    "func_80132E30",
+    "ftKoopaAttributes",
+    "ftKoopaVars",
+    "x2D4_specialAttributes",
+    "x2D8_specialAttributes2",
+    "x222C",
+    "x18B0",
+    "x2C_facing_direction",
+    "x1974_heldItem",
+    "x1A58",
+    "x2200_ftcmd_var0",
+    "x2210_ThrowFlags",
+    "x2226_flag",
+    "x234C_stateVar4",
+    "func_8026B2B4",
+    "func_8026B320",
+    "func_8026B3F8",
+    "func_80070FB4",
+    "func_80070C48",
+    "func_80070CC4",
+    "func_80074A4C",
+    "func_8007E2F4",
+    "func_800DE2A8",
+    "func_800DE7C0",
+    "struct copy",
+    "attribute copy loop"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename ftKoopaAttributes fields x34 through x9C to semantic names.",
+    "Find later changes to Fighter x1A58 and whether it receives a semantic field name.",
+    "Search for other character PRs replacing mtctr 0x14 attribute copy loops with struct assignment.",
+    "Check whether unused locals in ftKoopa_OnDeath and ftKoopa_OnLoad were later cleaned up or retained for matching.",
+    "Find later PRs that name func_8026B2B4, func_8026B320, or func_80070FB4 to clarify the item-state logic."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

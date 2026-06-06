@@ -1,0 +1,136 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1676",
+  "pr": {
+    "number": 1676,
+    "title": "Camera pause work",
+    "url": "https://github.com/doldecomp/melee/pull/1676",
+    "state": "MERGED",
+    "author": "sadkellz",
+    "created_at": "2025-07-10T16:22:31Z",
+    "merged_at": "2025-07-11T01:02:54Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Camera pause-mode decomp/refactor work centered on src/melee/cm/camera.c and cm/types.h. The PR renamed the camera movement struct to CameraTransformState, propagated transform/transform_copy naming through camera APIs, identified several pause-camera fields such as pause_eye_offset, pause_eye_distance, pause_up, min_distance, and max_distance, and implemented pause zoom/rotation-related functions. decomp.dev reported one new full match, Camera_8002BAA8, and improvements to Camera_8002BD88 and Camera_8002A768. There was no PR body or human review feedback in the slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-field-renaming",
+      "camera-pause",
+      "cleanup"
+    ],
+    "systems": [
+      "camera",
+      "melee-core",
+      "stage"
+    ]
+  },
+  "key_files": [
+    "src/melee/cm/camera.c",
+    "src/melee/cm/types.h",
+    "src/melee/cm/camera.h",
+    "src/melee/cm/camera.static.h",
+    "src/melee/cm/forward.h",
+    "src/melee/gr/grstadium.c"
+  ],
+  "what_changed": [
+    "Renamed struct CameraMovement to CameraTransformState and updated forward declarations and camera function signatures that pass this state, including Camera_80029AAC, Camera_80029BC4, Camera_80029C88, Camera_8002A768, Camera_8002AF68, and Camera_8002B1F8.",
+    "Renamed Camera fields movement and movement_lerp to transform and transform_copy. transform_copy was annotated as running the same tween logic but not obviously used for output.",
+    "Converted many unknown Camera fields from unk_* names to offset-style x* or array-style _* names, while giving semantic names to pause-camera fields: min_distance, max_distance, pause_eye_offset, pause_eye_distance, and pause_up.",
+    "Implemented Camera_8002BAA8 with a comment identifying it as Camera_PauseZoom. The implementation computes the pause eye offset length, clamps pause_eye_distance between min_distance and max_distance, normalizes the offset, and stores the scaled offset back.",
+    "Implemented Camera_8002BC78 and helper logic for camera basis clamping/orthonormalization. It clamps near-vertical forward vectors, preserves pause_up when clamped, and rebuilds right/up with cross products and normalization.",
+    "Implemented Camera_8002BD88 with a comment identifying it as Camera_PauseRotate. It derives forward/up/right vectors from pause_eye_offset, clamps vertical rotation near poles, updates pause_up, applies y and x rotation offsets, normalizes, scales by pause_eye_distance, and writes back pause_eye_offset.",
+    "Added a small vec_len(Vec3*) helper returning sqrtf(x*x + y*y + z*z).",
+    "Renamed static camera direction constants in camera.static.h, including cm_803B73B8 to cm_WorldForward and cm_803B73D0 to cm_WorldUp, and made these static Vec3 const.",
+    "Updated camera.h prototypes to use CameraTransformState and changed Camera_8002BD88 from UNK_RET/UNK_PARAMS to void Camera_8002BD88(f32, f32).",
+    "Added explanatory comments in grstadium.c mapping Pokémon Stadium state values to default, fire, grass, water, and rock."
+  ],
+  "smart_moves": [
+    "The PR separated semantic naming from unknown offset naming: fields with understood pause-camera meaning received names like pause_eye_offset and pause_eye_distance, while uncertain fields were converted to x-offset style rather than overinterpreted.",
+    "Renaming CameraMovement to CameraTransformState better reflects that the struct contains interest, target_interest, position, target_position, fov, and target_fov rather than just movement parameters.",
+    "Factoring vector length into vec_len and basis reconstruction into an inline OrthonormalizeBasis made the pause zoom/rotate code easier to reason about while preserving matching progress.",
+    "The pause rotation code explicitly handles near-pole forward vectors by clamping y to +/-1 and zeroing incompatible rotation input, which documents a likely source of edge-case behavior.",
+    "World direction constants were given semantic names and const qualification, making call sites like Camera_8002A768 and Camera_8002BD88 clearer without changing data layout.",
+    "The author left uncertainty visible in comments, including transform_copy usage and a TODO/fake constant note in Camera_8002BD88, which helps future decompilers avoid treating provisional logic as fully understood."
+  ],
+  "decomp_lessons": [
+    "When a struct mostly transports eye/interest/fov target and current values, naming it around transform state can clarify many call sites at once and reduce misleading parameter names like movement.",
+    "For large globals like Camera, use semantic names only where behavior is supported by code evidence; otherwise x-offset and _array naming keeps layout searchable and honest.",
+    "Pause camera work benefits from identifying the basis vectors explicitly: forward from negative eye offset, up from stored pause_up or world up, and right from cross products.",
+    "Matching a function may require replacing decompiler-style reciprocal-square-root expansion with a clearer helper or sqrtf expression if the compiler emits the desired sequence.",
+    "Header prototypes should be updated together with implementation parameter type renames so later PRs do not keep propagating stale typedefs.",
+    "Small stage comments, such as mapping numeric Stadium variants to fire/grass/water/rock/default, can improve future decomp context even when the code behavior is unchanged."
+  ],
+  "naming_conventions": [
+    "CameraMovement -> CameraTransformState",
+    "movement -> transform",
+    "movement_lerp -> transform_copy",
+    "cm_803B73B8 -> cm_WorldForward",
+    "cm_803B73D0 -> cm_WorldUp",
+    "unk_2F8 -> min_distance",
+    "unk_2FC -> max_distance",
+    "unk_320 -> pause_eye_offset",
+    "unk_330 -> pause_eye_distance",
+    "unk_334 -> pause_up",
+    "Unknown scalar/bitfield names were normalized to x-offset style such as x2BC, x2C0, x398_b0, x399_b6, x39A_b7.",
+    "Unknown arrays were normalized to leading-underscore offset style such as _8C, _B0, and _1B0."
+  ],
+  "assembly_or_matching_tactics": [
+    "decomp.dev reported Camera_8002BAA8 improved from 87.07% to 100.00%, adding a new 61-byte full match in main/melee/cm/camera.",
+    "decomp.dev reported Camera_8002BD88 improved from 0.00% to 85.80%, a +556 byte unmatched-function improvement.",
+    "decomp.dev reported Camera_8002A768 improved from 65.62% to 66.21%, a +12 byte improvement, alongside the rename from raw cm_803B73B8 accesses to cm_WorldForward.",
+    "Camera_8002BAA8 replaced a decompiler-looking manual __frsqrte length calculation with vec_len/sqrtf plus normalization and distance clamping.",
+    "Camera_8002BC78 and Camera_8002BD88 use PSVECCrossProduct and lbVector_Normalize to reconstruct an orthonormal camera basis.",
+    "Camera_8002BD88 contains an explicit TODO noting that the x-axis path used a fake constant expression, so that function was not fully solved despite the large match improvement."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided slice.",
+    "The only issue comment was the decomp.dev report showing matched code increased by 464 bytes overall, with one new match and two unmatched-function improvements."
+  ],
+  "searchable_terms": [
+    "Camera pause work",
+    "Camera_8002BAA8",
+    "Camera_PauseZoom",
+    "Camera_8002BD88",
+    "Camera_PauseRotate",
+    "Camera_8002BC78",
+    "Camera_8002A768",
+    "CameraTransformState",
+    "CameraMovement",
+    "transform",
+    "transform_copy",
+    "pause_eye_offset",
+    "pause_eye_distance",
+    "pause_up",
+    "min_distance",
+    "max_distance",
+    "vec_len",
+    "OrthonormalizeBasis",
+    "cm_WorldForward",
+    "cm_WorldUp",
+    "PSVECCrossProduct",
+    "lbVector_Normalize",
+    "src/melee/cm/camera.c",
+    "src/melee/cm/types.h",
+    "src/melee/cm/camera.static.h",
+    "grstadium",
+    "Pokemon Stadium fire grass water rock"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that finish Camera_8002BD88 or remove the TODO/fake constant in the x rotation path.",
+    "Search whether transform_copy is later proven to affect rendering or can be given a better semantic name.",
+    "Search for later renames of x2BC, x2C0, x341_b3_b4, and x35C after more pause-camera behavior is understood.",
+    "Check whether Camera_8002C010 and nearby pause camera functions were decompiled after this PR."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,147 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-901",
+  "pr": {
+    "number": 901,
+    "title": "Partially match `ftCo_Shouldered`",
+    "url": "https://github.com/doldecomp/melee/pull/901",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-30T08:13:56Z",
+    "merged_at": "2023-05-30T08:38:15Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Partially decompiled the common fighter shouldered state by moving the 0x8009C4F8-0x8009CA08 region out of asm/ft_08A4.s into new ftCo_09C4.c and ftCo_Shouldered.c translation units. The PR report shows ftCo_09C4.c fully matched and ftCo_Shouldered.c at 90.48%, with trivial IASA/Phys/Coll callbacks matched and several core shouldered routines still using ASM/WIP fallback. The change also introduced supporting headers, added the new objects to obj_files.mk, renamed the interacted-fighter pointer to victim_gobj across many fighter/capture/throw paths, and refined relevant Fighter/common-data/collision structs to make the shouldered code expressible.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "partial-match",
+      "asm-to-c",
+      "headers",
+      "struct-refinement",
+      "field-renaming",
+      "build-list-update"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "shouldered",
+      "cargo",
+      "throw",
+      "capture",
+      "collision",
+      "library",
+      "asm",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_Shouldered.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Shouldered.h",
+    "src/melee/ft/chara/ftCommon/ftCo_09C4.c",
+    "src/melee/ft/chara/ftCommon/ftCo_09C4.h",
+    "asm/melee/ft/ft_08A4.s",
+    "obj_files.mk",
+    "src/melee/ft/types.h",
+    "src/melee/ft/chara/ftCommon/types.h",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/ftcommon.c",
+    "src/melee/ft/ft_08A4.h",
+    "src/melee/lb/lbcollision.h"
+  ],
+  "what_changed": [
+    "Removed the shouldered-related assembly block from asm/melee/ft/ft_08A4.s, including ftCo_8009C4F8, ftCo_8009C540, ftCo_8009C5A4, ftCo_8009C640, ftCo_8009C744, ftCo_Shouldered_Anim, ftCo_Shouldered_IASA, ftCo_Shouldered_Phys, and ftCo_Shouldered_Coll.",
+    "Added src/melee/ft/chara/ftCommon/ftCo_09C4.c for ftCo_8009C4F8 and ftCo_8009C540; the PR report says this file matched 100%.",
+    "Added src/melee/ft/chara/ftCommon/ftCo_Shouldered.c with C/WIP implementations and inline-asm fallback for the main shouldered routines; the PR report says the file reached 90.48%.",
+    "Added ftCo_09C4.h and ftCo_Shouldered.h declarations and included ftCo_Shouldered.h from many ftCommon cargo/wait/attack/item files that call ftCo_8009C5A4 or related routines.",
+    "Updated obj_files.mk to build ftCo_09C4.c.o and ftCo_Shouldered.c.o before the remaining ft_08A4.s.o, preserving link/order placement while shrinking the asm object.",
+    "Renamed Fighter::x1A58_interactedFighter to Fighter::victim_gobj and propagated that name through common fighter, cargo, Koopa, Mewtwo, Master Hand, and other capture/throw call sites.",
+    "Added ftCommon_MotionVars::shouldered with fields at fp+2340 and fp+2344, matching the shouldered timer/flag storage used by ftCo_Shouldered_Anim and ftCo_8009C640.",
+    "Refined ftCommonData fields used by shouldered logic, including x3B0 as float, x3B4 as shouldered_anim_rate, and x4A0/x4A4/x4A8/x4AC as floats.",
+    "Refined several Fighter bitfields and flags from UnkFlagStruct-style access to direct named bitfields such as x2224_b2, x2224_b7, x221F_b4, throw_flags, and related byte/bit names.",
+    "Adjusted HitCapsule naming/layout in lbcollision.h, including exposing damage and kb_angle fields that the shouldered damage code reads."
+  ],
+  "smart_moves": [
+    "Split the fully matched prologue/helper pair ftCo_8009C4F8 and ftCo_8009C540 into ftCo_09C4.c while keeping the harder shouldered state code in its own ftCo_Shouldered.c; this makes progress searchable and isolates partial-match debt.",
+    "Used the existing project pattern of ASM functions with non-MUST_MATCH/WIP C bodies and nofralloc inline-asm fallback for routines that were close but not fully matching.",
+    "Kept empty callbacks as normal C functions for ftCo_Shouldered_IASA, ftCo_Shouldered_Phys, and ftCo_Shouldered_Coll, immediately removing trivial assembly and improving action-state readability.",
+    "Renamed the ubiquitous x1A58_interactedFighter field to victim_gobj before/while matching the shouldered code, making the chain of holder/victim access in cargo, capture, and damage code much clearer.",
+    "Introduced typed common-data floats and a named shouldered_anim_rate field so animation-rate and timer code could be written semantically instead of through opaque UNK_T accesses.",
+    "Added new object files before the remaining ft_08A4.s.o rather than deleting the asm object entirely, allowing incremental decompilation of a contiguous assembly file without disturbing later still-asm symbols."
+  ],
+  "decomp_lessons": [
+    "For partial matches, separating a fully matched small file from a larger partially matched state file gives future contributors a clean boundary and avoids burying matched routines inside WIP code.",
+    "When a decompiled action state depends on a heavily reused fighter pointer, renaming the struct field globally can be a prerequisite for readable and maintainable C.",
+    "State-specific motion variables should be added to the ftCommon_MotionVars union at the observed offsets before trying to express action logic; here fp+2340/fp+2344 became mv.co.shouldered.x0/x4.",
+    "Common-data fields should be typed to their actual use once a routine proves they are floats or rates; this avoids casts and helps match arithmetic and ftAnim_SetAnimRate calls.",
+    "Inline ASM fallback can keep the repository buildable and symbol-order-correct while C versions document current understanding under WIP/non-MUST_MATCH guards.",
+    "Damage/collision matching often requires improving HitCapsule field names first; ftCo_Shouldered.c reads hit->damage, hit->kb_angle, hit->x8, and hit->element-like data rather than opaque vector aliases."
+  ],
+  "naming_conventions": [
+    "Common fighter action files follow ftCo_<Action>.c and ftCo_<Action>.h, as introduced with ftCo_Shouldered.c/h.",
+    "Small address-range helper files may keep an address-style name such as ftCo_09C4.c/h when the behavior name is not yet fully known.",
+    "Unidentified functions retain address names such as ftCo_8009C5A4, ftCo_8009C640, and ftCo_8009C744, while action callbacks use semantic names such as ftCo_Shouldered_Anim.",
+    "The field x1A58_interactedFighter was renamed to victim_gobj, indicating that grabbed/captured/shouldered relationships should prefer role-based names when evidence is strong.",
+    "Action-local motion variables use a state substruct under mv.co, here mv.co.shouldered.x0 and mv.co.shouldered.x4, with offset comments preserving fp+2340/fp+2344.",
+    "Common-data semantic naming was introduced where known, notably shouldered_anim_rate at +3B4, while less-understood fields remain offset-style such as x3B0 and x4A8."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used ASM function declarations with C bodies enabled for !MUST_MATCH or WIP and nofralloc inline assembly fallback otherwise.",
+    "Inserted explicit dummy stack arrays under MUST_MATCH comments for unused stack space in ftCo_8009C5A4, ftCo_8009C540, and ftCo_8009C744-style routines.",
+    "Defined file-local MWERKS_GEKKO constants for 0.0, 1.0, and CONV_HI to replace the sdata2 constants removed from ft_08A4.s.",
+    "Preserved remaining ft_08A4.s assembly while deleting only the newly decompiled region, then added the new C objects ahead of the asm object in obj_files.mk.",
+    "Matched integer-from-float behavior in ftCo_8009C640 by expressing percent scaling with p_ftCommonData->x4A0/x4A4 and an int cast, backed by the inline-asm fallback for exact codegen.",
+    "Factored the ground/air shouldered timing expression into a small static inline helper inlineA0, returning x4A8 on ground and x4A8*x4AC in air."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice, so there is no direct reviewer feedback to extract."
+  ],
+  "searchable_terms": [
+    "pr-901",
+    "ftCo_Shouldered",
+    "ftCo_Shouldered_Anim",
+    "ftCo_Shouldered_IASA",
+    "ftCo_Shouldered_Phys",
+    "ftCo_Shouldered_Coll",
+    "ftCo_8009C4F8",
+    "ftCo_8009C540",
+    "ftCo_8009C5A4",
+    "ftCo_8009C640",
+    "ftCo_8009C744",
+    "ftCo_09C4",
+    "ft_08A4.s",
+    "victim_gobj",
+    "x1A58_interactedFighter",
+    "ftCo_MS_ShoulderedWait",
+    "ftCo_MS_ShoulderedTurn",
+    "shouldered_anim_rate",
+    "mv.co.shouldered",
+    "HitCapsule damage",
+    "HitCapsule kb_angle",
+    "Fighter_ChangeMotionState",
+    "ftAnim_SetAnimRate",
+    "ftCommon_8007DC08",
+    "ftColl_80079C70",
+    "ftCo_Damage_CalcKnockback",
+    "cargo hold",
+    "shouldered partial match",
+    "ribbanya"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match ftCo_Shouldered.c or remove its ASM fallback.",
+    "Search for further renames of mv.co.shouldered.x0 and mv.co.shouldered.x4.",
+    "Search for later HitCapsule layout refinements around damage, kb_angle, x8, and element.",
+    "Find subsequent PRs that continue decompiling asm/melee/ft/ft_08A4.s after ftCo_Shouldered.",
+    "Search for uses of victim_gobj to understand capture/throw ownership conventions."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

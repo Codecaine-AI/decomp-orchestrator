@@ -1,0 +1,134 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1498",
+  "pr": {
+    "number": 1498,
+    "title": "Match runtime.c",
+    "url": "https://github.com/doldecomp/melee/pull/1498",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2025-05-22T01:50:23Z",
+    "merged_at": "2025-05-22T02:06:59Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched Runtime/runtime.c by replacing the empty/nonmatching runtime source with inline PowerPC/MWCC assembly implementations for several compiler runtime helpers, updating runtime.h prototypes to ASM declarations, moving __div2i out of lbtime.h, and flipping Runtime/runtime.c from NonMatching to Matching in configure.py. The decomp.dev report confirms 100% matches for the added runtime functions and a +2644 byte matched-code gain.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "inline-assembly",
+      "headers",
+      "build-configuration",
+      "runtime-library"
+    ],
+    "systems": [
+      "Runtime",
+      "TRKLib",
+      "configure.py",
+      "lbtime"
+    ]
+  },
+  "key_files": [
+    "configure.py",
+    "src/Runtime/runtime.c",
+    "src/Runtime/runtime.h",
+    "src/melee/lb/lbtime.h"
+  ],
+  "what_changed": [
+    "configure.py changed TRKLib's Runtime/runtime.c object from Object(NonMatching, \"Runtime/runtime.c\") to Object(Matching, \"Runtime/runtime.c\").",
+    "src/Runtime/runtime.c grew from an effectively empty file to 601 lines including <placeholder.h>, runtime.h, a static __constants table, and inline ASM definitions guarded by #ifdef __MWERKS__.",
+    "Added matched runtime helper bodies for __cvt_fp2unsigned, __div2u, __div2i, __mod2u, __mod2i, __shl2i, __shr2u, __shr2i, __cvt_sll_dbl, __cvt_sll_flt, and __cvt_dbl_usll.",
+    "Used #pragma push / #pragma optimization_level 0 / #pragma optimizewithasm off around some inline-asm routines, notably the signed/unsigned divide and modulo helpers.",
+    "src/Runtime/runtime.h replaced ad-hoc or typed prototypes with ASM void declarations for runtime helpers and a typed ASM declaration for __cvt_fp2unsigned(register double d).",
+    "runtime.h added declarations for __cvt_ull_dbl, __cvt_ull_flt, and __cvt_dbl_ull; the diff excerpt only shows implementations for other functions, so the reason for these declarations is not directly evidenced here.",
+    "src/melee/lb/lbtime.h removed the local extern s64 __div2i(s64, s64), consolidating the compiler runtime helper declaration under Runtime/runtime.h.",
+    "The automated decomp.dev comment reported matched code increasing to 25.99% (+0.07%, +2644 bytes) and linked code to 19.57% (+0.04%, +1632 bytes)."
+  ],
+  "smart_moves": [
+    "Kept compiler runtime helpers as ASM functions instead of attempting risky C rewrites, which is appropriate for low-level 64-bit arithmetic and floating-point conversion helpers where register behavior and condition codes matter.",
+    "Guarded inline assembly with #ifdef __MWERKS__ and provided a simple non-MWERKS fallback for __cvt_fp2unsigned, preserving host/tool compatibility where possible.",
+    "Moved __div2i out of lbtime.h, avoiding a local gameplay/library header owning a compiler runtime symbol.",
+    "Used runtime.h as the central declaration point for runtime helper symbols, reducing scattered extern declarations.",
+    "Only marked runtime.c as Matching after adding the corresponding matched source and receiving automated confirmation of 100% matches for the listed runtime functions.",
+    "Used explicit compiler pragmas to control optimization/asm interaction around functions whose matching is sensitive to MWCC inline-asm codegen."
+  ],
+  "decomp_lessons": [
+    "Compiler support/runtime objects may be best matched with carefully transcribed inline assembly, especially for 64-bit division/modulo, shifts, and float/integer conversion routines.",
+    "When matching inline assembly in MWCC, function prototypes often need to be declared with ASM and void register-level signatures rather than high-level C argument lists, unless the function requires a typed C-visible interface like __cvt_fp2unsigned(register double d).",
+    "If a compiler runtime helper is referenced from gameplay code, declare it in the Runtime header rather than duplicating externs in unrelated subsystem headers.",
+    "Build metadata must be updated from NonMatching to Matching once the object is actually matched; configure.py is part of the matching change, not just source code.",
+    "Optimization pragmas such as #pragma optimization_level 0 and #pragma optimizewithasm off can be necessary matching tools for inline-assembly-heavy MWCC runtime functions.",
+    "Use small static constant tables when the original runtime routine loads exact floating-point constants by address; __cvt_fp2unsigned used a __constants table loaded with lis/ori and lfd."
+  ],
+  "naming_conventions": [
+    "Compiler runtime helper symbols retain double-underscore names, e.g. __div2u, __div2i, __mod2u, __mod2i, __shl2i, __shr2u, __shr2i.",
+    "Conversion helper names encode source and destination types, e.g. __cvt_fp2unsigned, __cvt_sll_dbl, __cvt_sll_flt, __cvt_dbl_usll.",
+    "Internal inline-assembly labels use local/simple names such as lab1, lab2, positive1, no_adjust, func_end, or address-like labels such as L_802BA610 and lbl_802b2b1c when matching known assembly labels.",
+    "Runtime declarations belong in src/Runtime/runtime.h rather than subsystem headers like src/melee/lb/lbtime.h."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used ASM function declarations and inline PowerPC instructions wrapped in #ifdef __MWERKS__ blocks.",
+    "Used nofralloc in several assembly routines to control function prologue/epilogue generation.",
+    "Used explicit stack frame setup such as stwu r1,-16(r1), manual stores/loads, and final addi r1,r1,16 / blr where needed.",
+    "Used PowerPC condition registers and branches directly, including cr0/cr6/cr7 comparisons in __cvt_fp2unsigned and signedness handling in __div2i and __mod2i.",
+    "Used cntlzw, mtctr, bdnz, adde, subfc, and subfe patterns to implement 64-bit division and modulo at the register level.",
+    "Used subfic/subfze sign adjustment patterns for signed 64-bit division, modulo, and signed integer conversion behavior.",
+    "Used bitfield/rotate instructions such as rlwinm, rlwimi, rotlwi, rotrwi, clrlwi, extrwi, and extlwi in floating-point conversion helpers.",
+    "Applied #pragma push/pop with #pragma optimization_level 0 and #pragma optimizewithasm off to stabilize code generation around some inline-asm routines.",
+    "Verified matches through decomp.dev, which listed each added runtime function as 100.00% matched."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided PR slice.",
+    "Automated decomp.dev report confirmed runtime.c improvements: __cvt_fp2unsigned, __div2u, __div2i, __mod2u, __mod2i, __shl2i, __shr2u, __shr2i, __cvt_sll_flt, and __cvt_dbl_usll reached 100.00%.",
+    "Automated report also showed collateral matching gains in several vi files, but the PR diff evidence does not explain the causal mechanism beyond runtime.c becoming matched/linked."
+  ],
+  "searchable_terms": [
+    "PR1498",
+    "Match runtime.c",
+    "Runtime/runtime.c",
+    "Runtime/runtime.h",
+    "TRKLib",
+    "Object Matching Runtime/runtime.c",
+    "Object NonMatching Runtime/runtime.c",
+    "__constants",
+    "__cvt_fp2unsigned",
+    "__div2u",
+    "__div2i",
+    "__mod2u",
+    "__mod2i",
+    "__shl2i",
+    "__shr2u",
+    "__shr2i",
+    "__cvt_sll_dbl",
+    "__cvt_sll_flt",
+    "__cvt_dbl_usll",
+    "__cvt_ull_dbl",
+    "__cvt_ull_flt",
+    "__cvt_dbl_ull",
+    "nofralloc",
+    "__MWERKS__",
+    "ASM void",
+    "pragma optimization_level 0",
+    "pragma optimizewithasm off",
+    "placeholder.h",
+    "lbtime.h extern __div2i",
+    "64-bit division runtime helper",
+    "64-bit modulo runtime helper",
+    "floating point conversion runtime helper"
+  ],
+  "follow_up_queries": [
+    "Check whether __cvt_ull_dbl, __cvt_ull_flt, and __cvt_dbl_ull are implemented elsewhere or were only added as forward declarations in runtime.h.",
+    "Search for remaining local extern declarations of compiler runtime helpers in non-Runtime headers and consolidate them into Runtime/runtime.h if appropriate.",
+    "Use PR1498 as a reference when matching other MWCC runtime/compiler helper objects that require nofralloc inline assembly and optimization pragmas.",
+    "Investigate why matching Runtime/runtime.c caused decomp.dev to report additional vi function match gains, if future dependency/linkage work needs an explanation."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,133 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-693",
+  "pr": {
+    "number": 693,
+    "title": "Match dolphin ar (except __ARChecksize)",
+    "url": "https://github.com/doldecomp/melee/pull/693",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-01-16T21:42:31Z",
+    "merged_at": "2023-01-16T21:47:15Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched most of Dolphin's ARAM AR module in C, leaving __ARChecksize in assembly. The PR moved ARRegisterDMACallback, ARGetDMAStatus, ARStartDMA, ARAlloc, ARFree, ARCheckInit, ARInit, ARGetBaseAddress, ARGetSize, and __ARHandler from asm/dolphin/ar/ar.s into new src/dolphin/ar/ar.c, added ar.c.o to obj_files.mk before the remaining ar.s.o, and corrected ARRegisterDMACallback's header prototype to return the previous Event callback.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "asm-to-c",
+      "library-runtime"
+    ],
+    "systems": [
+      "dolphin/ar",
+      "dolphin/dsp",
+      "dolphin/os",
+      "obj_files.mk",
+      "asm"
+    ]
+  },
+  "key_files": [
+    "src/dolphin/ar/ar.c",
+    "asm/dolphin/ar/ar.s",
+    "src/dolphin/ar/ar.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Added src/dolphin/ar/ar.c with C implementations for AR callback registration, DMA status/start, ARAM stack allocation/free, init checks, initialization, base/size getters, and the AR interrupt handler.",
+    "Removed the matched AR functions and sdata2 float/double constants from asm/dolphin/ar/ar.s while retaining __ARChecksize in assembly, consistent with the PR title's exception.",
+    "Added $(BUILD_DIR)/src/dolphin/ar/ar.c.o to TEXT_O_FILES immediately before $(BUILD_DIR)/asm/dolphin/ar/ar.s.o so the newly matched C object links alongside the remaining assembly object.",
+    "Changed src/dolphin/ar/ar.h so ARRegisterDMACallback returns Event instead of void, matching the implementation and observed assembly behavior of returning the old callback.",
+    "Implemented ARStartDMA through halfword DSP register writes using __DSPRegs indices 16-21 and explicit masking/or-ing for address, length, and transfer type fields.",
+    "Implemented ARInit setup of __AR_Callback, DSP ARAM interrupt handler/unmasking, stack pointer/free block bookkeeping, refresh register calculation, __ARChecksize call, and __AR_init_flag setting."
+  ],
+  "smart_moves": [
+    "Kept __ARChecksize in asm rather than forcing an incomplete match, allowing the rest of the AR module to transition to C cleanly.",
+    "Preserved interrupt safety around shared AR state and hardware register updates by mirroring OSDisableInterrupts/OSRestoreInterrupts patterns in ARRegisterDMACallback, ARGetDMAStatus, ARStartDMA, ARAlloc, ARFree, and ARInit.",
+    "Used extern declarations for existing small-data globals such as __AR_Callback, __AR_Size, __AR_StackPointer, __AR_FreeBlocks, __AR_BlockLength, and __AR_init_flag, avoiding unnecessary data movement while only decompiling text.",
+    "Matched the old assembly behavior of ARRegisterDMACallback by saving and returning the previous callback, then fixed the public header to expose that return type.",
+    "Separated hardware register bitfield updates into source-level masks that correspond closely to the rlwinm/rlwimi/or halfword operations in the assembly excerpt.",
+    "Handled the interrupt callback through an OSContext stack object, OSClearContext, OSSetCurrentContext, callback null-check, and restoration of the previous context, matching the assembly structure."
+  ],
+  "decomp_lessons": [
+    "When converting a partially matched library file, leave hard functions in asm and add the C object before the asm object in obj_files.mk so remaining assembly symbols can continue to provide unresolved functions.",
+    "Header prototypes should be checked against the matched assembly, not just existing declarations; ARRegisterDMACallback was declared void but the assembly returned the old callback in r3.",
+    "Volatile or global hardware state often requires exact interrupt disable/restore ordering for both correctness and matching; keep the saved interrupt state variable and restore after state/register writes.",
+    "DSP MMIO register accesses can be expressed through shared register arrays like __DSPRegs when that reproduces the same halfword load/store and masking patterns.",
+    "For init routines, preserve early-return behavior before disabling interrupts; ARInit returns 0x4000 immediately when __AR_init_flag is already true.",
+    "If a floating hardware timing expression matches but the ideal SDK macro is unknown, a source-level TODO is acceptable evidence of uncertainty; this PR used `196.0F * (__OSBusClock / 202500000.0F)` with a note that an OS_TIMER_CLOCK macro should probably be used."
+  ],
+  "naming_conventions": [
+    "Dolphin AR public APIs use AR-prefixed names: ARRegisterDMACallback, ARGetDMAStatus, ARStartDMA, ARAlloc, ARFree, ARCheckInit, ARInit, ARGetBaseAddress, ARGetSize.",
+    "Internal AR globals and handlers use double-underscore names: __AR_Callback, __AR_Size, __AR_StackPointer, __AR_FreeBlocks, __AR_BlockLength, __AR_init_flag, __ARHandler, __ARChecksize.",
+    "Callback type is represented as Event, and callback variables use names like callback and oldCb.",
+    "ARStartDMA parameters were named by role: type, mainmem_addr, aram_addr, length.",
+    "ARInit parameters were named stack_index_addr and num_entries, reflecting the AR allocation stack bookkeeping.",
+    "OS interrupt/context names follow Dolphin OS types and constants: __OSInterrupt, OSContext, OS_INTR_DSP_ARAM, OS_INTRMASK_DSP_ARAM."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced hand-written/remaining assembly with C only for functions that matched; __ARChecksize stayed in asm/dolphin/ar/ar.s.",
+    "Used explicit casts to u16 on __DSPRegs assignments to influence halfword codegen and match register writes.",
+    "Used masks such as ~0x3ff, ~0xffe0, ~0x8000, and `(type << 15)` to model the original rlwinm/rlwimi bit manipulation in ARStartDMA.",
+    "For ARInit's refresh calculation, used float constants 196.0F and 202500000.0F and an int temporary to reproduce the assembly's floating conversion path; removed corresponding sdata2 constants from asm once generated by C.",
+    "Matched ARFree's stack behavior by pre-decrementing __AR_BlockLength, optionally storing the freed length, subtracting `*__AR_BlockLength` from __AR_StackPointer, incrementing __AR_FreeBlocks, restoring interrupts, and returning the new stack pointer.",
+    "Matched __ARHandler's large stack OSContext behavior by declaring a local OSContext exceptionContext and bracketing the callback with OSClearContext/OSSetCurrentContext calls.",
+    "Used `static void __ARHandler(...)` in the C file while forward declaring it before ARInit, keeping it file-local yet usable for __OSSetInterruptHandler."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-693",
+    "dolphin ar",
+    "ARAM",
+    "ARRegisterDMACallback",
+    "ARGetDMAStatus",
+    "ARStartDMA",
+    "ARAlloc",
+    "ARFree",
+    "ARCheckInit",
+    "ARInit",
+    "ARGetBaseAddress",
+    "ARGetSize",
+    "__ARHandler",
+    "__ARChecksize",
+    "__AR_Callback",
+    "__AR_Size",
+    "__AR_StackPointer",
+    "__AR_FreeBlocks",
+    "__AR_BlockLength",
+    "__AR_init_flag",
+    "__DSPRegs",
+    "OSDisableInterrupts",
+    "OSRestoreInterrupts",
+    "__OSSetInterruptHandler",
+    "__OSUnmaskInterrupts",
+    "OS_INTR_DSP_ARAM",
+    "OS_INTRMASK_DSP_ARAM",
+    "OSClearContext",
+    "OSSetCurrentContext",
+    "OSContext",
+    "Event",
+    "obj_files.mk",
+    "asm/dolphin/ar/ar.s",
+    "src/dolphin/ar/ar.c",
+    "src/dolphin/ar/ar.h",
+    "OS_TIMER_CLOCK",
+    "__OSBusClock"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that match __ARChecksize and remove the remaining asm/dolphin/ar/ar.s dependency.",
+    "Check whether later work replaces ARInit's hard-coded refresh calculation with an OS_TIMER_CLOCK macro or SDK-equivalent expression.",
+    "Search for follow-up header expansions for src/dolphin/ar/ar.h, since this PR only corrected ARRegisterDMACallback and did not add prototypes for every implemented AR API.",
+    "Compare other Dolphin hardware modules for the same __DSPRegs bitfield masking style used in ARStartDMA."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

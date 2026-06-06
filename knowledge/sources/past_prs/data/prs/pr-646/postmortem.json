@@ -1,0 +1,150 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-646",
+  "pr": {
+    "number": 646,
+    "title": "Match exception runtime functions",
+    "url": "https://github.com/doldecomp/melee/pull/646",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-01-05T05:42:56Z",
+    "merged_at": "2023-01-05T07:17:54Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched several runtime exception-support functions by replacing the handwritten asm file asm/Runtime/NMWException.s with C implementations for global destructor-chain handling and Gecko exception fragment registration. The PR added a Runtime/Gecko_ExceptionPPC.h header with the __eti_init_info struct and fragment registration prototypes, moved __init_cpp_exceptions from inline asm to C using the renamed extabindex symbol _eti_init_info_, and updated obj_files.mk to build the new C objects. A small matching workaround used an unused asm function to trigger a peephole-off compiler behavior, with review discussion noting it behaves like #pragma peephole off but better resembles original source.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "runtime-library",
+      "headers",
+      "naming",
+      "build-system"
+    ],
+    "systems": [
+      "Runtime",
+      "exceptions",
+      "asm",
+      "include",
+      "src",
+      "obj_files.mk",
+      "extabindex"
+    ]
+  },
+  "key_files": [
+    "asm/Runtime/NMWException.s",
+    "src/Runtime/Gecko_ExceptionPPC.c",
+    "src/Runtime/global_destructor_chain.c",
+    "src/Runtime/__init_cpp_exceptions.c",
+    "include/Runtime/Gecko_ExceptionPPC.h",
+    "asm/extabindex.s",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted asm/Runtime/NMWException.s, removing asm definitions for __destroy_global_chain, __register_fragment, __unregister_fragment, fragmentinfo, and lbl_804D7058.",
+    "Added src/Runtime/global_destructor_chain.c implementing __destroy_global_chain in C with a DestructorChain struct, __global_destructor_chain pointer, and destructor calls with second argument -1.",
+    "Added src/Runtime/Gecko_ExceptionPPC.c implementing __register_fragment and __unregister_fragment using a one-element static ProcessInfo fragment_info array.",
+    "Added include/Runtime/Gecko_ExceptionPPC.h with the __eti_init_info layout fields eti_start, eti_end, code_start, code_size and prototypes for __register_fragment and __unregister_fragment.",
+    "Reworked src/Runtime/__init_cpp_exceptions.c to include the new runtime header, make fragmentID static int, make GetR2 static asm, implement __init_cpp_exceptions in C, and keep __fini_cpp_exceptions in C.",
+    "Renamed the extabindex symbol lbl_80005918 to _eti_init_info_ and updated its self-pointer entry to reference _eti_init_info_.",
+    "Declared _eti_init_info_ as __declspec(section \".init\") extern __eti_init_info _eti_init_info_[] in __init_cpp_exceptions.c to avoid the prior incompatible-section asm workaround.",
+    "Updated obj_files.mk to replace asm/Runtime/NMWException.s.o with src/Runtime/global_destructor_chain.c.o and src/Runtime/Gecko_ExceptionPPC.c.o."
+  ],
+  "smart_moves": [
+    "Split the old NMWException asm into focused C translation units: one for destructor-chain runtime logic and one for Gecko exception fragment registration.",
+    "Introduced a small header for shared exception-runtime types and function prototypes instead of keeping ad hoc extern declarations in __init_cpp_exceptions.c.",
+    "Used a named extabindex symbol, _eti_init_info_, to let __init_cpp_exceptions refer to exception table initialization data from C.",
+    "Kept the known linker limitation explicit with a Doxygen @todo noting that _eti_init_info_ should eventually be _eti_init_info once the linker can generate that name.",
+    "Preserved matching-sensitive behavior in Gecko_ExceptionPPC.c with an unused asm function under #ifndef NON_MATCHING to trigger the same peephole-off behavior as a pragma.",
+    "Made internal state local where possible, such as static fragmentID and static fragment_info, reducing unnecessary global symbol exposure."
+  ],
+  "decomp_lessons": [
+    "Runtime asm can often be retired by identifying small data structures from memory access patterns: the fragment table became ProcessInfo with exception_info, TOC, and active fields, and the destructor list became DestructorChain with next, destructor, and object fields.",
+    "When an asm implementation exists only because a referenced symbol lives in a difficult section, a section-qualified extern declaration may allow the caller to become C while preserving placement constraints.",
+    "For matching CodeWarrior output, source constructs that resemble original-source idioms can be preferable to blunt pragmas when they trigger equivalent compiler behavior.",
+    "Document linker-driven naming hacks near their use so future linker improvements have an obvious cleanup target.",
+    "Replacing an asm object with C requires updating obj_files.mk in the same PR so the old asm file stops contributing duplicate or stale runtime symbols.",
+    "Use static for runtime implementation details unless the original binary or other objects require an exported symbol."
+  ],
+  "naming_conventions": [
+    "Exception table init data was renamed from an anonymous label lbl_80005918 to _eti_init_info_, with a trailing underscore because the intended _eti_init_info name could not yet be generated by the linker.",
+    "The runtime header uses the original-looking type name __eti_init_info and function names __register_fragment and __unregister_fragment.",
+    "The local fragment table type was named ProcessInfo and the static array fragment_info, replacing the prior asm label fragmentinfo.",
+    "The global destructor linked-list type was named DestructorChain and its callback typedef Destructor.",
+    "The destructor-chain global was named __global_destructor_chain, replacing the prior anonymous sbss label lbl_804D7058.",
+    "The R2 accessor was kept as GetR2 and made static within __init_cpp_exceptions.c."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted a full 79-line asm runtime file after matching its functions in C.",
+    "Used static asm char* GetR2(void) containing mr r3, r2 to retrieve the TOC pointer for __register_fragment.",
+    "Removed explicit nofralloc and blr from the GetR2 inline asm shown in the old version, leaving the compiler to generate the function framing/return as needed for the match.",
+    "Added an unused static asm function under #ifndef NON_MATCHING in Gecko_ExceptionPPC.c to trigger a peephole-off compiler bug/behavior.",
+    "Review discussion confirmed the unused asm workaround works the same as #pragma peephole off, but the author chose it because it lined up with the original source better.",
+    "Used __declspec(section \".init\") on the _eti_init_info_ extern to reference data in the init/extabindex area from C."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "file": "src/Runtime/Gecko_ExceptionPPC.c",
+      "feedback": "Asked whether the unused asm function workaround worked differently than simply using #pragma peephole off."
+    },
+    {
+      "author": "r-burns",
+      "file": "src/Runtime/Gecko_ExceptionPPC.c",
+      "feedback": "Replied that it works the same as the pragma, but felt it aligns better with the original source than a bare pragma."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/Runtime/__init_cpp_exceptions.c",
+      "feedback": "Suggested formatting the _eti_init_info_ naming hack as a Doxygen @todo comment; noted they would place it above the _eti_init_info_ declaration, but Doxygen was confused by __declspec at the time."
+    }
+  ],
+  "searchable_terms": [
+    "Match exception runtime functions",
+    "NMWException.s",
+    "Gecko_ExceptionPPC.c",
+    "Gecko_ExceptionPPC.h",
+    "global_destructor_chain.c",
+    "__destroy_global_chain",
+    "__register_fragment",
+    "__unregister_fragment",
+    "__init_cpp_exceptions",
+    "__fini_cpp_exceptions",
+    "__eti_init_info",
+    "_eti_init_info_",
+    "_eti_init_info",
+    "fragmentID",
+    "fragment_info",
+    "ProcessInfo",
+    "DestructorChain",
+    "__global_destructor_chain",
+    "GetR2",
+    "TOC",
+    "peephole off",
+    "unused asm function",
+    "NON_MATCHING",
+    "__declspec(section \".init\")",
+    "extabindex.s",
+    "obj_files.mk",
+    "runtime exceptions",
+    "global destructor chain",
+    "linker cannot generate name",
+    "Doxygen __declspec"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename _eti_init_info_ to _eti_init_info after linker support improves.",
+    "Search for other uses of unused asm functions to trigger peephole-off behavior versus #pragma peephole off.",
+    "Check whether fragment_info size remains one element or is generalized in later exception runtime work.",
+    "Look for subsequent cleanup of Doxygen comments around __declspec(section \".init\").",
+    "Search for additional runtime asm files that were converted to C using section-qualified extern data declarations."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

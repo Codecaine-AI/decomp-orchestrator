@@ -1,0 +1,139 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1852",
+  "pr": {
+    "number": 1852,
+    "title": "Clean up and link `ftYs_SpecialLw`",
+    "url": "https://github.com/doldecomp/melee/pull/1852",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2025-08-19T01:19:02Z",
+    "merged_at": "2025-08-19T01:45:11Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Split Yoshi special-move code that had been bundled under `ftYs_SpecialHi.c`, added and linked a matching `ftYs_SpecialLw.c`, introduced a separate nonmatching `ftYs_SpecialS.c`, and cleaned related Yoshi headers/types/inlines. The decomp.dev report showed linked code +1284 bytes and 27 new matches, mostly functions moved into the new `ftYs_SpecialLw` and `ftYs_SpecialS` units; the reported broken matches were the same functions leaving the old `ftYs_SpecialHi` unit, so they appear to be split relocation effects rather than regressions.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "code-splitting",
+      "headers",
+      "types",
+      "config"
+    ],
+    "systems": [
+      "fighter",
+      "ftYoshi",
+      "config",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "config/GALE01/splits.txt",
+    "config/GALE01/symbols.txt",
+    "configure.py",
+    "src/melee/ft/chara/ftYoshi/ftYs_SpecialHi.c",
+    "src/melee/ft/chara/ftYoshi/ftYs_SpecialLw.c",
+    "src/melee/ft/chara/ftYoshi/ftYs_SpecialLw.h",
+    "src/melee/ft/chara/ftYoshi/ftYs_SpecialS.c",
+    "src/melee/ft/chara/ftYoshi/ftYs_SpecialS.h",
+    "src/melee/ft/chara/ftYoshi/ftYs_SpecialN.c",
+    "src/melee/ft/chara/ftYoshi/ftYs_SpecialN.h",
+    "src/melee/ft/chara/ftYoshi/types.h",
+    "src/melee/ft/inlines.h",
+    "src/melee/ft/ftdata.c"
+  ],
+  "what_changed": [
+    "Updated GALE01 splits so `ftYs_SpecialHi.c` ends at `0x8012E644`, new `ftYs_SpecialLw.c` covers `0x8012E644..0x8012EB48`, and new `ftYs_SpecialS.c` covers `0x8012EB48..0x80132A0C`.",
+    "Added `ftYs_SpecialLw.c` as a matching object in `configure.py`; added `ftYs_SpecialS.c` as nonmatching so the remaining Yoshi side-special range is isolated but not claimed matching.",
+    "Moved Yoshi down-special implementation out of `ftYs_SpecialHi.c` into new `ftYs_SpecialLw.c`, including enter/anim/phys/coll/landing helpers and the star-spawn accessory callback `fn_8012E644`.",
+    "Created `ftYs_SpecialS.c` and `ftYs_SpecialS.h` for Yoshi side-special functions that had previously lived in the `ftYs_SpecialHi` source range, preserving many functions as documented nonmatching stubs while matching several IASA/phys/coll leaf functions.",
+    "Cleaned `ftYs_SpecialHi.c` includes and helper naming, gave `ftYs_SpecialS_8012DF8C` a concrete signature `void (Fighter_GObj*, Vec3*)`, and replaced raw motion-state constants in some paths with named `ftYs_MS_*` and `motion_flags`.",
+    "Removed unrelated SpecialHi/SpecialLw/SpecialS prototypes from `ftYs_SpecialN.h` and deleted `ftYs_SpecialN.static.h`, moving its static prototypes into `ftYs_SpecialN.c`.",
+    "Extended `ftYs_DatAttrs` with offsets used by SpecialHi and SpecialLw: `xEC`, `xF0`, `xF4`, `specialhi_base_angle`, `xFC`, `x100`, and `speciallw_star_offset`, with a static size assertion of `0x120`.",
+    "Added small shared inline helpers in `ft/inlines.h`: `getStickDirX(Fighter*)` and `ftGetFacingDirInt(Fighter*)`.",
+    "Changed four Yoshi `.sdata2` symbols at `0x804D9A58..0x804D9A64` from global `ftYs_Init_*` names to local `@183`, `@184`, `@194`, and `@246`, matching their local constant usage in the split unit."
+  ],
+  "smart_moves": [
+    "Treated the PR as a linker/split cleanup: first narrowed the SpecialHi range, then introduced separate SpecialLw and SpecialS compilation units so future matching work can target smaller, semantically coherent files.",
+    "Kept `ftYs_SpecialLw.c` fully matching while leaving `ftYs_SpecialS.c` nonmatching, avoiding overclaiming progress for the larger side-special body.",
+    "Converted repeated facing-direction branch logic into `ftGetFacingDirInt`, which let `ftYs_SpecialAirLw_Coll` express the original check succinctly while preserving the integer `-1/+1` behavior needed by ledge/ground helpers.",
+    "Added `ftYs_DatAttrs` fields at exact offsets instead of continuing to rely only on anonymous padding, allowing SpecialHi angle math and SpecialLw star offsets to be written against typed data attributes.",
+    "Used named motion-state IDs and named bitwise motion flags where possible, improving readability without changing the matching-sensitive flag value.",
+    "Cleaned header ownership by moving SpecialHi/Lw/S declarations out of `ftYs_SpecialN.h`, reducing accidental cross-file declarations after the split."
+  ],
+  "decomp_lessons": [
+    "When a source file is carrying several adjacent assembly ranges, split `splits.txt` and `configure.py` together; otherwise decomp.dev may report apparent broken matches in the old unit even though the code was successfully relocated.",
+    "A bot report with many 'broken matches' in the old object and corresponding 'new matches' in new objects can indicate a successful file split, not a functional regression.",
+    "For fighter special-move code, keep per-move headers focused: `SpecialN.h` should not declare unrelated `SpecialHi`, `SpecialLw`, or `SpecialS` functions once those units exist.",
+    "Adding typed dat-attribute fields at known offsets can unlock cleaner matching code for math-heavy routines such as angle/vector calculation and item spawn offsets.",
+    "Small inlines for common sign/facing decisions are reusable matching aids, especially when the original code wants integer `-1/+1` rather than the fighter's float `facing_dir`.",
+    "Local `.sdata2` constants may need to be renamed from placeholder globals to local `@NNN` symbols when code is split into the unit that actually owns them."
+  ],
+  "naming_conventions": [
+    "Yoshi fighter files use the `ftYs_` prefix and move-specific filenames such as `ftYs_SpecialN.c`, `ftYs_SpecialHi.c`, `ftYs_SpecialLw.c`, and `ftYs_SpecialS.c`.",
+    "Motion-state names are preferred over raw IDs where known, e.g. `ftYs_MS_SpecialLw`, `ftYs_MS_SpecialAirLw`, `ftYs_MS_SpecialLwLanding`, and `ftYs_MS_SpecialAirHi`.",
+    "Helper names introduced in this PR describe intent rather than placeholder names: `setAccessory4Callback`, `setDamageCallbacks`, `setupCallbacks`, `checkAnimEnd`, `changeMotionState`, `getStickDirX`, and `ftGetFacingDirInt`.",
+    "Unknown Yoshi attribute fields remain offset-named (`xEC`, `xF0`, `xF4`, `xFC`, `x100`) while understood fields get semantic names (`specialhi_base_angle`, `speciallw_star_offset`).",
+    "Private helpers in new units are declared `static` or `static inline` when they are local to that compilation unit."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `PAD_STACK` and `FORCE_PAD_STACK_8` in small functions where stack shape was matching-sensitive, including SpecialLw enter/anim/phys routines and SpecialN helper cleanup.",
+    "Preserved exact motion flags through bitwise named constants such as `Ft_MF_SkipHit | Ft_MF_SkipMatAnim | Ft_MF_SkipColAnim | Ft_MF_UpdateCmd | Ft_MF_SkipItemVis | Ft_MF_Unk19 | Ft_MF_SkipModelPartVis | Ft_MF_SkipModelFlags | Ft_MF_Unk27` for a SpecialLw motion transition.",
+    "For `fn_8012E644`, spawned two Yoshi stars by reading `FtPart_TransN` world position with `lb_8000B1CC`, applying mirrored `speciallw_star_offset.x`, calling `it_802B2FC8` with `-1.0f` and `+1.0f`, and clearing `accessory4_cb`.",
+    "For SpecialHi vector math, typed `ftYs_DatAttrs` enabled code using stick magnitude, `specialhi_base_angle`, `cosf`, and `sinf` to produce the velocity vector for `ftYs_SpecialS_8012DF8C`.",
+    "Changed static inline functions in SpecialN cleanup to `static` functions where appropriate, likely to control inlining/codegen during the cleanup; evidence is diff-only, no reviewer comment explained the intent."
+  ],
+  "review_feedback": [
+    "No human review comments were present in this PR slice.",
+    "decomp.dev bot reported GALE01 matched code improved to 38.91% (+0.01%, +316 bytes) and linked code improved to 25.71% (+0.03%, +1284 bytes).",
+    "decomp.dev bot listed 27 new matches, including 16 functions in `ftYs_SpecialLw` and multiple leaf functions in `ftYs_SpecialS`; it also listed 25 broken matches in `ftYs_SpecialHi`, corresponding to functions moved out of that unit.",
+    "decomp.dev bot reported one unmatched-function improvement: `ftYs_SpecialS_8012DF8C` in `ftYs_SpecialHi` improved to 96.03%."
+  ],
+  "searchable_terms": [
+    "pr-1852",
+    "ribbanya",
+    "ftYs_SpecialLw",
+    "ftYs_SpecialHi",
+    "ftYs_SpecialS",
+    "ftYs_SpecialN",
+    "Yoshi down special",
+    "Yoshi side special",
+    "Yoshi egg",
+    "Yoshi star",
+    "fn_8012E644",
+    "ftYs_SpecialAirLw_Coll",
+    "ftYs_SpecialLw_Enter",
+    "ftYs_SpecialAirLw_Enter",
+    "ftYs_SpecialS_8012EA04",
+    "ftYs_SpecialS_8012EAD8",
+    "ftYs_SpecialS_8012DF8C",
+    "ftGetFacingDirInt",
+    "getStickDirX",
+    "speciallw_star_offset",
+    "specialhi_base_angle",
+    "ftYs_DatAttrs",
+    "splits.txt",
+    "symbols.txt",
+    "configure.py",
+    "MatchingFor",
+    "GALE01",
+    "linked code +1284"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that make `ftYs_SpecialS.c` matching after this split.",
+    "Search for later renames of `ftYs_SpecialS_8012EA04`, `ftYs_SpecialS_8012EAD8`, and `fn_8012E644` to semantic Yoshi down-special names.",
+    "Check whether `ftYs_DatAttrs` fields `xEC`, `xF0`, `xF4`, `xFC`, and `x100` receive semantic names in later Yoshi work.",
+    "Look for reuse or modification of `ftGetFacingDirInt` and `getStickDirX` in other fighter decomp PRs.",
+    "Verify whether the local `.sdata2` constants `@183`, `@184`, `@194`, and `@246` are later named or moved."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

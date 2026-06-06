@@ -1,0 +1,132 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2035",
+  "pr": {
+    "number": 2035,
+    "title": "gm/it/if: Match game, item, and interface functions",
+    "url": "https://github.com/doldecomp/melee/pull/2035",
+    "state": "MERGED",
+    "author": "itsgrimetime",
+    "created_at": "2025-12-30T01:47:53Z",
+    "merged_at": "2025-12-30T09:14:19Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched a small set of game-mode and item functions as part of the PR #2024 split, with the PR body also claiming interface matches and a lbBgFlash signature update. The provided diff slice shows concrete changes in gm_17C0.c and it_2725.c: extending a global state struct to expose byte field x116, implementing fn_80180AC0 as a simple flag check, inlining item ECB/position math into it_80274DAC instead of calling it_80274D6C, swapping two command arguments in it_8027990C, and moving a pragma boundary. A post-merge/PR comment notes unintended regressions and intent to fix them, but the slice does not include the full regression details.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "item-behavior",
+      "game-state-struct",
+      "command-dispatch",
+      "regression-fix-context"
+    ],
+    "systems": [
+      "game-mode",
+      "item",
+      "interface"
+    ]
+  },
+  "key_files": [
+    "src/melee/gm/gm_17C0.c",
+    "src/melee/it/it_2725.c"
+  ],
+  "what_changed": [
+    "In src/melee/gm/gm_17C0.c, struct lbl_80472D28_t gained padding at +0x108 and a u8 field x116 at +0x116.",
+    "In src/melee/gm/gm_17C0.c, fn_80180AC0 was implemented to return 1 when lbl_80472D28.x116 equals 1, otherwise 0.",
+    "In src/melee/it/it_2725.c, it_80274DAC no longer delegates to it_80274D6C after clearing xB54.unk_x and xB54.unk_y; it now explicitly computes item->xB54.x8 fields from item collision ECB right/left/top coordinates plus item position.",
+    "In src/melee/it/it_2725.c, it_8027990C changed the argument order passed to it_80273648 from unk1, unk0 to unk0, unk1.",
+    "In src/melee/it/it_2725.c, a #pragma pop was moved from before it_8027990C to after it_8027990C, indicating the matching-sensitive pragma scope needed to include that function.",
+    "The PR body says it matched gm_80160DC0, gm_80160DFC, gm_8017A1E8, it_80272B4C, itBox_8026EE48, itGShell_802AD2D4, if_802F761C, if_80302BB0, and if_8030A570 through if_8030A8E8, but those changes are not visible in the provided diff excerpt.",
+    "The PR body says lbBgFlash_800205F0 had its signature updated from void to taking an s32 parameter and its caller updated, but that file-level evidence is not present in the supplied changed_files list."
+  ],
+  "smart_moves": [
+    "Exposed the exact byte-sized global field x116 instead of continuing to treat the global as opaque padding, enabling fn_80180AC0 to match as a direct state-flag query.",
+    "Expanded a helper call in it_80274DAC into the local ECB/position calculation, suggesting the original compiler output required the computations to appear in this function rather than through a shared helper.",
+    "Used local float temporaries for right_x, right_y, left_x, and top_y, which likely helped reproduce register allocation/order for the item collision math.",
+    "Corrected command operand ordering in it_8027990C, a small but important semantic and matching fix for command dispatch code.",
+    "Adjusted #pragma pop placement around it_8027990C, preserving a matching-sensitive compiler directive scope rather than treating pragmas as incidental formatting."
+  ],
+  "decomp_lessons": [
+    "When a function is just checking one byte of global state, adding the precise struct field at the known offset can be cleaner and more matchable than masking through raw padding or placeholder access.",
+    "Helper reuse is not always match-preserving; if the target binary duplicated simple math inline, decomp code may need to inline the equivalent operations even when a helper exists nearby.",
+    "For item ECB calculations, preserve the observed order of loading right, left, top, and position components because float temporaries and assignment order can affect matching.",
+    "Command script handlers are sensitive to operand order. Similar-looking unk fields such as cmd->u->unk33.unk0 and unk1 should be verified against behavior and codegen rather than assumed from names.",
+    "Pragma push/pop scopes can be part of the matching strategy. Moving a #pragma pop by one function can be the difference between matched and unmatched code.",
+    "PR summaries may mention broader module work than a small slice shows; postmortem records should distinguish claims from directly visible diff evidence."
+  ],
+  "naming_conventions": [
+    "Global data structs retain label-derived names such as lbl_80472D28_t when the real semantic name is unknown.",
+    "Unknown fields are represented with offset-style names such as x104, x116, xB54, x378_itemColl, unk_x, unk_y, unk0, and unk1.",
+    "Item object pointers use project conventions such as Item_GObj* for the GObj and Item* for item data, commonly retrieved with GET_ITEM.",
+    "Function names remain address-based for unmatched or unidentified functions, e.g. fn_80180AC0, gm_80180AE4, it_80274DAC, and it_8027990C.",
+    "Command handler code uses CommandInfo* cmd and NEXT_CMD(cmd) as the apparent convention for advancing script commands."
+  ],
+  "assembly_or_matching_tactics": [
+    "Implemented fn_80180AC0 as an explicit if returning 1 or 0 instead of returning the comparison directly, preserving likely original branch/code shape.",
+    "Added char padding of exact size before a u8 field to align lbl_80472D28_t with known data offsets.",
+    "Replaced a call to it_80274D6C with local field loads and float additions to reproduce inline codegen in it_80274DAC.",
+    "Introduced named float locals in the collision-bound calculation, likely to control load order and register allocation.",
+    "Used PAD_STACK(4) in it_8027990C and adjusted pragma scope around it, indicating stack layout and compiler options were relevant to matching.",
+    "Swapped cmd->u->unk33 argument order to it_80273648, showing that matching command handlers may require close attention to union field access order."
+  ],
+  "review_feedback": [
+    {
+      "source": "issue_comment",
+      "author": "itsgrimetime",
+      "feedback": "The author noted: \"oh, the regressions weren't intended. will fix this up\".",
+      "lesson": "The PR had unintended regressions according to the comment, but the supplied slice does not identify which functions regressed or how they were fixed."
+    }
+  ],
+  "searchable_terms": [
+    "pr-2035",
+    "itsgrimetime",
+    "gm/it/if",
+    "gm_17C0.c",
+    "it_2725.c",
+    "fn_80180AC0",
+    "lbl_80472D28_t",
+    "lbl_80472D28.x116",
+    "gm_80180AE4",
+    "it_80274DAC",
+    "it_80274D6C",
+    "it_80274DFC",
+    "it_802798D4",
+    "it_8027990C",
+    "it_80279958",
+    "it_80273648",
+    "Item_GObj",
+    "GET_ITEM",
+    "xB54",
+    "x378_itemColl",
+    "ECB",
+    "CommandInfo",
+    "NEXT_CMD",
+    "PAD_STACK",
+    "pragma pop",
+    "lbBgFlash_800205F0",
+    "if_802F761C",
+    "if_80302BB0",
+    "if_8030A570",
+    "if_8030A8E8",
+    "regressions weren't intended",
+    "PR #2024 split",
+    "SHA1 check passes"
+  ],
+  "follow_up_queries": [
+    "Inspect the full PR diff or subsequent commits for the unintended regressions mentioned by the author.",
+    "Verify whether the claimed interface matches and lbBgFlash_800205F0 signature update are present in the complete PR history despite not appearing in the supplied changed_files list.",
+    "Look for later renames or struct refinements for lbl_80472D28_t.x116 to determine its semantic meaning.",
+    "Search nearby item command handlers for other cmd->u->unk33 operand-order fixes or pragma-scope matching patterns.",
+    "Compare it_80274DAC and it_80274D6C to understand why the helper call did not match and whether the helper remains used elsewhere."
+  ],
+  "confidence": 0.78,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

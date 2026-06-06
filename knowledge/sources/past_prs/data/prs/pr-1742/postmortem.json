@@ -1,0 +1,157 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1742",
+  "pr": {
+    "number": 1742,
+    "title": "gmcamera work + minor scene handler update",
+    "url": "https://github.com/doldecomp/melee/pull/1742",
+    "state": "MERGED",
+    "author": "sadkellz",
+    "created_at": "2025-07-26T01:38:40Z",
+    "merged_at": "2025-07-26T01:48:42Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Advanced decompilation of gmCamera by replacing placeholders with typed includes, prototypes, structs, and matched implementations for camera-mode frame/enter logic, while also correcting the game-mode scene data table to use minor-scene enum IDs instead of major-scene IDs. The scene-handler correction was explicitly validated in review as explaining previously nonsensical callbacks.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-typing",
+      "scene-table-correction"
+    ],
+    "systems": [
+      "game-mode",
+      "gm-camera",
+      "minor-scenes",
+      "scene-handlers",
+      "sislib-ui"
+    ]
+  },
+  "key_files": [
+    "src/melee/gm/gmcamera.c",
+    "src/melee/gm/gmcamera.h",
+    "src/melee/gm/gmcamera.static.h",
+    "src/melee/gm/gmscdata.c",
+    "src/melee/gm/types.h",
+    "src/melee/gm/forward.h",
+    "src/melee/gm/gm_1601.h"
+  ],
+  "what_changed": [
+    "Added a forward declaration for CameraVsData in src/melee/gm/forward.h.",
+    "Removed an unused include of it/forward.h from src/melee/gm/gm_1601.h.",
+    "Expanded gmCamera includes to use real headers such as gm/gmcamera.static.h, baselib/sislib.h, gm/gm_1A36.h, gm/gm_1A45.h, gm/types.h, lb/lbaudio_ax.h, lb/lbsnap.h, and mn/mn_2295.h instead of relying on local extern declarations.",
+    "Commented out old local HSD_SisLib extern declarations in gmcamera.c after including the proper sislib header.",
+    "Changed HSD_SisLib_804D1124 usage in gmCamera_801A2224 to cast the global to SisLibUnkStruct before dereferencing x0C_ptr->x08_arr.",
+    "Retyped gmCamera_801A2334 from a vague void* function with three parameters into HSD_Text* gmCamera_801A2334(s32, f32, f32, f32, f32), using HSD_Text fields x24.x, x24.y, and x49 directly.",
+    "Cleaned up gmCamera_801A2334 by removing large TODO/commented matching notes and replacing them with typed local variables and direct struct-field writes.",
+    "Adjusted gmCamera_801A2334 pointer arithmetic for gmCamera_80479BC8.gcus2_ptrs using arg0 * 0x10 and a cast to gmCameraUnkStruct2*.",
+    "Added a dont_inline pragma around gmCamera_801A2650, preserving matching behavior while keeping the function in C.",
+    "Implemented gmCamera_801A34FC_OnFrame, including snap checks, SIS text cleanup, call to gmCamera_801A33BC, menu transition handling via mn_8022F218/mn_8022F268, button handling via gm_801A36A0, audio feedback via lbAudioAx_80024030, and state changes through gmCamera_80479C20.x0.",
+    "Implemented gmCamera_801A3634_OnEnter, storing the incoming state pointer, initializing camera SIS data with gmCamera_801A2650, clearing three text slots, and calling gmCamera_801A33BC.",
+    "Added new src/melee/gm/gmcamera.static.h declaring static CameraVsData gmCamera_80479C20 and static f32 gmCamera_803DA758[12].",
+    "Expanded gmCameraUnkStruct in gmcamera.h with named or partially typed fields including ifvscam, x28, x2C, x30, x38, x40, x44, x48, and x54.",
+    "Updated gmCamera function prototypes in gmcamera.h, including gmCamera_801A2334 returning HSD_Text*, gmCamera_801A253C taking s32* arguments, and gmCamera_801A33BC returning void.",
+    "Added struct CameraVsData to gm/types.h with a u32* x0 state pointer and a union exposing either named HSD_Text* slots slot_a, slot_b, bottom_text or an indexed HSD_Text* text[3].",
+    "Corrected the MinorSceneHandler gm_803DA920 table in gmscdata.c from MJ_* major-scene constants to MN_* minor-scene constants, including entries such as MN_TITLE, MN_MENU, MN_VS, MN_CAMERA_VS, and MN_COUNT."
+  ],
+  "smart_moves": [
+    "The scene table fix recognized that gm_803DA920 indexes minor scene handlers, not major scenes; this made the callback mapping coherent and was praised by review.",
+    "Using a union in CameraVsData allowed the same three HSD_Text pointers to be accessed both by semantic names and by an array loop for cleanup.",
+    "Moving static file-scope declarations into gmcamera.static.h followed the project pattern for static globals while keeping gmCamera-specific data localized.",
+    "Replacing local extern declarations with proper headers improved type consistency for HSD_Text/SISLib calls and reduced fragile hand-written prototypes.",
+    "The dont_inline pragma around gmCamera_801A2650 shows a matching tactic: preserve compiler codegen for a small helper that might otherwise be inlined or reordered.",
+    "The OnFrame implementation kept repeated button reads and bitmask conditions close to observed behavior rather than over-abstracting them, which is often safer for matching."
+  ],
+  "decomp_lessons": [
+    "When a scene-handler table's callbacks appear nonsensical, verify whether the discriminator enum is major scene or minor scene before assuming callback order is wrong.",
+    "For UI text data, prefer real HSD_Text typing over void* or ad hoc unknown structs once sislib headers are available; this enables field-level matches such as x24.x, x24.y, and x49.",
+    "A small struct with both named fields and an array view is useful when code alternates between semantic slot access and loop-based cleanup.",
+    "Do not leave large m2c diagnostic comments in final matched code once the pointer arithmetic or struct layout is resolved.",
+    "Static headers can be used to expose file-local BSS/static declarations to the translation unit without polluting broader public headers.",
+    "If changing enum families in data tables, reviewers may validate the result by checking whether callbacks now semantically match the table entries."
+  ],
+  "naming_conventions": [
+    "Camera-mode functions use the gmCamera_ address-based prefix, with lifecycle suffixes such as _OnFrame, _OnEnter, and _OnLeave.",
+    "Minor scene enum constants use the MN_* prefix, while major scene constants use MJ_*; this PR demonstrates that MinorSceneHandler entries should use MN_* values.",
+    "Unknown gmCamera structs remain address/domain-prefixed, such as gmCameraUnkStruct and gmCameraUnkStruct2, while newly understood aggregate state was named CameraVsData.",
+    "Text slots in CameraVsData were named by UI meaning as slot_a, slot_b, and bottom_text, with a parallel text[3] array for iteration.",
+    "Field names still use offset-style placeholders such as x0, x20, x24, x54 where semantics are not yet fully known, with comments added where evidence exists."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used #pragma dont_inline on/reset around gmCamera_801A2650 to control compiler inlining for matching.",
+    "Resolved a previous pointer-arithmetic matching issue in gmCamera_801A2334 by computing arg0 * 0x10 and casting the address of gmCamera_80479BC8.gcus2_ptrs to gmCameraUnkStruct2* before accessing fields.",
+    "Retyped HSD_SisLib_803A5ACC result as HSD_Text* and wrote directly to nested text position fields, replacing unknown struct field accesses.",
+    "Kept explicit casts such as (SisLibUnkStruct*)HSD_SisLib_804D1124 and (s32) comparisons where they likely influence generated code or signedness.",
+    "Used PAD_STACK(8) in gmCamera_801A3634_OnEnter, indicating stack-shape preservation for matching."
+  ],
+  "review_feedback": [
+    {
+      "author": "r-burns",
+      "file": "src/melee/gm/gmscdata.c",
+      "comment": "Good catch! I was wondering why these callbacks didn't make any sense, should have realized they are minor scene ids",
+      "lesson": "The changed gm_803DA920 table entries from MJ_* to MN_* were correct because the table is keyed by minor scene IDs."
+    }
+  ],
+  "searchable_terms": [
+    "pr-1742",
+    "gmcamera",
+    "gmCamera_801A2224",
+    "gmCamera_801A2334",
+    "gmCamera_801A2650",
+    "gmCamera_801A33BC",
+    "gmCamera_801A34FC_OnFrame",
+    "gmCamera_801A3634_OnEnter",
+    "gmCamera_801A367C_OnLeave",
+    "CameraVsData",
+    "gmCamera_80479C20",
+    "gmCamera_803DA758",
+    "gmCameraUnkStruct",
+    "gmCameraUnkStruct2",
+    "HSD_Text",
+    "HSD_SisLib_803A5ACC",
+    "HSD_SisLib_803A5CC4",
+    "HSD_SisLib_803A6368",
+    "HSD_SisLib_803A6530",
+    "HSD_SisLib_803A660C",
+    "HSD_SisLib_803A62A0",
+    "HSD_SisLib_803A611C",
+    "HSD_SisLib_804D1124",
+    "MinorSceneHandler",
+    "gm_803DA920",
+    "MN_CAMERA_VS",
+    "MN_TITLE",
+    "MN_MENU",
+    "MN_VS",
+    "MN_COUNT",
+    "MJ_TITLE",
+    "MJ_MENU",
+    "MJ_VS",
+    "lbSnap_8001D338",
+    "lbAudioAx_80024030",
+    "mn_8022F218",
+    "mn_8022F268",
+    "gm_801A36A0",
+    "gm_801A4B60",
+    "dont_inline",
+    "PAD_STACK",
+    "SIS_VsCameraData",
+    "SdVsCam"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that further type gmCameraUnkStruct, gmCameraUnkStruct2, or CameraVsData fields.",
+    "Check whether HSD_SisLib_804D1124 later receives a proper SIS/global type instead of the local SisLibUnkStruct cast.",
+    "Search for other MinorSceneHandler tables still using MJ_* constants where MN_* constants are expected.",
+    "Look for follow-up work on gmCamera_801A253C, gmCamera_801A25C8, gmCamera_801A26C0, and gmCamera_801A33BC.",
+    "Verify whether gmCamera_80479C20.x0 state values 0, 1, and 2 were later named or converted to an enum."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

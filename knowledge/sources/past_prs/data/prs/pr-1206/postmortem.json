@@ -1,0 +1,167 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1206",
+  "pr": {
+    "number": 1206,
+    "title": "Match `itscball` (752 bytes)",
+    "url": "https://github.com/doldecomp/melee/pull/1206",
+    "state": "MERGED",
+    "author": "wyatt-avilla",
+    "created_at": "2024-02-12T21:46:27Z",
+    "merged_at": "2024-02-12T21:57:12Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the 752-byte `melee/it/items/itscball.c` item file by replacing the handwritten assembly object with C, wiring it into the matching build, and marking many formerly global internal callbacks and the local zero float as local in `symbols.txt`. The new C reconstructs the item state table and small callback wrappers around existing item engine helpers such as `Item_80268E5C`, `it_8026D62C`, `it_8026E15C`, `it_8026E8C4`, `it_80272860`, `it_80274658`, `it_80273030`, and `itColl_BounceOffVictim`. The PR report shows all functions at 100% with score 0.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "build-config",
+      "symbol-scope-cleanup",
+      "item-state-table"
+    ],
+    "systems": [
+      "item",
+      "asm",
+      "config",
+      "build"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/it/items/itscball.c",
+      "role": "Added matched C implementation for the Super Scope ball item file, including local callback prototypes and `ItemStateTable it_803F6220`."
+    },
+    {
+      "path": "asm/melee/it/items/itscball.s",
+      "role": "Removed the 296-line assembly implementation after the C version matched."
+    },
+    {
+      "path": "config/GALE01/symbols.txt",
+      "role": "Changed internal `itscball` callbacks and `it_804DCB50` from global to local scope while leaving externally referenced functions global."
+    },
+    {
+      "path": "configure.py",
+      "role": "Changed `melee/it/items/itscball.c` from `NonMatching` to `Matching` in the runtime library object list."
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "Switched the text object from `asm/melee/it/items/itscball.s.o` to `src/melee/it/items/itscball.c.o`."
+    }
+  ],
+  "what_changed": [
+    "Deleted `asm/melee/it/items/itscball.s` and added a 162-line C source file for the same text/data/sdata2 content.",
+    "Recreated `ItemStateTable it_803F6220` as five state entries using function pointers for callbacks such as `it_80294B20`, `it_80294B28`, `it_80294B2C`, `it_80294B80`, `it_80294B88`, `it_80294BB8`, `it_80294C64`, `it_80294C6C`, `it_80294CB8`, `it_80294D0C`, `it_80294D14`, and `it_80294D18`.",
+    "Implemented tiny boolean callbacks that return `false` or `true`, empty void callbacks, and transition callbacks that call shared item helpers.",
+    "Implemented velocity-reset behavior in `it_80294AD0` by setting `item->x40_vel.x`, `y`, and `z` to `0.0F`, then calling `it_8026B390` and `Item_80268E5C(gobj, 0, ITEM_ANIM_UPDATE)`.",
+    "Implemented fall/gravity-style callbacks using `GET_ITEM(gobj)->xCC_item_attr`, `attr->x10_fall_speed`, `attr->x14_fall_speed_max`, and `it_804D6D28->x68_float`.",
+    "Updated `configure.py` to mark `melee/it/items/itscball.c` as `Matching`.",
+    "Updated `obj_files.mk` to link the C object instead of the assembly object.",
+    "Adjusted `symbols.txt` so many helper callbacks and the float at `it_804DCB50` became local rather than global."
+  ],
+  "smart_moves": [
+    "Used `static` declarations for callbacks that are only referenced inside the item state table or local helper transitions, matching the `symbols.txt` scope cleanup.",
+    "Preserved address-based placeholder names such as `it_80294AD0` rather than inventing semantic names without evidence.",
+    "Modeled the assembly `.data` table directly as `ItemStateTable it_803F6220[]`, which keeps the table shape visible and reusable for similar item files.",
+    "Used established project macros and types such as `GET_ITEM`, `Item_GObj`, `HSD_GObj`, `Item`, `ItemAttr`, and `ITEM_ANIM_UPDATE` instead of raw offset-only code.",
+    "Kept repeated small state-change callbacks as simple wrappers around common item helpers, which mirrors the assembly and avoids overcomplicating matching code.",
+    "Handled build integration in both `configure.py` and `obj_files.mk`, the necessary pair when moving an item file from asm to matched C."
+  ],
+  "decomp_lessons": [
+    "For small item files, many callbacks may be direct wrappers around common item-state helper functions; matching can often be achieved by reconstructing those calls and return values rather than discovering new behavior.",
+    "When replacing an asm item file, update both the object list and the matching/nonmatching configuration or the build may still use the old assembly object.",
+    "Item state tables can expose which callbacks are internal; use that evidence to mark callback functions `static` and update symbol scope to local.",
+    "Zero constants emitted into `.sdata2` may need local symbol treatment when the only use is inside the newly matched file.",
+    "Use known item struct fields, such as `x40_vel`, `xCC_item_attr`, `x10_fall_speed`, and `x14_fall_speed_max`, to replace raw loads/stores while preserving exact behavior.",
+    "The PR author explicitly noted concern about leaving the float name alone in `symbols.txt` and interaction with `obj_files.mk`; this is evidence that symbol scope/build-object interactions can be fragile during asm-to-C migration."
+  ],
+  "naming_conventions": [
+    "Kept unknown functions named by address, e.g. `it_80294AB0`, `it_80294AD0`, `it_80294B58`, and `it_80294D7C`.",
+    "Used `it_803F6220` for the item state table symbol, retaining the existing address-based data symbol name.",
+    "Used project item object typedefs in signatures: `Item_GObj*` for item-specific callbacks and `HSD_GObj*` where the callback table/helper signature required the generic object type.",
+    "Marked internal callbacks as `static` in C and `scope:local` in `symbols.txt`; functions left global include externally visible wrappers such as `it_80294AB0`, `it_80294BE4`, `it_80294C14`, `it_80294C3C`, `it_80294CE4`, `it_80294D4C`, `it_80294D54`, `it_80294D5C`, and `it_80294D7C` according to the excerpt."
+  ],
+  "assembly_or_matching_tactics": [
+    "Translated `li r3, 0; blr` callbacks into `return false;` and `li r3, 1; blr` callbacks into `return true;`.",
+    "Translated bare `blr` callbacks into empty `void` functions.",
+    "Matched three consecutive float stores to offsets `0x40`, `0x44`, and `0x48` as chained assignments to `item->x40_vel.x/y/z = 0.0F`.",
+    "Used function pointers directly in helper calls, e.g. `it_8026D62C(gobj, it_80294B58)`, `it_8026E15C(gobj, it_80294AD0)`, and `it_8026E8C4(gobj, it_80294AD0, it_80294B58)`.",
+    "Replaced assembly loads from `item->xCC_item_attr` offsets `0x10` and `0x14` with `attr->x10_fall_speed` and `attr->x14_fall_speed_max`.",
+    "Used explicit casts between `Item_GObj*` and `HSD_GObj*` around shared item helpers where the decompiled signatures differ from the local callback signature.",
+    "Matched file-level data by reconstructing the `.data` state table and eliminating the old `.sdata2` assembly constant through a C float literal."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "text": "Seems like a split issue. I'll take a look.",
+      "interpretation": "The only visible comment suggests a possible split/build-symbol issue, likely related to the author's note about the float symbol and `obj_files.mk`; no detailed reviewer guidance is present in the provided slice."
+    }
+  ],
+  "searchable_terms": [
+    "pr-1206",
+    "itscball",
+    "Match itscball",
+    "752 bytes",
+    "src/melee/it/items/itscball.c",
+    "asm/melee/it/items/itscball.s",
+    "ItemStateTable",
+    "it_803F6220",
+    "it_80294AB0",
+    "it_80294AD0",
+    "it_80294B20",
+    "it_80294B28",
+    "it_80294B2C",
+    "it_80294B58",
+    "it_80294B80",
+    "it_80294B88",
+    "it_80294BB8",
+    "it_80294BE4",
+    "it_80294C0C",
+    "it_80294C14",
+    "it_80294C3C",
+    "it_80294C64",
+    "it_80294C6C",
+    "it_80294CB8",
+    "it_80294CE4",
+    "it_80294D0C",
+    "it_80294D14",
+    "it_80294D18",
+    "it_80294D4C",
+    "it_80294D54",
+    "it_80294D5C",
+    "it_80294D7C",
+    "it_804DCB50",
+    "it_804D6D28",
+    "GET_ITEM",
+    "Item_80268E5C",
+    "ITEM_ANIM_UPDATE",
+    "it_8026B390",
+    "it_8026D62C",
+    "it_8026E15C",
+    "it_8026E8C4",
+    "it_80272860",
+    "it_80274658",
+    "it_80273030",
+    "itColl_BounceOffVictim",
+    "scope local",
+    "NonMatching to Matching",
+    "obj_files.mk",
+    "configure.py"
+  ],
+  "follow_up_queries": [
+    "Find other item files with `ItemStateTable` entries whose callbacks are still global but only locally referenced.",
+    "Search for item files that still link `asm/melee/it/items/*.s.o` in `obj_files.mk` while having a C stub present.",
+    "Compare `itscball.c` callback patterns with nearby item files using `Item_80268E5C`, `it_8026E15C`, and `it_8026E8C4`.",
+    "Investigate the referenced split issue around `it_804DCB50` and object-file migration if later PRs mention `itscball` or local float symbols."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

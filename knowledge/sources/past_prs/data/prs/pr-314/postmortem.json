@@ -1,0 +1,132 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-314",
+  "pr": {
+    "number": 314,
+    "title": "Match `HSD_JObj`",
+    "url": "https://github.com/doldecomp/melee/pull/314",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2022-02-26T00:12:09Z",
+    "merged_at": "2022-08-22T15:28:54Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched a small but dependency-sensitive piece of sysdolphin baselib JObj code by moving `HSD_JObjCheckDepend` into C, removing the old assembly body, adding the new C object to linker order, and tightening JObj header declarations/inline flag checks. The PR body notes that JObj work could not be pushed until the full file was done because inlines affected codegen, making this a useful example of handling inline-heavy baselib matching carefully.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "inline-sensitive-codegen",
+      "linker-order"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "jobj",
+      "asm",
+      "src",
+      "include"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/jobj.c",
+    "asm/sysdolphin/baselib/jobj.s",
+    "include/sysdolphin/baselib/jobj.h",
+    "obj_files.mk",
+    "include/functions.h"
+  ],
+  "what_changed": [
+    "Added `src/sysdolphin/baselib/jobj.c` containing a C implementation of `HSD_JObjCheckDepend(HSD_JObj* jobj)`.",
+    "Removed the assembly implementation previously labeled `HSD_JObjCheckDependAll` from `asm/sysdolphin/baselib/jobj.s`.",
+    "Updated remaining assembly call sites in `HSD_JObjAnim`, `func_803707F8`, and `HSD_JObjAnimAll` from `HSD_JObjCheckDependAll` to `HSD_JObjCheckDepend` while preserving the same branch targets/offsets in the excerpt.",
+    "Changed the public declaration in `include/sysdolphin/baselib/jobj.h` from `HSD_JObjCheckDependAll` to `HSD_JObjCheckDepend`.",
+    "Annotated `HSD_JObj` struct members with explicit offsets, including `flags` at `0x14`, `aobj` at `0x7C`, `robj` at `0x80`, and `id` at `0x84`.",
+    "Replaced magic flag constants in JObj inlines with symbolic names: `USER_DEF_MTX`, `MTX_DIRTY`, and `MTX_INDEP_SRT`.",
+    "Added `$(BUILD_DIR)/src/sysdolphin/baselib/jobj.c.o` to `obj_files.mk` before the remaining `asm/sysdolphin/baselib/jobj.s.o` entry.",
+    "Adjusted `.sdata` handling in `jobj.s` by replacing concrete `lbl_804D5DA0`/`lbl_804D5DA8` string definitions with `.set` aliases based on `jobj_c_sdata_start` near `lbl_804D5DB0`."
+  ],
+  "smart_moves": [
+    "Kept the asm remainder and the newly matched C object linked together, rather than attempting to convert all of `jobj.s` in one step.",
+    "Renamed the dependency check consistently across header and asm references, avoiding a stale `CheckDependAll` symbol after moving the function to C.",
+    "Used named flag macros in inline helpers and the new C function, making bit tests like matrix dirty/user-defined matrix/independent SRT easier to audit than raw constants such as `0x40`, `0x800000`, and `0x2000000`.",
+    "Added struct offset comments before matching more JObj code, which helps validate field layout against assembly loads/stores such as `flags` at `0x14`, `parent` at `0x0C`, and `robj` at `0x80`.",
+    "Handled small-data labels explicitly with `.set` aliases, a useful tactic when newly compiled C contributes strings/sdata but the surrounding assembly still references old labels."
+  ],
+  "decomp_lessons": [
+    "Inline-heavy files can require matching or staging a larger surrounding unit before a small function can be safely landed; the PR body explicitly calls out that JObj could not be pushed earlier due to inline usage.",
+    "When converting one function out of a large assembly file, update all remaining assembly call labels to the new C symbol name so mixed C/asm linkage remains coherent.",
+    "Prefer symbolic flag constants in headers and inlines once the bit meaning is known; it documents semantics and reduces mistakes in future matching.",
+    "Offset-annotated structs are especially valuable for baselib object types where many assembly functions access fields by fixed offsets.",
+    "Small-data/string label placement can be a matching blocker; aliases or label arithmetic may be needed to preserve addresses while migrating code to C."
+  ],
+  "naming_conventions": [
+    "`HSD_JObjCheckDepend` replaced the older/stale `HSD_JObjCheckDependAll` name in both declaration and call sites.",
+    "JObj helper names follow the `HSD_JObj...` prefix, e.g. `HSD_JObjMtxIsDirty`, `HSD_JObjSetMtxDirty`, `HSD_JObjSetTranslate`, and `HSD_JObjResetRST`.",
+    "Flag names are uppercase semantic macros such as `USER_DEF_MTX`, `MTX_DIRTY`, `MTX_INDEP_SRT`, `MTX_INDEP_PARENT`, `EFFECTOR`, `JOINT1`, and `JOINT2`.",
+    "Struct definitions use explicit offset comments in the form `/* 0x14 */ u32 flags;` to tie C layout back to assembly evidence."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed exactly the matched assembly body from `jobj.s` and left later assembly functions in place.",
+    "Preserved remaining assembly branch/call disassembly while changing symbol names from `HSD_JObjCheckDependAll` to `HSD_JObjCheckDepend`.",
+    "Inserted `src/sysdolphin/baselib/jobj.c.o` before `asm/sysdolphin/baselib/jobj.s.o` in linker order so the new C function occupies the expected location before the assembly tail.",
+    "Used `.set jobj_c_sdata_start, lbl_804D5DB0 - 0x10`, then `.set lbl_804D5DA0` and `.set lbl_804D5DA8` to keep legacy sdata labels available after moving data generation toward C.",
+    "The matched C implementation relies on `HSD_JObjMtxIsDirty` inline behavior and flag combinations to reproduce the old dependency-dirtying logic."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "ribbanya",
+      "state": "APPROVED",
+      "submitted_at": "2022-08-22T11:49:28Z",
+      "body": "Up-to-date with `master` and `OK`. Should merge imo."
+    }
+  ],
+  "searchable_terms": [
+    "PR314",
+    "PsiLupan",
+    "Match HSD_JObj",
+    "HSD_JObj",
+    "HSD_JObjCheckDepend",
+    "HSD_JObjCheckDependAll",
+    "HSD_JObjMtxIsDirty",
+    "HSD_JObjSetMtxDirty",
+    "HSD_JObjSetTranslate",
+    "HSD_JObjAnim",
+    "HSD_JObjAnimAll",
+    "func_803707F8",
+    "JObjResetRST",
+    "jobj.c",
+    "jobj.s",
+    "jobj.h",
+    "obj_files.mk",
+    "USER_DEF_MTX",
+    "MTX_DIRTY",
+    "MTX_INDEP_SRT",
+    "MTX_INDEP_PARENT",
+    "EFFECTOR",
+    "JOINT1",
+    "JOINT2",
+    "robj",
+    "aobj",
+    "sdata",
+    "jobj_c_sdata_start",
+    "lbl_804D5DA0",
+    "lbl_804D5DA8",
+    "lbl_804D5DB0",
+    "inline"
+  ],
+  "follow_up_queries": [
+    "Check later JObj PRs for whether the remaining `asm/sysdolphin/baselib/jobj.s` functions were migrated using the same inline and sdata tactics.",
+    "Investigate whether the full-file-looking changes in `include/functions.h` and `obj_files.mk` were formatting/line-ending churn or generated ordering changes beyond adding `jobj.c.o`.",
+    "Search for future cleanup of `HSD_JObjCheckDependAll` references to confirm the renamed symbol fully replaced the old name."
+  ],
+  "confidence": 0.84,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,156 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1182",
+  "pr": {
+    "number": 1182,
+    "title": "Work on sysdolphin's shadow",
+    "url": "https://github.com/doldecomp/melee/pull/1182",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-02-02T07:56:30Z",
+    "merged_at": "2024-02-02T08:07:59Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched most of sysdolphin baselib shadow support by filling in large portions of shadow.c, including shadow texture sizing, render begin/end flow, active-state texture registration, object list management, shadow projection matrix generation, and viewing-rectangle validation. The PR also corrected several Dolphin GX/MTX prototypes and baselib type declarations needed by the shadow code. The author explicitly noted that some shadow functions remained missing because they depended on VEC code/prototypes that were not yet set up.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "prototype-correction",
+      "baselib-shadow"
+    ],
+    "systems": [
+      "sysdolphin/baselib",
+      "dolphin/gx",
+      "dolphin/mtx"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/shadow.c",
+    "src/sysdolphin/baselib/shadow.h",
+    "src/sysdolphin/baselib/forward.h",
+    "src/sysdolphin/baselib/jobj.h",
+    "src/sysdolphin/baselib/jobj.c",
+    "src/sysdolphin/baselib/pobj.c",
+    "src/sysdolphin/baselib/texp.h",
+    "src/dolphin/mtx.h",
+    "src/dolphin/gx/GXAttr.c",
+    "src/dolphin/gx/GXAttr.h",
+    "src/dolphin/gx/GXFrameBuf.c",
+    "src/dolphin/gx/GXFrameBuf.h",
+    "src/dolphin/gx/GXTexture.c",
+    "src/dolphin/gx/GXTexture.h"
+  ],
+  "what_changed": [
+    "Expanded src/sysdolphin/baselib/shadow.c by roughly 280 lines, adding matched implementations for HSD_ShadowSetSize, HSD_ShadowStartRender, HSD_ShadowEndRender, HSD_ShadowSetActive, HSD_ShadowAddObject, HSD_ShadowDeleteObject, a static makeMatrix helper, and HSD_ViewingRectCheck.",
+    "Added shadow rendering setup that configures camera state, TEV, PE mode, channel color, scissor rectangles, vertex descriptors, a background quad, and then renders registered JObjs with HSD_JObjDispAll using RENDER_SHADOW.",
+    "Added shadow texture lifecycle behavior: allocate/free image buffers based on GXGetTexBufferSize, copy rendered shadow output with GXCopyTex, sync with GXPixModeSync, invalidate textures with GXInvalidateTexAll, and update the texture projection matrix.",
+    "Added shadow object list management using HSD_SListAllocAndPrepend/HSD_SListRemove and JObj refcounting through new HSD_JObjRef plus existing HSD_JObjUnref.",
+    "Replaced a temporary float-constant workaround in HSD_ShadowAlloc with direct 0.0f arguments to HSD_CObjSetViewportfx4.",
+    "Added HSD_TrspMask as an enum in forward.h with HSD_TRSP_OPA, HSD_TRSP_XLU, HSD_TRSP_TEXEDGE, and HSD_TRSP_ALL, replacing the previous u32 typedef in jobj.h.",
+    "Changed HSD_JObjDispSub's trsp_mask parameter from u32 to HSD_TrspMask in the local declaration in jobj.c.",
+    "Corrected GXSetVtxAttrFmt to take GXCompType for its component type parameter instead of GXAttrType, and removed matching-blocking casts in pobj.c.",
+    "Corrected GXCopyTex's destination argument from u32 to void* in GXFrameBuf.c/h, matching its use with image buffer pointers.",
+    "Corrected GXInvalidateTexAll from a bogus three-argument prototype to void GXInvalidateTexAll(void), matching its implementation and call site.",
+    "Added MTX/VEC convenience aliases and prototypes in mtx.h: VECCrossProduct, VECSubtract, VECNormalize, MTXLightPerspective, MTXLightFrustum, and MTXLightOrtho mapped to PS/C_MTX implementations.",
+    "Added TEVCONF_MODE define in texp.h for use in the shadow TEV descriptor."
+  ],
+  "smart_moves": [
+    "Fixed library prototypes before relying on them in shadow.c, which allowed call sites to become cleaner and removed incorrect casts in pobj.c rather than preserving bad type information.",
+    "Moved HSD_TrspMask from an opaque u32 typedef to a named enum in a shared forward header, making transparent/opaque render-mask call sites more self-documenting.",
+    "Used existing baselib systems rather than ad hoc replacements: HSD_State/HSD_SetupTevStageAll/HSD_SetupPEMode for render state, HSD_SList for object tracking, HSD_MObjAddShadowTexture/DeleteShadowTexture for active shadow texture registration, and HSD_JObj refcount helpers for ownership.",
+    "Added MTXLight* and VEC macro aliases in mtx.h to match expected SDK-style names while preserving the existing PS/C_ implementation symbols.",
+    "Made shadow texture allocation conditional on missing image data or size changes, freeing old image memory before reallocating and updating camera viewport/scissor to match the new texture size.",
+    "Kept remaining work bounded: the PR body explicitly says missing shadow functions depend on VEC code/prototypes not yet set up, avoiding speculative implementation."
+  ],
+  "decomp_lessons": [
+    "When a newly matched subsystem needs SDK calls, first audit the prototypes: wrong argument types in GXSetVtxAttrFmt, GXCopyTex, and GXInvalidateTexAll caused downstream casts or unusable call signatures.",
+    "Prefer precise enum typedefs for bitmask-style parameters when evidence exists. HSD_TrspMask documents valid render-mask bits and improves signatures such as HSD_JObjDispSub/HSD_JObjDispAll call sites.",
+    "Decomp work in baselib often requires small header unlocks across Dolphin and sysdolphin, not just the target .c file; shadow.c needed GX, MTX, TEV, JObj, PObj, state, perf, list, and utility declarations.",
+    "Replacing temporary hacks after enough file context is matched can improve both source quality and matching. HSD_ShadowAlloc no longer needed a local float hack once float constants could be expressed directly.",
+    "Reference ownership should be reflected in matched helper APIs. Adding HSD_JObjRef made HSD_ShadowAddObject mirror HSD_ShadowDeleteObject's unref behavior cleanly.",
+    "Projection helper functions are a useful pattern for shadow/texture projection code: branch on HSD_CObj projection type, call the corresponding MTXLight* routine, then concatenate with the camera viewing matrix into the texture matrix.",
+    "If a function depends on missing vector prototypes or SDK aliases, adding the aliases/prototypes in the central math header can unblock future matching without inventing unrelated subsystem code."
+  ],
+  "naming_conventions": [
+    "Baselib shadow public functions use the HSD_Shadow* prefix, e.g. HSD_ShadowSetSize, HSD_ShadowStartRender, HSD_ShadowEndRender, HSD_ShadowSetActive, HSD_ShadowAddObject, and HSD_ShadowDeleteObject.",
+    "Static local helpers in shadow.c used lower camel case names, e.g. makeMatrix and drawBackgroundRect.",
+    "Transparent-render mask constants use the HSD_TRSP_* prefix: HSD_TRSP_OPA, HSD_TRSP_XLU, HSD_TRSP_TEXEDGE, HSD_TRSP_ALL.",
+    "The transparent mask type is named HSD_TrspMask and lives in forward.h rather than as a plain u32 typedef in jobj.h.",
+    "SDK-style macro aliases expose non-prefixed names such as VECCrossProduct, VECSubtract, VECNormalize, MTXLightPerspective, MTXLightFrustum, and MTXLightOrtho while mapping to PSVECCrossProduct/PSVECSubtract/PSVECNormalize and C_MTXLight* implementations.",
+    "TEV descriptor mode constant added as TEVCONF_MODE."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed incorrect casts in pobj.c after correcting GXSetVtxAttrFmt's parameter type to GXCompType, suggesting that matching improved by fixing the declaration rather than forcing casts at use sites.",
+    "Changed GXCopyTex to accept void* so HSD_ShadowEndRender could pass idesc->img_ptr naturally, aligning the source with the real destination-buffer semantics.",
+    "Changed GXInvalidateTexAll to a void-argument function because the implementation ignores arguments and shadow rendering needs the no-argument SDK-style call.",
+    "Used exact-looking float literals in drawBackgroundRect, including 1.20000004768f and -1.10000002384f, which likely reflects matching-sensitive constant values from the original code.",
+    "Added SDK macro aliases in mtx.h so source can call MTXLightPerspective/Frustum/Ortho and VEC* names while still linking to existing C_/PS-prefixed implementations.",
+    "Used static initialized HSD_Chan, HSD_TevDesc, and HSD_PEDesc objects inside HSD_ShadowStartRender to mirror original data layout/state setup patterns.",
+    "Preserved assert line numbers in new shadow functions, e.g. HSD_ASSERT(277), HSD_ASSERT(501), HSD_ASSERT(698), and HSD_ASSERT(818), which are often important for decomp matching and source fidelity."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR context.",
+    "The PR body states: \"Matches most of shadow. The missing functions rely on some VEC code we didn't have prototypes setup for, and will likely get to them in the future.\""
+  ],
+  "searchable_terms": [
+    "PR1182",
+    "PsiLupan",
+    "sysdolphin shadow",
+    "baselib shadow.c",
+    "HSD_ShadowSetSize",
+    "HSD_ShadowStartRender",
+    "HSD_ShadowEndRender",
+    "HSD_ShadowSetActive",
+    "HSD_ShadowAddObject",
+    "HSD_ShadowDeleteObject",
+    "HSD_ViewingRectCheck",
+    "makeMatrix",
+    "drawBackgroundRect",
+    "HSD_TrspMask",
+    "HSD_TRSP_OPA",
+    "HSD_TRSP_XLU",
+    "HSD_TRSP_TEXEDGE",
+    "HSD_TRSP_ALL",
+    "HSD_JObjRef",
+    "HSD_JObjDispSub",
+    "HSD_JObjDispAll",
+    "RENDER_SHADOW",
+    "GXSetVtxAttrFmt",
+    "GXCompType",
+    "GXAttrType cast removal",
+    "GXCopyTex void pointer",
+    "GXInvalidateTexAll void",
+    "GXGetTexBufferSize",
+    "GXPixModeSync",
+    "MTXLightPerspective",
+    "MTXLightFrustum",
+    "MTXLightOrtho",
+    "VECCrossProduct",
+    "VECSubtract",
+    "VECNormalize",
+    "TEVCONF_MODE",
+    "HSD_SetupTevStageAll",
+    "HSD_SetupPEMode",
+    "HSD_MObjAddShadowTexture",
+    "HSD_MObjDeleteShadowTexture"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that complete the remaining sysdolphin shadow functions blocked by VEC prototypes.",
+    "Search for subsequent changes to src/dolphin/mtx.h around VEC and MTXLight prototypes.",
+    "Search for later cleanup or matching fixes in HSD_ShadowStartRender and drawBackgroundRect.",
+    "Check whether HSD_TrspMask was propagated to all HSD_JObjDispAll/HSD_JObjDispSub declarations after this PR.",
+    "Look for later PRs replacing TEVCONF_MODE magic values or expanding texp.h TEV descriptor definitions."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

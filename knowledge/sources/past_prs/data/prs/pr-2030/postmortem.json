@@ -1,0 +1,127 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2030",
+  "pr": {
+    "number": 2030,
+    "title": "gr: Match grCorneria stage functions",
+    "url": "https://github.com/doldecomp/melee/pull/2030",
+    "state": "MERGED",
+    "author": "itsgrimetime",
+    "created_at": "2025-12-30T01:30:05Z",
+    "merged_at": "2025-12-30T03:38:48Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched three Corneria stage functions split out from PR #2024: `grCorneria_801DEC08` as a blast-zone boundary check, `grCorneria_801DFC2C` as a stage/GroundVars reset routine, and `grCorneria_801DFEB8` as an animation trigger/reset routine. The PR also improved `grCorneria_GroundVars` typing in `types.h`, replacing several raw or positional fields with named flags, base/offset coordinates, and cannon item pointers, and updated the `grCorneria_801DEC08` prototype from unknown params to `s32 grCorneria_801DEC08(Vec3* pos)`.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "stage-function-matching",
+      "struct-field-naming"
+    ],
+    "systems": [
+      "stage",
+      "ground",
+      "Corneria",
+      "gr"
+    ]
+  },
+  "key_files": [
+    "src/melee/gr/grcorneria.c",
+    "src/melee/gr/types.h",
+    "src/melee/gr/grcorneria.h"
+  ],
+  "what_changed": [
+    "Added `#include \"stage.h\"` to `grcorneria.c` so the matched blast-zone function could call `Stage_GetBlastZoneRightOffset`, `Stage_GetBlastZoneLeftOffset`, `Stage_GetBlastZoneTopOffset`, and `Stage_GetBlastZoneBottomOffset`.",
+    "Implemented `grCorneria_801DEC08(Vec3* pos)` as a four-way blast-zone bounds check returning `1` when `pos->x` or `pos->y` is outside the stage blast-zone offsets and `0` otherwise.",
+    "Implemented `grCorneria_801DFC2C(Ground_GObj* gobj)` to reset Corneria ground vars including `xC6_flags.b0`, `offset_y.flags.b0`, `xC8`, `xCC`, `xD0`, `base_x`, `base_y`, `offset_x`, `xC4_flags.b0`, `xC4_flags.b1`, and set `gp->x11_flags.b012 = 1`.",
+    "Implemented `grCorneria_801DFEB8(Ground_GObj* gobj)` to clear `xC6_flags.b0`, call `grAnime_801C8138((HSD_GObj*) gobj, gp->map_id, 0)`, clear `xC4_flags.b0` and `xC4_flags.b1`, and set `gp->x11_flags.b012 = 1`.",
+    "Changed `grCorneria_801DEC08` declaration in `grcorneria.h` from `UNK_RET grCorneria_801DEC08(UNK_PARAMS)` to `s32 grCorneria_801DEC08(Vec3* pos)`.",
+    "Refined `struct grCorneria_GroundVars` by replacing `xC4_b0` and `xC4_b1` bitfields with an `xC4_flags` sub-struct, adding explicit bytes/flags around offsets `xC5`, `xC6_flags`, and `xC7`, renaming position fields to `base_x`, `base_y`, `offset_x`, and `offset_y`, and renaming cannon item pointers to `left_cannon` and `right_cannon`.",
+    "Updated existing Corneria initialization code to use the new field names, including translating the main JObj from `base_x + offset_x` and `base_y + offset_y.val`."
+  ],
+  "smart_moves": [
+    "Kept the PR focused by splitting Corneria stage matches out from the larger #2024 effort.",
+    "Turned an unknown function signature into a concrete, useful prototype using `Vec3*` and `s32`, which improves call-site readability and future type propagation.",
+    "Matched the blast-zone helper with direct calls to existing Stage accessors instead of hard-coding boundary constants.",
+    "Improved struct semantics while matching: fields formerly named only by offsets, such as `xD4`, `xD8`, `xDC`, `xE0`, `x120`, and `x124`, were replaced with purpose-bearing names like `base_x`, `base_y`, `offset_x`, `offset_y`, `left_cannon`, and `right_cannon`.",
+    "Used small flag sub-structs/unions for byte-level flag access, allowing code such as `cn->xC6_flags.b0` and `cn->offset_y.flags.b0` instead of raw pointer byte writes."
+  ],
+  "decomp_lessons": [
+    "For stage boundary helpers, compare a passed `Vec3*` against `Stage_GetBlastZone*Offset` accessors before assuming constants or stage-local data.",
+    "When a matched function writes byte or bit offsets in `Ground`, prefer adding typed fields to the relevant `GroundVars` struct if the layout evidence supports it.",
+    "Unions can be useful when the same offset is used both as a float value and as byte/bit flags, as shown by `offset_y.val` and `offset_y.flags.b0`; this should be used cautiously and only when the raw offset behavior is evidenced.",
+    "Naming stage-local fields by observed behavior can make existing initialization code self-documenting without changing layout: `base_x`, `base_y`, and `offset_x` clarified translation math.",
+    "After matching a function, update headers away from `UNK_RET`/`UNK_PARAMS` so later decompilation can reuse accurate prototypes under `--require-protos`."
+  ],
+  "naming_conventions": [
+    "Use `xNN_flags` for offset-backed bitfield containers when exact semantic meaning is still unknown but bit access is known, e.g. `xC4_flags`, `xC6_flags`, and `x11_flags`.",
+    "Use `.b0`, `.b1`, or similar bit names inside flag sub-structs when the bit purpose is not yet identified.",
+    "Use semantic names for clearly inferred stage object references, e.g. `left_cannon` and `right_cannon` for Corneria cannon item GObjs.",
+    "Use coordinate role names such as `base_x`, `base_y`, `offset_x`, and `offset_y` when initialization and transform math identify position roles.",
+    "Keep unknown offset-style names like `xC8`, `xCC`, `xD0`, `xE4`, etc. where the PR did not establish stronger semantics."
+  ],
+  "assembly_or_matching_tactics": [
+    "Matched `grCorneria_801DEC08` by expressing sequential early-return comparisons against right, left, top, and bottom blast-zone offsets.",
+    "Matched reset-style functions by taking `Ground* gp = gobj->user_data` and a local `struct grCorneria_GroundVars* cn = &gp->gv.corneria`, reducing repeated nested accesses while preserving emitted access patterns.",
+    "Used explicit cast `(HSD_GObj*) gobj` for the `grAnime_801C8138` call in `grCorneria_801DFEB8`, matching the callee's expected type.",
+    "Replaced raw byte-offset access noted in the PR body with typed struct fields in the submitted diff, suggesting the final matching approach favored layout refinement over pointer arithmetic.",
+    "Introduced `stage.h` rather than externing blast-zone functions locally."
+  ],
+  "review_feedback": [
+    "The PR body explicitly noted a known issue from discussion after opening #2024: earlier versions of `grCorneria_801DFC2C` and `grCorneria_801DFEB8` used raw pointer offsets such as `base[0xC6] = 0` and `((xE0_flags*)(base + 0xE0))->b0 = 0`.",
+    "The author offered to improve types before merging; the diff shows that proper `GroundVars` fields and flag containers were added, addressing the raw pointer concern.",
+    "No review comments were included in the provided slice, so there is no direct reviewer wording to preserve."
+  ],
+  "searchable_terms": [
+    "pr-2030",
+    "grCorneria",
+    "grCorneria_801DEC08",
+    "grCorneria_801DFC2C",
+    "grCorneria_801DFEB8",
+    "Corneria",
+    "blast zone",
+    "Stage_GetBlastZoneRightOffset",
+    "Stage_GetBlastZoneLeftOffset",
+    "Stage_GetBlastZoneTopOffset",
+    "Stage_GetBlastZoneBottomOffset",
+    "Ground_GObj",
+    "Ground",
+    "grCorneria_GroundVars",
+    "xC4_flags",
+    "xC6_flags",
+    "offset_y",
+    "base_x",
+    "base_y",
+    "offset_x",
+    "left_cannon",
+    "right_cannon",
+    "grAnime_801C8138",
+    "grAnime_801C8780",
+    "HSD_JObjSetTranslate",
+    "types.h",
+    "grcorneria.c",
+    "grcorneria.h",
+    "raw pointer offsets",
+    "UNK_PARAMS",
+    "require-protos"
+  ],
+  "follow_up_queries": [
+    "Find other `grCorneria` functions still declared with `UNK_RET` or `UNK_PARAMS` after PR #2030.",
+    "Search for remaining raw offset accesses in stage `GroundVars` reset functions similar to `base[0xC6]` or `base + 0xE0`.",
+    "Compare `grCorneria_GroundVars` layout with neighboring stage structs to verify flag byte naming conventions.",
+    "Look for other stage blast-zone helper functions that can be matched using `Stage_GetBlastZone*Offset` accessors.",
+    "Audit uses of `offset_y` as both float and flags to confirm the union layout remains accurate."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

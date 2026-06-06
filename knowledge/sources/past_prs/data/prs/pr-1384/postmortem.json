@@ -1,0 +1,152 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1384",
+  "pr": {
+    "number": 1384,
+    "title": "Misc match improvements and cleanups",
+    "url": "https://github.com/doldecomp/melee/pull/1384",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2024-05-10T00:27:50Z",
+    "merged_at": "2024-05-10T00:48:53Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Small cross-cutting cleanup PR motivated by removing M2C_FIELD usage while improving matches in fighter action/collision/material code, common fighter states, sword item code, and lb refract headers. The changes replaced raw offset and bit-mask access with named struct fields, bitfields, GET_FIGHTER/GET_ITEM helpers, typed command-script access, and clearer loop/control-flow shapes where those helped matching.",
+  "change_classification": {
+    "primary_type": "decomp-matching cleanup",
+    "categories": [
+      "cleanup",
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "M2C_FIELD-removal",
+      "bitfield-naming",
+      "prototype-correction"
+    ],
+    "systems": [
+      "fighter",
+      "fighter-common",
+      "fighter-action-command",
+      "fighter-collision",
+      "fighter-material",
+      "item",
+      "library-refract"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/ftaction.c",
+    "src/melee/ft/types.h",
+    "src/melee/lb/types.h",
+    "src/melee/ft/chara/ftCommon/ftCo_Guard.c",
+    "src/melee/ft/ftcoll.c",
+    "src/melee/ft/ftmaterial.c",
+    "src/melee/ft/ftmaterial.h",
+    "src/melee/lb/lbrefract.h",
+    "src/melee/it/items/itsword.c",
+    "src/melee/ft/chara/ftCommon/ftCo_DamageFall.c",
+    "src/melee/ft/chara/ftCommon/ftCo_AirCatch.c"
+  ],
+  "what_changed": [
+    "Replaced several raw fighter field accesses with named fields, e.g. ftCo_DamageFall now checks fp->ground_or_air == GA_Ground instead of M2C_FIELD(fp, s32*, 0xE0).",
+    "Simplified ftCo_Guard setup by using GET_FIGHTER(gobj), named guard motion variables such as fp->mv.co.guard.x14/x18/x1C, and named fighter bitfields x221C_b1/x221C_b2/x221C_b3 instead of raw 0x221C masks.",
+    "Added a typed union view to FtCmdState::x8 in src/melee/ft/types.h, exposing x8_bits with signed halfword fields x0/x2 and byte-level bitfields x0_b0..x3_b7 for command-script decoding.",
+    "Cleaned ftAction_8007121C hitbox command parsing by replacing multiple M2C_FIELD reads and manual masks with HitCapsule fields/bitfields such as hit->jobj, x40_b0..x40_b3, x41_b4..x41_b7, x42_b0/x42_b1/x42_b2/x42_b4/x42_b5/x42_b7, x43_b0/x43_b1/x43_b2, and hit_grabbed_victim_only.",
+    "Restructured ftAction_8007349C from goto-style command-script loop control into early return plus a do/while loop, while using cmd->u.Command_09->id and ftAction_803C0870[id - 10] for command advancement.",
+    "Rewrote ftColl_8007B0C0 from pointer walking and raw x221A bit manipulation into a for loop over fp->hurt_capsules, setting state and skip_update_pos, then assigning fp->x221A_b5 based on HurtCapsule_Enabled.",
+    "Expanded lb HitCapsule layout in src/melee/lb/types.h by replacing the anonymous padding byte at +0x41 with named bitfields x41_b0 through x41_b7.",
+    "Updated ftMaterial_800BF2B8 to call lbRefract_80022998 with an additional s8 argument from fp->smash_attrs.x2134_vibrateFrame and updated the lbrefract.h prototype accordingly.",
+    "Updated ftMaterial_800BF534 signature to accept rendermode and adjusted its declaration/call site.",
+    "Replaced a raw virtual-method call through mobj->parent.class_info offset 0x48 with HSD_MOBJ_METHOD(mobj)->setup_tev(mobj, tobj, mobj_rendermode).",
+    "Cleaned sword item code by removing redundant spawn.pos assignments, correcting repeated item-var references in it_80285084/it_80285140 to the local x10/x14/x18 and x28/x2C/x30 groups, and simplifying it_802852B8 arithmetic.",
+    "Changed ftCo_AirCatch_Anim from a ternary expression to an if/else assignment for var_f3; the visible expressions are equivalent in the excerpt, so this appears to be a control-flow/codegen matching tweak rather than a semantic change."
+  ],
+  "smart_moves": [
+    "Added typed command byte/bit access in FtCmdState instead of repeatedly decoding the same command stream through M2C_FIELD; this localizes script-layout knowledge and makes later command parsing cleaner.",
+    "Promoted known byte bits in HitCapsule and Fighter to named bitfields, allowing assignments like hit->x42_b5 = 1 or fp->x221A_b5 = false to replace brittle mask/or/and sequences.",
+    "Used existing accessor macros such as GET_FIGHTER and GET_ITEM where appropriate, reducing cast noise and making decompiled code align with project style.",
+    "Converted raw class-info function-pointer access to HSD_MOBJ_METHOD(...)->setup_tev, preserving behavior while documenting the dispatch slot through the HSD material vtable abstraction.",
+    "Retained matching-sensitive dummy stack arrays where needed, e.g. ftAction_8007121C still has a local u8 padding array, but adjusted its size, showing cleanup was balanced against stack/codegen constraints.",
+    "Rewrote goto-heavy command execution logic into structured control flow without erasing matching details such as F32_MAX timer semantics and command table advancement."
+  ],
+  "decomp_lessons": [
+    "When a raw M2C_FIELD offset has a known meaning, prefer adding or using the correct struct field/bitfield over leaving offset casts in function bodies.",
+    "For command-script readers, a union overlay can be a practical decomp tactic: keep the raw pointer for byte advancement while exposing typed halfword and bitfield views for individual command fields.",
+    "Bitfield naming pays off immediately in collision/action code because many match-blocking statements are just set/clear operations on packed state bytes.",
+    "Header/prototype cleanup is part of matching: call-site fixes in ftmaterial required corresponding updates in ftmaterial.h and lbrefract.h.",
+    "Structured loops can match better than m2c-style gotos when the underlying control flow is understood; ftAction_8007349C demonstrates early exits plus do/while around command execution.",
+    "Redundant-looking source changes, such as splitting an equivalent ternary into if/else in ftCo_AirCatch_Anim, may be intentional codegen-shape adjustments and should not be dismissed if they improve matching.",
+    "Replacing pointer-walk loops with indexed for loops is safe when array length and element type are established, and improves readability while maintaining semantics."
+  ],
+  "naming_conventions": [
+    "Fighter packed flags use offset-plus-bit names such as x221A_b5, x221C_b1, x221C_b2, x221C_b3, x2223_b2, and x2223_b7.",
+    "HitCapsule packed flags use offset-plus-bit names such as x40_b0, x41_b4, x42_b5, and x43_b2, with semantic aliases where known such as hit_grabbed_victim_only.",
+    "Unknown movement subfields remain under mode-specific namespaces, e.g. fp->mv.co.guard.x14, x18, and x1C.",
+    "Command byte overlays in FtCmdState use x8_bits plus byte/bit names x0_b0 through x3_b7 and signed halfword names x0 and x2.",
+    "Project accessor macros GET_FIGHTER(gobj) and GET_ITEM(gobj) are preferred over direct gobj->user_data casts when available.",
+    "HSD vtable access should use method macros such as HSD_MOBJ_METHOD(mobj)->setup_tev rather than raw class_info offset calls when the method is identified."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed many M2C_FIELD and M2C_BITWISE-style artifacts by introducing named fields and bitfields, which can improve both readability and compiler codegen stability.",
+    "Used typed signed and unsigned halfword reads from command data to avoid extra casts, e.g. M2C_FIELD(cmd->x8, u16*, 0), M2C_FIELD(cmd->x8, s16*, 2), and cmd->x8_bits->x0/x2.",
+    "Maintained local stack padding arrays in functions where stack layout likely affects matching.",
+    "Changed ftCo_AirCatch_Anim expression shape from ternary initialization to separate declaration plus if/else assignment, likely to influence emitted branch/register structure.",
+    "Recast ftAction_8007349C command loop to avoid labels/gotos while preserving timer break conditions and repeated execution until cmd->timer returns to F32_MAX.",
+    "Moved from byte mask updates to direct bitfield assignments, causing source-level operations to reflect intended single-bit stores/updates."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR 1384",
+    "Misc match improvements and cleanups",
+    "r-burns",
+    "M2C_FIELD",
+    "M2C_FIELD removal",
+    "FtCmdState",
+    "x8_bits",
+    "Command_Execute",
+    "ftAction_8007121C",
+    "ftAction_8007349C",
+    "HitCapsule",
+    "hit_grabbed_victim_only",
+    "x40_b0",
+    "x41_b4",
+    "x42_b5",
+    "x43_b2",
+    "ftCo_Guard",
+    "ftCo_800924C0",
+    "ftCo_80092450",
+    "ftColl_8007B0C0",
+    "HurtCapsule",
+    "skip_update_pos",
+    "x221A_b5",
+    "ftMaterial_800BF2B8",
+    "ftMaterial_800BF534",
+    "lbRefract_80022998",
+    "HSD_MOBJ_METHOD",
+    "setup_tev",
+    "itSword_Spawn",
+    "it_80285084",
+    "it_80285140",
+    "it_802852B8",
+    "ftCo_DamageFall",
+    "ground_or_air",
+    "GA_Ground",
+    "ftCo_AirCatch_Anim",
+    "HSD_JObjSetupMatrix"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that continue replacing M2C_FIELD in ftAction command parsing.",
+    "Search for additional FtCmdState x8_bits uses to verify the command overlay naming pattern remained stable.",
+    "Search for later HitCapsule bitfield renames from x40_b*/x41_b*/x42_b*/x43_b* to semantic names.",
+    "Look for PRs touching lbRefract_80022998 or ftMaterial_800BF534 to see whether the new s8/rendermode parameters were later named.",
+    "Find follow-up cleanups in it/items/itsword.c around xDD4_itemVar.sword field names."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

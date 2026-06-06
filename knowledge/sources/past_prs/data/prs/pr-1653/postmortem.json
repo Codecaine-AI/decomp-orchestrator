@@ -1,0 +1,146 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1653",
+  "pr": {
+    "number": 1653,
+    "title": "gmmainlib matches",
+    "url": "https://github.com/doldecomp/melee/pull/1653",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-29T05:06:18Z",
+    "merged_at": "2025-06-29T05:09:27Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched several gmmain_lib routines and added concrete data definitions for default GameRules and a custom GXRenderModeObj. The PR replaced multiple nonmatching placeholders with C implementations for rules randomization, zeroing substructures, VI render-mode selection, main-lib initialization, and reset-code bookkeeping. It also tightened gmmain_lib.h prototypes and moved pad_F0 into struct gmm_retval_EDBC in types.h, indicating the struct boundary was adjusted to support matching and correct field layout.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-layout",
+      "data-definitions"
+    ],
+    "systems": [
+      "game-mode",
+      "gmmainlib",
+      "video",
+      "language",
+      "audio"
+    ]
+  },
+  "key_files": [
+    "src/melee/gm/gmmain_lib.c",
+    "src/melee/gm/gmmain_lib.h",
+    "src/melee/gm/types.h"
+  ],
+  "what_changed": [
+    "Added includes needed by newly matched gmmain_lib code: HSD random/video, gm_1601, gm types, lb_00B0, lbaudio_ax, and lblanguage.",
+    "Defined gmMainLib_803D4A48 as a default GameRules initializer with positional field comments for known fields such as mode, time limit, stock count, handicap, damage ratio, stock time limit, friendly fire, pause, score display, and unk_14.",
+    "Defined gmMainLib_803D4A80 as a GXRenderModeObj using VI_TVMODE_NTSC_PROG, VI_XFBMODE_SF, repeated sample patterns, and a vertical filter table.",
+    "Removed the trivial func_8015CFAC stub returning 0.",
+    "Implemented gmMainLib_8015ECBC to set gmMainLib_804D3EE0->x1850.unk_x1 to 0x34 normally, or randomly to 0x34/0x36 when gm_80164600() and gm_80164ABC() both hold, using HSD_Randi(4).",
+    "Implemented gmMainLib_8015F464, gmMainLib_8015F490, and gmMainLib_8015F4BC as memzero wrappers for gmMainLib_804D3EE0->thing.unk_8, unk_28, and unk_30 respectively.",
+    "Implemented gmMainLib_8015F500 to select between gmMainLib_803D4A80, GXNtsc480Prog, GXNtsc480IntDf, and GXNtsc480Int based on gmMainLib_8046B0F0.x8 and gmMainLib_804D3EE0->thing.x1CB0.x10[5], then call HSD_VISetConfigure.",
+    "Implemented gmMainLib_8015FBA4 under #pragma dont_inline: clears gmMainLib_804D3EE0, detects /usa.ini with DVDConvertPathToEntrynum, sets language settings accordingly, seeds gmMainLib_8045A6C0[0].x1850 from gmMainLib_803D4A48, initializes slots 1 through 8 with gmMainLib_8015F600(i, 1), initializes audio with lbAudioAx_80028690, and configures video through gmMainLib_8015F500.",
+    "Adjusted gmMainLib_8015FCC0 to write through a temporary pointer to gmMainLib_8046B0F0, preserving reset-code state and lbTime_8000AFBC timestamp assignment.",
+    "Fixed gmmain_lib.h declarations: corrected gmMainLib_8015EDC8 address comment, added u8 gmMainLib_8015F4E8(void), and changed gmMainLib_8015F600 from UNK_RET/UNK_PARAMS to void gmMainLib_8015F600(int, int).",
+    "Moved char pad_F0[0xB8] from struct gmm_x1868 into struct gmm_retval_EDBC, making unk_30 include that padding instead of keeping it at the outer gmm_x1868 level."
+  ],
+  "smart_moves": [
+    "Kept the large GameRules initializer positional but annotated known fields inline, which preserves MWCC-compatible C while making fragile struct-order data understandable.",
+    "Used #pragma push / #pragma dont_inline on / #pragma pop around gmMainLib_8015FBA4, suggesting inlining control was necessary for matching without globally affecting surrounding codegen.",
+    "Introduced a local temporary pointer in gmMainLib_8015FCC0 for gmMainLib_8046B0F0, a small code-shape tactic often needed to match MWCC register/addressing behavior.",
+    "Modeled the render-mode choice as pointer selection followed by a single HSD_VISetConfigure call, matching the control flow while centralizing the final side effect.",
+    "Adjusted struct padding ownership rather than only forcing casts or raw offsets, improving future type correctness for gmm_retval_EDBC and gmm_x1868 users."
+  ],
+  "decomp_lessons": [
+    "For MWCC-era C in this project, designated initializers are not available, so default data structs may need positional initializers plus comments for known fields.",
+    "When a large initializer is unavoidable, comments beside fields can document inferred member meanings without changing generated data layout.",
+    "Matching can require explicit no-inline pragmas around initialization routines; use scoped push/pop pragmas to avoid accidental codegen changes elsewhere.",
+    "If a zeroing function targets an embedded object, prefer expressing it as memzero(&field, sizeof(field)) once the struct layout supports that expression.",
+    "A padding relocation inside nested structs can be a real decomp improvement: here pad_F0 became part of gmm_retval_EDBC instead of gmm_x1868, allowing unk_30 sizing and zeroing to make more semantic sense.",
+    "Small temporary variables, especially for globals and selected pointers, may be matching tactics rather than style noise."
+  ],
+  "naming_conventions": [
+    "Unidentified global data and functions continue to use address-based names such as gmMainLib_803D4A48, gmMainLib_803D4A80, gmMainLib_8015F500, and gmMainLib_8046B0F0.",
+    "Game-mode structs use gmm_ prefixes for partially understood types, such as gmm_x1F2C, gmm_x1868, gmm_retval_ED98, gmm_retval_EDB0, and gmm_retval_EDBC.",
+    "Unknown or inferred fields retain offset-style names such as x1850, unk_x1, thing, unk_8, unk_28, unk_30, x1CB0, x10, and pad_F0.",
+    "Header comments use address-offset markers like /* 15F500 */ and were corrected when stale, as with gmMainLib_8015EDC8 changing from /* 15F4E8 */ to /* 15EDC8 */."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used #pragma dont_inline for gmMainLib_8015FBA4 to prevent MWCC from inlining calls and disrupting the expected match.",
+    "Kept an unused stack dummy declaration `u8 _[4];` in gmMainLib_8015ECBC, likely to influence stack frame/code shape; the diff does not provide reviewer discussion for this exact tactic.",
+    "Split render-mode selection into intermediate pointer variables var_r0, var_r0_2, and var_r3, preserving compiler-like branch and register behavior.",
+    "Assigned gmMainLib_8046B0F0 through a local `struct gmMainLib_8046B0F0_t* tmp`, likely to match address materialization and repeated stores.",
+    "Replaced placeholders with direct memzero calls using sizeof on inferred fields, reducing raw-size dependence where field layout was known."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "file": "src/melee/gm/gmmain_lib.c",
+      "topic": "GameRules initializer comments",
+      "comment": "Asked whether there was a better way to write the initializer comments in C."
+    },
+    {
+      "author": "r-burns",
+      "file": "src/melee/gm/gmmain_lib.c",
+      "topic": "MWCC initializer limitation",
+      "comment": "Explained that designated initializers would be preferable, but MWCC does not support them, so positional initializers with comments were used."
+    }
+  ],
+  "searchable_terms": [
+    "pr-1653",
+    "gmmainlib matches",
+    "gmmain_lib.c",
+    "gmmain_lib.h",
+    "types.h",
+    "gmMainLib_803D4A48",
+    "gmMainLib_803D4A80",
+    "GameRules",
+    "GXRenderModeObj",
+    "VI_TVMODE_NTSC_PROG",
+    "VI_XFBMODE_SF",
+    "GXNtsc480Prog",
+    "GXNtsc480IntDf",
+    "GXNtsc480Int",
+    "HSD_VISetConfigure",
+    "HSD_Randi",
+    "gmMainLib_8015ECBC",
+    "gmMainLib_8015F464",
+    "gmMainLib_8015F490",
+    "gmMainLib_8015F4BC",
+    "gmMainLib_8015F500",
+    "gmMainLib_8015FBA4",
+    "gmMainLib_8015FCC0",
+    "gmMainLib_8015F600",
+    "DVDConvertPathToEntrynum",
+    "/usa.ini",
+    "lbLang_SetLanguageSetting",
+    "lbLang_SetSavedLanguage",
+    "lbAudioAx_80028690",
+    "OSGetResetCode",
+    "lbTime_8000AFBC",
+    "designated initializers",
+    "MWCC",
+    "dont_inline",
+    "pad_F0",
+    "gmm_retval_EDBC",
+    "gmm_x1868"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename gmMainLib_803D4A48 or document the GameRules fields used in its positional initializer.",
+    "Search for later changes to gmMainLib_8015FBA4 to see whether the dont_inline pragma remained necessary.",
+    "Search for additional struct layout refinements involving gmm_retval_EDBC, gmm_x1868, unk_30, and pad_F0.",
+    "Look for later matches of gmMainLib_8015F260, gmMainLib_8015F588, gmMainLib_8015F600, gmMainLib_8015FB68, and gmMainLib_8015FC74.",
+    "Check whether func_8015CFAC was removed as dead/trivial code or renamed elsewhere in subsequent cleanup."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

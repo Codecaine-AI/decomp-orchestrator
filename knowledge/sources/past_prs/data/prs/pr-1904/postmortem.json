@@ -1,0 +1,166 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1904",
+  "pr": {
+    "number": 1904,
+    "title": "HSD synth matches",
+    "url": "https://github.com/doldecomp/melee/pull/1904",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-09-07T03:38:37Z",
+    "merged_at": "2025-09-07T03:43:01Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched four previously stubbed HSD synth functions in src/sysdolphin/baselib/synth.c, improving GALE01 matched code by +2304 bytes according to the decomp.dev bot. The PR added implementations for HSD_SynthSFXUpdateMix, HSD_Synth_8038B5AC, HSD_SynthSFXKeyOff, and HSD_Synth_80388E08, plus small supporting type/signature and data-symbol fixes in synth.h, synth.static.h, axdriver, and symbols.txt.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "audio",
+      "headers",
+      "data-symbols",
+      "function-signatures"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "HSD synth",
+      "AX audio",
+      "GALE01 symbols"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/sysdolphin/baselib/synth.c",
+      "role": "Main matching work; added four synth function implementations and supporting static data/helpers."
+    },
+    {
+      "path": "src/sysdolphin/baselib/synth.h",
+      "role": "Corrected prototypes for stream counters, callbacks, and HSD_Synth_8038B5AC argument types."
+    },
+    {
+      "path": "src/sysdolphin/baselib/synth.static.h",
+      "role": "Changed HSD_Synth_804D7778 from static s8 to static volatile u8."
+    },
+    {
+      "path": "src/sysdolphin/baselib/axdriver.c",
+      "role": "Adjusted AXDriver_8038E8EC second parameter from int to u8."
+    },
+    {
+      "path": "src/sysdolphin/baselib/axdriver.h",
+      "role": "Kept AXDriver_8038E8EC declaration consistent with implementation."
+    },
+    {
+      "path": "config/GALE01/symbols.txt",
+      "role": "Marked lbl_8040806C as byte data instead of an untyped object."
+    }
+  ],
+  "what_changed": [
+    "Implemented HSD_Synth_80388E08 as a search through HSD_Synth_804C2AE0 voice/bank lists, unloading and freeing the matching AXVPB when its prev field matches the supplied integer.",
+    "Implemented HSD_SynthSFXKeyOff with getNode lookup, driverInactivatedCallback handling, direct voice freeing for flagged nodes, and priority/volume update behavior for normal key-off.",
+    "Implemented HSD_SynthSFXUpdateMix, including stereo/mono mix setup through AXPBMIX, panning math using sqrtf_accurate from math_ppc.h, AXSetVoiceMix calls, ITD shift calculation through lbl_8040806C, and AXSetVoiceItdOn/AXSetVoiceItdTarget updates.",
+    "Implemented HSD_Synth_8038B5AC for stream playback setup: waits on HSD_Synth_804D7778, disables interrupts, stops/keys off an existing stream node, acquires an AX voice, initializes a synth node, requests stream header data through HSD_DevComRequest, and returns the generated stream node id.",
+    "Added supporting static/data objects in synth.c: data_pad, data_pad_2, static AXPBMIX lbl_80407FB4, and byte lookup table lbl_8040806C.",
+    "Moved freeVoices earlier in synth.c so it can be reused by HSD_SynthSFXKeyOff before HSD_SynthCallback.",
+    "Changed HSD_SynthResetStreamCounters prototype from void(void) to void(int, int, void*, bool), matching its callback-like signature while leaving the visible body unchanged in the excerpt.",
+    "Changed HSD_SynthPStreamHeaderCallback declaration to use int, int, void*, bool cancelflag instead of void*, s32, void*, s32.",
+    "Changed HSD_Synth_8038B5AC declaration from int, u8, int, int to int, u8, u8, int.",
+    "Changed AXDriver_8038E8EC second argument from int to u8 in both axdriver.c and axdriver.h.",
+    "Changed HSD_Synth_804D7778 to static volatile u8, consistent with spin-wait usage in HSD_Synth_8038B5AC.",
+    "Updated GALE01 symbols.txt so lbl_8040806C is classified as data:byte."
+  ],
+  "smart_moves": [
+    "Used exact-width argument types such as u8 and bool in headers to help codegen match call-site extension and callback ABI behavior.",
+    "Made HSD_Synth_804D7778 volatile because HSD_Synth_8038B5AC spin-waits on it, preventing the compiler from treating the loop as reading an ordinary stable local/static value.",
+    "Recreated data layout with explicit padding arrays and a byte lookup table, allowing data-section ordering and symbol typing to support the code matches.",
+    "Introduced small inline helpers, including freeVoices, my_memzero, and HSD_Synth_8038B5AC_inline, to shape codegen while keeping repeated logic understandable.",
+    "Used sqrtf_accurate from math_ppc.h for the panning/mix calculations rather than a generic sqrtf, which is important for matching PPC math output.",
+    "Preserved an explicit TODO noting that AXVPB prev probably has the wrong struct type, avoiding a silent struct-definition change without enough evidence."
+  ],
+  "decomp_lessons": [
+    "For audio code, matching often depends on correcting small integer widths in prototypes; int versus u8 changes generated extension/truncation behavior.",
+    "Spin flags or fields changed by asynchronous callbacks should be modeled as volatile when the decompiled function polls them.",
+    "Data-symbol typing in symbols.txt can matter: lbl_8040806C was marked data:byte to match its use as a u8 lookup table.",
+    "When a compiler emits struct-zeroing or clearing patterns that do not map cleanly to memset, a local inline zeroing helper may be a practical matching tactic.",
+    "Callback-like functions may have unused parameters; keeping the full observed signature, as with HSD_SynthResetStreamCounters, can be necessary even when the body ignores the parameters.",
+    "AX/HSD synth work may require matching both code and data layout together: static mix buffers, lookup tables, and padding were part of this match set.",
+    "If a struct field appears semantically mis-typed, document the mismatch and cast locally rather than broadening the change without stronger evidence."
+  ],
+  "naming_conventions": [
+    "Unknown HSD synth functions kept address-based names such as HSD_Synth_80388E08 and HSD_Synth_8038B5AC.",
+    "Known public synth APIs use HSD_SynthSFX* names, e.g. HSD_SynthSFXKeyOff and HSD_SynthSFXUpdateMix.",
+    "Unknown data symbols retain lbl_8040xxxx or HSD_Synth_804Dxxxx address-based names.",
+    "Local matching helpers use descriptive lower/camel names such as freeVoices, stopRange, my_memzero, and HSD_Synth_8038B5AC_inline.",
+    "The PR did not rename unknown functions beyond the evidence in the diff; most newly matched unknowns remained address-based."
+  ],
+  "assembly_or_matching_tactics": [
+    "Added PAD_STACK(0x10) in HSD_SynthSFXKeyOff and PAD_STACK(8) in HSD_Synth_8038B5AC to reproduce expected stack layout.",
+    "Used static inline helper extraction to influence inlining and control-flow shape.",
+    "Used an explicit byte table lbl_8040806C for ITD shift lookup instead of deriving values algorithmically.",
+    "Used my_memzero with int stores over sizeof(AXPBMIX), likely to match the original clearing loop more closely than a library memset call.",
+    "Used volatile u8 for HSD_Synth_804D7778 to preserve a busy-wait loop over a global flag.",
+    "Used sqrtf_accurate and exact float constants such as 0.003921569F, 32767.0F, and 23169.768F in HSD_SynthSFXUpdateMix.",
+    "Kept interrupt boundaries with OSDisableInterrupts and OSRestoreInterrupts around synth node list/volume update manipulation.",
+    "Adjusted function signatures to u8/bool where necessary to match parameter handling."
+  ],
+  "review_feedback": [
+    {
+      "source": "decomp-dev[bot]",
+      "url": "https://github.com/doldecomp/melee/pull/1904#issuecomment-3263432109",
+      "summary": "Bot reported GALE01 matched code increased to 41.84%, +0.06% and +2304 bytes, with 4 new full matches: HSD_SynthSFXUpdateMix (+1200), HSD_Synth_8038B5AC (+624), HSD_SynthSFXKeyOff (+308), and HSD_Synth_80388E08 (+172)."
+    },
+    {
+      "source": "human_review",
+      "summary": "No human review comments or PR body rationale were present in the provided slice."
+    }
+  ],
+  "searchable_terms": [
+    "PR1904",
+    "HSD synth matches",
+    "HSD_SynthSFXUpdateMix",
+    "HSD_Synth_8038B5AC",
+    "HSD_SynthSFXKeyOff",
+    "HSD_Synth_80388E08",
+    "HSD_SynthResetStreamCounters",
+    "HSD_SynthPStreamHeaderCallback",
+    "AXDriver_8038E8EC",
+    "HSD_Synth_804D7778",
+    "volatile u8",
+    "lbl_8040806C",
+    "data:byte",
+    "AXPBMIX",
+    "AXPBSRC",
+    "AXVPB",
+    "AXSetVoiceMix",
+    "AXSetVoiceItdOn",
+    "AXSetVoiceItdTarget",
+    "AXAcquireVoice",
+    "AXFreeVoice",
+    "AXSetVoicePriority",
+    "sqrtf_accurate",
+    "math_ppc.h",
+    "PAD_STACK",
+    "my_memzero",
+    "freeVoices",
+    "HSD_DevComRequest",
+    "OSDisableInterrupts",
+    "OSRestoreInterrupts",
+    "sysdolphin baselib synth"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that resolve the TODO about AXVPB prev needing a signed int type instead of a pointer.",
+    "Search for additional HSD synth stream functions near HSD_Synth_8038AD74, HSD_Synth_8038ADD0, and HSD_Synth_8038B120.",
+    "Look for other PRs that mark unknown data tables as data:byte in config/GALE01/symbols.txt.",
+    "Search for uses of volatile globals in callback/spin-wait matching across sysdolphin baselib.",
+    "Compare later synth.h changes to see whether HSD_SynthPStreamHeaderCallback and HSD_SynthResetStreamCounters signatures were further refined."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

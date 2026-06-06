@@ -1,0 +1,199 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-113",
+  "pr": {
+    "number": 113,
+    "title": "Work through data labels and fix lwzu cases that were preventing shiftability",
+    "url": "https://github.com/doldecomp/melee/pull/113",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-11-19T17:41:49Z",
+    "merged_at": "2021-11-19T17:41:58Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large assembly-only cleanup that made more data and code references shiftable. The PR added many missing global data labels inside asm/data.s and asm/rodata.s, then replaced raw absolute .4byte addresses such as 0x803EB3FC and 0x803F5468 with symbolic labels. It also fixed multiple lwzu address-formation cases across Dolphin, Melee, and sysdolphin assembly by using the actual target symbol or full hardware address with @h/@l, and by converting follow-up loads/stores after lwzu to small offsets from the updated base register.",
+  "change_classification": {
+    "primary_type": "asm_shiftability_fix",
+    "categories": [
+      "fix",
+      "asm cleanup",
+      "data labeling",
+      "relocation hygiene"
+    ],
+    "systems": [
+      "asm",
+      "data",
+      "rodata",
+      "dolphin",
+      "dvd",
+      "melee",
+      "ft",
+      "gr",
+      "it",
+      "lb",
+      "sysdolphin",
+      "baselib"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "asm/data.s",
+      "reason": "Main cleanup target; added many .global lbl_* definitions at internal data-table offsets and replaced hardcoded .4byte absolute addresses with symbolic label references."
+    },
+    {
+      "path": "asm/rodata.s",
+      "reason": "Added missing rodata labels so references could use symbols instead of raw addresses."
+    },
+    {
+      "path": "asm/dolphin/dolphin_sdk_1.s",
+      "reason": "Fixed lwzu target address expression for a hardware-register style access using @h/@l."
+    },
+    {
+      "path": "asm/dolphin/dvd/dvdlow.s",
+      "reason": "Fixed a lwzu low-half expression against a 0xCC00 hardware address."
+    },
+    {
+      "path": "asm/melee/cm/code_80028B9C.s",
+      "reason": "Fixed lwzu to target lbl_80453060 with matching @h/@l relocation syntax."
+    },
+    {
+      "path": "asm/melee/db/code_80225374.s",
+      "reason": "Changed lwzu setup to load the actual target label and adjusted the following store to 0x4(r3)."
+    },
+    {
+      "path": "asm/melee/ft/ftbosslib.s",
+      "reason": "Fixed lwzu and follow-up access pattern involving lbl_803B7548."
+    },
+    {
+      "path": "asm/melee/ft/ftkirby.s",
+      "reason": "Fixed multiple lwzu references to data labels such as lbl_803B7548."
+    },
+    {
+      "path": "asm/melee/gr/grcastle.s",
+      "reason": "Fixed stage assembly lwzu reference to a labeled data address."
+    },
+    {
+      "path": "asm/melee/gr/grcorneria.s",
+      "reason": "Fixed multiple stage assembly lwzu references to labeled data addresses."
+    },
+    {
+      "path": "asm/melee/gr/grflatzone.s",
+      "reason": "Fixed stage assembly lwzu reference to a labeled data address."
+    },
+    {
+      "path": "asm/melee/gr/grkinokoroute.s",
+      "reason": "Fixed stage assembly lwzu reference to a labeled data address."
+    },
+    {
+      "path": "asm/melee/gr/grzebesroute.s",
+      "reason": "Fixed stage assembly lwzu reference to a labeled data address."
+    },
+    {
+      "path": "asm/melee/it/code_80266F3C.s",
+      "reason": "Fixed item assembly lwzu setup around lbl_804A0E24 and related offsets."
+    },
+    {
+      "path": "asm/melee/lb/code_8000E9F0.s",
+      "reason": "Fixed low-level Melee assembly lwzu reference to lbl_804318B0."
+    },
+    {
+      "path": "asm/sysdolphin/baselib/lobj.s",
+      "reason": "Fixed baselib lwzu references to labeled data addresses."
+    },
+    {
+      "path": "asm/sysdolphin/baselib/pobj.s",
+      "reason": "Fixed baselib lwzu reference to lbl_804C0908."
+    }
+  ],
+  "what_changed": [
+    "Added internal labels inside existing data blocks, for example lbl_803EB3FC, lbl_803EB444, lbl_803EB48C, lbl_803EB4C8, lbl_803EB4F8, lbl_803EB540, lbl_803EB57C, lbl_803EB5C4, lbl_803EB5E8, and table labels lbl_803EB660 through lbl_803EB69C.",
+    "Converted .4byte raw absolute addresses in data tables to symbolic references, for example 0x803EB3FC became lbl_803EB3FC and 0x803F5468 became lbl_803F5468.",
+    "Added many missing global labels in data/rodata around the 0x803F54xx-0x803F82xx range so large function/data dispatch tables could reference labels rather than numeric addresses.",
+    "Fixed lwzu cases where the instruction used a plain immediate like 0x3060(r3), 0x75e8(r4), -0x7f64(r4), or 0xe24(r3) instead of a symbol low-half expression.",
+    "For lwzu sequences, changed the preceding lis to use the actual target symbol high half, for example lbl_804A0C64@ha or lbl_804318B0@ha rather than a nearby page/base label.",
+    "Where lwzu updates the base register, changed later accesses from misleading low-half symbolic expressions such as lbl_803B0004@l(r4) or lbl_803C0004@l(r4) to literal offsets such as 0x4(r4).",
+    "For hardware-address accesses, used full absolute address expressions with @h/@l, for example 0xCC006434@h and 0xCC006434@l."
+  ],
+  "smart_moves": [
+    "The fix did not merely rename addresses; it inserted labels at the exact embedded offsets that tables pointed to, preserving layout while making the relocation relationships explicit.",
+    "Replacing numeric .4byte addresses with symbols makes data tables more robust to shifting and helps future decompilation identify pointer fields versus raw constants.",
+    "The lwzu fixes account for update-form semantics: after lwzu, the base register has changed, so subsequent accesses should usually be expressed as small offsets from the updated register, not as unrelated @l relocations.",
+    "Using target-symbol @h/@ha and @l pairs keeps the assembled instructions byte-identical while removing hardcoded address assumptions.",
+    "The PR applied the same pattern across many asm files, reducing one-off shiftability failures rather than only fixing a single local symptom."
+  ],
+  "decomp_lessons": [
+    "When a data table contains addresses into the middle of another data blob, add explicit labels at those interior offsets before replacing .4byte constants with symbols.",
+    "For shiftability, raw .4byte 0x80xxxxxx values should be audited: if they are pointers, prefer .4byte lbl_xxxxxxxx or function symbols.",
+    "lwzu is dangerous for symbolic relocation cleanup because it mutates the base register. Re-check all following memory operands before converting an immediate to symbol@l.",
+    "If lwzu loads from a target address and the next instruction accesses the next word, the follow-up access may need to be 0x4(updated_base) rather than old_label@l(base).",
+    "Hardware register addresses can still be expressed with full numeric @h/@l forms, which is more shift-safe and assembler-aware than splitting them manually as lis 0xcc00 plus a plain offset.",
+    "Global labels in asm/data.s and asm/rodata.s are useful scaffolding for later C migration because they expose table boundaries and pointer targets."
+  ],
+  "naming_conventions": [
+    "Anonymous or unknown data labels follow the address-derived lbl_XXXXXXXX convention.",
+    "Unknown functions referenced from tables retain func_XXXXXXXX names.",
+    "PowerPC high/low relocation expressions use symbol@h, symbol@ha, and symbol@l as appropriate.",
+    "New labels are emitted with a matching .global lbl_XXXXXXXX line before the label definition.",
+    "NULL remains the preferred symbolic spelling for null .4byte entries rather than 0x00000000 when the table is pointer-like."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replace `.4byte 0x803EB3FC` with `.4byte lbl_803EB3FC` after adding `.global lbl_803EB3FC` at that exact data offset.",
+    "Replace dispatch-table raw rodata pointers such as `.4byte 0x803F5468` with `.4byte lbl_803F5468` once the target rodata label exists.",
+    "Convert `lis r3, lbl_804A0004@ha` plus `lwzu ..., 0xc64(r3)` to `lis r3, lbl_804A0C64@ha` plus `lwzu ..., lbl_804A0C64@l(r3)` when the actual access target is lbl_804A0C64.",
+    "After update-form loads, use literal relative offsets for subsequent adjacent fields, for example changing a following store/load to `0x4(r3)` or `0x4(r4)`.",
+    "For fixed hardware addresses, use complete address relocation syntax such as `lis r4, 0xCC006434@h` and `lwzu r5, 0xCC006434@l(r4)`."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "shiftability",
+    "data labels",
+    "lwzu",
+    "update-form load",
+    "PowerPC relocation",
+    "@h",
+    "@ha",
+    "@l",
+    ".4byte raw address",
+    "asm/data.s",
+    "asm/rodata.s",
+    "lbl_803EB3FC",
+    "lbl_803EB6B0",
+    "lbl_803F14C4",
+    "lbl_803F23CC",
+    "lbl_803F5468",
+    "lbl_804A0C64",
+    "lbl_803B7548",
+    "lbl_804318B0",
+    "lbl_804C0908",
+    "0xCC006434",
+    "dolphin_sdk_1",
+    "dvdlow",
+    "ftkirby",
+    "ftbosslib",
+    "grcastle",
+    "grcorneria",
+    "grflatzone",
+    "grkinokoroute",
+    "grzebesroute",
+    "code_80266F3C",
+    "code_8000E9F0",
+    "baselib",
+    "lobj",
+    "pobj"
+  ],
+  "follow_up_queries": [
+    "Find remaining `.4byte 0x80` absolute addresses in asm/data.s and asm/rodata.s that could be symbolized.",
+    "Audit remaining `lwzu` instructions for symbol@l operands and follow-up loads/stores that may still use stale base assumptions.",
+    "Search for `lbl_803B0004@l` and `lbl_803C0004@l` in asm files to find other cases where a post-lwzu base register should use `0x4(reg)`.",
+    "Identify newly labeled data tables around lbl_803F14C4 and lbl_803F23CC for future struct/table typing in C."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

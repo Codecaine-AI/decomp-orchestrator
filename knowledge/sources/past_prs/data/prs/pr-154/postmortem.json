@@ -1,0 +1,134 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-154",
+  "pr": {
+    "number": 154,
+    "title": "frank works better now",
+    "url": "https://github.com/doldecomp/melee/pull/154",
+    "state": "MERGED",
+    "author": "EpochFlame",
+    "created_at": "2021-12-06T04:52:53Z",
+    "merged_at": "2021-12-06T04:56:55Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "PR 154 improved the Epilogue-assisted build/postprocessing path centered on tools/frank.py. frank.py stopped detecting end-of-code via fragile terminal byte-sequence scans and instead derived the code section end from a code-size field found after a CODESIZE_MAGIC marker. The Makefile was updated to use Epilogue mwcceppc 1.2.5e, run frank before postproc for EPILOGUE_PROCESS objects, clean the epilogue directory, and apply the lbvector CFLAGS override to the Epilogue object too. e_files.mk added several additional Epilogue-unscheduled objects. Ignore rules were expanded for generated Windows binaries/batch files and include/*.s. The PR body states that the result matches and that postprocessor.py is only needed to fix stray mtlr instructions, but there was little review discussion.",
+  "change_classification": {
+    "primary_type": "tooling-fix",
+    "categories": [
+      "decomp-matching",
+      "fix",
+      "tooling",
+      "build-system",
+      "epilogue-process"
+    ],
+    "systems": [
+      "tools",
+      "makefile",
+      "repo-root",
+      "include",
+      "lb",
+      "sysdolphin-baselib"
+    ]
+  },
+  "key_files": [
+    "tools/frank.py",
+    "Makefile",
+    "e_files.mk",
+    ".gitignore",
+    "include/.gitignore"
+  ],
+  "what_changed": [
+    "In tools/frank.py, replaced EOC_BYTES-based end-of-code detection with a CODESIZE_MAGIC marker lookup followed by reading a big-endian 4-byte code size and computing eoc_offset as 0x34 + code_size.",
+    "In tools/frank.py, final byte reconstruction now copies stripped/profile bytes from offset 0x34 through eoc_offset instead of through a scanned stripped_eoc value; conditional branch fixup logic remains after this replacement step.",
+    "In Makefile, EPILOGUE_PROCESS now selects MWCC_EPI_VERSION 1.2.5e and MWCC_EPI_EXE mwcceppc.exe instead of version 1.0 and mwcceppc_profile.exe.",
+    "In Makefile, the normal build object rule no longer runs POSTPROC unconditionally after compiling with the primary compiler.",
+    "In Makefile, EPILOGUE_PROCESS object rules compile the Epilogue object, run FRANK to patch the normal build object using the Epilogue object, then run POSTPROC on the normal build object to address remaining postprocessing needs.",
+    "In Makefile, clean now removes the epilogue directory in addition to build and ELF2DOL outputs.",
+    "In Makefile, the special CFLAGS for src/melee/lb/lbvector.o (-inline auto -fp_contract on) were mirrored for the corresponding Epilogue object path.",
+    "In e_files.mk, EPILOGUE_UNSCHEDULED expanded beyond lblanguage.o to include lbcommand.o, lbvector.o, and several sysdolphin/baselib objects: tobj.o, aobj.o, fobj.o, wobj.o, and texp.o.",
+    "In .gitignore, generated *.exe, *.dll, and *.bat files were ignored.",
+    "Added include/.gitignore to ignore generated *.s files under include/."
+  ],
+  "smart_moves": [
+    "Using the object-file code-size metadata avoids relying on searching for byte patterns that can appear ambiguously or fail depending on generated code shape.",
+    "Running frank before postproc in the Epilogue path preserves the intended Epilogue-derived code replacement first, then applies the narrower postprocessor cleanup afterward.",
+    "The PR body explicitly narrows postprocessor.py's role: it is only needed to fix stray mtlr instructions, as far as the author knows. This suggests the pipeline should avoid using postproc as a broad replacement for frank's object reconstruction.",
+    "Mirroring lbvector's special CFLAGS onto the Epilogue object prevents the fallback/Epilogue compile from drifting from the main object compile settings.",
+    "Cleaning the epilogue directory reduces stale-object risk when changing Epilogue compiler versions or the unscheduled file list."
+  ],
+  "decomp_lessons": [
+    "For matching-tool object surgery, prefer structural metadata such as code size fields over sentinel instruction-byte scans when determining replacement ranges.",
+    "When combining multiple object postprocessors, ordering matters: first perform the major section/code replacement, then apply targeted instruction cleanup.",
+    "Any per-file CFLAGS needed for matching should be applied consistently to both the normal build object and the Epilogue-generated object when both are part of the comparison/replacement flow.",
+    "Generated artifacts from local toolchains should be ignored explicitly to keep decomp PRs focused on source, scripts, and build metadata.",
+    "When introducing or expanding alternate compiler paths, add clean rules for the alternate output directory to prevent stale files from influencing matches."
+  ],
+  "naming_conventions": [
+    "CODESIZE_MAGIC was introduced as an uppercase module-level constant for a fixed byte signature used by tools/frank.py.",
+    "CBLR_BYTES remains the uppercase module-level list for conditional-branch-to-link-register byte sequences.",
+    "Make variables follow existing uppercase underscore style: MWCC_EPI_VERSION, MWCC_EPI_EXE, EPILOGUE_PROCESS, EPILOGUE_UNSCHEDULED, EPILOGUE_DIR, PROCFLAGS.",
+    "Epilogue object paths mirror normal object paths under $(EPILOGUE_DIR), e.g. $(EPILOGUE_DIR)/src/melee/lb/lbvector.o."
+  ],
+  "assembly_or_matching_tactics": [
+    "frank.py strips a known profiling byte sequence from the Epilogue/profile object, then uses bytes from the stripped object to replace the vanilla object's code region from 0x34 to the computed end-of-code offset.",
+    "The computed end-of-code offset is based on a big-endian code size read after CODESIZE_MAGIC, reducing dependence on finding branch/end sentinel sequences.",
+    "Conditional branch-to-link-register byte fixes remain part of frank.py after code-region replacement.",
+    "The EPILOGUE_PROCESS pipeline compiles both the normal object and an Epilogue object, then uses frank.py to patch the normal object with bytes from the Epilogue object before running postprocessor.py for stray mtlr cleanup.",
+    "Epilogue unscheduled object coverage was expanded for lb and sysdolphin/baselib files, indicating those files benefited from or required the Epilogue unscheduled compilation path."
+  ],
+  "review_feedback": [
+    "No inline review comments were present in the provided slice.",
+    "One review is recorded, but the excerpt does not include reviewer details or feedback text.",
+    "The PR body/comment excerpt says: \"Yes, this matches. postprocessor.py is only needed to fix stray mtlr instructions, as far as I'm aware.\""
+  ],
+  "searchable_terms": [
+    "pr-154",
+    "frank works better now",
+    "EpochFlame",
+    "tools/frank.py",
+    "frank.py",
+    "CODESIZE_MAGIC",
+    "CBLR_BYTES",
+    "code_size_offset",
+    "eoc_offset",
+    "end of code",
+    "EOC_BYTES",
+    "mwcceppc.exe",
+    "MWCC_EPI_VERSION",
+    "1.2.5e",
+    "EPILOGUE_PROCESS",
+    "EPILOGUE_UNSCHEDULED",
+    "postprocessor.py",
+    "POSTPROC",
+    "stray mtlr",
+    "lbvector",
+    "lbcommand",
+    "lblanguage",
+    "tobj",
+    "aobj",
+    "fobj",
+    "wobj",
+    "texp",
+    "sysdolphin baselib",
+    "include/.gitignore",
+    "*.s",
+    "*.exe",
+    "*.dll",
+    "*.bat"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify tools/frank.py CODESIZE_MAGIC or eoc_offset handling to see whether this code-size tactic held up.",
+    "Search for postprocessor.py changes mentioning stray mtlr to understand the remaining postprocessing responsibility after frank runs.",
+    "Look for later expansions or removals in e_files.mk EPILOGUE_UNSCHEDULED to identify which objects required Epilogue unscheduled compilation.",
+    "Search for mwcceppc 1.2.5e usage across the build system to confirm whether this became the stable Epilogue compiler version."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

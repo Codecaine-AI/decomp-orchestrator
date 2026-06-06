@@ -1,0 +1,150 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1905",
+  "pr": {
+    "number": 1905,
+    "title": "lbshadow matches",
+    "url": "https://github.com/doldecomp/melee/pull/1905",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-09-07T05:40:47Z",
+    "merged_at": "2025-09-07T05:46:21Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched and typed a substantial portion of the lbshadow module, replacing ad-hoc/opaque fighter shadow storage with a named LbShadow struct and adding implementations for several shadow lifecycle/display helpers. The PR also propagated the new type through fighter layout, ftLib accessors, dbcamera, grdisplay, lb headers, and GALE01 symbols. Evidence of review discussion is minimal; the PR merged quickly with no review comments in the provided slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-typing",
+      "symbol-map-cleanup"
+    ],
+    "systems": [
+      "lb",
+      "fighter",
+      "stage-display",
+      "debug-camera",
+      "config-symbols",
+      "sysdolphin-shadow"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/lbshadow.c",
+    "src/melee/lb/lbshadow.h",
+    "src/melee/lb/types.h",
+    "src/melee/lb/forward.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/ftlib.c",
+    "src/melee/ft/ftlib.h",
+    "src/melee/gr/grdisplay.c",
+    "src/melee/db/dbcamera.c",
+    "config/GALE01/symbols.txt"
+  ],
+  "what_changed": [
+    "Added about 198 lines to src/melee/lb/lbshadow.c, implementing matched lbShadow functions around shadow allocation, removal, active-state updates, per-fighter shadow limiting, and GX quad rendering.",
+    "Introduced struct LbShadow in src/melee/lb/types.h with eight one-bit flags named x0_b0 through x0_b7 followed by HSD_Shadow* shadow.",
+    "Changed Fighter layout at fp+20A4 from UnkFlagStruct x20A4 plus separate u32 x20A8 into a single LbShadow x20A4, implying the previous x20A8 field is the shadow pointer inside LbShadow.",
+    "Changed ftLib_800872B0 return type from void* to LbShadow* in ftlib.c and ftlib.h, making callers use a typed shadow struct instead of local anonymous bitfield casts.",
+    "Updated dbcamera.c to test ft->x20A4.shadow instead of ft->x20A8 and to write ft->x20A4.x0_b5 instead of ft->x20A4.b5 before calling lbShadow_8000EEE0.",
+    "Updated grdisplay.c to remove a local anonymous bitfield struct and use LbShadow* from ftLib_800872B0; shadow visibility now writes x0_b4 based on camera/stage visibility checks before lbShadow_8000EFEC.",
+    "Updated lbshadow.h include guard and includes, added typed prototypes for lbShadow_8000ED54, lbShadow_8000EE8C, and lbShadow_8000F214, and replaced UnkFlagStruct* parameters with LbShadow*.",
+    "Added a forward declaration typedef for LbShadow in src/melee/lb/forward.h.",
+    "Adjusted config/GALE01/symbols.txt by splitting lbShadow_803BA0E4 into two local string labels lbl_803BA0E4 and lbl_803BA0F0 while keeping lbShadow_803BA0FC as the HSD_Chan data symbol."
+  ],
+  "smart_moves": [
+    "The PR unified previously separate/opaque shadow-related fighter fields into one typed LbShadow struct, which made call sites in dbcamera and grdisplay simpler and less speculative.",
+    "Typing ftLib_800872B0 as LbShadow* converted downstream code from anonymous local bitfield casts to reusable project-level structure knowledge.",
+    "The struct preserves bit-level flag access with x0_bN names, allowing matching to proceed without overclaiming semantic names for each flag.",
+    "lbShadow_8000EFEC reflects a likely engine behavior: it clears x0_b2 for all fighter shadows, counts visible/non-disabled shadows, disables additional shadows after count > 5, and calls lbShadow_8000EEE0 to refresh active state.",
+    "lbShadow_8000ED54 captures exact shadow initialization constants such as PROJ_ORTHO, near 0.001F, far 5000.0F, 0x100 texture size, intensity 0xC0, scaleS +0.45F, scaleT -0.45F, and active true, providing reusable constants for future matching.",
+    "lbShadow_8000F214 uses explicit GX FIFO writes and HSD/GX setup calls, preserving low-level ordering that often matters for decomp matching."
+  ],
+  "decomp_lessons": [
+    "When a field immediately after bitflags is consistently tested as a pointer, consider whether the bitflags and pointer form a single small subsystem struct rather than separate fighter fields.",
+    "Propagating a newly identified struct through accessors, headers, and all call sites can eliminate anonymous local struct hacks and reduce future mismatch risk.",
+    "Use conservative names like LbShadow and x0_bN when flag semantics are only partially known; type the layout without inventing meanings.",
+    "Symbol-map string splitting can be necessary when a previously global/object symbol actually represents multiple local string literals used by matched code.",
+    "For rendering/decomp code, preserve exact GX/HSD setup order, matrix/stat side effects, scalar multipliers, and direct FIFO writes rather than abstracting them away.",
+    "Assertions with source file names and line numbers, such as __assert(\"lbshadow.c\", 0x36, \"lbshadow\") and __assert(\"shadow.h\", 0x63, \"shadow\"), are matching evidence and should be retained exactly."
+  ],
+  "naming_conventions": [
+    "Module functions use the existing lbShadow_8000XXXX address-based naming convention.",
+    "The new struct is named LbShadow, matching the module name while using project typedef style via forward.h.",
+    "Unknown bitfields are named by offset and bit index: x0_b0, x0_b1, x0_b2, x0_b3, x0_b4, x0_b5, x0_b6, x0_b7.",
+    "The fighter field remains address-based as x20A4 but is now typed as LbShadow.",
+    "The embedded pointer field is named shadow once identified as HSD_Shadow*.",
+    "Local/static data labels in symbols.txt use lbl_803BA0E4/lbl_803BA0F0 for strings, while lbShadow_803BA0FC remains the named static HSD_Chan data object."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used typed bitfields to match byte-level flag manipulation while preserving access to individual bits.",
+    "Kept PAD_STACK(0x18) in lbShadow_8000EFEC, indicating a stack-shape matching tactic.",
+    "Used direct GXWGFifo.f32 writes in lbShadow_8000F214 rather than helper abstractions, matching low-level GX emission order.",
+    "Declared const int num_edges = 4 before GXBegin, likely to match register/constant usage for the quad draw.",
+    "Preserved float constants and signs exactly, including +0.45F, -0.45F, 1.2F multipliers, and z *= -1.1F.",
+    "Preserved assert strings and line numbers, which are often required to match rodata and control flow.",
+    "Split one data symbol into two local string symbols in symbols.txt, likely to align rodata/data boundaries for the matched lbshadow code."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "No human PR body text was present in the provided context; rationale is inferred from the diff and title only."
+  ],
+  "searchable_terms": [
+    "pr-1905",
+    "lbshadow matches",
+    "lbShadow_8000E9F0",
+    "lbShadow_8000ED54",
+    "lbShadow_8000EE8C",
+    "lbShadow_8000EEE0",
+    "lbShadow_8000EFEC",
+    "lbShadow_8000F214",
+    "lbShadow_8000F38C",
+    "LbShadow",
+    "HSD_Shadow",
+    "HSD_ShadowAlloc",
+    "HSD_ShadowRemove",
+    "HSD_ShadowSetActive",
+    "HSD_ShadowSetSize",
+    "HSD_ShadowAddObject",
+    "HSD_CObjSetProjectionType",
+    "PROJ_ORTHO",
+    "HSD_CObjSetNear",
+    "HSD_CObjSetFar",
+    "HSD_CObjSetFlags",
+    "HSD_SetupChannelAll",
+    "GXWGFifo",
+    "GXBegin",
+    "GX_QUADS",
+    "GXSetScissor",
+    "HSD_identityMtx",
+    "HSD_PerfCurrentStat.nb_mtx_load",
+    "ftLib_800872B0",
+    "Fighter x20A4",
+    "x0_b4",
+    "x0_b5",
+    "grDisplay_801C5B90",
+    "Camera_80030B24",
+    "stage_info.x17C",
+    "dbcamera fn_802270C4",
+    "config/GALE01/symbols.txt",
+    "lbShadow_803BA0FC",
+    "lbl_803BA0E4",
+    "lbl_803BA0F0"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename LbShadow bitfields x0_b0 through x0_b5 to semantic names.",
+    "Search for remaining uses of UnkFlagStruct near fighter shadow code to see whether more fields can be typed as LbShadow.",
+    "Inspect unmatched lbShadow_8000E9F0 and lbShadow_8000F38C for reuse of the LbShadow struct or static data labels.",
+    "Check whether the count > 5 shadow limiter in lbShadow_8000EFEC appears in game behavior notes or other platform versions.",
+    "Look for future changes to lbShadow_803BA0FC or HSD_Chan setup that refine material/channel typing."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

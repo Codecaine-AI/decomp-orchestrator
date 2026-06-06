@@ -1,0 +1,146 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-346",
+  "pr": {
+    "number": 346,
+    "title": "Split & match gmmain",
+    "url": "https://github.com/doldecomp/melee/pull/346",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-04-06T03:01:32Z",
+    "merged_at": "2022-04-06T03:35:10Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Split the gmmain portion out of assembly into src/melee/gm/gmmain.c and matched it, removing a large block from asm/melee/gm/gmmain_lib.s. The new C covered startup/main logic, debug/develop.ini handling, pad setup, report strings, BSS/SBSS data, and required function prototypes/build-system entries. Review feedback noted that the debug level enum values should not be treated as unknown because the menus document their names.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "build-system",
+      "headers",
+      "naming-feedback"
+    ],
+    "systems": [
+      "game-mode",
+      "gm",
+      "gmmain",
+      "asm",
+      "include",
+      "repo-root",
+      "dolphin-os",
+      "sysdolphin-baselib"
+    ]
+  },
+  "key_files": [
+    "src/melee/gm/gmmain.c",
+    "asm/melee/gm/gmmain_lib.s",
+    "include/functions.h",
+    "obj_files.mk",
+    "e_files.mk"
+  ],
+  "what_changed": [
+    "Renamed asm/melee/gm/gmmain.s to asm/melee/gm/gmmain_lib.s and removed the matched gmmain code/data region from the assembly file.",
+    "Added src/melee/gm/gmmain.c with about 201 lines of C replacing approximately 381 lines of assembly.",
+    "Moved functions and data around labels lbl_8015FD24, lbl_8015FDA0, func_8015FDA4, and main into C according to the diff excerpt.",
+    "Moved related string/data/BSS/SBSS material such as /develop.ini strings, gmmain.c assert/report strings, lbl_8046B108, lbl_8046B1F8, lbl_804D6590, and lbl_804D6594 out of assembly into the new C translation unit.",
+    "Added src/melee/gm/gmmain.c.o to e_files.mk EPILOGUE_UNSCHEDULED.",
+    "Updated obj_files.mk so the new C object participates in the object list while the remaining assembly is kept as gmmain_lib.s.",
+    "Promoted function declarations in include/functions.h for OSGetConsoleSimulatedMemSize as returning u32 and func_803756F8 as BOOL func_803756F8(s32, ...), replacing unknown commented prototypes."
+  ],
+  "smart_moves": [
+    "Kept unmatched remainder code in a renamed gmmain_lib.s while extracting only the matched gmmain portion into C, preserving incremental progress without forcing the whole original assembly file to be converted at once.",
+    "Added required external prototypes in include/functions.h rather than relying on implicit declarations, which is important for matching return types and varargs calls in startup code.",
+    "Matched startup code using existing known SDK and HSD calls such as OSInit, DVDInit, PADInit, CARDInit, OSInitAlarm, OSGetConsoleSimulatedMemSize, OSAllocFromArenaHi, HSD_AllocateXFB, HSD_GXSetFifoObj, HSD_InitComponent, GXSetMisc, and OSGetTick.",
+    "Preserved label-based names for globals and unresolved functions where stronger names were not evidenced, avoiding invented symbol names during the split.",
+    "Included the new object in both normal object build metadata and epilogue-unscheduled metadata, which reduced the risk of linker/order mismatches after moving code from assembly to C."
+  ],
+  "decomp_lessons": [
+    "For large assembly files, a practical tactic is to split the file into a residual *_lib.s plus a new C file for the matched range, then update object lists to keep linker order stable.",
+    "Startup/main translation units often need broad external declarations across Dolphin OS, DVD, PAD, CARD, GX, HSD, language, and game subsystems; prototype accuracy matters for matching.",
+    "When assembly uses varargs-like logging/config calls, the C prototype should explicitly allow varargs, as with func_803756F8(s32, ...).",
+    "Data adjacent to the matched functions, including report strings and small-data labels, may need to move with the C file to preserve section layout and references.",
+    "Reviewer-supplied documentation can improve enum naming even when the assembly only exposes numeric comparisons; do not leave documented debug levels as unknown if menu/docs names exist.",
+    "When evidence is insufficient for symbol names, keeping lbl_ and func_ names is acceptable and safer than speculative renaming."
+  ],
+  "naming_conventions": [
+    "Residual assembly after a partial split was named asm/melee/gm/gmmain_lib.s.",
+    "The new source file followed the subsystem path src/melee/gm/gmmain.c.",
+    "Unidentified symbols retained project placeholder styles such as lbl_8015FD24, lbl_803D4AC8, lbl_804D4A08, and func_8015FDA4.",
+    "SDK/HSD symbols used known exported-style names such as OSGetConsoleSimulatedMemSize, HSD_AllocateXFB, HSD_GXSetFifoObj, and HSD_InitComponent.",
+    "Review feedback indicated DB/debug level enum names should be derived from documented debug menu names rather than labeled as unknown."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted a contiguous assembly range containing lbl_8015FD24, lbl_8015FDA0, func_8015FDA4, and main into C.",
+    "Matched a simple no-op/return function at lbl_8015FDA0 as a C stub rather than leaving it in assembly.",
+    "Represented debug-level switch/branch logic from func_8015FDA4 in C while preserving global debug state accesses such as lbl_804D4A08, lbl_804D6B20, and lbl_804D6B30.",
+    "Used extern declarations for globals such as GXRenderModeObj lbl_80401168, PadLibData HSD_PadLibData, build timestamp string lbl_803EA6C8, seed_ptr, and callback labels.",
+    "Preserved matching-sensitive startup call order in main, including OS/Dolphin initialization, arena size handling, HSD/GX setup, random seed initialization from OSGetTick, callback registration, report output, and final game startup calls.",
+    "Moved associated .data, .bss, .sdata, and .sbss labels out of assembly along with the matched code."
+  ],
+  "review_feedback": [
+    {
+      "author": "PsiLupan",
+      "file": "src/melee/gm/gmmain.c",
+      "comment": "These DB levels aren't really unknown, since the menus state them. See: https://github.com/eigenform/melee-re/blob/master/docs/DEBUG.md",
+      "lesson": "Use documented menu/debug names for DB level enum values when available instead of marking them unknown."
+    }
+  ],
+  "searchable_terms": [
+    "pr-346",
+    "Split & match gmmain",
+    "r-burns",
+    "gmmain",
+    "gmmain.c",
+    "gmmain_lib.s",
+    "asm/melee/gm/gmmain_lib.s",
+    "src/melee/gm/gmmain.c",
+    "include/functions.h",
+    "obj_files.mk",
+    "e_files.mk",
+    "main",
+    "lbl_8015FD24",
+    "lbl_8015FDA0",
+    "func_8015FDA4",
+    "lbl_803D4AC8",
+    "lbl_8046B108",
+    "lbl_8046B1F8",
+    "lbl_804D3EE8",
+    "lbl_804D3EEC",
+    "lbl_804D3EF4",
+    "lbl_804D6590",
+    "lbl_804D6594",
+    "lbl_804D4A08",
+    "lbl_804D6B20",
+    "lbl_804D6B30",
+    "HSD_PadLibData",
+    "PadLibData",
+    "PADSetSpec",
+    "DVDConvertPathToEntrynum",
+    "OSGetConsoleSimulatedMemSize",
+    "func_803756F8",
+    "HSD_AllocateXFB",
+    "HSD_GXSetFifoObj",
+    "HSD_InitComponent",
+    "GXSetMisc",
+    "debug level",
+    "DB levels",
+    "develop.ini",
+    "DEBUG.md"
+  ],
+  "follow_up_queries": [
+    "Check later PRs for whether gmmain debug level enum names were revised using the DEBUG.md/menu names.",
+    "Search for follow-up renames of lbl_804D4A08, lbl_804D6B20, and lbl_804D6B30 to stronger debug-level/debug-flag names.",
+    "Look for subsequent gmmain_lib.s splits that removed more remaining assembly from asm/melee/gm/gmmain_lib.s.",
+    "Verify whether func_803756F8 received a semantic HSD name after its varargs prototype was added."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

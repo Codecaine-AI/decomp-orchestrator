@@ -1,0 +1,124 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1120",
+  "pr": {
+    "number": 1120,
+    "title": "Fix include paths in `sysdolphin`",
+    "url": "https://github.com/doldecomp/melee/pull/1120",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-01-25T18:18:01Z",
+    "merged_at": "2024-01-25T18:19:20Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Mass include-path cleanup across src/sysdolphin/baselib to work around an MWCC `-cwd source` header-resolution bug. The PR replaced many angle-bracket baselib includes such as `#include <baselib/jobj.h>` with quoted includes that are either local to the same baselib directory, such as `#include \"jobj.h\"`, or explicitly rooted as `#include \"baselib/jobj.h\"` inside headers. This mattered because MWCC resolves quoted includes from the current C file location rather than from the including header's directory when `-cwd source` is used, so insufficiently specific header paths could make unrelated translation units search the wrong directory, e.g. `fighter.c` including `gobj.h` then trying to resolve `melee/ft/jobj.h` instead of the baselib header.",
+  "change_classification": {
+    "primary_type": "build_include_path_fix",
+    "categories": [
+      "fix",
+      "headers",
+      "include_paths",
+      "build_system_compatibility",
+      "mwcc_workaround"
+    ],
+    "systems": [
+      "src/sysdolphin/baselib",
+      "sysdolphin",
+      "baselib"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/initialize.c",
+    "src/sysdolphin/baselib/pobj.c",
+    "src/sysdolphin/baselib/jobj.c",
+    "src/sysdolphin/baselib/cobj.c",
+    "src/sysdolphin/baselib/robj.c",
+    "src/sysdolphin/baselib/gobj.c",
+    "src/sysdolphin/baselib/gobjplink.c",
+    "src/sysdolphin/baselib/mobj.c",
+    "src/sysdolphin/baselib/displayfunc.c",
+    "src/sysdolphin/baselib/controller.h",
+    "src/sysdolphin/baselib/gobjgxlink.h",
+    "src/sysdolphin/baselib/psstructs.h",
+    "src/sysdolphin/baselib/psdisptev.c"
+  ],
+  "what_changed": [
+    "Changed many sysdolphin baselib implementation-file includes from global-style `#include <baselib/...>` to local quoted includes like `#include \"class.h\"`, `#include \"gobj.h\"`, `#include \"debug.h\"`, and `#include \"objalloc.h\"`.",
+    "Changed many sysdolphin baselib header-file dependencies from angle-bracket baselib paths to quoted explicit baselib paths such as `#include \"baselib/forward.h\"`, `#include \"baselib/jobj.h\"`, `#include \"baselib/objalloc.h\"`, and `#include \"baselib/archive.h\"`.",
+    "Preserved external SDK/library include style for platform, Dolphin, MetroTRK, MSL, and other non-baselib headers such as `<platform.h>`, `<dolphin/os.h>`, `<dolphin/gx/GXAttr.h>`, and `<MSL/trigf.h>`.",
+    "Touched 45 files with nearly one-for-one include edits, totaling 169 added and 171 deleted lines according to the PR context.",
+    "Removed `#include <baselib/psdisptev.h>` from `src/sysdolphin/baselib/psdisptev.c` in the excerpt, leaving `<platform.h>` and extern/function declarations visible there."
+  ],
+  "smart_moves": [
+    "Applied a consistent rule that C files in `src/sysdolphin/baselib` should include sibling baselib headers with short quoted names, avoiding unnecessary global include lookup.",
+    "Applied a different rule for headers: when a baselib header includes another baselib header, keep the path explicit as `\"baselib/...\"` so translation units outside baselib do not accidentally resolve relative to their own source directory.",
+    "Kept system and SDK headers in angle brackets, making the intended distinction between project-local baselib headers and external include roots clear.",
+    "The PR body documented the MWCC behavior with a concrete failure mode involving `gobj.h`, `jobj.h`, and `fighter.c`, making the otherwise mechanical include churn easy to audit and reuse."
+  ],
+  "decomp_lessons": [
+    "With MWCC `-cwd source`, do not assume a quoted include inside a header resolves relative to that header. The PR states MWCC uses the location of the current C file, not the header, so project headers need paths that remain valid from downstream translation-unit directories.",
+    "For sysdolphin baselib C files, prefer same-directory quoted includes for sibling headers, e.g. `#include \"jobj.h\"`, because the current C file is already in `src/sysdolphin/baselib`.",
+    "For sysdolphin baselib headers that may be included from outside baselib, prefer quoted but path-qualified includes, e.g. `#include \"baselib/jobj.h\"`, to avoid accidentally searching directories like `melee/ft/`.",
+    "Include-path-only PRs can still be important decomp infrastructure fixes: they stabilize builds and prevent header-resolution bugs without changing function bodies or matching logic.",
+    "When doing broad include cleanup, preserve external header conventions so the diff communicates which headers are local project headers versus SDK/toolchain headers."
+  ],
+  "naming_conventions": [
+    "Baselib headers are referenced in C files by sibling names such as `\"class.h\"`, `\"debug.h\"`, `\"gobj.h\"`, `\"jobj.h\"`, `\"pobj.h\"`, `\"robj.h\"`, and `\"tev.h\"`.",
+    "Baselib headers are referenced from other headers with a quoted `baselib/` prefix, e.g. `\"baselib/forward.h\"`, `\"baselib/jobj.h\"`, `\"baselib/gobj.h\"`, `\"baselib/archive.h\"`, and `\"baselib/objalloc.h\"`.",
+    "External or configured-root headers remained in angle brackets, including `<platform.h>`, `<dolphin/...>`, `<MetroTRK/intrinsics.h>`, `<MSL/trigf.h>`, `<__mem.h>`, and `<Gecko_setjmp.h>`."
+  ],
+  "assembly_or_matching_tactics": [
+    "No assembly matching changes are evidenced; the diff excerpt is an include-path/build-compatibility cleanup.",
+    "The matching-relevant tactic is indirect: avoid MWCC `-cwd source` include-resolution pitfalls so translation units compile with the intended headers before attempting function matching.",
+    "The PR did not provide evidence of new symbols, struct layout changes, or asm tricks."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR context.",
+    "The only explicit rationale is from the PR body: MWCC has a bug under `-cwd source` where it uses the current C file location rather than the header location for include resolution, requiring more specific header paths."
+  ],
+  "searchable_terms": [
+    "PR1120",
+    "ribbanya",
+    "sysdolphin",
+    "baselib",
+    "include paths",
+    "MWCC",
+    "-cwd source",
+    "header resolution",
+    "quoted includes",
+    "angle bracket includes",
+    "baselib/forward.h",
+    "baselib/jobj.h",
+    "baselib/gobj.h",
+    "gobj.h",
+    "jobj.h",
+    "fighter.c",
+    "src/sysdolphin/baselib",
+    "initialize.c",
+    "pobj.c",
+    "jobj.c",
+    "cobj.c",
+    "robj.c",
+    "gobj.c",
+    "gobjplink.c",
+    "gobjgxlink.h",
+    "controller.h",
+    "psstructs.h",
+    "psdisptev.c"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching sysdolphin baselib include style to see whether the C-file short quoted include and header `\"baselib/...\"` convention remained stable.",
+    "Search for remaining `#include <baselib/` occurrences after PR 1120 to identify files that may still be vulnerable to the MWCC `-cwd source` behavior.",
+    "Look for other documented MWCC include-resolution or `-cwd source` workarounds in past PRs.",
+    "Check whether non-sysdolphin headers that are included from fighter or other game directories follow the same explicit quoted path convention."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

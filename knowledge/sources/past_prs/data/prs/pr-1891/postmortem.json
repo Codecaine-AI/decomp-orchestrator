@@ -1,0 +1,142 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1891",
+  "pr": {
+    "number": 1891,
+    "title": "Split and link `ftCo_AppealS`, `ft_0DF0`, `ft_0DF1`",
+    "url": "https://github.com/doldecomp/melee/pull/1891",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2025-08-31T08:52:56Z",
+    "merged_at": "2025-08-31T09:06:49Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Split the former `ftCo_AppealS.c` address range into three matching linked units: the remaining common side-appeal logic in `ftCo_AppealS.c`, smash-charge helper logic in new `ft_0DF0.c`, and C-stick/input threshold helpers in new `ft_0DF1.c`. The PR updated splits and build configuration to mark all three objects Matching, added focused headers for the new units, and retargeted includes across fighter common action files. The decomp.dev report shows +1104 matched bytes and +3968 linked bytes, with 32 new matches; reported broken matches are primarily the same functions moving out of the old `ftCo_AppealS` unit into the new split units.",
+  "change_classification": {
+    "primary_type": "split-and-link decomp matching",
+    "categories": [
+      "decomp-matching",
+      "object-splitting",
+      "headers",
+      "include-cleanup",
+      "build-config"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "fighter-input",
+      "smash-charge",
+      "config",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "config/GALE01/splits.txt",
+    "configure.py",
+    "src/melee/ft/chara/ftCommon/ftCo_AppealS.c",
+    "src/melee/ft/chara/ftCommon/ftCo_AppealS.h",
+    "src/melee/ft/ft_0DF0.c",
+    "src/melee/ft/ft_0DF0.h",
+    "src/melee/ft/ft_0DF1.c",
+    "src/melee/ft/ft_0DF1.h",
+    "src/melee/ft/inlines.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/ftcommon.c"
+  ],
+  "what_changed": [
+    "`config/GALE01/splits.txt` changed `ftCo_AppealS.c` from `0x800DE9B8..0x800DF938` to `0x800DE9B8..0x800DEE84`, then added new split ranges for `melee/ft/ft_0DF0.c` at `0x800DEE84..0x800DF1C8` and `melee/ft/ft_0DF1.c` at `0x800DF1C8..0x800DF938`.",
+    "`configure.py` changed `ftCo_AppealS.c` from NonMatching to Matching and added `Object(Matching, \"melee/ft/ft_0DF0.c\")` and `Object(Matching, \"melee/ft/ft_0DF1.c\")`.",
+    "`ftCo_AppealS.c` was reduced from a mixed file containing appeal, smash-charge, and C-stick helpers to side-appeal logic only, including implementations for `ftCo_800DE9B8`, `ftCo_800DE9D8`, `ftCo_800DEA28`, `ftCo_800DEAE8`, `ftCo_800DEBD0`, and the AppealS Anim/IASA/Phys/Coll callbacks.",
+    "New `ft_0DF0.c/.h` contains the `0x800DEE84..0x800DF0D0` smash charge state helpers, including `ftCo_800DEE84`, `ftCo_800DEEA8`, `ftCo_800DEEB8`, `ftCo_800DEEE8`, `ftCo_800DEF38`, and `ftCo_800DF0D0`.",
+    "New `ft_0DF1.c/.h` contains C-stick/input threshold helpers from `0x800DF1C8..0x800DF910`, including `ftCo_800DF1C8`, `ftCo_800DF21C`, `ftCo_800DF50C`, `ftCo_800DF678`, `ftCo_800DF72C`, and related boolean predicates.",
+    "`ftCo_AppealS.h` dropped declarations for functions now owned by `ft_0DF0.h` and `ft_0DF1.h`, and tightened prototypes from `UNK_RET`/`UNK_PARAMS` to typed `bool`, `void`, `Fighter_GObj*`, and `FtMotionId` signatures for the remaining AppealS functions.",
+    "Call sites in common attack, cliff, damage, down, escape, item throw, jump, Peach float attack, `ftcommon.c`, and `fighter.c` were updated to include `ft/ft_0DF0.h` or `ft/ft_0DF1.h` instead of depending on `ftCommon/ftCo_AppealS.h` for unrelated declarations.",
+    "`ft/inlines.h` gained a reusable `canUseCstick(Fighter* fp)` inline using `gm_8016B0FC()` and `it_8026B30C(fp->item_gobj)`, replacing a static inline formerly local to `ftCo_AppealS.c`.",
+    "`ft/types.h` changed `struct ftData_80085FD4_ret::x8` from `u32` to `UNK_T`, consistent with the new `ftCo_800DEAE8` check against `NULL` before selecting left/right appeal motion states."
+  ],
+  "smart_moves": [
+    "The split follows exact contiguous address boundaries from the old monolithic `ftCo_AppealS.c` range, making the decomp.dev broken-match report understandable as relocation rather than lost matching.",
+    "The PR avoided leaving unrelated smash-charge and C-stick helper declarations in `ftCo_AppealS.h`; moving them into `ft_0DF0.h` and `ft_0DF1.h` reduced false coupling between side-appeal code and other fighter action code.",
+    "Moving `canUseCstick` into `ft/inlines.h` made the repeated single-button-mode/item C-stick gate available to the new `ft_0DF1.c` helper family without duplicating a local static inline.",
+    "The `ftCo_AppealS_IASA` rewrite used sequential early-return checks (`RETURN_IF`) for the interrupt chain, preserving the same guard structure while making the long condition more maintainable.",
+    "The matching code retained known matching idioms where needed, such as `PAD_STACK(0x18)` in `ftCo_800DF0D0`, temporary bool locals in C-stick helpers, and an inner redeclaration block in `ftCo_800DEF38`.",
+    "The author updated both object build config and linker split metadata in the same PR, allowing the new source files to become linked matching objects immediately."
+  ],
+  "decomp_lessons": [
+    "When a nominal action file contains multiple unrelated address regions, splitting by real object boundaries can convert a large NonMatching file into several Matching linked objects while clarifying ownership.",
+    "Header cleanup should accompany object splits: callers should include the new owner header for the function family they actually use, not the historical file that happened to contain the declarations.",
+    "Bot reports may list many 'broken matches' after a split because functions moved units; compare with the 'new matches' list and linked-code delta before treating them as regressions.",
+    "Small type corrections can be necessary for newly decompiled logic: here `ftData_80085FD4_ret::x8` became pointer-like `UNK_T` because the new code tests it against `NULL`.",
+    "Reusable input-gating logic belongs in a common inline header when several helpers require the same condition, especially for C-stick predicates gated by single-button mode and held item behavior.",
+    "Retaining address-based names such as `ftCo_800DF1C8` is appropriate when semantic names are not yet evidenced; the useful improvement is separating them into coherent address-range files and typed headers."
+  ],
+  "naming_conventions": [
+    "New split files use unresolved address-range names `ft_0DF0.c` and `ft_0DF1.c`, matching the first address prefix of their contained functions.",
+    "Function names remain address-based `ftCo_800Dxxxx` where semantics are not proven.",
+    "Headers use matching unresolved names `ft_0DF0.h` and `ft_0DF1.h` and declare functions with address comments such as `/* 0DF1C8 */`.",
+    "The AppealS header now reserves `ftCo_AppealS_*` names for the action callbacks and keeps adjacent address-named side-appeal helpers in the same file.",
+    "Prototype refinement preferred project types like `Fighter_GObj*`, `Fighter*`, `Vec2*`, `FtMotionId`, `f32`, and `bool` over `UNK_RET`, `UNK_PARAMS`, and loose `enum_t` where the diff supplied evidence."
+  ],
+  "assembly_or_matching_tactics": [
+    "`ftCo_800DF0D0` keeps `PAD_STACK(0x18)`, indicating stack-shape preservation was needed for matching.",
+    "`ftCo_800DEF38` preserves an inner scoped redeclaration of `SmashAttr* attr` and `Fighter* fp`, a common tactic when source structure must match compiler register/stack behavior.",
+    "`ft_0DF1.c` uses explicit boolean-return predicates with simple `if (...) return true; return false;` forms instead of collapsing to direct expression returns, likely preserving generated code shape.",
+    "`ft_0DF1.c` retains math/input macros such as `ABS` and `SQ` around C-stick threshold checks against `p_ftCommonData` fields.",
+    "The new split ranges include `.sdata2` adjustments: `ftCo_AppealS.c` keeps `0x804D9118..0x804D912C`, `ft_0DF0.c` owns `0x804D9130..0x804D9138`, and `ft_0DF1.c` owns `0x804D9138..0x804D913C`.",
+    "`ftCo_800DEAE8` uses the motion-state table selection expression based on `msid1 >= fp->x18` and checks `ftData_80085FD4(fp, ms->anim_id)->x8 != NULL` before selecting the mirrored side-appeal motion state."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the slice.",
+    "decomp.dev reported `Matched code: 41.08% (+0.03%, +1104 bytes)` and `Linked code: 26.23% (+0.10%, +3968 bytes)`.",
+    "decomp.dev listed 32 new matches, including new matches in `main/melee/ft/ft_0DF0`, `main/melee/ft/ft_0DF1`, and the reduced `main/melee/ft/chara/ftCommon/ftCo_AppealS` unit.",
+    "decomp.dev also listed 26 broken matches in the old `ftCo_AppealS` unit; the evidence indicates these are primarily functions moved into the new split units rather than unmatched code remaining in place."
+  ],
+  "searchable_terms": [
+    "pr-1891",
+    "ribbanya",
+    "ftCo_AppealS",
+    "ft_0DF0",
+    "ft_0DF1",
+    "split and link",
+    "Object Matching",
+    "GALE01 splits",
+    "0x800DEE84",
+    "0x800DF1C8",
+    "0x800DF938",
+    "ftCo_800DEE84",
+    "ftCo_800DEF38",
+    "ftCo_800DF0D0",
+    "ftCo_800DF1C8",
+    "ftCo_800DF50C",
+    "ftCo_800DF910",
+    "canUseCstick",
+    "C-stick",
+    "single-button mode",
+    "gm_8016B0FC",
+    "it_8026B30C",
+    "SmashAttr",
+    "SmashState_PreCharge",
+    "SmashState_Charging",
+    "SmashState_Release",
+    "FtMotionId",
+    "ftData_80085FD4_ret x8",
+    "RETURN_IF",
+    "PAD_STACK"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename `ft_0DF0` smash-charge helpers to semantic names.",
+    "Find later PRs that rename or document the `ft_0DF1` C-stick helper family.",
+    "Search for future changes to `canUseCstick` in `ft/inlines.h` or callers of `ftCo_800DF21C` and `ftCo_800DF50C`.",
+    "Check whether `ftData_80085FD4_ret::x8` receives a concrete pointer type after this PR.",
+    "Look for follow-up splits around adjacent fighter ranges `ft_0D14`, `ftCo_Thrown`, or Donkey Kong common state files."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

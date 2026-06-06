@@ -1,0 +1,125 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-956",
+  "pr": {
+    "number": 956,
+    "title": "frank.py: Restrict rescheduling to .text section",
+    "url": "https://github.com/doldecomp/melee/pull/956",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-07-04T19:34:07Z",
+    "merged_at": "2023-07-04T19:59:18Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Updated tools/frank.py so its profiler-based instruction rescheduling operates only on the MWCC .text/code section rather than scanning and rewriting the entire object file. The script now extracts header, .text, and footer using the object code-size marker and a fixed MWCC code offset, runs rescheduling only on sliced code bytes, then reassembles the object. The PR also cleaned up repeated aligned-search logic and tightened safety checks around code-size mismatches and epilogue-local reorder handling.",
+  "change_classification": {
+    "primary_type": "tooling_bugfix",
+    "categories": [
+      "tooling",
+      "cleanup",
+      "binary_rewriting",
+      "matching_support"
+    ],
+    "systems": [
+      "tools",
+      "frank.py",
+      "object_file_processing"
+    ]
+  },
+  "key_files": [
+    "tools/frank.py"
+  ],
+  "what_changed": [
+    "Added find_aligned(list, seq, idx), a helper that searches for byte sequences only at 4-byte-aligned positions and returns -1 when not found.",
+    "Introduced code_offset = 0x34 with a comment noting MWCC places the .text section at that file offset.",
+    "Factored code-size extraction into get_code_size(object_bytes), reading the 4-byte big-endian code size after CODESIZE_MAGIC.",
+    "Changed the no-code-object path to catch ValueError from get_code_size and write the vanilla object unchanged.",
+    "After reading vanilla and profile object bytes, the tool now slices out header, footer, vanilla .text bytes, and profile .text bytes, so rescheduling acts on code bytes only.",
+    "Tracked epilogue positions in epi_pos_list while scanning PROFILE_EXTRA_BYTES, enabling later epilogue-related reorder logic to inspect only known relevant locations.",
+    "Replaced repeated unaligned .find loops with find_aligned for PROFILE_EXTRA_BYTES, BLR byte sequences, MTLR, and BLR searches.",
+    "Added bounds checks around epilogue-local peephole rescheduling before reading surrounding instructions.",
+    "Changed final code construction from replacing a code region inside the full vanilla object to first producing final .text bytes, then reassembling header + final .text + footer.",
+    "Added a code-size mismatch guard: if stripped profile code length differs from vanilla .text length, the script warns and falls back to vanilla code because relocations may no longer line up.",
+    "Restricted the lmw/lwz/lfd reorder pass to epi_pos_list instead of scanning the entire final byte stream.",
+    "Kept the existing BLR restoration, mtlr/blr reunification, and lmw/lwz/lfd reorder concepts, but moved them into the .text-only processing flow."
+  ],
+  "smart_moves": [
+    "The central fix was to isolate .text before performing byte-level scheduling edits, preventing accidental matches and rewrites in non-code regions of the object file.",
+    "Preserving header and footer bytes separately made the transformation explicit: only .text is mutable, while object metadata and non-code sections remain untouched.",
+    "The profile-code-size mismatch fallback is conservative and decomp-friendly: when stripped profile code cannot map one-to-one to vanilla code, it avoids producing relocated instructions at wrong offsets.",
+    "Using find_aligned consolidates a repeated safety pattern and reduces the chance that byte-pattern searches accidentally match instruction-like data at unaligned offsets.",
+    "Collecting epilogue positions while processing PROFILE_EXTRA_BYTES allowed the later lmw/lwz/lfd pass to be tied to known epilogue areas instead of scanning arbitrary bytes.",
+    "The change retained the no-code-object fast path, so objects without code continue to pass through unchanged."
+  ],
+  "decomp_lessons": [
+    "Binary rewrite tools used for matching should clearly separate code sections from non-code sections before doing pattern replacement; object-wide byte scans are risky.",
+    "For MWCC object files in this context, the .text section can be treated as starting at offset 0x34, with size recoverable from the CODESIZE_MAGIC record.",
+    "When profiler-generated code has a different stripped length than vanilla code, do not blindly use it: relative relocation-sensitive instructions can become invalid if code offsets shift.",
+    "Pattern matching on PowerPC instruction streams should enforce 4-byte alignment.",
+    "Store contextual anchors discovered during one pass, such as epilogue positions, and reuse them to constrain later heuristic reorder passes.",
+    "When a tool is intended to help decomp matching, conservative fallback to vanilla bytes is preferable to producing an object that may silently corrupt non-code data or relocation-sensitive code."
+  ],
+  "naming_conventions": [
+    "Helper names are descriptive and action-oriented, e.g. find_aligned and get_code_size.",
+    "The script uses explicit byte-region names: header, footer, vanilla_bytes, profile_bytes, final_bytes.",
+    "Code-size variables distinguish vanilla and profile values: vanilla_code_size and profile_code_size.",
+    "Epilogue-related state uses epi_pos and epi_pos_list.",
+    "Constants and magic byte arrays remain uppercase, e.g. CODESIZE_MAGIC, PROFILE_EXTRA_BYTES, BLR_BYTE_SEQ_ARRAY, MTLR_BYTE_SEQ, BLR_BYTE_SEQ.",
+    "Opcode mnemonic locals are uppercase, e.g. LWZ, LFS, ADDI, LI, LMW, FDIVS, LFD."
+  ],
+  "assembly_or_matching_tactics": [
+    "Restrict byte-sequence searches and rewrites to the .text section instead of the whole object.",
+    "Use 4-byte-aligned searches for PowerPC instruction patterns.",
+    "Use CODESIZE_MAGIC plus a big-endian 4-byte size field to determine code length.",
+    "Strip PROFILE_EXTRA_BYTES from profile code before comparing/replacing final scheduled code.",
+    "For profile/vanilla schedule differences around inserted bl/nop profiler bytes, compare adjacent vanilla and profile instructions and use vanilla ordering when the profiler schedule swaps them undesirably.",
+    "Restore vanilla BLR-like branch-to-link-register instructions by copying matching aligned vanilla bytes back into final code.",
+    "Reunify separated mtlr/blr instructions by shifting intervening instructions up and moving mtlr closer to blr.",
+    "Apply the lmw/lwz/lfd reorder heuristic only at previously identified epilogue positions.",
+    "Assert final .text length matches expected code_size before reassembling the object."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-956",
+    "frank.py",
+    "frank",
+    "Restrict rescheduling to .text section",
+    "MWCC .text offset",
+    "code_offset 0x34",
+    "CODESIZE_MAGIC",
+    "get_code_size",
+    "find_aligned",
+    "PROFILE_EXTRA_BYTES",
+    "BLR_BYTE_SEQ_ARRAY",
+    "MTLR_BYTE_SEQ",
+    "BLR_BYTE_SEQ",
+    "PowerPC 4-byte alignment",
+    "object file byte rewriting",
+    "profile code size mismatch",
+    "relocations won't line up",
+    "vanilla code fallback",
+    "peephole rescheduling",
+    "epilogue positions",
+    "epi_pos_list",
+    "lmw lwz lfd reorder",
+    "mtlr blr reunify",
+    "non-code regions",
+    "tooling cleanup"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify tools/frank.py after PR 956.",
+    "Search for CODESIZE_MAGIC usage in tooling to confirm object code-size parsing assumptions.",
+    "Look for other binary rewriting scripts that scan entire object files instead of section-limited code bytes.",
+    "Find PRs mentioning profile code size mismatch or relocation alignment problems.",
+    "Search for follow-up changes to lmw/lwz/lfd reorder heuristics or epi_pos_list."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

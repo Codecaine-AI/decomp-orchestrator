@@ -1,0 +1,126 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2039",
+  "pr": {
+    "number": 2039,
+    "title": "vi: Match visual/cutscene functions",
+    "url": "https://github.com/doldecomp/melee/pull/2039",
+    "state": "MERGED",
+    "author": "itsgrimetime",
+    "created_at": "2025-12-30T09:38:14Z",
+    "merged_at": "2026-01-06T00:14:26Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched two visual/cutscene functions in src/melee/vi/vi1201v1.c, replacing placeholder stubs for fn_8031FC30 and fn_8031FCBC and tightening their header prototypes. The matched code drives a camera object animation, triggers frame-based visual/cutscene events, calls cleanup/transition routines at animation end, and unlinks a GObj after a 30-frame counter threshold. Review discussion emphasized avoiding unnecessary ad-hoc externs, preferring proper headers or split correction, using m2c before AI one-shot attempts, reverting accidental dump artifacts, and using project-style bool literals.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "naming",
+      "types-structs",
+      "review-process"
+    ],
+    "systems": [
+      "melee-core",
+      "vi",
+      "visual-cutscene"
+    ]
+  },
+  "key_files": [
+    "src/melee/vi/vi1201v1.c",
+    "src/melee/vi/vi1201v1.h"
+  ],
+  "what_changed": [
+    "Added baselib includes needed by the new matches in vi1201v1.c: <baselib/aobj.h>, <baselib/cobj.h>, and <baselib/gobjplink.h>.",
+    "Implemented fn_8031FC30(HSD_GObj* gobj). It obtains the HSD_CObj with GET_COBJ, advances camera animation via HSD_CObjAnim, checks cobj->aobj->curr_frame against 1.0F, 30.0F, and end_frame, then triggers vi_8031C9B4(0xD, 0), un_8031F9D8(un_804D6FFC, un_804D6FFD), and finally lb_800145F4() plus gm_801A4B60().",
+    "Implemented fn_8031FCBC(HSD_GObj* gobj). It compares global counter un_804D6FF8 as f32 against 30.0F, unlinks the GObj with HSD_GObjPLink_80390228 once the threshold is reached, otherwise increments the counter.",
+    "Updated vi1201v1.h prototypes from UNK_RET/UNK_PARAMS to concrete signatures: un_8031F9D8(u8, u8), fn_8031FC30(HSD_GObj*), and fn_8031FCBC(HSD_GObj*).",
+    "The final changed-file list only includes vi1201v1.c and vi1201v1.h, although review excerpts mention earlier or intermediate hunks in vi1101.c, vi1202.c, and orig/GALE01/sys/.gitkeep that appear not to be part of the final diff slice."
+  ],
+  "smart_moves": [
+    "Converted unknown function declarations into typed prototypes as soon as call evidence was available, which helps later matches avoid UNK_PARAMS propagation.",
+    "Used known HSD access macros and structs, especially GET_COBJ and HSD_CObj->aobj fields, instead of raw object offsets for the matched camera-animation path.",
+    "Modeled animation behavior using explicit frame sentinels: first frame, frame 30, and end_frame. This captures cutscene timing in readable C while preserving match-relevant float comparisons.",
+    "For the short lifetime/countdown function, preserved the apparent signed/global counter behavior and only calls HSD_GObjPLink_80390228 after the 30-frame threshold."
+  ],
+  "decomp_lessons": [
+    "When matching VI/cutscene animation callbacks, inspect HSD_CObjAnim and HSD_AObj frame fields; many actions are keyed directly off curr_frame values and end_frame.",
+    "Do not leave newly understood local functions as UNK_RET/UNK_PARAMS in headers. Concrete HSD_GObj* and primitive parameter types improve both matching and cross-TU readability.",
+    "Review feedback says local extern declarations are usually avoidable. Prefer including or creating the relevant header, and consider whether a symbol actually belongs to the current translation unit when only referenced in that file.",
+    "For AI-assisted matching, reviewers questioned whether m2c was tried. The author noted they would adjust workflow so Claude always attempts m2c first, even if it thinks it can one-shot a function.",
+    "Avoid committing accidental source-dump artifacts such as orig/GALE01/sys/.gitkeep; reviewer explicitly requested revert.",
+    "Use project-preferred C bool literals true and false instead of TRUE and FALSE when touching bool-returning code, per review feedback in related intermediate hunks."
+  ],
+  "naming_conventions": [
+    "Matched functions kept address-derived temporary names fn_8031FC30 and fn_8031FCBC because no semantic names were established in the PR evidence.",
+    "OnEnter/OnFrame suffixes remain in nearby declarations such as un_8031FD18_OnEnter and un_80320490_OnFrame, reflecting existing callback naming style.",
+    "HSD object callback arguments should be typed as HSD_GObj* when the function is installed or used as a GObj process/callback.",
+    "Header comments retain address tags such as /* 31FC30 */ next to declarations."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use m2c as a first-pass aid for decomp attempts before relying on AI-generated source; this was explicitly discussed in review.",
+    "Include specific baselib headers for struct field access: cobj/aobj access required <baselib/cobj.h> and <baselib/aobj.h>, while unlinking a GObj required <baselib/gobjplink.h>.",
+    "Frame comparisons were expressed as exact float constants, e.g. curr_frame == 1.0F, curr_frame == 30.0F, and curr_frame == cobj->aobj->end_frame, which is likely important for matching generated floating-point compare code.",
+    "For fn_8031FCBC, the global integer counter is cast to f32 for comparison against 30.0F before deciding whether to unlink the GObj; preserve this shape if reusing the tactic.",
+    "Replacing raw UNK_PARAMS prototypes with concrete signatures can be part of the match, not just cleanup, because call argument types influence generated code and include requirements."
+  ],
+  "review_feedback": [
+    "ribbanya on orig/GALE01/sys/.gitkeep: \"Revert.\"",
+    "ribbanya on an intermediate vi1101.c hunk: \"Did Claude do this? Did you try using m2c at all?\"",
+    "itsgrimetime replied that Claude sometimes tries its own first pass before creating a scratch and they would adjust it to always attempt m2c first even if it thinks it can one-shot the function.",
+    "ribbanya on vi1201v1.c externs: these externs are not the worst thing, but are never necessary; prefer including the relevant header or creating it, and consider whether symbols belong in the current translation unit when only referenced from the file.",
+    "ribbanya on an intermediate vi1202.c hunk: \"Just change the argument type.\"",
+    "ribbanya on an intermediate vi1202.c hunk: use true and false, not TRUE and FALSE."
+  ],
+  "searchable_terms": [
+    "pr-2039",
+    "vi1201v1",
+    "vi1201v1.c",
+    "vi1201v1.h",
+    "visual",
+    "cutscene",
+    "fn_8031FC30",
+    "fn_8031FCBC",
+    "un_8031F9D8",
+    "un_804D6FFC",
+    "un_804D6FFD",
+    "un_804D6FF8",
+    "HSD_GObj",
+    "HSD_CObj",
+    "HSD_AObj",
+    "GET_COBJ",
+    "HSD_CObjAnim",
+    "curr_frame",
+    "end_frame",
+    "vi_8031C9B4",
+    "lb_800145F4",
+    "gm_801A4B60",
+    "HSD_GObjPLink_80390228",
+    "baselib/aobj.h",
+    "baselib/cobj.h",
+    "baselib/gobjplink.h",
+    "UNK_RET",
+    "UNK_PARAMS",
+    "m2c",
+    "Claude",
+    "extern headers",
+    "true false bool"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename fn_8031FC30 or fn_8031FCBC to semantic VI/cutscene names.",
+    "Search for un_804D6FFC, un_804D6FFD, and un_804D6FF8 to determine whether reviewer feedback about moving externs into a header or current TU was later addressed.",
+    "Search VI cutscene files for similar HSD_CObjAnim curr_frame/end_frame patterns that can reuse the fn_8031FC30 matching tactic.",
+    "Check later vi1201v1.h edits for further replacement of UNK_RET/UNK_PARAMS declarations near un_8031FD18_OnEnter and fn_8031FAA8.",
+    "Review subsequent author PRs for evidence that the workflow changed to always run m2c before AI source attempts."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,124 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1853",
+  "pr": {
+    "number": 1853,
+    "title": "Improve mnmain fuzzy matches",
+    "url": "https://github.com/doldecomp/melee/pull/1853",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-08-19T02:34:58Z",
+    "merged_at": "2025-08-19T03:17:27Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Improved fuzzy matching in src/melee/mn/mnmain.c by reshaping adjacent Vec3 constants into indexed arrays, hiding mn_80229A7C behind a typed static helper plus a small dontinline wrapper, and rewriting several menu construction/control-flow sections to use cleaner loops, locals, stack padding, and StaticModelDesc pointers. The public prototype for mn_80229A7C was removed from mnmain.h because the function became file-local. No PR body or review-comment evidence was present in the slice, so intent is inferred mainly from the title and diff.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "control-flow cleanup",
+      "data-layout cleanup",
+      "stack-layout tuning"
+    ],
+    "systems": [
+      "melee-core",
+      "mn",
+      "main menu"
+    ]
+  },
+  "key_files": [
+    "src/melee/mn/mnmain.c",
+    "src/melee/mn/mnmain.h"
+  ],
+  "what_changed": [
+    "Converted separate adjacent Vec3 statics mn_803EB360/mn_803EB36C and mn_803EB378/mn_803EB384 into two-element Vec3 arrays mn_803EB360[2] and mn_803EB378[2]. Call sites were updated from pointer arithmetic like &mn_803EB360 + condition to indexed expressions such as &mn_803EB360[var_r26 == arg1].",
+    "Changed mn_80229A7C from an externally declared void*(arg0)-style function with #pragma dont_inline into a static typed helper taking struct mn_80229A7C_t*. Added static inline mn_80229A7C_dontinline(void*, int, int) to preserve a non-inlined call shape where needed.",
+    "Removed the mn_80229A7C prototype from src/melee/mn/mnmain.h after making the function static in mnmain.c.",
+    "Adjusted animation frame calculations to use the new Vec3 arrays, for example mn_803EB360[1].x versus mn_803EB360[0].x and mn_803EB378[1].x versus mn_803EB378[0].x.",
+    "Moved HSD_JObj* sp20[4] lower in fn_8022AFEC and added PAD_STACK(0x34), indicating a stack-layout-oriented fuzzy-match improvement.",
+    "Reworked mn_8022B3A0 locals and loops: enlarged local JObj arrays sp48 and sp2C, replaced while/do-while loops with for loops, introduced typed helper locals such as StaticModelDesc* top and Vec3* r31, simplified index variables, and added PAD_STACK(0x14).",
+    "In mn_8022B3A0, replaced repeated MenMainConTop_Top and MenMainCursor_Top field accesses with StaticModelDesc* top locals before HSD_JObjLoadJoint and HSD_JObjAddAnimAll calls.",
+    "In mn_8022B3A0, replaced an inline block that destroyed/recreated description HSD_Text with a direct call to mn_80229A7C(menu_data, menu_data->x0, menu_data->x1), reusing the helper.",
+    "Added PAD_STACK(8) in mn_8022D104, again suggesting stack-shape tuning for matching."
+  ],
+  "smart_moves": [
+    "Grouping adjacent Vec3 globals into two-element arrays made boolean-index selection explicit and avoided awkward address arithmetic on separate symbols, which is both clearer and more likely to match the original data layout.",
+    "Keeping mn_80229A7C typed and static improved local type information while the mn_80229A7C_dontinline wrapper preserved the call/inlining behavior needed for matching a specific call site.",
+    "Removing the header declaration after making mn_80229A7C static avoided exporting an implementation detail and kept the header consistent with linkage.",
+    "Using StaticModelDesc* locals for MenMainConTop_Top and MenMainCursor_Top reduced repeated global field expressions and may influence register allocation in a controllable way.",
+    "Rewriting counter-heavy while loops into compact for loops reduced temporary variables and made menu index relationships, such as 2 * i, easier to see.",
+    "Replacing duplicated HSD_Text update code with mn_80229A7C centralized behavior and helped align the constructed function body with an existing helper's logic."
+  ],
+  "decomp_lessons": [
+    "For fuzzy matches, check whether adjacent scalar/static objects are actually better represented as an array; boolean conditions often become clean array indices and improve both readability and codegen.",
+    "A function can be made static and strongly typed while still preserving no-inline behavior at selected call sites through a tiny wrapper; this is useful when header exposure and matching constraints conflict.",
+    "Stack local order and placement still matter for fuzzy matching. Moving an array declaration and adding PAD_STACK can be a deliberate match tactic rather than cosmetic cleanup.",
+    "When repeated global asset descriptors appear in generated code, introducing a pointer local to the StaticModelDesc can alter register use in useful ways while making the code clearer.",
+    "Prefer explicit indexed loops when they reveal original table indexing; replacing manual increment variables with for-loop indices can reduce fake temporaries in decomp output.",
+    "If a local helper already performs setup/teardown for a menu text object, call it directly rather than duplicating its body, unless the duplicate code is needed for an exact match."
+  ],
+  "naming_conventions": [
+    "Unidentified main-menu symbols retain address-based names such as mn_803EB360, mn_803EB378, mn_803EB6B0, and mn_8022B3A0.",
+    "Static asset descriptors use resource-style names such as MenMainBack_Top, MenMainConTop_Top, and MenMainCursor_Top.",
+    "The temporary wrapper was named mn_80229A7C_dontinline, explicitly documenting its matching purpose rather than pretending it is a separate gameplay/menu concept.",
+    "The internal data struct for mn_80229A7C remained address-based as struct mn_80229A7C_t, matching the project convention for not-yet-semanticized structs."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used Vec3 arrays and boolean indexing to replace pointer arithmetic over adjacent globals: mn_803EB360[var_r26 == arg1] and mn_803EB378[temp_p25 == i]-style patterns.",
+    "Replaced #pragma push / #pragma dont_inline on / #pragma pop around mn_80229A7C with a static inline wrapper that calls the typed static implementation.",
+    "Added PAD_STACK(0x34), PAD_STACK(0x14), and PAD_STACK(8) in affected functions to tune stack frame layout.",
+    "Moved local array declarations, including HSD_JObj* sp20[4], to influence stack order.",
+    "Adjusted local array sizes in mn_8022B3A0 from sp48[1]/sp2C[5] to sp48[12]/sp2C[7], matching observed use through lb_8001204C and later indexed access.",
+    "Introduced locals such as StaticModelDesc* top and Vec3* r31 to guide register allocation and avoid repeated global expressions.",
+    "Changed signed/unsigned local types around menu indices, including u8 temp_r25, u8 var_r16_2, and int temp_r22_2, likely to better match casts and register operations."
+  ],
+  "review_feedback": [
+    "No review comments were included in the provided slice.",
+    "The slice reports one issue comment, but its body was not present, so no specific reviewer guidance can be extracted."
+  ],
+  "searchable_terms": [
+    "pr-1853",
+    "Improve mnmain fuzzy matches",
+    "mnmain",
+    "mnmain.c",
+    "mnmain.h",
+    "mn_80229A7C",
+    "mn_80229A7C_dontinline",
+    "mn_8022B3A0",
+    "fn_8022AFEC",
+    "mn_8022D104",
+    "mn_803EB360",
+    "mn_803EB378",
+    "mn_803EB36C",
+    "mn_803EB384",
+    "mn_803EB390",
+    "mn_803EB6B0",
+    "Vec3 array",
+    "PAD_STACK",
+    "dont_inline",
+    "StaticModelDesc",
+    "MenMainConTop_Top",
+    "MenMainCursor_Top",
+    "HSD_JObjReqAnimAll",
+    "HSD_SisLib_803A6368",
+    "decomp matching",
+    "fuzzy match",
+    "main menu"
+  ],
+  "follow_up_queries": [
+    "Find other mnmain.c fuzzy-match PRs that convert adjacent Vec3 statics into arrays.",
+    "Search for uses of *_dontinline wrappers replacing #pragma dont_inline in the melee codebase.",
+    "Check whether mn_803EB360 and mn_803EB378 later receive semantic names for selected/unselected menu cursor animation ranges.",
+    "Inspect future mn_8022B3A0 changes for whether the stack padding and StaticModelDesc pointer locals remained necessary."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

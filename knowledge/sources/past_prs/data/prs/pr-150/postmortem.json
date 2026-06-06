@@ -1,0 +1,191 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-150",
+  "pr": {
+    "number": 150,
+    "title": "Convert part of player.s to inline ASM with a matched function that simply needs data match",
+    "url": "https://github.com/doldecomp/melee/pull/150",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-04T23:59:07Z",
+    "merged_at": "2021-12-04T23:59:16Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Moved the first block of melee/pl/player.s into a new src/melee/pl/player.c as mostly inline PowerPC asm, added src/melee/pl/player.h with an opaque StaticPlayer definition and prototypes, renamed several player functions from func_80031xxx-style labels to Player_* symbols, and updated assembly callsites across gm, db, gr, lb, text_2, and text_4 to call the new names. One small wrapper, Player_80031DA8, was written in C and calls func_800EED50; Player_GetPtrForSlot has a C version guarded by NON_MATCHING with a note that it matches once data is moved over. The PR also adjusted build inclusion via obj_files.mk and moved a block of .sdata labels out of asm/sdata.s into asm/melee/lb/code_8000F9F8.s, apparently to preserve or improve data ordering for matching.",
+  "change_classification": {
+    "primary_type": "asm-to-c-inline-asm-decomp",
+    "categories": [
+      "decomp-matching",
+      "inline-asm-migration",
+      "headers",
+      "symbol-renaming",
+      "data-ordering",
+      "build-system"
+    ],
+    "systems": [
+      "player",
+      "melee/pl",
+      "asm",
+      "sdata",
+      "include",
+      "obj_files"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/pl/player.c",
+      "role": "New C translation unit containing inline asm versions of Player_GetPtrForSlot, Player_80031790, Player_80031848, Player_80031900, Player_800319C4, Player_80031AD0, Player_80031CB0, Player_80031D2C, plus a C wrapper Player_80031DA8."
+    },
+    {
+      "path": "src/melee/pl/player.h",
+      "role": "New player header with StaticPlayer as an opaque u8[0xE90] struct and public prototypes for the renamed Player_* functions."
+    },
+    {
+      "path": "asm/melee/pl/player.s",
+      "role": "Removed roughly 495 lines of the original player assembly block after migrating it to src/melee/pl/player.c; remaining asm calls were updated to Player_800319C4."
+    },
+    {
+      "path": "include/functions.h",
+      "role": "Renamed unknown player function comments to Player_* names and added void prototypes for helper calls needed by player.c, including func_80068E98, func_800855C8, func_8008578C, func_800867E8, func_8008688C, and func_800EED50."
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "Added $(BUILD_DIR)/src/melee/pl/player.o before the existing asm/melee/pl/player.o so the new C object participates in the link."
+    },
+    {
+      "path": "asm/sdata.s",
+      "role": "Removed a leading block of .sdata labels lbl_804D3740 through lbl_804D37A0."
+    },
+    {
+      "path": "asm/melee/lb/code_8000F9F8.s",
+      "role": "Reintroduced the removed .sdata labels inside the lb assembly file, including strings such as jobj.h, jobj, lobj.h, lobj, lbarq.c, rp, handle, 0, p->size, and %s :."
+    },
+    {
+      "path": "asm/melee/gm/code_801601C4.s",
+      "role": "Updated many branch-and-link targets from func_80031xxx names to Player_80031DA8, Player_80031848, Player_80031AD0, and Player_80031790."
+    },
+    {
+      "path": "asm/melee/db/code_80225374.s",
+      "role": "Updated func_80031724 call to Player_GetPtrForSlot."
+    },
+    {
+      "path": "asm/melee/gr/grshrineroute.s",
+      "role": "Updated func_80031790 and func_80031900 calls to Player_80031790 and Player_80031900."
+    },
+    {
+      "path": "asm/melee/lb/code_80016A54.s",
+      "role": "Updated calls to Player_80031CB0 and Player_80031D2C."
+    },
+    {
+      "path": "asm/melee/text_2.s",
+      "role": "Updated calls to Player_80031DA8 and Player_80031790."
+    },
+    {
+      "path": "asm/melee/text_4.s",
+      "role": "Updated a call to Player_80031DA8."
+    }
+  ],
+  "what_changed": [
+    "Created src/melee/pl/player.c and moved the initial player.s function block into it as inline asm functions using nofralloc.",
+    "Introduced Player_CheckSlot(s32 slot, u32 line) as an inline C helper that reports \"cant get player struct! %d\\n\" and asserts with __FILE__, a line value, and \"0\" when the slot check fails.",
+    "Added a guarded C implementation of Player_GetPtrForSlot under #ifdef NON_MATCHING with the comment \"Matches when everything is moved over\"; the active fallback remains an inline asm body.",
+    "Added a fully C Player_80031DA8 wrapper that forwards param_1 and param_2 to func_800EED50.",
+    "Renamed player functions in declarations and assembly callsites from raw func_80031724, func_80031790, func_80031848, func_80031900, func_800319C4, func_80031AD0, func_80031CB0, func_80031D2C, and func_80031DA8 to Player_GetPtrForSlot and Player_80031xxx names.",
+    "Added src/melee/pl/player.h with StaticPlayer defined as an opaque struct containing u8 data[0xE90] and prototypes for the new Player_* symbols.",
+    "Added src/melee/pl/player.o to obj_files.mk immediately before asm/melee/pl/player.o.",
+    "Moved .sdata labels lbl_804D3740 through lbl_804D37A0 from global asm/sdata.s into asm/melee/lb/code_8000F9F8.s.",
+    "Added or concretized function prototypes in include/functions.h for helper functions called by the new player.c inline asm/C code."
+  ],
+  "smart_moves": [
+    "Used inline asm as an intermediate decomp step, reducing standalone assembly while preserving exact codegen for functions that were not yet fully translated.",
+    "Kept the old assembly instruction comments and labels inside player.c, making the migration reviewable against the deleted player.s block and preserving address-level searchability.",
+    "Renamed all known callsites to the new Player_* symbols in the same PR, avoiding mixed func_80031xxx and Player_* references.",
+    "Introduced an opaque StaticPlayer with the known stride size, 0xE90, so pointer arithmetic and function signatures could be expressed without needing a complete player struct layout.",
+    "Isolated the potentially matchable C version of Player_GetPtrForSlot behind NON_MATCHING instead of forcing an unready C translation into the build.",
+    "Handled data-order side effects by relocating the affected .sdata block rather than leaving global sdata layout changes implicit.",
+    "Added the new C object before the remaining asm player object, which is important when splitting a module while preserving link order and symbol ownership."
+  ],
+  "decomp_lessons": [
+    "When converting only part of an asm file, add the new C object adjacent to the remaining asm object in obj_files.mk to preserve link order as much as possible.",
+    "For partial struct knowledge, an opaque byte-array struct can be sufficient to express globals, function returns, and array stride while delaying field naming until evidence improves.",
+    "Rename callsites in assembly as soon as functions get subsystem ownership; even if the implementation remains inline asm, Player_* symbols are more searchable and communicate module boundaries.",
+    "A function can be marked as logically matched but still blocked by data placement; keep the C candidate guarded and document the dependency, as done by the Player_GetPtrForSlot NON_MATCHING block.",
+    "Moving code from .s to inline asm can expose data-order problems; inspect .sdata/.sdata2 placement and be ready to move data labels to the translation unit that owns the order.",
+    "Small wrapper functions are good early C wins: Player_80031DA8 reduced to a direct func_800EED50 call while larger nearby routines stayed inline asm."
+  ],
+  "naming_conventions": [
+    "Player_GetPtrForSlot was used for the previously anonymous func_80031724, showing a preference for a descriptive name once behavior is known.",
+    "Less-understood player routines were renamed with a subsystem prefix plus address suffix, such as Player_80031790, Player_80031848, Player_80031900, Player_800319C4, Player_80031AD0, Player_80031CB0, Player_80031D2C, and Player_80031DA8.",
+    "The player header used include guard _player_h_, matching the simple lowercase filename style present in this early codebase slice.",
+    "The temporary/opaque struct name StaticPlayer was used for the player data array at lbl_80453080 with size 0xE90.",
+    "Parameter names in partially understood prototypes stayed generic where behavior was not documented, e.g. param_1, param_2, id, and slot."
+  ],
+  "assembly_or_matching_tactics": [
+    "Inline asm functions were declared with asm return/type syntax and nofralloc to preserve original prologues/epilogues.",
+    "Original address comments were retained in player.c, enabling byte-for-byte comparison with the deleted asm/melee/pl/player.s contents.",
+    "The active Player_GetPtrForSlot remained inline asm while a C candidate was guarded by NON_MATCHING, signaling that data layout/order rather than code logic was the remaining blocker.",
+    "The PR updated branch targets in assembly files without changing instructions, e.g. bl func_80031724 became bl Player_GetPtrForSlot and bl func_80031DA8 became bl Player_80031DA8.",
+    "Data labels were moved wholesale from asm/sdata.s into asm/melee/lb/code_8000F9F8.s, preserving labels and contents while changing ownership/location.",
+    "The migrated routines kept references to raw labels such as lbl_80453080, lbl_803BCDC0, lbl_803BCDE0, lbl_803BCE44, lbl_803BCE60, and lbl_804D3940 where stronger names were not yet available."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-150",
+    "PsiLupan",
+    "player-match",
+    "player.s",
+    "src/melee/pl/player.c",
+    "src/melee/pl/player.h",
+    "StaticPlayer",
+    "Player_GetPtrForSlot",
+    "Player_CheckSlot",
+    "Player_80031790",
+    "Player_80031848",
+    "Player_80031900",
+    "Player_800319C4",
+    "Player_80031AD0",
+    "Player_80031CB0",
+    "Player_80031D2C",
+    "Player_80031DA8",
+    "func_80031724",
+    "func_80031790",
+    "func_80031848",
+    "func_80031900",
+    "func_800319C4",
+    "func_80031AD0",
+    "func_80031CB0",
+    "func_80031D2C",
+    "func_80031DA8",
+    "lbl_80453080",
+    "lbl_803BCDC0",
+    "lbl_803BCDE0",
+    "lbl_803BCE44",
+    "lbl_803BCE60",
+    "lbl_804D3940",
+    "lbl_804D3740",
+    "lbl_804D37A0",
+    "asm/sdata.s",
+    "code_8000F9F8.s",
+    "NON_MATCHING",
+    "nofralloc",
+    "0xE90",
+    "obj_files.mk",
+    "cant get player struct"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that replace inline asm in src/melee/pl/player.c with C implementations.",
+    "Find later PRs that define fields for StaticPlayer instead of u8 data[0xE90].",
+    "Find later PRs that resolve the Player_GetPtrForSlot data match blocker mentioned by the NON_MATCHING comment.",
+    "Search for subsequent renames of Player_80031790, Player_80031848, Player_80031900, Player_800319C4, Player_80031AD0, Player_80031CB0, Player_80031D2C, and Player_80031DA8.",
+    "Search for later cleanup of lbl_80453080 and the moved lbl_804D3740-lbl_804D37A0 sdata labels."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

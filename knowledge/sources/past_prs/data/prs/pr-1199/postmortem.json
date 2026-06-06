@@ -1,0 +1,144 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1199",
+  "pr": {
+    "number": 1199,
+    "title": "Create `scratches.txt` and `melee-scratch-tracker`",
+    "url": "https://github.com/doldecomp/melee/pull/1199",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-02-10T22:28:41Z",
+    "merged_at": "2024-02-10T22:31:04Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added a repo-level database of decomp.me Melee scratches at `config/GALE01/scratches.txt` and introduced a Rust workspace tool, `melee-scratch-tracker`, to seed/update that file from the decomp.me API and list scratches by address. The PR formalized a convention where integrated scratches are manually marked `OK` instead of a percent completion. There were no review comments in the slice, so rationale comes mainly from the PR body and diffs.",
+  "change_classification": {
+    "primary_type": "tooling",
+    "categories": [
+      "decomp-matching",
+      "tooling",
+      "metadata-tracking",
+      "config"
+    ],
+    "systems": [
+      "repo-root",
+      "config/GALE01",
+      "tooling",
+      "rust-workspace",
+      "decomp.me-integration"
+    ]
+  },
+  "key_files": [
+    "config/GALE01/scratches.txt",
+    "tools/scratch-tracker/Cargo.toml",
+    "tools/scratch-tracker/src/main.rs",
+    "tools/scratch-tracker/src/decompme_api.rs",
+    "tools/scratch-tracker/src/scratch_config.rs",
+    "tools/scratch-tracker/src/scratch.rs",
+    "tools/scratch-tracker/src/address.rs",
+    "tools/scratch-tracker/src/dtk_config.rs",
+    "tools/scratch-tracker/src/parse.rs",
+    "tools/scratch-tracker/LICENSE",
+    "Cargo.toml",
+    "Cargo.lock",
+    "tools/replace-symbols/Cargo.toml"
+  ],
+  "what_changed": [
+    "Created `config/GALE01/scratches.txt` with 4362 scratch records in a stable text format: `name = completion:address; // author:... id:... parent:... updated:... created:...`.",
+    "Added `tools/scratch-tracker` as a Rust package named `melee-scratch-tracker` in the workspace.",
+    "Implemented CLI subcommands `list { addr }`, `refresh`, `seed { from }`, and `update`.",
+    "Implemented `cargo run -rp melee-scratch-tracker update` as the documented path for pulling new scratches from decomp.me.",
+    "Implemented address-aware listing, demonstrated in the PR with `cargo run -rp melee-scratch-tracker list 0x801450A0` producing name, author, completion, and decomp.me scratch URL columns.",
+    "Added parsing and serialization for scratch completion values, including numeric percentages and the special `OK` status for manually confirmed integrated scratches.",
+    "Added `Address` states for `TODO`, `INLINE`, numeric `0x????????`, `UNKNOWN`, and `ERROR`, with display formatting preserving uppercase canonical address output.",
+    "Added decomp.me API integration against `https://decomp.me/api/scratch` with preset `63`, JSON parsing, pagination, retry/backoff, gzip/brotli support, and update stopping once an already-known creation time is reached.",
+    "Added logic to resolve scratch addresses from `config/GALE01/symbols.txt` by symbol name and to heuristically parse 8-digit in-range addresses from scratch names.",
+    "Added duplicate-id handling, merge/update logic, parse failure bailouts, and family/parent graph validation and refresh support.",
+    "Added many Rust dependencies to `Cargo.lock`, including `reqwest`, `serde`, `serde_json`, `time`, `nom`, `petgraph`, `dashmap`, `rayon`, `backoff`, and logging/CLI crates.",
+    "Changed `tools/replace-symbols/Cargo.toml` to depend on `melee-utils` by path only, consistent with the new workspace usage."
+  ],
+  "smart_moves": [
+    "Kept scratch data in a plain text config file, making it searchable, diffable, and easy to manually mark as integrated.",
+    "Separated tool concerns into focused modules: API fetching, scratch config parsing/writing, address parsing, symbol config lookup, and core scratch model.",
+    "Introduced `OK` as a completion value rather than deleting completed scratch records, preserving provenance while distinguishing integrated work from merely 100% decomp.me matches.",
+    "Used `symbols.txt` to resolve named scratches to known addresses, making scratch tracking useful even when decomp.me scratch names do not contain explicit addresses.",
+    "Sorted saved scratches deterministically by address, completion, timestamps, author, and id via `Scratch::txt_order`, improving reviewability of future updates.",
+    "Used update-time/creation-time metadata and duplicate-id checks to make repeated API syncs safer.",
+    "Recognized parent/child scratch relationships through `parent:` metadata and added graph checks to catch cyclic family relationships.",
+    "Made address listing output compact and column-aligned so decompers can quickly compare multiple scratches for the same function/address."
+  ],
+  "decomp_lessons": [
+    "External decomp.me scratch work should be tracked as first-class repo metadata when it can guide matching or integration work.",
+    "A scratch database should preserve author, id, parent, created, and updated metadata; this enables attribution, lineage tracking, and safe refresh/update behavior.",
+    "Do not treat 100% scratch completion as equivalent to integration into the codebase; this PR used `OK` only after manual confirmation.",
+    "Address lookup can combine explicit address parsing with symbol-table resolution, which is useful because scratch names may be human-friendly symbols rather than raw addresses.",
+    "For large generated-but-curated metadata files, deterministic serialization and stable sort order are important for manageable diffs.",
+    "Tooling that fetches public API data should include retry/backoff, pagination handling, and a bounded update mode rather than blindly refetching everything each time.",
+    "Config parsers should fail loudly on malformed records before rewriting, as `scratch_config::load` bails if any scratch lines fail to parse."
+  ],
+  "naming_conventions": [
+    "`scratches.txt` entries use `Name = Completion:Address; // key:value key:value ...` formatting.",
+    "Integrated scratches are marked with completion `OK`; non-integrated scratches use a percentage such as `100%`, `99.87%`, or `8.33%`.",
+    "Address fields use canonical forms including `TODO`, `UNKNOWN`, `INLINE`, `ERROR`, or `0x` plus eight uppercase hex digits.",
+    "Scratch metadata keys evidenced in the file/parser include `author`, `id`, `parent`, `updated`, and `created`.",
+    "The Rust package is named `melee-scratch-tracker`, matching the invocation `cargo run -rp melee-scratch-tracker ...`.",
+    "Tool modules use descriptive Rust snake_case filenames: `decompme_api.rs`, `scratch_config.rs`, `dtk_config.rs`, `address.rs`, `parse.rs`, and `scratch.rs`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use `melee-scratch-tracker list 0xADDRESS` to find decomp.me scratches targeting a specific function address before starting or reviewing matching work.",
+    "Use `scratches.txt` to identify high-completion or already integrated (`OK`) scratch candidates for a symbol.",
+    "Use parent scratch metadata to trace derivative scratch attempts and avoid losing lineage when evaluating which scratch to integrate.",
+    "Use symbol-name-to-address resolution from `config/GALE01/symbols.txt` to connect decomp.me scratch names to repo addresses.",
+    "Evidence for direct assembly matching tactics is weak in this PR; the changes are primarily tracking/tooling rather than function decompilation."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The PR was merged quickly on the same day it was opened, but the slice provides no reviewer rationale."
+  ],
+  "searchable_terms": [
+    "scratches.txt",
+    "melee-scratch-tracker",
+    "decomp.me",
+    "decompme_api",
+    "scratch tracker",
+    "scratch_config",
+    "config/GALE01/scratches.txt",
+    "cargo run -rp melee-scratch-tracker update",
+    "cargo run -rp melee-scratch-tracker list",
+    "Completion::Ok",
+    "OK:0x",
+    "TODO address",
+    "UNKNOWN address",
+    "INLINE address",
+    "ERROR address",
+    "Address::Value",
+    "symbols.txt address resolution",
+    "preset 63",
+    "Scratch::txt_order",
+    "fix_families",
+    "parent scratch",
+    "reqwest",
+    "serde_json",
+    "nom parser",
+    "petgraph",
+    "backoff",
+    "rayon",
+    "ribbanya"
+  ],
+  "follow_up_queries": [
+    "Find later PRs modifying `config/GALE01/scratches.txt` to mark scratches `OK` after integration.",
+    "Find later PRs extending `melee-scratch-tracker` with TU-wide listing or other planned features.",
+    "Search for usages of `cargo run -rp melee-scratch-tracker list` in developer workflow notes or comments.",
+    "Find PRs that use scratch IDs from `scratches.txt` as evidence for matching functions.",
+    "Review later changes to `scratch_config.rs` for format or parser convention changes."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

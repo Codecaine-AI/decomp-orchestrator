@@ -1,0 +1,139 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-641",
+  "pr": {
+    "number": 641,
+    "title": " Fighter cleanup pass 2 by Altimor",
+    "url": "https://github.com/doldecomp/melee/pull/641",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-03T10:56:45Z",
+    "merged_at": "2023-01-05T07:33:29Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Fighter cleanup pass that introduced a C implementation of Fighter_SetupParts in src/melee/ft/ftparts.c, renamed the old func_800743E0 symbol to Fighter_SetupParts across assembly, declarations, and Fighter_Create, renamed lbRefract func_800226A8 to lbRefract_PObjLoad, and moved the func_80081298 declaration from fighter.h to ftcliffcommon.h. The new Fighter_SetupParts code documents and reproduces the fighter JObj traversal used to populate FighterBone entries and count DObjs, with explicit bounds/mismatch asserts against ftPartsTable parts_num.",
+  "change_classification": {
+    "primary_type": "cleanup",
+    "categories": [
+      "cleanup",
+      "headers",
+      "symbol_renaming",
+      "c_decompilation",
+      "fighter_parts"
+    ],
+    "systems": [
+      "fighter",
+      "ftparts",
+      "lbrefract",
+      "include",
+      "asm"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/ftparts.c",
+    "asm/melee/ft/ftparts.s",
+    "asm/melee/ft/ft_unknown_006.s",
+    "src/melee/ft/fighter.c",
+    "include/functions.h",
+    "src/melee/lb/lbrefract.h",
+    "asm/melee/lb/lbrefract_002.s",
+    "src/melee/ft/fighter.h",
+    "src/melee/ft/ftcliffcommon.h",
+    "src/melee/ft/code_80081B38.c"
+  ],
+  "what_changed": [
+    "Added new source file src/melee/ft/ftparts.c containing Fighter_SetupParts(HSD_GObj* fighter_obj).",
+    "Renamed func_800743E0 to Fighter_SetupParts in asm/melee/ft/ftparts.s, include/functions.h, asm/melee/ft/ft_unknown_006.s, and the Fighter_Create call site in src/melee/ft/fighter.c.",
+    "Implemented Fighter_SetupParts as an iterative traversal over a fighter's HSD_JObj hierarchy, filling fighter->x5E8_fighterBones[part] via func_80074194 and tracking fighter->x5EC_dobj_list.count.",
+    "Added local ftparts traversal helpers/macros MAX_FT_PARTS, JOBJ_NEXT, JOBJ_PARENT, and JOBJ_CHILD, and extern declarations for func_8007506C and func_80074194.",
+    "Added safety checks in Fighter_SetupParts: assert if ftPartsTable[fighter->x4_fighterKind]->parts_num exceeds MAX_FT_PARTS, and assert if the final traversed part count does not equal parts_num.",
+    "Renamed lbrefract func_800226A8 to lbRefract_PObjLoad in src/melee/lb/lbrefract.h and asm/melee/lb/lbrefract_002.s, including class-info callback references in ftparts.s and lbrefract_002.s.",
+    "Cleaned trailing whitespace on several blr/blrl lines in asm/melee/lb/lbrefract_002.s.",
+    "Moved BOOL func_80081298(HSD_GObj* gobj) declaration out of src/melee/ft/fighter.h and into src/melee/ft/ftcliffcommon.h.",
+    "Added #include <melee/ft/ftcliffcommon.h> to src/melee/ft/code_80081B38.c so the moved func_80081298 declaration remains available where needed."
+  ],
+  "smart_moves": [
+    "Converted the opaque func_800743E0 name to the descriptive Fighter_SetupParts name at both C and assembly call sites, preserving linkage while making the fighter creation path easier to read.",
+    "Kept traversal null-safe by wrapping direct HSD_JObj next/parent/child access in JOBJ_* macros that return NULL when the input JObj is NULL.",
+    "Encoded the original traversal as an iterative depth-first walk with comments explaining the left descent, bottom-node left-to-right visit, and climb back up to continue right.",
+    "Preserved runtime sanity checks from the original logic with OSReport and __assert messages for too many fighter parts and mismatched part counts.",
+    "Improved header ownership by relocating func_80081298 from broad fighter.h to ftcliffcommon.h, reducing unrelated exposure in the central fighter header.",
+    "Renamed lbRefract_PObjLoad based on its use as a PObj load callback, including references stored into class-info fields, which gives future decomp work a more semantically useful anchor."
+  ],
+  "decomp_lessons": [
+    "When decompiling fighter setup code, name functions according to their role in the fighter lifecycle; Fighter_SetupParts is more searchable and maintainable than an address-based func_* name.",
+    "Tree traversals over HSD_JObj can be represented in C without recursion by tracking current jobj, tree_depth, and explicit next/parent/child transitions.",
+    "For matching old code that walks object trees, preserve the exact order of traversal and side effects: skipped parts still increment part, func_80074194 receives the current bone, current jobj, dobj_count pointer, and tree_depth, and the final dobj_count is written back to the fighter.",
+    "Header declarations should live with the subsystem that owns the behavior; cliff-common functions should be declared in ftcliffcommon.h rather than fighter.h.",
+    "Renaming an assembly symbol requires updating every assembly branch/callback reference and C declaration/call site together to avoid split names.",
+    "Callback symbols used in class initialization, such as lbRefract_PObjLoad, are good candidates for semantic naming because their storage location and type hint at their purpose."
+  ],
+  "naming_conventions": [
+    "Fighter lifecycle helpers use the Fighter_* prefix, as in Fighter_SetupParts.",
+    "Library refract helpers use an lbRefract_* prefix, as in lbRefract_PObjLoad.",
+    "Temporary object-tree access helpers are uppercase macro-style names, e.g. JOBJ_NEXT, JOBJ_PARENT, JOBJ_CHILD.",
+    "The PR keeps existing address-based func_* names for still-unidentified helpers such as func_8007506C and func_80074194 rather than inventing names without evidence.",
+    "Fighter enum constants use FTKIND_* naming, visible in surrounding fighter.h context."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used assembly symbol renames rather than behavior changes for func_800743E0 -> Fighter_SetupParts and func_800226A8 -> lbRefract_PObjLoad.",
+    "Updated lis/addi relocation operands in assembly from func_800226A8@ha/@l to lbRefract_PObjLoad@ha/@l where the function pointer is installed.",
+    "Maintained branch targets and instruction bytes while changing only symbol names in assembly call sites, e.g. the bl at 800BE9D4 now targets Fighter_SetupParts.",
+    "The C Fighter_SetupParts implementation mirrors a depth-first JObj walk using part, tree_depth, and dobj_count locals, likely chosen to match existing codegen/control flow.",
+    "The implementation uses explicit NULL checks and continue/break structure to model the original traversal paths: descend child if not JOBJ_INSTANCE, otherwise visit next sibling, otherwise climb parents until a next sibling exists or traversal finishes."
+  ],
+  "review_feedback": [
+    "No issue comments or review comments were present in the provided PR slice.",
+    "One review is recorded in the metadata, but no review body or actionable feedback is included in the excerpt.",
+    "PR body notes that this includes equivalent commits from PR #636 up to commit 76aae6e1526ea90b8b5717c6f6e5b39668495644 and got stuck on commit 178ba6df7efba665b253ddcc100d74d6ab0ed488."
+  ],
+  "searchable_terms": [
+    "PR641",
+    "fighter cleanup pass 2",
+    "Altimor",
+    "ribbanya",
+    "Fighter_SetupParts",
+    "func_800743E0",
+    "ftparts.c",
+    "ftparts.s",
+    "Fighter_Create",
+    "fighter parts num over",
+    "fighter parts num not match",
+    "ftPartsTable",
+    "MAX_FT_PARTS",
+    "FighterBone",
+    "x5E8_fighterBones",
+    "x5EC_dobj_list",
+    "dobj_count",
+    "tree_depth",
+    "HSD_JObj",
+    "JOBJ_INSTANCE",
+    "JOBJ_NEXT",
+    "JOBJ_PARENT",
+    "JOBJ_CHILD",
+    "func_80074194",
+    "func_8007506C",
+    "lbRefract_PObjLoad",
+    "func_800226A8",
+    "lbrefract_002.s",
+    "ftcliffcommon.h",
+    "func_80081298",
+    "header cleanup"
+  ],
+  "follow_up_queries": [
+    "Check PR #636 and commit 76aae6e1526ea90b8b5717c6f6e5b39668495644 for the source of the equivalent fighter cleanup commits referenced in the PR body.",
+    "Investigate commit 178ba6df7efba665b253ddcc100d74d6ab0ed488 to understand what blocked further porting in this cleanup pass.",
+    "Look for later PRs that further decompile or rename func_80074194 and func_8007506C, since they are central to Fighter_SetupParts.",
+    "Search later history for movement of Fighter_SetupParts declaration from include/functions.h into a more specific ftparts header.",
+    "Verify whether MAX_FT_PARTS 140 becomes a named constant in a shared fighter parts header in later cleanup work."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

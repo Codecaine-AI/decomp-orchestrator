@@ -1,0 +1,198 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1971",
+  "pr": {
+    "number": 1971,
+    "title": "Misc Mn/Gm work",
+    "url": "https://github.com/doldecomp/melee/pull/1971",
+    "state": "MERGED",
+    "author": "sadkellz",
+    "created_at": "2025-10-24T20:27:06Z",
+    "merged_at": "2025-10-24T20:51:41Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "PR 1971 was a mixed menu/game-mode decomp cleanup and matching pass. It introduced a semantic `AnimLoopSettings` struct for three-float animation ranges that had previously been typed as `Vec3`, propagated that type through `mnmain`, `mndeflicker`, `mnsound`, `mninfo`, and `gmtitle`, added initial `mndatadel` source/static-header work for warning modal animation setup, and simplified `efAsync_8006729C` to reach a full match. The decomp.dev bot reported one new match, `efAsync_8006729C` at 100%, plus large improvements for `mnDataDel_8024EEC0` and `fn_8024ECCC`.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "type-recovery",
+      "semantic-refactor",
+      "menu-decomp"
+    ],
+    "systems": [
+      "menu",
+      "game-mode",
+      "effect",
+      "baselib-jobj",
+      "sislib"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ef/efasync.c",
+      "why": "Simplified `efAsync_8006729C` control flow and table access; bot reported this function became a 100% match."
+    },
+    {
+      "path": "src/melee/mn/types.h",
+      "why": "Added `struct AnimLoopSettings { f32 start_frame; f32 end_frame; f32 loop_frame; }`, replacing overloaded `Vec3` use for animation frame ranges."
+    },
+    {
+      "path": "src/melee/mn/forward.h",
+      "why": "Added forward declaration for `AnimLoopSettings` so menu/game-mode headers could refer to the recovered type."
+    },
+    {
+      "path": "src/melee/mn/mnmain.c",
+      "why": "Bulk-converted menu animation tables and helper functions from `Vec3` fields `.x/.y/.z` to `AnimLoopSettings` fields `.start_frame/.end_frame/.loop_frame`."
+    },
+    {
+      "path": "src/melee/mn/mnmain.h",
+      "why": "Updated prototypes for `mn_8022ED6C`, `mn_8022EE84`, and `mn_8022EFD8` to accept `AnimLoopSettings*`."
+    },
+    {
+      "path": "src/melee/mn/mndatadel.c",
+      "why": "Added initial C implementations/placeholders for data-delete warning modal behavior, including `fn_8024ECCC` and `mnDataDel_8024EEC0`."
+    },
+    {
+      "path": "src/melee/mn/mndatadel.static.h",
+      "why": "New static header captured local data types and constants for data-delete warning UI, including `WarnCmnData`, `WarnCommonJoints`, `MnDataDelData`, static model/data symbols, and small JObj helper inlines."
+    },
+    {
+      "path": "src/melee/gm/gmtitle.c",
+      "why": "Retyped title-screen animation constants from `Vec3` to `AnimLoopSettings` and updated call sites to semantic fields."
+    },
+    {
+      "path": "src/melee/mn/mndeflicker.c",
+      "why": "Retyped deflicker animation frame ranges and updated `mn_8022EC18`/end-frame checks."
+    },
+    {
+      "path": "src/melee/mn/mnsound.c",
+      "why": "Retyped sound menu animation table and local variables to `AnimLoopSettings`."
+    },
+    {
+      "path": "src/melee/mn/mninfo.c",
+      "why": "Retyped an info-menu animation table from `Vec3` to `AnimLoopSettings`."
+    },
+    {
+      "path": "src/melee/mn/mndatadel.h",
+      "why": "Replaced many `UNK_RET`/`UNK_PARAMS` prototypes with typed `void`, `HSD_GObj*`, and `u8` signatures where known."
+    }
+  ],
+  "what_changed": [
+    "`efAsync_8006729C` was rewritten from nested conditionals and commented alternate code into a compact early-return form using `struct _struct_efAsync_803C025C_0xC* entry = &efAsync_803C025C[index]`, bounds checks for `index >= 50 || index < 0`, a null `ef_DAT_file` guard, then `lbDvd_800178E8(...)`.",
+    "`AnimLoopSettings` was introduced in `mn/types.h` with fields `start_frame`, `end_frame`, and `loop_frame`, preserving the existing 3-float layout formerly represented by `Vec3`.",
+    "Large menu animation data arrays and constants in `mnmain.c` were retyped from `Vec3` to `AnimLoopSettings`, including `mn_803EAE8C`, `mn_803EB354`, `mn_803EB360`, `mn_803EB378`, and many other `mn_803EB*` tables.",
+    "Animation helper signatures in `mnmain.h` and `mnmain.c` changed from `Vec3*` to `AnimLoopSettings*`: `mn_8022ED6C`, `mn_8022EE84`, and `mn_8022EFD8`.",
+    "Call sites were updated from positional vector fields like `.x`, `.y`, `.z` to semantic fields like `.start_frame`, `.end_frame`, and `.loop_frame` across menu, deflicker, sound, info, and title code.",
+    "`mndatadel.c` went from empty to a 155-line source file with placeholders for remaining functions plus partial implementations of `fn_8024ECCC` and `mnDataDel_8024EEC0`.",
+    "`fn_8024ECCC` was documented as animating the warning modal and handles current frame checks, panel/exclamation animation, SisLib text creation/destruction, cursor state animation, and GObj cleanup.",
+    "`mnDataDel_8024EEC0` creates the warning modal GObj, loads its JObj tree, attaches animation, hides warning arrow/progress-bar joints, initializes yes/no cursor animation, and swaps cursor X positions for US language.",
+    "`mndatadel.static.h` added recovered local structures, joint indices, static data declarations, and helper inlines for finding/hiding JObj children.",
+    "`mndatadel.h` replaced many unknown prototypes with better typed signatures, including `fn_8024ECCC(HSD_GObj*)`, `mnDataDel_8024EEC0(void)`, and `mnDataDel_8024FE4C(u8)`."
+  ],
+  "smart_moves": [
+    "Recovering `AnimLoopSettings` was a high-value semantic type recovery: it kept ABI/layout compatibility with `Vec3` while making frame-range logic self-documenting.",
+    "The field rename from `.x/.y/.z` to `.start_frame/.end_frame/.loop_frame` made dozens of animation conditionals easier to audit without changing the three-float data representation.",
+    "The `efAsync_8006729C` rewrite used early returns and a table-entry pointer to eliminate awkward nested logic and commented alternatives; this was confirmed by the bot as a new 100% match.",
+    "Adding a file-local static header for `mndatadel` kept recovered internal structures and constants near the translation unit instead of polluting the public header.",
+    "Naming warning-modal joint indices as `WARN_JOINT_*` turned magic joint numbers into searchable, reusable UI structure knowledge.",
+    "Small helpers such as `JObj_HideChildAtIdx` captured repeated `lb_80011E24` plus `HSD_JObjSetFlagsAll(..., JOBJ_HIDDEN)` behavior, clarifying intent in the newly decompiled modal setup.",
+    "Typed prototypes in `mndatadel.h` reduced reliance on `UNK_RET`/`UNK_PARAMS` while leaving still-unknown functions as placeholders rather than overclaiming."
+  ],
+  "decomp_lessons": [
+    "When a three-float data table is being used as animation timing rather than coordinates, introduce a semantic struct with the same layout instead of continuing to overload `Vec3`.",
+    "Semantic field names can improve future matching work: `.start_frame`, `.end_frame`, and `.loop_frame` expose intent in frame comparisons, loop resets, and `HSD_JObjReqAnim*` calls.",
+    "Forward-declare recovered shared structs in the subsystem `forward.h` when multiple C files and public headers need pointer-level access.",
+    "Static headers are useful for translation-unit-local recovered data, enums, inlines, and static symbols, especially when public headers should only expose callable API.",
+    "Partial decomp progress is still useful: this PR left many `mndatadel` functions as `/// #symbol` placeholders but added enough surrounding types and helpers to improve two functions substantially.",
+    "Do not erase matching-specific idioms casually: `mn_8022ED6C` and `mn_8022EE84` retained volatile casts around the start-frame load, indicating that exact load behavior mattered for codegen.",
+    "Type recovery can cascade across systems; once `AnimLoopSettings` was introduced, related data in `mnmain`, `mndeflicker`, `mnsound`, `mninfo`, and `gmtitle` could be made consistent."
+  ],
+  "naming_conventions": [
+    "`AnimLoopSettings` names a recovered 0xC-byte three-float animation range/loop descriptor.",
+    "`AnimLoopSettings.start_frame` replaces prior `.x` accesses when requesting or checking the beginning frame.",
+    "`AnimLoopSettings.end_frame` replaces prior `.y` accesses when checking animation completion or clamp limits.",
+    "`AnimLoopSettings.loop_frame` replaces prior `.z` accesses for loop restart frames; comments indicate a sentinel value controls non-looping behavior, though the diff has inconsistent wording between `-0.1f` checks and a `-1.0f` field comment.",
+    "`WARN_JOINT_*` enum names identify warning modal JObj children, including panel, yes/no cursors, exclamation mark/arrow, and progress bar joints.",
+    "`mndatadel.static.h` follows the project pattern of keeping static/internal declarations for one source file separate from the public `mndatadel.h`.",
+    "`JObj_HideChildAtIdx` and `JObj_GetChildAtIdx` wrap child lookup by joint index using `lb_80011E24`."
+  ],
+  "assembly_or_matching_tactics": [
+    "`efAsync_8006729C` matched by using a pointer to the table entry, checking range with `index >= 50 || index < 0`, returning on null filename, then making the DVD load call once.",
+    "The `efAsync_8006729C` cleanup removed `#if 1`/`#else` dead alternatives and a stale question comment about `lbDvd_800178E8` argument count.",
+    "For animation helpers, the code kept `*(volatile f32*) &arg1->start_frame` in request calls, a likely codegen-preservation tactic inherited from the former `Vec3` implementation.",
+    "`mnDataDel_8024EEC0` uses `PAD_STACK(4)`, suggesting stack-shape control was needed for matching.",
+    "`fn_8024ECCC` includes an explicit `u8 _pad[10]`, another sign that local layout/stack padding mattered.",
+    "The bot report gives concrete matching evidence: `efAsync_8006729C` improved from 81.79% to 100.00%; `mnDataDel_8024EEC0` improved from 0.00% to 99.26%; `fn_8024ECCC` improved from 0.00% to 87.82%."
+  ],
+  "review_feedback": [
+    {
+      "source": "decomp-dev[bot]",
+      "feedback": "Matched code for GALE01 stayed at 46.35% overall but gained +112 bytes; one new match was reported for `main/melee/ef/efasync` function `efAsync_8006729C`."
+    },
+    {
+      "source": "decomp-dev[bot]",
+      "feedback": "The bot reported two unmatched-function improvements in `main/melee/mn/mndatadel`: `mnDataDel_8024EEC0` to 99.26% and `fn_8024ECCC` to 87.82%."
+    },
+    {
+      "source": "human review",
+      "feedback": "No human review comments were present in the provided PR slice."
+    }
+  ],
+  "searchable_terms": [
+    "PR1971",
+    "Misc Mn/Gm work",
+    "sadkellz",
+    "AnimLoopSettings",
+    "start_frame",
+    "end_frame",
+    "loop_frame",
+    "Vec3 animation table",
+    "mnmain",
+    "mn_8022ED6C",
+    "mn_8022EE84",
+    "mn_8022EFD8",
+    "mn_8022F298",
+    "mndatadel",
+    "mndatadel.static.h",
+    "WarnCmnData",
+    "WarnCommonJoints",
+    "WARN_JOINT_PANEL",
+    "WARN_JOINT_CURSOR_YES",
+    "WARN_JOINT_CURSOR_NO",
+    "WARN_JOINT_EXCLAIM",
+    "WARN_JOINT_PROGRESS_BAR",
+    "fn_8024ECCC",
+    "mnDataDel_8024EEC0",
+    "HSD_SisLib_803A5ACC",
+    "HSD_SisLib_803A5CC4",
+    "lbLang_IsSavedLanguageUS",
+    "JObj_HideChildAtIdx",
+    "efAsync_8006729C",
+    "efAsync_803C025C",
+    "ef_DAT_file",
+    "lbDvd_800178E8",
+    "gmtitle",
+    "gmTitle_803DA4F0",
+    "mndeflicker",
+    "mnsound",
+    "mninfo"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that correct or clarify the `AnimLoopSettings.loop_frame` sentinel comment, since this diff checks for `-0.1f` while the struct comment says `-1.0f`.",
+    "Search for remaining `Vec3` animation timing tables that should become `AnimLoopSettings`.",
+    "Inspect later `mndatadel` PRs for full matches of `fn_8024ECCC`, `mnDataDel_8024EEC0`, and the remaining placeholder functions.",
+    "Look for reuse of `WarnCommonJoints` or similar warning modal joint enums in other menu screens.",
+    "Search for functions using `mn_8022EFD8`, `mn_8022ED6C`, or `mn_8022EE84` to identify additional animation-loop data structures."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

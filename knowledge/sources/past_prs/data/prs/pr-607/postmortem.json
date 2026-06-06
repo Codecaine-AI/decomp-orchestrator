@@ -1,0 +1,166 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-607",
+  "pr": {
+    "number": 607,
+    "title": "DVD labeling, match DVDInit",
+    "url": "https://github.com/doldecomp/melee/pull/607",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-12-11T00:47:00Z",
+    "merged_at": "2022-12-11T00:53:56Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Dolphin DVDInit routine in C and improved DVD-related assembly labeling. The PR moved DVDInit out of asm/dolphin/dvd/dvd.s into new src/dolphin/dvd/dvd.c, added that C object to obj_files.mk before the remaining dvd.s object, and renamed several anonymous DVD globals and labels across dvd.s, dvdfs.s, and dvdlow.s. The implementation preserves existing low-level DVD initialization behavior, including alarm setup, DVD filesystem and waiting-queue initialization, interrupt handler registration, thread queue initialization, direct DVD hardware register writes at 0xCC006000, boot magic checks, OSReport messages, and __fstLoad for JTAG boot.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "labeling",
+      "asm-cleanup",
+      "build-integration",
+      "hardware-register-mapping"
+    ],
+    "systems": [
+      "dolphin",
+      "dvd",
+      "dvdlow",
+      "dvdfs",
+      "asm",
+      "src",
+      "obj_files.mk"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/dolphin/dvd/dvd.c",
+      "role": "New C implementation of DVDInit."
+    },
+    {
+      "path": "asm/dolphin/dvd/dvd.s",
+      "role": "Removed asm DVDInit, moved its string data to C ownership, and applied DVD global/label naming cleanup."
+    },
+    {
+      "path": "asm/dolphin/dvd/dvdfs.s",
+      "role": "Renamed DVDFS globals and introduced __DVDThreadQueue storage in sbss."
+    },
+    {
+      "path": "asm/dolphin/dvd/dvdlow.s",
+      "role": "Renamed low-level DVD globals and timeout handler references such as CommandList, Callback, NextCommandNumber, and AlarmHandlerForTimeout."
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "Added src/dolphin/dvd/dvd.c.o to the DVD object list before asm/dolphin/dvd/dvd.s.o."
+    }
+  ],
+  "what_changed": [
+    "Deleted the assembly definition of DVDInit from asm/dolphin/dvd/dvd.s and added an equivalent 47-line C implementation in src/dolphin/dvd/dvd.c.",
+    "Added src/dolphin/dvd/dvd.c.o to TEXT_O_FILES in obj_files.mk between dvdfs.s.o and dvd.s.o, allowing only DVDInit to be compiled from C while the rest of dvd.s remains assembly.",
+    "Represented the DVD hardware register block at fixed address 0xCC006000 with a small struct named IO, then used IO.unk0 = 0x2A and IO.unk4 = 0 to match the original register stores.",
+    "Modeled bootInfo as a pointer to a small extern struct with eight u32 words followed by boot_magic, matching the asm access to bootInfo + 0x20.",
+    "Moved DVDInit string literals into C: \"app booted via JTAG\\n\", \"load fst\\n\", \"app booted from bootrom\\n\", and \"bootrom\\n\".",
+    "Renamed dvd.s sbss symbols from raw lbl_* names to more meaningful DVD globals including IDShouldBe, PausingFlag, FirstTimeInBootrom, DVDInitialized, and __DVDThreadQueue references.",
+    "Renamed dvdfs.s lbl_804D7278 to BootInfo and added __DVDThreadQueue in sbss.",
+    "Renamed dvdlow.s symbols including lbl_804A7488 to CommandList, lbl_804D7238 to Callback, lbl_804D7274 to NextCommandNumber, and references to lbl_80336E98 to AlarmHandlerForTimeout.",
+    "Removed many .global directives for internal branch-table or local labels in dvd.s, reducing accidental exported-label noise."
+  ],
+  "smart_moves": [
+    "The PR decompiled a small, isolated entry point first: DVDInit depends on existing asm routines but does not require converting the whole DVD state machine at once.",
+    "Adding dvd.c.o immediately before dvd.s.o in obj_files.mk preserved link order while replacing only the matched routine.",
+    "Using extern declarations for existing assembly symbols let the new C function call and share state with the still-assembly DVD subsystem.",
+    "The bootInfo struct was sized to place boot_magic at offset 0x20, which is the access pattern shown in the removed assembly.",
+    "The fixed-address IO struct made the hardware register writes readable while retaining the exact 0xCC006000/0xCC006004 behavior.",
+    "Meaningful sbss names replaced anonymous labels before or alongside C conversion, making later DVD decompilation easier and less error-prone."
+  ],
+  "decomp_lessons": [
+    "For SDK subsystem bring-up code, it can be effective to match one initializer in C while leaving callbacks and state-machine internals in asm.",
+    "When C code accesses still-assembly globals, rename the asm storage labels first so the C externs express intent and reduce future churn.",
+    "Small placeholder structs are useful for matching pointer-plus-offset loads when the complete SDK struct is not yet recovered; here boot_magic is explicitly placed at offset 0x20.",
+    "Memory-mapped I/O can be represented as a fixed-address struct when the compiler and project syntax support it; this keeps register stores readable without hiding exact addresses.",
+    "Removing unnecessary .global directives on local jump labels helps distinguish real exported symbols from internal switch/case or branch targets.",
+    "String literal relocation matters when moving assembly into C: the original .data strings for DVDInit were removed from dvd.s because the C function now emits/owns them."
+  ],
+  "naming_conventions": [
+    "DVD SDK internal functions keep double-underscore prefixes, e.g. __DVDFSInit, __DVDClearWaitingQueue, __DVDInitWA, __DVDInterruptHandler, __fstLoad, and __DVDThreadQueue.",
+    "Recovered DVD global state uses SDK-like PascalCase or mixed SDK names: DVDInitialized, FirstTimeInBootrom, IDShouldBe, PausingFlag, PauseFlag, AutoFinishing, ResetRequired, Canceling, CancelCallback.",
+    "Low-level DVD globals were renamed toward descriptive nouns: CommandList, Callback, NextCommandNumber.",
+    "Callback/state function names in existing asm use lower camel or mixed callback style such as cbForStateBusy, cbForStateGettingError, stateReadingFST, stateBusy, and stateCheckID3.",
+    "DVDFS storage naming distinguished BootInfo, FstStart, FstStringStart, MaxEntryNum, currentDirectory, and __DVDLongFileNameFlag."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted the initial DVDInit guard from an sbss lbl load/branch into `if (!DVDInitialized)`.",
+    "Used `DVDInitialized = TRUE` after OSInitAlarm to match the original one-time initialization path.",
+    "Set `bootInfo = (void*) 0x80000000` and `IDShouldBe = 0x80000000` to match the original stores of a 0x80000000 base pointer.",
+    "Called `__OSSetInterruptHandler(0x15, __DVDInterruptHandler)` and `__OSUnmaskInterrupts(0x400)` with literal constants matching the removed assembly.",
+    "Used boot magic comparisons `0xE5207C22` and `0xD15EA5E` to reproduce the original JTAG, bootrom, and first-time bootrom reporting branches.",
+    "Kept unresolved or not-yet-recovered routines as extern calls rather than forcing broader decompilation.",
+    "Retained the remaining DVD assembly after DVDInit, minimizing risk to the large DVD state machine and command handling code.",
+    "Renamed sda21/sbss labels in assembly to match the new C extern names, ensuring C/asm symbol linkage stays consistent."
+  ],
+  "review_feedback": [
+    {
+      "type": "approval",
+      "reviewer": "ribbanya",
+      "submitted_at": "2022-12-11T00:53:28Z",
+      "body": ""
+    },
+    {
+      "type": "no_commentary",
+      "note": "The PR dump contains no issue comments or review comments, so there is no detailed reviewer rationale beyond the approval."
+    }
+  ],
+  "searchable_terms": [
+    "PR607",
+    "DVD labeling",
+    "match DVDInit",
+    "DVDInit",
+    "src/dolphin/dvd/dvd.c",
+    "asm/dolphin/dvd/dvd.s",
+    "asm/dolphin/dvd/dvdfs.s",
+    "asm/dolphin/dvd/dvdlow.s",
+    "obj_files.mk",
+    "DVDInitialized",
+    "FirstTimeInBootrom",
+    "IDShouldBe",
+    "PausingFlag",
+    "PauseFlag",
+    "bootInfo",
+    "BootInfo",
+    "boot_magic",
+    "0xE5207C22",
+    "0xD15EA5E",
+    "0xCC006000",
+    "IO struct",
+    "__DVDThreadQueue",
+    "__DVDInterruptHandler",
+    "__DVDFSInit",
+    "__DVDClearWaitingQueue",
+    "__DVDInitWA",
+    "__fstLoad",
+    "CommandList",
+    "Callback",
+    "NextCommandNumber",
+    "AlarmHandlerForTimeout",
+    "stateBusy",
+    "cbForStateBusy",
+    "stateReadingFST",
+    "DVDLowReadDiskID",
+    "DVDLowAudioBufferConfig"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that expand src/dolphin/dvd/dvd.c beyond DVDInit.",
+    "Search for later recovery of the full boot info struct used by bootInfo->boot_magic.",
+    "Search for PRs that replace the fixed-address IO placeholder with named DVD hardware register definitions.",
+    "Find subsequent DVD PRs that decompile stateBusy, cbForStateBusy, DVDGetDriveStatus, DVDCheckDisk, or DVDCancelAsync.",
+    "Search for further renames of BootInfo versus bootInfo to check whether naming was normalized."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,203 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-699",
+  "pr": {
+    "number": 699,
+    "title": "Enable `-requireprotos` and `-warn iserror`",
+    "url": "https://github.com/doldecomp/melee/pull/699",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-17T16:30:01Z",
+    "merged_at": "2023-01-18T08:31:39Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Enabled prototype-required builds and warning-as-error builds by default, forcing a broad cleanup of missing, malformed, or locally duplicated function declarations across MSL, Runtime, Dolphin, sysdolphin/baselib, fighter, item, ground, and related headers. The PR primarily converted source files to include their own public headers, added forward declarations and missing prototypes, corrected function signatures, removed redundant fallback stubs around MWERKS-only asm blocks, and moved struct forward declarations into forward headers where needed. The change mattered because it made missing prototypes and compiler warnings fail the build, raising the baseline for future decomp work and preventing silent signature drift.",
+  "change_classification": {
+    "primary_type": "build-strictness-and-header-cleanup",
+    "categories": [
+      "headers",
+      "prototypes",
+      "warning-cleanup",
+      "types-structs",
+      "build-system",
+      "forward-declarations"
+    ],
+    "systems": [
+      "repo-root",
+      "MSL",
+      "Runtime",
+      "MetroTRK",
+      "Dolphin",
+      "GX",
+      "CARD",
+      "DVD",
+      "sysdolphin-baselib",
+      "fighter",
+      "item",
+      "ground",
+      "melee-core"
+    ]
+  },
+  "key_files": [
+    "Makefile",
+    "src/MSL/string.c",
+    "src/MSL/string.h",
+    "src/MSL/PPC_EABI/critical_regions.gamecube.c",
+    "src/Runtime/Gecko_setjmp.c",
+    "src/Runtime/Gecko_setjmp.h",
+    "src/Runtime/__init_cpp_exceptions.c",
+    "src/Runtime/global_destructor_chain.c",
+    "src/MetroTRK/dolphin_trk.h",
+    "src/dolphin/card.h",
+    "src/dolphin/card/forward.h",
+    "src/dolphin/card/CARDCreate.h",
+    "src/dolphin/card/CARDMount.h",
+    "src/dolphin/card/CARDRead.h",
+    "src/dolphin/card/CARDRename.h",
+    "src/dolphin/card/CARDStat.h",
+    "src/dolphin/card/CARDWrite.h",
+    "src/dolphin/dvd/dvd.h",
+    "src/dolphin/gx/GXBump.c",
+    "src/dolphin/gx/GXFrameBuf.c",
+    "src/dolphin/gecko.h",
+    "src/sysdolphin/baselib/forward.h",
+    "src/sysdolphin/baselib/gobj.h",
+    "src/sysdolphin/baselib/jobj.h",
+    "src/melee/ft/ft_unknown_006.h",
+    "src/melee/lb/lbunknown_001.h"
+  ],
+  "what_changed": [
+    "Changed the default Makefile setting `REQUIRE_PROTOS ?= 0` to `REQUIRE_PROTOS ?= 1`.",
+    "Added a new `WARN_ERROR ?= 1` make option intended to append `-warn iserror` when enabled; the excerpt shows this guarded by `ifeq ($(WARN_ERROR),1)`.",
+    "Added or corrected many header includes at the top of C files so each implementation sees its own prototype, such as MSL, Runtime, AXFX, CARD, GX, and baselib source files.",
+    "Added missing public prototypes for library APIs including CARD async functions, DVD async/stream functions, AXFX hook functions, MetroTRK interrupt enabling, and string functions.",
+    "Corrected MSL string declarations from unusual parenthesized forms such as `unsigned long(strlen);` to standard prototypes such as `size_t strlen(const char* s);` and `char* strcpy(...)`.",
+    "Wrapped `#pragma ANSI_strict off` / restore handling in `src/MSL/string.c` with `#ifdef __MWERKS__`, using `#pragma push` and `#pragma pop` in the final diff excerpt.",
+    "Moved CARD-related incomplete types into `src/dolphin/card/forward.h` by adding `typedef struct CARDFileInfo CARDFileInfo;` and `typedef struct CARDStat CARDStat;`, while changing the concrete struct definitions in implementation/public headers to named `struct` forms.",
+    "Removed `src/dolphin/gecko.h`, whose setjmp/longjmp declarations were superseded by `src/Runtime/Gecko_setjmp.h`.",
+    "Adjusted `Gecko_setjmp` signatures to use `unk_t` parameters and to match the required prototype count for `__setjmp` and `longjmp`.",
+    "Changed several inline assembly function declarations from empty or wrong prototypes to explicit argument lists, for example in `GXBump.c` and `PPCArch.c`.",
+    "Deleted some non-MWERKS `NOT_IMPLEMENTED` fallback stubs for functions implemented only as MWERKS inline assembly in the excerpt, reducing duplicate or mismatched declarations.",
+    "Touched a very broad set of fighter, item, ground, and baselib headers to make prototypes, forward declarations, and struct declarations acceptable under `-requireprotos` and warnings-as-errors."
+  ],
+  "smart_moves": [
+    "The PR raised compiler strictness only after doing the mechanical cleanup needed across many subsystems, avoiding a setting change that would immediately break unrelated future work.",
+    "Including each module's own header from its corresponding C file is a reusable self-check: the compiler verifies that implementation signatures match exported prototypes.",
+    "Using forward headers, especially for CARD and baselib types, reduced dependency pressure while still satisfying prototype requirements.",
+    "The MSL string fix preserved compiler-specific pragma behavior behind `__MWERKS__` instead of assuming a Gecko-only condition.",
+    "Prototype fixes were applied to assembly declarations too, which is important because `-requireprotos` catches inline asm functions just like normal C functions.",
+    "Struct definitions were changed to named `struct` declarations where forward declarations were needed, enabling opaque or semi-opaque pointer use without forcing full type inclusion everywhere.",
+    "The PR allowed strictness options to be disabled through make flags, preserving an escape hatch while making strict mode the default."
+  ],
+  "decomp_lessons": [
+    "Before enabling `-requireprotos`, every C file should include the header that declares the functions it defines; otherwise local signature drift will surface as build failures.",
+    "Warning-as-error work often uncovers real type hygiene issues, not just cosmetic warnings: missing prototypes, wrong return types, wrong parameter counts, and duplicate declarations all matter for matching decompilation.",
+    "Forward declaration headers are useful for decomp projects with heavily interdependent structs, but they require named structs rather than anonymous typedef-only definitions.",
+    "Inline assembly functions still need accurate C-level prototypes. Empty parameter lists or wrong return types can compile loosely until strict flags are enabled.",
+    "Compiler-specific pragmas should be guarded by compiler feature macros such as `__MWERKS__` when the evidence supports that they are not platform-specific.",
+    "For MSL/libc functions, prefer normal standard-style declarations such as `char* strcpy(...)` and `size_t strlen(...)` unless there is explicit matching evidence requiring unusual syntax.",
+    "Centralizing declarations in canonical headers makes later matching work safer because changed signatures must satisfy all call sites and the implementation at compile time.",
+    "Strict build settings can be an effective project-wide quality gate once the existing warning/prototype debt is paid down."
+  ],
+  "naming_conventions": [
+    "Makefile flags use uppercase snake case such as `REQUIRE_PROTOS`, `WARN_ERROR`, `NON_MATCHING`, and `SKIP_CHECK`.",
+    "Dolphin subsystem headers follow paths like `src/dolphin/card/CARDCreate.h`, `src/dolphin/gx/GXBump.h`, and `src/dolphin/dvd/dvd.h`.",
+    "Forward declaration headers are named `forward.h`, for example `src/dolphin/card/forward.h` and `src/sysdolphin/baselib/forward.h`.",
+    "CARD API prototypes keep SDK-style names such as `CARDCreateAsync`, `CARDMountAsync`, `CARDReadAsync`, `CARDRenameAsync`, `CARDSetStatusAsync`, and `CARDWriteAsync`.",
+    "DVD async APIs use SDK-style names ending in `Async`, `AsyncPrio`, or stream-related forms such as `DVDPrepareStreamAbsAsync`.",
+    "Unknown or not-yet-typed parameters remain represented with project placeholder types such as `unk_t` when exact types are not established.",
+    "Compiler guard macros in the excerpt include `__MWERKS__` for compiler-specific pragmas and `MWERKS_GEKKO` for Gecko-targeted inline assembly blocks."
+  ],
+  "assembly_or_matching_tactics": [
+    "Updated inline asm declarations to include explicit argument and return signatures, e.g. `GXSetTevIndirect(s32, s32, u8, s32, s32, s32, s32, s32)`, `GXSetIndTexMtx(s32, unk_t, s32)`, and `GXSetIndTexOrder(s32, s32, s32)`.",
+    "Changed `PPCMfhid0` from a void-like signature to `u32 PPCMfhid0(void)`, matching the assembly behavior of returning a value in r3.",
+    "Adjusted `__setjmp` to take three arguments in both asm and non-MWERKS forms, matching the header prototype shown in the diff.",
+    "Kept MWERKS inline assembly under `#ifdef MWERKS_GEKKO`, while removing some non-MWERKS fallback stubs that introduced mismatched prototypes in the excerpt.",
+    "Used `#pragma push` and `#pragma pop` around MSL `ANSI_strict` changes to localize compiler pragma effects.",
+    "The evidence does not indicate that this PR directly improved function matching percentages; its assembly changes appear aimed at prototype correctness and warning cleanup."
+  ],
+  "review_feedback": [
+    {
+      "path": "src/MSL/string.c",
+      "author": "r-burns",
+      "feedback": "Suggested `#ifdef __MWERKS__` and asked whether the pragma guard was not Gecko-specific.",
+      "outcome": "The diff excerpt shows `#ifdef __MWERKS__` around the MSL string pragma handling."
+    },
+    {
+      "path": "src/MSL/string.h",
+      "author": "r-burns",
+      "feedback": "Suggested replacing parenthesized declarations with standard prototypes: `char* strcpy(char* __restrict dst, const char* __restrict src);` and `size_t strlen(const char* s);`.",
+      "outcome": "The diff excerpt shows these standard declarations in `src/MSL/string.h`."
+    },
+    {
+      "path": "src/MSL/string.c",
+      "author": "ribbanya",
+      "feedback": "Referenced CodeWarrior documentation page 267 in response to the compiler pragma discussion.",
+      "outcome": "Supports that the pragma handling was based on compiler documentation, but the excerpt does not show further discussion."
+    },
+    {
+      "path": "src/MSL/string.h",
+      "author": "r-burns",
+      "feedback": "Noted that the string declaration change looked like it had been reverted somehow.",
+      "outcome": "Final excerpt shows the standard `strcpy` and `strlen` prototypes present."
+    }
+  ],
+  "searchable_terms": [
+    "PR699",
+    "requireprotos",
+    "-requireprotos",
+    "warn iserror",
+    "-warn iserror",
+    "WARN_ERROR",
+    "REQUIRE_PROTOS",
+    "warnings as errors",
+    "missing prototypes",
+    "header cleanup",
+    "forward declarations",
+    "own header include",
+    "MSL string",
+    "ANSI_strict",
+    "__MWERKS__",
+    "MWERKS_GEKKO",
+    "Gecko_setjmp",
+    "__setjmp",
+    "longjmp",
+    "CARDFileInfo",
+    "CARDStat",
+    "CARDCallback",
+    "CARDCreateAsync",
+    "CARDMountAsync",
+    "CARDReadAsync",
+    "CARDSetStatusAsync",
+    "CARDWriteAsync",
+    "DVDReadAbsAsyncPrio",
+    "DVDSeekAbsAsyncPrio",
+    "DVDPrepareStreamAbsAsync",
+    "AXFXSetHooks",
+    "EnableMetroTRKInterrupts",
+    "GXBump",
+    "GXFrameBuf",
+    "PPCMfhid0",
+    "inline asm prototypes",
+    "baselib forward.h",
+    "dolphin/card/forward.h"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fix or modify `WARN_ERROR` or the Makefile `-warn iserror` flag handling.",
+    "Search for remaining files that define functions without including their own header after PR #699.",
+    "Search for `CARDFileInfo` and `CARDStat` forward declaration patterns reused in later Dolphin CARD cleanup.",
+    "Find later changes to `src/Runtime/Gecko_setjmp.h` to see whether `unk_t` parameters were refined.",
+    "Search for additional `__MWERKS__` pragma guards around MSL or Runtime code.",
+    "Find later PRs that remove `unk_t` from GX inline asm prototypes introduced or touched here.",
+    "Audit whether deleted `src/dolphin/gecko.h` declarations had any remaining include references after this PR."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,153 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-838",
+  "pr": {
+    "number": 838,
+    "title": "Match `ftLk_SpecialLw`",
+    "url": "https://github.com/doldecomp/melee/pull/838",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-08T17:27:04Z",
+    "merged_at": "2023-05-08T17:35:28Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched Link's down-special implementation (`ftLk_SpecialLw`) by replacing a large MWERKS_GEKKO inline-asm block with C for enter, animation, physics, collision, existing-bomb handling, and bomb-spawn callback behavior. The PR also cleaned the Link down-special header by removing placeholder/static label prototypes and gave `it_8029DD58` a typed signature returning an item `HSD_GObj*`, enabling the C spawn path to call it directly.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "callback-wiring",
+      "item-spawn-typing"
+    ],
+    "systems": [
+      "fighter",
+      "fighter-Link",
+      "item",
+      "animation",
+      "collision"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftLink/ftLk_SpecialLw.c",
+    "src/melee/ft/chara/ftLink/ftLk_SpecialLw.h",
+    "src/melee/it/it_27CF.h"
+  ],
+  "what_changed": [
+    "Replaced inline assembly in `ftLk_SpecialLw.c` with C implementations for `ftLk_SpecialLw_Enter`, `ftLk_SpecialAirLw_Enter`, `ftLk_SpecialLw_Anim`, `ftLk_SpecialAirLw_Anim`, `ftLk_SpecialLw_Phys`, `ftLk_SpecialAirLw_Phys`, `ftLk_SpecialLw_Coll`, and `ftLk_SpecialAirLw_Coll`.",
+    "Introduced shared helper `doEnter` to handle ground/air entry setup: calls `updateBomb`, clears `fp->throw_flags.flags`, changes motion state, runs `ftAnim_8006EBA4`, and installs `spawnBomb` into `fp->cb.x21BC_callback_Accessory4`.",
+    "Renamed/decompiled the old `ftLk_800EB75C` behavior as static `updateBomb`, checking `fp->item_gobj`, comparing `itGetKind(fp->item_gobj) - It_Kind_Link_Bomb <= 1`, and calling `ft_800957F4(gobj, msid)` when the held item is a Link bomb variant.",
+    "Renamed/decompiled the old accessory callback label `lbl_800EB7C8` as static `spawnBomb`, using `ftCheckThrowB0`, `ftParts_8007500C`, `FtPart_LThumbNb`, `lb_8000B1CC`, Link data attributes, and `it_8029DD58` to create and store a bomb item gobj.",
+    "Introduced shared helper `doAnim` to collapse the two animation callbacks to `if (!ftAnim_IsFramesRemaining(gobj)) cb(gobj);`, dispatching to `ft_8008A2BC` for ground and `ft_800CC730` for air.",
+    "Converted physics callbacks into direct wrappers around `ft_80084F3C` and `ft_80084EEC`.",
+    "Added `coll_mf` as a static `MotionFlags` combination for ground/air collision transitions and preserved the accessory callback after switching between `ftLk_MS_SpecialLw` and `ftLk_MS_SpecialAirLw`.",
+    "Removed `<placeholder.h>`, the static label prototype for `lbl_800EB7C8`, and the obsolete public prototype for `ftLk_800EB75C` from `ftLk_SpecialLw.h`.",
+    "Changed `it_8029DD58` in `it_27CF.h` from `UNK_RET it_8029DD58(UNK_PARAMS)` to `HSD_GObj* it_8029DD58(HSD_GObj* fighter_gobj, Vec3*, u8, int, float)` with a comment that it returns an item `HSD_GObj`.",
+    "Added forward/type includes needed for the typed C implementation, including fighter, Link, item, baselib forwards, and `ftLink/types.h`."
+  ],
+  "smart_moves": [
+    "Factored nearly identical ground and air enter paths into `doEnter`, preserving the different existing-bomb motion IDs (`108` and `112`) and motion-state IDs (`ftLk_MS_SpecialLw` and `ftLk_MS_SpecialAirLw`) while avoiding duplicated control flow.",
+    "Factored animation end behavior into `doAnim` with an `HSD_GObjEvent` callback parameter, a useful pattern when two action states differ only in their terminal callback.",
+    "Kept bomb-spawn callback setup explicit after both entry and ground/air collision transitions, reflecting that `x21BC_callback_Accessory4` must survive action-state changes for the bomb pull to complete.",
+    "Used typed fighter/item fields (`fp->item_gobj`, `fp->throw_flags.flags`, `fp->dat_attrs`, `fp->parts`, `fp->facing_dir`, `fp->ft_data`) instead of raw offsets, improving future readability and decomp reuse.",
+    "Replaced magic item-kind subtraction with `It_Kind_Link_Bomb`, making the range check self-documenting while still matching the original `kind - 58 <= 1` behavior.",
+    "Preserved known matching artifacts with `#ifdef MUST_MATCH` unused stack buffers and `@todo Unused stack` comments instead of hiding why otherwise strange locals exist.",
+    "Centralized the collision-transition flag mask as `static MotionFlags const coll_mf`, making the original `0x0C4C5080` assembly immediate understandable through named `Ft_MF_*` flags."
+  ],
+  "decomp_lessons": [
+    "When decompiling paired ground/air fighter states, look for identical skeletons with only motion IDs, callbacks, or transition targets changed; helper functions can reduce duplicate C while still matching.",
+    "Accessory callbacks in fighter action states may be represented by anonymous labels in asm dumps; once behavior is understood, promote them to meaningful static functions such as `spawnBomb` and remove placeholder prototypes from headers.",
+    "A successful asm-to-C match may require improving a callee prototype in another subsystem header; here, typing `it_8029DD58` enabled the item-spawn call to match and documented its return object.",
+    "Original constants embedded as floats or bitmasks can often be expressed as normal C literals or named flag combinations; the removed `ftLk_Init_804D92F0/804D92F4` became `0`, `1`, and named motion flags in call sites.",
+    "Use `MUST_MATCH` guarded dummy stack arrays only where the compiler needs stack-shape preservation; annotate them as unused matching artifacts so future cleanup does not accidentally break matching.",
+    "Collision state changes should preserve `fp->cur_anim_frame` and reinstall callbacks when the original asm does so, especially in item-spawning moves whose effects are driven by later animation/accessory events.",
+    "Header cleanup is part of matching: once labels become static C helpers, public headers should expose only real external functions and should not retain `<placeholder.h>` or `UNK_*` declarations."
+  ],
+  "naming_conventions": [
+    "Old anonymous/static label `lbl_800EB7C8` was renamed to behavior-oriented `spawnBomb`.",
+    "Old address-style helper `ftLk_800EB75C` was renamed to behavior-oriented static `updateBomb`.",
+    "Shared local helpers use `doEnter` and `doAnim` naming for common action-state control flow.",
+    "Link motion-state enum names used in C are `ftLk_MS_SpecialLw` and `ftLk_MS_SpecialAirLw` rather than raw `0x166`/`0x167` values.",
+    "The collision flag mask is named `coll_mf`, typed as `MotionFlags const`, and built from `Ft_MF_*` flag names.",
+    "Fighter callback field is referenced by its structured name `fp->cb.x21BC_callback_Accessory4`.",
+    "Link item constant is represented as `It_Kind_Link_Bomb` rather than the raw item-kind value used in assembly."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced inline asm guarded by `#ifdef MWERKS_GEKKO` with matching C while retaining address comments on static helper declarations (`/* 0EB75C */`, `/* 0EB7C8 */`).",
+    "Used helper extraction to match repeated assembly patterns for ground/air entry and animation callbacks without duplicating entire functions.",
+    "Preserved unused stack allocation through `#ifdef MUST_MATCH` arrays: `u8 _[4]` in `spawnBomb` and zero-initialized `u8 _[8] = { 0 }` in `doAnim`.",
+    "Converted the original `0x0C4C5080` motion-flag immediate into an OR of named `Ft_MF_*` flags: `Ft_MF_SkipMatAnim`, `Ft_MF_SkipColAnim`, `Ft_MF_UpdateCmd`, `Ft_MF_SkipItemVis`, `Ft_MF_Unk19`, `Ft_MF_SkipModelPartVis`, `Ft_MF_SkipModelFlags`, and `Ft_MF_Unk27`.",
+    "Matched existing-bomb behavior by subtracting `It_Kind_Link_Bomb` from `itGetKind(fp->item_gobj)` and using an unsigned-style `<= 1` range check.",
+    "Kept `@todo Verify MSID` comments on collision functions, indicating the C match used named Link motion states but the exact semantic IDs still needed confirmation."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-838",
+    "ribbanya",
+    "Match ftLk_SpecialLw",
+    "ftLk_SpecialLw.c",
+    "ftLk_SpecialLw.h",
+    "it_27CF.h",
+    "ftLk_SpecialLw_Enter",
+    "ftLk_SpecialAirLw_Enter",
+    "ftLk_SpecialLw_Anim",
+    "ftLk_SpecialAirLw_Anim",
+    "ftLk_SpecialLw_Phys",
+    "ftLk_SpecialAirLw_Phys",
+    "ftLk_SpecialLw_Coll",
+    "ftLk_SpecialAirLw_Coll",
+    "updateBomb",
+    "spawnBomb",
+    "doEnter",
+    "doAnim",
+    "ftLk_MS_SpecialLw",
+    "ftLk_MS_SpecialAirLw",
+    "It_Kind_Link_Bomb",
+    "it_8029DD58",
+    "ftCheckThrowB0",
+    "ftParts_8007500C",
+    "FtPart_LThumbNb",
+    "lb_8000B1CC",
+    "x21BC_callback_Accessory4",
+    "item_gobj",
+    "throw_flags",
+    "MUST_MATCH",
+    "unused stack",
+    "coll_mf",
+    "MotionFlags",
+    "Ft_MF_SkipMatAnim",
+    "Ft_MF_SkipColAnim",
+    "Ft_MF_UpdateCmd",
+    "Ft_MF_SkipItemVis",
+    "Ft_MF_Unk19",
+    "Ft_MF_SkipModelPartVis",
+    "Ft_MF_SkipModelFlags",
+    "Ft_MF_Unk27",
+    "ft_800957F4",
+    "ft_80094818",
+    "ft_8008A2BC",
+    "ft_800CC730",
+    "ft_80084F3C",
+    "ft_80084EEC",
+    "ft_80082708",
+    "ft_80081D0C",
+    "ftCommon_8007D5D4",
+    "ftCommon_8007D7FC"
+  ],
+  "follow_up_queries": [
+    "Find other Link or Young Link bomb pull special states that use `x21BC_callback_Accessory4` and compare their `spawnBomb` implementations.",
+    "Search for other item-spawn functions still declared as `UNK_RET`/`UNK_PARAMS` in item headers that could be typed from call sites.",
+    "Verify the `@todo Verify MSID` comments in `ftLk_SpecialLw_Coll` and `ftLk_SpecialAirLw_Coll` against motion-state tables.",
+    "Search for other decomp matches that use `MUST_MATCH` unused stack arrays in animation callbacks to reuse the same matching tactic."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

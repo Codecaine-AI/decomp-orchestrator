@@ -1,0 +1,156 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-242",
+  "pr": {
+    "number": 242,
+    "title": "Matching player c",
+    "url": "https://github.com/doldecomp/melee/pull/242",
+    "state": "MERGED",
+    "author": "snuffysasa",
+    "created_at": "2022-01-13T00:42:15Z",
+    "merged_at": "2022-01-17T10:14:06Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched additional early functions in src/melee/pl/player.c while leaving parts of the file under NON_MATCHING because the whole file could not yet compile and match together. The PR removed a large block of player assembly from asm/melee/pl/player.s, added C implementations/wrappers for player slot/entity operations, expanded StaticPlayer from an opaque byte buffer into a partially documented struct, and introduced S8Vec/S8VecPtr in Dolphin matrix types so lbl_803BCDE0 could be typed more accurately. Review focused on keeping symbol renames stable outside the PR, using decimal assertion line numbers, spacing, and correcting an erroneous unused parameter in a Player_800319C4 prototype.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-layout",
+      "NON_MATCHING",
+      "review-cleanup"
+    ],
+    "systems": [
+      "melee-core",
+      "player",
+      "asm",
+      "include",
+      "dolphin-mtx"
+    ]
+  },
+  "key_files": [
+    "src/melee/pl/player.c",
+    "asm/melee/pl/player.s",
+    "src/melee/pl/player.h",
+    "include/dolphin/mtx/mtxtypes.h"
+  ],
+  "what_changed": [
+    "Deleted roughly 312 lines of hand-written/player assembly from asm/melee/pl/player.s for functions in the 0x80031DC8-0x80032218 range, leaving func_8003221C and later assembly in place.",
+    "Added C implementations in src/melee/pl/player.c for several player functions, but guarded them with #ifdef NON_MATCHING where the PR author said the functions matched on decomp.me but the whole file could not compile and match yet.",
+    "Changed lbl_803BCDE0 from an untyped u32 array declaration to S8Vec lbl_803BCDE0[], requiring a new S8Vec type in include/dolphin/mtx/mtxtypes.h.",
+    "Reworked Player_CheckSlot to take only the slot, check slot < 0 or 6 <= slot, and assert with decimal line 102 after review feedback.",
+    "Expanded StaticPlayer in src/melee/pl/player.h from u8 data[0xE90] into a partially understood 0xE90-sized struct with named fields for player state, character, slot_type, transformed indices, positions, costume/controller/player IDs, entity pointers, flags, stale move entries, and a trailing buffer.",
+    "Added or adjusted prototypes around Player_GetPtrForSlot, Player_80031790, Player_80031848, Player_80031900, Player_800319C4, and external helper functions such as func_800D4F24, func_80390228, func_8008701C, func_800873CC, func_802F6E1C, and func_800D4FF4.",
+    "Introduced helper logic that iterates over two transformed player slots and calls entity functions only when the selected player_entity entry is non-null, matching Zelda/Sheik-style transformed-state behavior inferred in comments."
+  ],
+  "smart_moves": [
+    "Used NON_MATCHING guards to preserve buildability while keeping decomp.me-matching C available for future cleanup.",
+    "Recovered enough of StaticPlayer's layout to replace raw offset arithmetic like 0x0C transformed indices and 0xB0 entity pointers with meaningful field access.",
+    "Typed a three-byte signed vector table as S8Vec rather than leaving it as u32[], improving data-access expression fidelity.",
+    "Centralized repeated slot validation in Player_CheckSlot, mirroring repeated assembly patterns that OSReport then __assert on invalid slots.",
+    "Modeled transformed player handling with transformed[2] and player_entity[2], making repeated loops over normal/transformed entities easier to express in C."
+  ],
+  "decomp_lessons": [
+    "When a function matches in isolation but not in-file, preserve progress under NON_MATCHING rather than forcing risky global changes.",
+    "Struct expansion is useful for matching player code because offsets such as 0x0C, 0xAC, and 0xB0 recur across functions and become clearer as transformed indices, flags, and entity pointers.",
+    "Assertion line numbers should match source conventions and reviewer preference; in this PR, hex 0x66 was requested to be written as decimal 102.",
+    "Do not add phantom unused parameters to prototypes to satisfy guesses; reviewer noted Player_800319C4 is called by 80031FB0 with only r3 and r4.",
+    "Avoid opportunistic renames in unrelated assembly callsites during matching PRs unless the rename is accepted; review requested reverting a grshrineroute call label from func_8008688C_all_players back to Player_80031900.",
+    "Small formatting nits, such as adding a blank line between functions, were part of review expectations even in matching work."
+  ],
+  "naming_conventions": [
+    "Existing player functions retained mixed placeholder/address-style names such as Player_80031790, Player_80031848, Player_80031900, Player_800319C4, and Player_GetPtrForSlot.",
+    "Reviewer feedback favored preserving the existing public callsite name Player_80031900 over a more descriptive but unapproved rename func_8008688C_all_players.",
+    "New struct fields used descriptive snake_case where meaning was inferred, including player_state, player_character, slot_type, transformed, nametag_pos, player_entity, flags, and stale_move_table_current_write_index.",
+    "Unknown or uncertain fields stayed in unk-offset style such as unk0E, unk34, unk45, unk8F, unkEC, preserving uncertainty rather than overnaming.",
+    "Dolphin vector typedefs follow existing capitalization and pointer alias conventions: S16Vec/S16VecPtr and newly added S8Vec/S8VecPtr."
+  ],
+  "assembly_or_matching_tactics": [
+    "Matched repeated slot bounds checks as slot < 0 || 6 <= slot followed by OSReport and __assert.",
+    "Modeled array indexing into lbl_80453080 through StaticPlayer* and lbl_80453080[slot] instead of manual multiplication by 0xE90.",
+    "Translated transformed entity selection from byte-indexed loads at offsets 0x0C/0x0D and pointer loads at 0xB0 into player->player_entity[player->transformed[i]].",
+    "Used small inline helper/wrapper logic for repeated calls across both transformed entity slots.",
+    "Kept unmatched or file-sensitive code paths behind #else asm blocks to avoid regressing matching while moving C forward."
+  ],
+  "review_feedback": [
+    {
+      "file": "asm/melee/gr/grshrineroute.s",
+      "comment": "Reviewer PsiLupan asked to change a call label back, making this the primary nitpick; the hunk showed Player_80031900 being renamed to func_8008688C_all_players."
+    },
+    {
+      "file": "src/melee/pl/player.c",
+      "comment": "Reviewer requested changing assertion line number 0x66 to the actual decimal number."
+    },
+    {
+      "file": "src/melee/pl/player.c",
+      "comment": "Reviewer requested adding a blank line between adjacent functions around the NON_MATCHING wrapper area."
+    },
+    {
+      "file": "src/melee/pl/player.h",
+      "comment": "Reviewer noted there is not an unused argument in Player_800319C4; it is called by 80031FB0 and only receives r3 and r4."
+    },
+    {
+      "file": "general",
+      "comment": "PR author said requested changes were completed and invited maintainers to squash commits on merge."
+    }
+  ],
+  "searchable_terms": [
+    "Matching player c",
+    "player.c",
+    "player.s",
+    "player.h",
+    "StaticPlayer",
+    "S8Vec",
+    "S8VecPtr",
+    "S16Vec",
+    "mtxtypes.h",
+    "NON_MATCHING",
+    "Player_CheckSlot",
+    "Player_GetPtrForSlot",
+    "Player_80031790",
+    "Player_80031848",
+    "Player_80031900",
+    "Player_800319C4",
+    "func_80031DC8",
+    "func_80031EBC",
+    "func_80031FB0",
+    "func_80032070",
+    "func_8003219C",
+    "func_8003221C",
+    "func_800867E8",
+    "func_8008688C",
+    "func_8008701C",
+    "func_800873CC",
+    "func_800D4F24",
+    "func_800D4FF4",
+    "func_802F6E1C",
+    "func_80390228",
+    "lbl_80453080",
+    "lbl_803BCDE0",
+    "transformed",
+    "player_entity",
+    "slot_type",
+    "OSReport",
+    "__assert",
+    "assert line 102",
+    "Zelda Sheik transformed state",
+    "func_8008688C_all_players"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that remove NON_MATCHING around Player_80031790, Player_80031848, Player_80031900, or the 0x80031DC8-0x80032218 player.c range.",
+    "Search for later refinements to StaticPlayer field names and size validation after this initial struct expansion.",
+    "Search for Player_800319C4 prototype changes to confirm the final accepted two-argument signature.",
+    "Search for whether S8Vec in include/dolphin/mtx/mtxtypes.h was reused for other signed-byte vector tables.",
+    "Search for later rename decisions around Player_80031900 versus func_8008688C_all_players."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

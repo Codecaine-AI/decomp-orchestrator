@@ -1,0 +1,141 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-908",
+  "pr": {
+    "number": 908,
+    "title": "Match `ftCo_DownDamage`",
+    "url": "https://github.com/doldecomp/melee/pull/908",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-30T21:55:41Z",
+    "merged_at": "2023-05-30T22:03:09Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the ftCo_DownDamage file at 100%, moving six down-damage-related routines out of asm/melee/ft/ft_08A4.s into a new C translation unit and header under ftCommon. The PR added the new object to obj_files.mk, introduced a downdamage motion-vars struct for fp+2340, typed ftCommonData.x428 as int to support the percent-threshold comparison, and cleaned ft_08A4.h declarations so ftCo_8009F0F0 lives in ftCo_DownDamage.h while ftCo_8009F184 remains file-local.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "struct-typing",
+      "fighter-action-state"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "damage",
+      "collision",
+      "motion-vars",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/chara/ftCommon/ftCo_DownDamage.c",
+    "src/melee/ft/chara/ftCommon/ftCo_DownDamage.h",
+    "src/melee/ft/chara/ftCommon/types.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/ft_08A4.h",
+    "src/melee/ft/chara/ftCommon/ftCo_Damage.c",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Removed the previously hand-written assembly for ftCo_8009F0F0, ftCo_8009F184, ftCo_DownDamage_Anim, ftCo_DownDamage_IASA, ftCo_DownDamage_Phys, and ftCo_DownDamage_Coll from asm/melee/ft/ft_08A4.s.",
+    "Added src/melee/ft/chara/ftCommon/ftCo_DownDamage.c with matched C implementations for the DownDamage state logic.",
+    "Added src/melee/ft/chara/ftCommon/ftCo_DownDamage.h declaring ftCo_8009F0F0 and the DownDamage callbacks.",
+    "Added ftCo_DownDamage.c.o to TEXT_O_FILES in obj_files.mk before the remaining ft_08A4.s object.",
+    "Included ftCo_DownDamage.h from ftCo_Damage.c so the newly split declarations are visible where damage code needs them.",
+    "Added union ftCommon_MotionVars.downdamage with float x0 at fp+2340, matching the animation countdown storage used by ftCo_DownDamage_Anim.",
+    "Changed ftCommonData.x428 from UNK_T to int, matching its use as an integer common-data threshold converted to double/float for comparison against dmg.x1838_percentTemp.",
+    "Removed ftCo_8009F0F0 and ftCo_8009F184 declarations from ft_08A4.h; ftCo_8009F184 became static in the new C file."
+  ],
+  "smart_moves": [
+    "Kept the helper ftCo_8009F184 file-local with a static forward declaration, avoiding exporting a routine only used by ftCo_DownDamage.c.",
+    "Modeled fp+2340 through a named motion-vars union member, fp->mv.co.downdamage.x0, instead of leaving raw offsets or borrowing unrelated motion-var names.",
+    "Typed p_ftCommonData->x428 as int to match the assembly's integer load and xoris/lfd conversion pattern before comparing to percentTemp.",
+    "Used existing fighter helpers and state-transition functions rather than duplicating behavior: ftCo_8008DCE0, ftCommon_8007E2F4, ftCo_Damage_Phys, ftCo_8008FC94, ftCo_80098160, ftCo_80097F38, ftCo_80090780, and ftCo_800CC730.",
+    "Encoded the up/down DownDamage motion-state choice directly with FtMotionId ternaries, preserving the assembly's DownWaitU to DownDamageU and DownDamageU to DownStandU relationships.",
+    "Preserved empty IASA behavior as an empty C function, matching the one-instruction blr routine.",
+    "Used RETURN_IF around helper calls whose return values were only used for control flow in the matched assembly."
+  ],
+  "decomp_lessons": [
+    "When matching fighter state files, split newly matched state callbacks into a dedicated ftCo_<State>.c/.h pair and remove only the corresponding asm block from the larger asm file.",
+    "Motion-var fields at fp+2340 should be represented in ftCommon_MotionVars with a state-specific sub-struct when evidence identifies the owning state.",
+    "Assembly integer-to-floating conversion sequences can reveal that an unknown common-data field is an int even if the comparison target is float.",
+    "A trivial physics callback that only calls another physics routine can often match as a thin wrapper with the same gobj argument.",
+    "Empty action-state callbacks should be kept as explicit empty functions when the original asm is just blr.",
+    "For collision callbacks, preserve the branch shape with early-return macros when helper return values determine whether later collision handlers execute."
+  ],
+  "naming_conventions": [
+    "New common fighter state source/header follows ftCo_DownDamage.c and ftCo_DownDamage.h naming.",
+    "Action-state callbacks use the suffixes _Anim, _IASA, _Phys, and _Coll.",
+    "Unidentified address-based functions retained ftCo_8009F0F0 naming, while ftCo_8009F184 was made static because it is an internal helper.",
+    "State-specific motion vars are named under fp->mv.co.downdamage, with unknown fields kept as x0.",
+    "Motion IDs use ftCo_MS_DownBoundU, ftCo_MS_DownWaitU, ftCo_MS_DownDamageU, ftCo_MS_DownBoundD, ftCo_MS_DownWaitD, ftCo_MS_DownDamageD, ftCo_MS_DownStandU, and ftCo_MS_DownStandD."
+  ],
+  "assembly_or_matching_tactics": [
+    "Matched a six-function slice by deleting 214 lines of asm and replacing it with 98 lines of C plus precise header and type updates.",
+    "Translated the assembly's motion_id comparisons against 0xB7, 0xB8, 0xB9 and range check for 0xBF through 0xC1 into explicit DownBound/DownWait/DownDamage motion ID checks.",
+    "Represented bit extraction from fp+0x2224 as the existing bitfield fp->x2224_b2.",
+    "Mapped fp+0x2340 decrement and threshold check to fp->mv.co.downdamage.x0 -= 1 and <= 0.",
+    "Mapped fp+0xE0 ground/air checks to fp->ground_or_air == GA_Air or GA_Ground.",
+    "Mapped collision flag tests from coll_data offsets to coll->env_flags & MPCOLL_FLAGS_B11 and MPCOLL_FLAGS_B05.",
+    "Used GET_FIGHTER(gobj) in animation logic and direct gobj->user_data where that better matched local variable usage."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The only human text excerpt is a matching report showing the file and all listed functions at 100.00%."
+  ],
+  "searchable_terms": [
+    "pr-908",
+    "ftCo_DownDamage",
+    "ftCo_DownDamage.c",
+    "ftCo_DownDamage.h",
+    "ftCo_8009F0F0",
+    "ftCo_8009F184",
+    "ftCo_DownDamage_Anim",
+    "ftCo_DownDamage_IASA",
+    "ftCo_DownDamage_Phys",
+    "ftCo_DownDamage_Coll",
+    "ft_08A4.s",
+    "ft_08A4.h",
+    "ftCo_Damage.c",
+    "ftCommon_MotionVars",
+    "downdamage",
+    "fp+2340",
+    "p_ftCommonData",
+    "x428",
+    "x2224_b2",
+    "x1838_percentTemp",
+    "ground_or_air",
+    "GA_Ground",
+    "GA_Air",
+    "MPCOLL_FLAGS_B11",
+    "MPCOLL_FLAGS_B05",
+    "ftCo_MS_DownDamageU",
+    "ftCo_MS_DownDamageD",
+    "ftCo_MS_DownStandU",
+    "ftCo_MS_DownStandD",
+    "ftCo_8008DCE0",
+    "ftCommon_8007E2F4",
+    "ftCo_Damage_Phys",
+    "obj_files.mk",
+    "ribbanya"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename ftCo_8009F0F0 or ftCo_8009F184 to semantic DownDamage helper names.",
+    "Search for other uses of ftCommonData.x428 to confirm its semantic name and units.",
+    "Search for other state-specific fp+2340 motion-var structs to align naming and field semantics with downdamage.x0.",
+    "Inspect later ft_08A4.s splits around ftCo_8009F39C and ftCo_8009F75C for continuation of this decomp area."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

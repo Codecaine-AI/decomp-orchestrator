@@ -1,0 +1,121 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-687",
+  "pr": {
+    "number": 687,
+    "title": "Move __ppc_eabi_init function to correct TU",
+    "url": "https://github.com/doldecomp/melee/pull/687",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-01-15T23:42:29Z",
+    "merged_at": "2023-01-16T01:09:09Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Moved the startup helper assembly routines __init_hardware and __flush_cache out of src/dolphin/os/init/__start.c and into src/dolphin/os/init/__ppc_eabi_init.c, matching placement indicated by other games' debug maps. The change also moved declarations for __OSCacheInit and __OSPSInit from the private __start.h header into their relevant OSCache.h and OSInit.h headers so the relocated translation unit can include proper public/internal subsystem declarations.",
+  "change_classification": {
+    "primary_type": "translation_unit_correction",
+    "categories": [
+      "fix",
+      "headers",
+      "startup",
+      "decomp_structure"
+    ],
+    "systems": [
+      "dolphin",
+      "os",
+      "init"
+    ]
+  },
+  "key_files": [
+    "src/dolphin/os/init/__ppc_eabi_init.c",
+    "src/dolphin/os/init/__start.c",
+    "src/dolphin/os/init/__start.h",
+    "src/dolphin/os/OSCache.h",
+    "src/dolphin/os/OSInit.h"
+  ],
+  "what_changed": [
+    "Added PPCArch.h, OSCache.h, and OSInit.h includes to __ppc_eabi_init.c and defined MSR_FP there so the moved assembly routines have the dependencies they previously had through __start.c or __start.h.",
+    "Moved SECTION_INIT asm void __init_hardware(void) into __ppc_eabi_init.c. This routine enables the floating-point MSR bit, preserves LR in r31, calls __OSPSInit and __OSCacheInit, restores LR, and returns.",
+    "Moved SECTION_INIT asm void __flush_cache(void* address, size_t size) into __ppc_eabi_init.c, preserving the cache flush/invalidate instruction sequence with dcbst, sync, icbi, isync, and the rept loop label.",
+    "Removed __init_hardware and __flush_cache implementations from __start.c, leaving __start.c focused on startup/data initialization code such as __init_data.",
+    "Removed extern declarations for __OSCacheInit and __OSPSInit from __start.h.",
+    "Added void __OSCacheInit(void); to OSCache.h and void __OSPSInit(void); to OSInit.h so declarations live with their owning OS subsystems.",
+    "Removed the local extern void PPCHalt(void); line from __ppc_eabi_init.c in the shown diff; no replacement usage is visible in the excerpt.",
+    "Removed #pragma push / #pragma peephole off / #pragma pop around __init_cpp in __ppc_eabi_init.c in the shown diff."
+  ],
+  "smart_moves": [
+    "Used external evidence from other games' debug maps to correct translation-unit ownership rather than only matching local build convenience.",
+    "Kept the assembly bodies materially identical while relocating them, reducing behavioral risk and making the PR a structural correction rather than a logic rewrite.",
+    "Applied SECTION_INIT to the moved assembly routines in __ppc_eabi_init.c, preserving their intended init-section placement after relocation.",
+    "Replaced ad hoc declarations in __start.h with subsystem-local declarations in OSCache.h and OSInit.h, which makes the include graph communicate ownership more clearly.",
+    "Moved only the necessary startup helper routines and declarations, keeping the diff small: 5 files changed with balanced additions/deletions."
+  ],
+  "decomp_lessons": [
+    "Debug maps from other games can provide useful evidence for assigning functions to the correct translation unit, especially for runtime/startup code where local symbol placement may be uncertain.",
+    "When moving a function between TUs, preserve section attributes such as SECTION_INIT; correct section placement can matter as much as C-level behavior for matching.",
+    "Internal Dolphin OS routines should be declared in headers associated with their subsystem when possible: cache initialization in OSCache.h and processor-state initialization in OSInit.h rather than in an unrelated startup header.",
+    "Relocation fixes may require moving include dependencies and constants with the function. Here, MSR_FP and headers for PPCArch, OSCache, and OSInit followed __init_hardware into __ppc_eabi_init.c.",
+    "Keep assembly movement mechanically faithful. For fragile startup/cache code, unchanged instruction order, labels, and register usage are important for both matching and correctness.",
+    "A TU-correction PR can improve long-term decomp organization even when the net line count is nearly neutral."
+  ],
+  "naming_conventions": [
+    "Startup/runtime EABI initialization code is placed under src/dolphin/os/init/__ppc_eabi_init.c with double-underscore internal names such as __init_hardware, __flush_cache, __init_user, and __init_cpp.",
+    "Dolphin OS internal subsystem initializers use double-underscore OS-prefixed names such as __OSCacheInit and __OSPSInit.",
+    "Cache subsystem declarations belong in OSCache.h; OS initialization/processor-state declarations belong in OSInit.h.",
+    "The moved low-level routines retain lowercase Metrowerks/EABI-style names __init_hardware and __flush_cache rather than being renamed to project-specific wrappers."
+  ],
+  "assembly_or_matching_tactics": [
+    "Relocated asm routines without changing their instruction sequences, helping preserve codegen/matching characteristics.",
+    "Marked the moved asm functions with SECTION_INIT in their new TU to preserve init-section layout.",
+    "__init_hardware uses nofralloc, mfmsr/ori/mtmsr with MSR_FP 0x2000, saves LR via mflr r31, calls __OSPSInit and __OSCacheInit, restores LR via mtlr r31, then blr.",
+    "__flush_cache aligns/adjusts the address with lis/ori/and/subf/add, loops over cache lines with dcbst, sync, icbi, addic, subic., bge rept, then finishes with isync and blr.",
+    "The PR demonstrates that matching can depend on TU assignment informed by map evidence, not just local function body equivalence."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-687",
+    "r-burns",
+    "Move __ppc_eabi_init function to correct TU",
+    "__ppc_eabi_init.c",
+    "__start.c",
+    "__start.h",
+    "OSCache.h",
+    "OSInit.h",
+    "__init_hardware",
+    "__flush_cache",
+    "__init_user",
+    "__init_cpp",
+    "__OSCacheInit",
+    "__OSPSInit",
+    "MSR_FP",
+    "SECTION_INIT",
+    "PPCArch.h",
+    "startup",
+    "EABI",
+    "Dolphin OS",
+    "debug maps",
+    "translation unit",
+    "TU correction",
+    "cache flush",
+    "init section",
+    "dcbst",
+    "icbi",
+    "isync",
+    "nofralloc"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs touching __ppc_eabi_init.c to see whether this TU placement enabled additional matching or section-order fixes.",
+    "Check whether other startup/runtime functions in __start.c were later moved based on debug-map evidence.",
+    "Search for uses of __OSCacheInit and __OSPSInit declarations to confirm OSCache.h and OSInit.h became the canonical include locations.",
+    "Investigate whether removal of the peephole pragmas around __init_cpp affected matching or reflected no-longer-needed compiler workaround context."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

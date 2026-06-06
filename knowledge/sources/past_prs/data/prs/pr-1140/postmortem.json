@@ -1,0 +1,97 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1140",
+  "pr": {
+    "number": 1140,
+    "title": "Revert `sqrtf` changes",
+    "url": "https://github.com/doldecomp/melee/pull/1140",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-01-27T20:17:19Z",
+    "merged_at": "2024-01-27T20:19:05Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Reverted part of the MSL `sqrtf` inline implementation formatting/constant usage by restoring local static double constants `_half` and `_three` in `src/MSL/math.h`, then using those constants in the Newton-Raphson refinement steps around `__frsqrte`. The PR had no body or review discussion, so the exact motivation is inferred only from the title and one-file diff: these constants likely mattered for matching generated code or expected compiler behavior.",
+  "change_classification": {
+    "primary_type": "header_matching_fix",
+    "categories": [
+      "headers",
+      "revert",
+      "math_inline",
+      "matching"
+    ],
+    "systems": [
+      "MSL"
+    ]
+  },
+  "key_files": [
+    "src/MSL/math.h"
+  ],
+  "what_changed": [
+    {
+      "file": "src/MSL/math.h",
+      "details": "Inside `extern inline float sqrtf(float x)`, added `static const double _half = .5;` and `static const double _three = 3.0;` before the volatile result variable."
+    },
+    {
+      "file": "src/MSL/math.h",
+      "details": "Replaced repeated literal expressions `0.5 * guess * (3.0 - guess * guess * x)` with `_half * guess * (_three - guess * guess * x)` for all three reciprocal-square-root refinement iterations."
+    },
+    {
+      "file": "src/MSL/math.h",
+      "details": "Kept the existing algorithm structure: call `__frsqrte((double) x)`, perform three refinement passes noted as 12, 24, and 32 significant bits, then return `(float) (x * guess)` through volatile `y`."
+    }
+  ],
+  "smart_moves": [
+    "Used named `static const double` locals instead of repeated floating literals, which can affect compiler codegen and constant materialization in an inline header function.",
+    "Made a very small targeted revert in the MSL math header rather than changing the broader `sqrtf` algorithm.",
+    "Preserved the existing comments documenting the precision after each Newton-Raphson refinement step, keeping the matching-sensitive implementation understandable."
+  ],
+  "decomp_lessons": [
+    "For decompilation matching, seemingly equivalent floating-point constants such as inline `0.5`/`3.0` literals versus named `static const double` locals may not be interchangeable.",
+    "MSL inline functions in headers should be treated as matching-sensitive code because small source-level expression and storage changes can alter emitted code at call sites.",
+    "When reverting a matching regression, prefer the smallest possible source change that restores the previous compiler behavior."
+  ],
+  "naming_conventions": [
+    "The restored local constants use underscore-prefixed lowercase names `_half` and `_three`.",
+    "The existing MSL header style keeps `sqrtf` as an `extern inline` function and uses `ATTRIBUTE_USED` for constants such as `rad_to_deg`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use local `static const double` constants to control how floating constants are represented or reused by the compiler in matching-sensitive inline math code.",
+    "Preserve operation order in floating-point refinement expressions; this PR only changes constant references and line wrapping, not the multiplication/subtraction order.",
+    "Be cautious when simplifying or de-duplicating floating-point expressions in MSL math code, especially around PowerPC intrinsics like `__frsqrte`."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1140",
+    "Revert sqrtf changes",
+    "sqrtf",
+    "MSL",
+    "math.h",
+    "src/MSL/math.h",
+    "__frsqrte",
+    "_half",
+    "_three",
+    "0.5",
+    "3.0",
+    "Newton-Raphson",
+    "reciprocal square root",
+    "floating point constants",
+    "extern inline",
+    "matching",
+    "ribbanya"
+  ],
+  "follow_up_queries": [
+    "Find the earlier PR or commit that changed `sqrtf` literals before this revert.",
+    "Search for other MSL inline math functions where local static floating constants are required for matching.",
+    "Check whether `_half` and `_three` affect generated assembly via constant loading, storage class, or expression folding in the target compiler."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

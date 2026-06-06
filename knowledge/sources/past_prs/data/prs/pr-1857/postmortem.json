@@ -1,0 +1,121 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1857",
+  "pr": {
+    "number": 1857,
+    "title": "Link `ftCo_Barrel`",
+    "url": "https://github.com/doldecomp/melee/pull/1857",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2025-08-20T17:24:51Z",
+    "merged_at": "2025-08-20T17:52:18Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Linked the common fighter barrel object by changing `ftCo_Barrel.c` from NonMatching to Matching and tightening related source/header structure. The PR extracted repeated barrel knockback damage-field setup into a shared inline helper, moved the fake `SmallerHitCapsule` helper struct into `ftCommon/types.h`, and adjusted the GALE01 split sdata end address for `ftCo_Barrel.c`.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "inline-refactor",
+      "config-update"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "barrel",
+      "collision",
+      "damage",
+      "build-config"
+    ]
+  },
+  "key_files": [
+    "configure.py",
+    "config/GALE01/splits.txt",
+    "src/melee/ft/chara/ftCommon/ftCo_Barrel.c",
+    "src/melee/ft/chara/ftCommon/ftCo_BarrelWait.c",
+    "src/melee/ft/chara/ftCommon/inlines.h",
+    "src/melee/ft/chara/ftCommon/types.h"
+  ],
+  "what_changed": [
+    "`configure.py` now marks `melee/ft/chara/ftCommon/ftCo_Barrel.c` as `Object(Matching, ...)` instead of `Object(NonMatching, ...)`.",
+    "`config/GALE01/splits.txt` changed the `ftCo_Barrel.c` `.sdata` range end from `0x804D3CA8` to `0x804D3CA5`.",
+    "`ftCo_Barrel.c` includes `ftCommon/inlines.h` and `ftCommon/types.h`, declares a local `struct SmallerHitCapsule hit`, calls `lbColl_80008D30((HitCapsule*) &hit, arg3)`, and replaces open-coded knockback setup with `ftCo_Barrel_ApplyKnockback(fp, kb_angle, (HitCapsule*) &hit)`.",
+    "`ftCo_BarrelWait.c` includes `ftCommon/inlines.h`, removes a file-local fake `SmallerHitCapsule` definition, simplifies `ftCo_8009EC70` by hoisting `Fighter* fp = GET_FIGHTER(gobj)` and early position/collision/camera setup, removes an explicit `PAD_STACK(4)`, and reuses `ftCo_Barrel_ApplyKnockback` before applying `Fighter_UnkTakeDamage_8006CC30(fp, hit.damage)`.",
+    "`ftCommon/inlines.h` adds includes for `placeholder.h`, `ft/ftcoll.h`, and `ftCommon/types.h`, changes `ftCo_SpawnEf` from a dummy `u8 _[8] = { 0 };` stack pad to `FORCE_PAD_STACK_8`, and adds the new static inline `ftCo_Barrel_ApplyKnockback`.",
+    "`ftCommon/types.h` gains `struct SmallerHitCapsule`, explicitly marked as fake with `@todo Fake, need to find real size of #HitCapsule`."
+  ],
+  "smart_moves": [
+    "Factored the duplicated knockback-angle normalization and fighter damage bookkeeping into `ftCo_Barrel_ApplyKnockback`, reducing source drift between `ftCo_Barrel.c` and `ftCo_BarrelWait.c` while preserving the same field writes.",
+    "Kept the temporary reduced hit capsule representation explicit as `struct SmallerHitCapsule` and documented that it is fake, avoiding a misleading claim that the full `HitCapsule` layout is known.",
+    "Moved `SmallerHitCapsule` from a single C file into `ftCommon/types.h` so both barrel-related translation units can use the same layout workaround.",
+    "Used casts to `HitCapsule*` only at call boundaries (`lbColl_80008D30`, `ftCo_Barrel_ApplyKnockback`), making the matching workaround localized and searchable.",
+    "Replaced local dummy array stack padding in `ftCo_SpawnEf` with the named `FORCE_PAD_STACK_8` macro, making the intent of the matching artifact clearer."
+  ],
+  "decomp_lessons": [
+    "When two nonmatching or near-matching functions share identical field writes, extracting the common sequence into a static inline can improve matching and reduce duplicated brittle code.",
+    "For incomplete large structs such as `HitCapsule`, a temporary smaller struct can be used for stack layout matching, but it should be named and annotated as fake until the real layout is known.",
+    "Header placement matters: a fake or partial struct needed across multiple ftCommon files belongs in a shared ftCommon header rather than as a file-local duplicate.",
+    "Prefer project stack-padding macros such as `FORCE_PAD_STACK_8` over anonymous dummy arrays when padding is needed for matching.",
+    "A PR that links a source file should include both the build-config transition to `Matching` and any required split-address adjustment."
+  ],
+  "naming_conventions": [
+    "Common fighter barrel helper was named with the subsystem prefix and action context: `ftCo_Barrel_ApplyKnockback`.",
+    "Temporary partial layout type is named `SmallerHitCapsule`, reflecting that it is not the full `HitCapsule` and is a matching workaround.",
+    "Existing fighter field naming remains evidence-grounded and offset-like where unknown: `x1848_kb_angle`, `x184c_damaged_hurtbox`, `x1854_collpos`, `x1860_element`, `x21EC`.",
+    "The header guard style in `ftCommon/inlines.h` remains `MELEE_FT_CHARA_FTCOMMON_INLINES_H`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Changed `ftCo_Barrel.c` from nonmatching to matching in the configure object list.",
+    "Adjusted `.sdata` split end for `ftCo_Barrel.c` from `0x804D3CA8` to `0x804D3CA5`, indicating data boundary cleanup was part of linking.",
+    "Used a static inline helper for repeated knockback logic instead of duplicating code in multiple C files.",
+    "Used `FORCE_PAD_STACK_8` in `ftCo_SpawnEf` to express stack-shape padding explicitly.",
+    "Removed a `PAD_STACK(4)` from `ftCo_8009EC70` after refactoring the local variable and helper call structure.",
+    "Used `GET_FIGHTER(gobj)` consistently for `Fighter* fp` initialization in the touched functions."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR context.",
+    "The PR had one issue comment according to counts, but no comment body was included in the provided excerpt, so no reviewer intent can be extracted."
+  ],
+  "searchable_terms": [
+    "pr-1857",
+    "Link ftCo_Barrel",
+    "ftCo_Barrel.c",
+    "ftCo_BarrelWait.c",
+    "ftCo_Barrel_ApplyKnockback",
+    "SmallerHitCapsule",
+    "HitCapsule",
+    "lbColl_80008D30",
+    "ftColl_80079EA8",
+    "ftColl_800788D4",
+    "Fighter_UnkTakeDamage_8006CC30",
+    "mpColl_80043680",
+    "ftCamera_80076064",
+    "GET_FIGHTER",
+    "FORCE_PAD_STACK_8",
+    "PAD_STACK",
+    "Matching",
+    "NonMatching",
+    "GALE01 splits",
+    "sdata 0x804D3C98 0x804D3CA5",
+    "kb_angle",
+    "bury_timer_2",
+    "x1848_kb_angle",
+    "x1860_element"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that replace `SmallerHitCapsule` with the real `HitCapsule` layout.",
+    "Search for other barrel or collision damage functions duplicating `ftCo_Barrel_ApplyKnockback` logic.",
+    "Check whether additional files still use dummy stack arrays instead of `FORCE_PAD_STACK_8` or related padding macros.",
+    "Look for subsequent changes to the `ftCo_Barrel.c` `.sdata` split range."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

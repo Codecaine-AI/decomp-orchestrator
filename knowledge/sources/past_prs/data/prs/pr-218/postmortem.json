@@ -1,0 +1,140 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-218",
+  "pr": {
+    "number": 218,
+    "title": "Split the remainder of .data and move declarations into C where possible",
+    "url": "https://github.com/doldecomp/melee/pull/218",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-22T20:21:25Z",
+    "merged_at": "2021-12-22T20:21:31Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Removed the monolithic asm/data.s .data blob and redistributed remaining data into module-owned assembly files under asm/dolphin/ax and asm/sysdolphin/baselib, while moving several now-understood declarations and strings into C. Build metadata was adjusted so data-bearing asm files are linked with the normal object list instead of a separate DATA_O_FILES bucket. The PR also replaced some extern lbl_* references with named C definitions such as hsdObj, hsdClass, and hsdDObj, and made HSD_ArchiveParse compile as C after resolving the prior string-section blocker.",
+  "change_classification": {
+    "primary_type": "data_split_and_c_declaration_cleanup",
+    "categories": [
+      "asm_data_split",
+      "build_system",
+      "headers",
+      "c_declarations",
+      "symbol_naming"
+    ],
+    "systems": [
+      "asm",
+      "dolphin/ax",
+      "sysdolphin/baselib",
+      "include",
+      "build"
+    ]
+  },
+  "key_files": [
+    "asm/data.s",
+    "asm/dolphin/ax/AXAlloc.s",
+    "asm/sysdolphin/baselib/code_803A949C.s",
+    "asm/sysdolphin/baselib/code_80391580.s",
+    "asm/sysdolphin/baselib/sislib.s",
+    "asm/sysdolphin/baselib/*.s",
+    "Makefile",
+    "obj_files.mk",
+    "include/variables.h",
+    "src/sysdolphin/baselib/archive.c",
+    "src/sysdolphin/baselib/aobj.c",
+    "src/sysdolphin/baselib/class.c",
+    "src/sysdolphin/baselib/dobj.c",
+    "src/sysdolphin/baselib/object.c",
+    "src/sysdolphin/baselib/object.h",
+    "src/sysdolphin/baselib/dobj.h"
+  ],
+  "what_changed": [
+    "Deleted asm/data.s, which previously held a single 46661-line .data section from 0x803B9840 to 0x804316C0.",
+    "Added .data sections to many owning assembly files, with the largest blocks going into asm/sysdolphin/baselib/code_803A949C.s, asm/sysdolphin/baselib/code_80391580.s, asm/sysdolphin/baselib/sislib.s, and asm/dolphin/ax/AXAlloc.s.",
+    "Removed DATA_O_FILES from the Makefile O_FILES composition and deleted the DATA_O_FILES := $(BUILD_DIR)/asm/data.o definition from obj_files.mk.",
+    "Added module-specific asm objects such as asm/sysdolphin/baselib/dobj.o and asm/sysdolphin/baselib/aobj.o to TEXT_O_FILES where needed, and changed asm/sysdolphin/baselib/sobj.o to asm/sysdolphin/baselib/sobjlib.o.",
+    "Changed the epilogue build rules so %.s files in EPILOGUE_PROCESS are assembled directly with $(AS) and $(ASFLAGS), instead of treating all epilogue objects as C-family Frank post-processing inputs.",
+    "Moved known globals into C: HSD_ClassInfo hsdClass = { func_803822C0 }, HSD_ClassInfo hsdObj = { ObjInfoInit }, and HSD_DObjInfo hsdDObj = { DObjInfoInit }.",
+    "Renamed the commented variable entry in include/variables.h from lbl_804072A8 to hsdObj.",
+    "Replaced several extern string labels with direct C string literals or __FILE__ usage in class.c, gobjuserdata.c, memory.c, and object.c.",
+    "In aobj.c, replaced extern data labels lbl_80405FB8 and lbl_80405FC4 with explicit char arrays for \"object.h\" and \"HSD_OBJ(o)->ref_count != HSD_OBJ_NOREF\".",
+    "Removed the inline asm fallback for HSD_ArchiveParse; the C implementation became the active implementation after the string extern/section problem was eliminated.",
+    "Removed the update function pointer from HSD_DObjInfo in dobj.h, indicating the struct layout was corrected or narrowed by evidence in this slice."
+  ],
+  "smart_moves": [
+    "Splitting .data by owner makes future decompilation more searchable and keeps data near the code that references it, while preserving unknown labels where names were not yet justified.",
+    "Moving understood globals and assertion strings into C reduced dependence on anonymous lbl_* externs and enabled at least one previously non-matching function path, HSD_ArchiveParse, to be expressed in C.",
+    "The build-system change removed the special asm/data.o link bucket instead of leaving dead infrastructure behind, making link order reflect per-module ownership.",
+    "The PR only named symbols when there was direct evidence from surrounding C usage, for example hsdObj, hsdClass, hsdDObj, and known assertion/file strings; unknown jump tables and data stayed as jtbl_* or lbl_*.",
+    "Adding a direct assembly rule for epilogue %.s outputs avoided running Frank/C compiler post-processing on pure assembly data splits."
+  ],
+  "decomp_lessons": [
+    "When a giant .data file is split, update both object lists and build recipes; otherwise link order and epilogue processing can silently diverge from the original binary.",
+    "Known assertion strings can often be moved from extern lbl_* declarations into literal C arguments, which may unblock matching by avoiding section-placement constraints.",
+    "Class/object singleton data such as hsdClass, hsdObj, and hsdDObj should be defined in the C file that owns initialization logic when evidence is clear, instead of being treated as anonymous data labels.",
+    "Deleting inline asm fallbacks is safest when the root mismatch cause is removed; here the slice explicitly notes the old archive.c non-match was because the string could not be externed due to section placement.",
+    "Data ownership can be incremental: keep unresolved arrays, jump tables, and opaque data in per-module asm while migrating high-confidence declarations to C.",
+    "Header layout changes should be small and evidence-driven; dobj.h removed a trailing function pointer rather than broadly rewriting the type."
+  ],
+  "naming_conventions": [
+    "Use real baselib singleton names where known: hsdClass, hsdObj, hsdDObj.",
+    "Retain lbl_80xxxxxx names for unresolved data labels and jtbl_80xxxxxx for jump tables.",
+    "Prefer direct C string literals or __FILE__ for assert file/condition strings once their contents are known.",
+    "Reflect newly named data in include/variables.h comments, as shown by lbl_804072A8 becoming hsdObj."
+  ],
+  "assembly_or_matching_tactics": [
+    "Move .data from asm/data.s into the assembly file for the subsystem or source module that owns the references.",
+    "Append module-local .section .data blocks after existing text assembly while preserving labels, alignment, .global declarations, and raw .4byte/.asciz contents.",
+    "Keep TEXT_O_FILES ordered to preserve binary layout after adding per-module asm data objects.",
+    "Remove DATA_O_FILES once the monolithic data object is gone, so there is no separate data-only link phase.",
+    "For epilogue builds, assemble %.s files directly with AS/ASFLAGS and reserve Frank processing for C inputs with a corresponding build object.",
+    "Use C definitions for known globals and strings to solve section-related matching blockers before deleting inline asm fallbacks."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review body were present in the provided slice; no explicit reviewer feedback is captured."
+  ],
+  "searchable_terms": [
+    "PR218",
+    "data-split",
+    "asm/data.s",
+    "DATA_O_FILES",
+    "TEXT_O_FILES",
+    "EPILOGUE_PROCESS",
+    "Frank",
+    "AXAlloc.s",
+    "code_803A949C.s",
+    "code_80391580.s",
+    "sislib.s",
+    "sobjlib.s",
+    "HSD_ArchiveParse",
+    "hsdClass",
+    "hsdObj",
+    "hsdDObj",
+    "ObjInfoInit",
+    "DObjInfoInit",
+    "ClassInfoInit",
+    "HSD_ClassInfo",
+    "HSD_DObjInfo",
+    "variables.h",
+    "object.h",
+    "gobjuserdata",
+    "__FILE__",
+    "jtbl_",
+    "lbl_804072A8"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that continue replacing lbl_* data symbols with hsd* class/object singleton names.",
+    "Search for remaining DATA_O_FILES or asm/data.s references after PR 218.",
+    "Audit baselib .s files added in this PR for data blocks that can now be moved into C.",
+    "Check later changes to HSD_DObjInfo to confirm the removed update field and final struct layout.",
+    "Search for inline asm fallbacks guarded by NON_MATCHING that only exist because of extern string or data-section placement issues."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

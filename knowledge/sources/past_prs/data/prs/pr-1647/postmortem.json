@@ -1,0 +1,123 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1647",
+  "pr": {
+    "number": 1647,
+    "title": "Rest of ftSk_SpecialHi functions almost completely matching",
+    "url": "https://github.com/doldecomp/melee/pull/1647",
+    "state": "MERGED",
+    "author": "Gelatart",
+    "created_at": "2025-06-27T08:50:18Z",
+    "merged_at": "2025-06-27T15:14:51Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Implemented several previously stubbed Sheik SpecialHi, Sheik SpecialLw, and Yoshi SpecialN functions, with the PR author noting only slight remaining instruction differences for some ftSk_SpecialHi functions. The main work was matching Sheik Up-B travel/fall transition logic and related velocity preservation/restoration, while also refining ftSeakAttributes layout so later fields such as x54, x60, x64, x68, and x6C are typed as f32 and usable by matched physics code.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "fighter-special-moves"
+    ],
+    "systems": [
+      "fighter",
+      "ftSeak",
+      "ftYoshi"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftSeak/ftSk_SpecialHi.c",
+    "src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c",
+    "src/melee/ft/chara/ftSeak/types.h",
+    "src/melee/ft/chara/ftYoshi/ftYs_SpecialN.c",
+    "src/melee/ft/chara/ftYoshi/ftYs_SpecialN.h"
+  ],
+  "what_changed": [
+    "Replaced the nonmatching marker for ftSk_SpecialHi_80113A30 with a C implementation for AS_SheikUpBTravelAir that reads the left stick, computes stick magnitude with sqrtf, clamps the value, conditionally flips/normalizes facing with ftCommon_8007D9FC or ftCommon_8007DA24, computes launch angle with atan2f, sets specialhi velocity fields, assigns self_vel using cosf/sinf and ftSeakAttributes x44/x48, changes motion state to 0x167, updates animation, sets anim rate to 0, and calls inlineA0.",
+    "Added ftSk_SpecialHi_80113EAC and ftSk_SpecialHi_80113F68 plus local inline helpers that preserve current self/gr velocities into mv.co fields, zero gr_vel/self_vel, clear x221E_b0, set accessory4_cb to fn_80113038, change to motion states 0x165 or 0x168, and restore scaled ground or air velocity using ftSeakAttributes x54.",
+    "Implemented ftSk_SpecialLw_Phys as a direct call to ft_80084F3C and ftSk_SpecialAirLw_Phys using ftCommon_8007D494 with attributes x68/x6C followed by ftCommon_8007CEF4.",
+    "Expanded and corrected ftSeakAttributes: x54 changed from s32 to f32, x60/x64/x68/x6C added as f32 fields, and data_filler_1 shrunk to 0x04. Obsolete comments about fields matching only when typed f32 were removed after the struct was made concrete.",
+    "Added Yoshi SpecialN matches: fn_8012D360 and fn_8012D4F0 transition through ftCommon_8007D7FC and Fighter_ChangeMotionState to states 0x15B and 0x15D; ftYs_SpecialAirN1_0_Anim exits via ftCo_800CC730 when no frames remain; ftYs_SpecialAirN1_0_Coll and ftYs_SpecialN1_0_Coll call ft_80082C74/fn_8012D1AC and ft_8008403C/fn_8012D298 respectively.",
+    "Updated ftYs_SpecialN.h prototypes for fn_8012D1AC and fn_8012D4F0 from UNK_RET/UNK_PARAMS to typed void callbacks with ftYs_GObj* or Fighter_GObj* parameters."
+  ],
+  "smart_moves": [
+    "Used small static inline helper functions in ftSk_SpecialHi.c to reproduce repeated velocity-save/zero/accessory-callback setup for two closely related Sheik Up-B transitions while preserving per-state differences after the helper call.",
+    "Kept stack-padding dummy arrays such as u8 _[32], u8 _[4], and u8 _[8] where needed, indicating a matching tactic for stack layout and instruction ordering rather than purely semantic cleanup.",
+    "Converted ftSeakAttributes filler into explicit f32 fields only where newly matched code needed them, allowing SpecialHi and SpecialLw physics to access typed attributes instead of relying on opaque padding.",
+    "Used existing common fighter helpers for collision/physics state transitions rather than duplicating logic: ft_80084F3C, ftCommon_8007D494, ftCommon_8007CEF4, ft_80082C74, and ft_8008403C.",
+    "Preserved existing motion constants and flags from the target code path, including Fighter_ChangeMotionState IDs 0x165, 0x167, 0x168, 0x15B, and 0x15D and Yoshi flag 0x0C4C5092U."
+  ],
+  "decomp_lessons": [
+    "For fighter attribute structs, matching several related move functions can reveal that apparent filler should become typed fields; here Sheik attributes beyond x54 were resolved as f32 fields used by SpecialLw air physics.",
+    "When a transition function must carry velocity through a motion-state change, storing self_vel/gr_vel into mv.co scratch fields before zeroing and then restoring/scaling afterward can be the pattern needed for a match.",
+    "Repeated near-identical transition setup can be factored into static helper functions when it matches inlining behavior, but the helper body must preserve exact field writes such as x221E_b0 and accessory4_cb.",
+    "Joystick-vector code may need explicit intermediate locals and clamping order to match: square x/y, sqrt magnitude, clamp to 1.0-like constants, compare against an attribute threshold, and only then compute atan2f with facing_dir.",
+    "Header prototype cleanup is part of matching: replacing UNK_RET/UNK_PARAMS with concrete callback signatures lets newly implemented collision and state-change helpers typecheck and document expected gobj types."
+  ],
+  "naming_conventions": [
+    "Sheik files use the internal character prefix ftSk even though the path is ftSeak, e.g. ftSk_SpecialHi_80113A30 and ftSk_SpecialLw_Phys.",
+    "Action-state comments identify semantic move states, such as AS_SheikUpBTravelAir and AS_SheikUpBFall, while function names remain address-based until better names are known.",
+    "Local helper names were formed by appending _inline to the target function name, e.g. ftSk_SpecialHi_80113EAC_inline and ftSk_SpecialHi_80113F68_inline.",
+    "Unresolved attribute fields remained offset-style names such as x40, x44, x48, x54, x68, and x6C rather than speculative semantic names.",
+    "Yoshi SpecialN callbacks retained address-style names such as fn_8012D360 and fn_8012D4F0, with typed prototypes added only where evidence supported them."
+  ],
+  "assembly_or_matching_tactics": [
+    "Inserted explicit unused stack arrays to influence stack frame shape: u8 _[32] in ftSk_SpecialHi_80113A30, u8 _[4] in ftSk_SpecialAirLw_Phys, and u8 _[8] in ftYs_SpecialAirN1_0_Anim.",
+    "Used chained assignment fp->gr_vel = fp->self_vel.x = fp->self_vel.y = ftSk_Init_804D9660 in Sheik Up-B helpers, likely to match store ordering or compact generated code.",
+    "Accessed Fighter data both as gobj->user_data and through GET_FIGHTER depending on the surrounding function style and matching needs.",
+    "Kept math-library calls sqrtf, atan2f, cosf, and sinf in the Sheik Up-B travel implementation, with separate locals for stick_y_sq, stick_mag, var_f30, and var_f31 to control generated floating-point code.",
+    "Used existing float constants such as ftSk_Init_804D9660, ftSk_Init_804D9664, ftSk_Init_804D9688, ftSk_Init_804D968C, and ftYs_Init_804D9A38 rather than literal floating-point values."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "The PR body says the ftSk_SpecialHi functions were almost completely matching, with only slight instruction differences remaining on some functions.",
+    "The diff includes comments crediting Grumpy Zebra's fork of Gelatart's scratch and kipcode66 context from decomp.me for earlier SpecialHi-related matching work; there is no direct reviewer instruction attached to these comments in the slice."
+  ],
+  "searchable_terms": [
+    "pr-1647",
+    "Gelatart",
+    "ftSk_SpecialHi",
+    "ftSk_SpecialHi_80113A30",
+    "ftSk_SpecialHi_80113EAC",
+    "ftSk_SpecialHi_80113F68",
+    "AS_SheikUpBTravelAir",
+    "AS_SheikUpBFall",
+    "ftSk_SpecialLw_Phys",
+    "ftSk_SpecialAirLw_Phys",
+    "ftSeakAttributes",
+    "x54 f32",
+    "x68 x6C",
+    "data_filler_1",
+    "fn_80113038",
+    "accessory4_cb",
+    "x221E_b0",
+    "ftYs_SpecialN",
+    "ftYs_SpecialAirN1_0_Anim",
+    "ftYs_SpecialAirN1_0_Coll",
+    "ftYs_SpecialN1_0_Coll",
+    "fn_8012D360",
+    "fn_8012D4F0",
+    "Fighter_ChangeMotionState",
+    "ftCommon_8007D494",
+    "ftCommon_8007CEF4",
+    "ft_80082C74",
+    "ft_8008403C",
+    "stack padding u8 _"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching ftSk_SpecialHi_80113A30 to see whether the slight instruction differences mentioned in PR #1647 were fully resolved.",
+    "Search for subsequent renames or semantic documentation of ftSeakAttributes fields x40 through x6C.",
+    "Look for PRs that replace ftSk_SpecialHi_80113EAC_inline or ftSk_SpecialHi_80113F68_inline with shared common helpers or renamed transition routines.",
+    "Check later ftYs_SpecialN work for typed prototypes of fn_8012D1AC, fn_8012D360, fn_8012D4F0, and related collision callbacks."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

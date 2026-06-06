@@ -1,0 +1,143 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1834",
+  "pr": {
+    "number": 1834,
+    "title": "ifstatus work",
+    "url": "https://github.com/doldecomp/melee/pull/1834",
+    "state": "MERGED",
+    "author": "lukechampine",
+    "created_at": "2025-08-13T00:04:13Z",
+    "merged_at": "2025-08-13T06:21:51Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched and typed additional ifstatus code around the 803F9628 status element table, including an implementation of ifStatus_802F7134, conversion of a wrapper struct into a direct 8-element Element_803F9628 array, stronger callback/model pointer types, and more precise prototypes for if_802F73C4 and if_802F74D0. Review discussion identified that the archive section \"ScInfCnt_scene_models\" should be treated as DynamicModelDesc** rather than SceneDesc*, with a volatile local needed for matching despite unclear cause.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "fix",
+      "headers",
+      "types-structs",
+      "prototype-cleanup",
+      "archive-data-typing"
+    ],
+    "systems": [
+      "melee-core",
+      "ifstatus",
+      "interface",
+      "lbarchive",
+      "scene-types"
+    ]
+  },
+  "key_files": [
+    "src/melee/if/ifstatus.c",
+    "src/melee/if/types.h",
+    "src/melee/if/if_2F72.h"
+  ],
+  "what_changed": [
+    "Implemented ifStatus_802F7134 instead of leaving it as an unmatched stub marker.",
+    "Initialized static ifStatus_803F9628 as an array of 8 Element_803F9628 entries with HSD_GObj pointers, callback functions, numeric IDs, and flag-like values.",
+    "Changed ifStatus_803F9628 from a single Thing_803F9628 wrapper object to a direct Element_803F9628 ifStatus_803F9628[8] array.",
+    "Updated ifStatus_802F7220 cleanup to index ifStatus_803F9628[i] directly instead of ifStatus_803F9628.things[i].",
+    "Refined Element_803F9628.x8 from UNK_T to void (*)(HSD_GObj*) and Element_803F9628.x14 from s32 to DynamicModelDesc*.",
+    "Removed the Thing_803F9628 wrapper struct and its extra trailing u32 array from if/types.h.",
+    "Added sc/forward.h to expose DynamicModelDesc and baselib/forward.h in if_2F72.h to support HSD_GObj prototypes.",
+    "Changed if_802F73C4 and if_802F74D0 declarations from UNK_RET/UNK_PARAMS to void if_802F73C4(HSD_GObj*) and void if_802F74D0(HSD_GObj*).",
+    "Added includes in ifstatus.c for m2c_macros.h, placeholder.h, sc/types.h, and lb/lbarchive.h, although the final diff excerpt no longer uses the M2C_FIELD approach shown in earlier review hunks.",
+    "Loaded the archive section \"ScInfCnt_scene_models\" using lbArchive_LoadSections and assigned the resulting DynamicModelDesc* entries into ifStatus_803F9628[i].x14 for eight elements."
+  ],
+  "smart_moves": [
+    "Replaced repetitive manual initialization with two loops over the fixed 8-element status table, improving readability while preserving the matching behavior shown in the final diff.",
+    "Modeled the global at 803F9628 as the array that callers actually iterate over, avoiding the misleading Thing_803F9628.things wrapper and eliminating unused trailing fields.",
+    "Promoted unknown fields to specific callback and model descriptor pointer types once callsites and archive data clarified their roles.",
+    "Used DynamicModelDesc** volatile models in ifStatus_802F7134 after review feedback; this avoided the larger PAD_STACK/SceneDesc workaround and produced a cleaner typed load from lbArchive_LoadSections.",
+    "Kept the exact archive section name \"ScInfCnt_scene_models\" visible in code, which is useful evidence for connecting ifstatus model data to scene/archive resources."
+  ],
+  "decomp_lessons": [
+    "Do not over-trust type usage in another function: the author initially inferred SceneDesc from gm_80181998, but review suggested DynamicModelDesc was the better local type for this ifstatus use.",
+    "When an archive section appears to contain an array of model descriptors, representing the loaded pointer as DynamicModelDesc** can remove awkward M2C_FIELD indexing and clarify intent.",
+    "A volatile local can be a legitimate matching tactic when the semantic type is believed correct but the compiler otherwise rearranges stack/register behavior; document uncertainty when the reason is not understood.",
+    "If a wrapper struct only exists to hold a fixed array and all known code indexes the array directly, retyping the global as an array can simplify both C and cleanup code.",
+    "Callback fields should be typed as function pointers as soon as prototypes are known; this makes static initializers and headers more self-documenting than UNK_T/UNK_PARAMS.",
+    "Large PAD_STACK values are a warning sign. Review explored replacing a 20-byte stack pad and SceneDesc pointer/M2C_FIELD approach with a smaller local buffer plus correct typed pointer."
+  ],
+  "naming_conventions": [
+    "Preserved address-based names for partially understood symbols: ifStatus_802F7134, ifStatus_802F7220, ifStatus_803F9628, ifStatus_804D6D60, ifStatus_804D6D61.",
+    "Used subsystem prefix ifStatus_ for status interface functions and data.",
+    "Kept generic field names x0, x4, x8, xC, x10, x14, etc. in Element_803F9628 while improving their C types where evidence existed.",
+    "Renamed the global type usage away from Thing_803F9628 toward Element_803F9628[8], reflecting the concrete element array layout.",
+    "Header prototypes in if_2F72.h retain address comments such as /* 2F73C4 */ while replacing unknown signatures with typed HSD_GObj* parameters."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used a fixed u8 _[8] local in ifStatus_802F7134 to influence stack layout.",
+    "Declared DynamicModelDesc** volatile models; reviewer noted the volatile was needed for matching but the exact reason was unclear.",
+    "Loaded data via lbArchive_LoadSections(*archive, (void**) &models, \"ScInfCnt_scene_models\", 0), matching the expected archive API cast pattern.",
+    "Looped over exactly 8 status entries for initialization and model descriptor assignment, matching the size of the static ifStatus_803F9628 table.",
+    "Earlier attempted tactics included PAD_STACK(20), SceneDesc* desc, and M2C_FIELD(&desc, s32**, 0)[i]; review steered this toward a typed DynamicModelDesc** solution."
+  ],
+  "review_feedback": [
+    {
+      "author": "lukechampine",
+      "file": "src/melee/if/ifstatus.c",
+      "feedback": "Author flagged uncertainty on the initial ifStatus_802F7134 implementation: \"not sure what's going on here 🤔\"."
+    },
+    {
+      "author": "lukechampine",
+      "file": "src/melee/if/ifstatus.c",
+      "feedback": "Author noted that PAD_STACK(20) was a lot of extra stack and that declaring SceneDesc as a non-pointer did not align offsets."
+    },
+    {
+      "author": "r-burns",
+      "file": "src/melee/if/ifstatus.c",
+      "feedback": "Reviewer suggested a cleaner implementation using u8 _[8], HSD_Archive**, DynamicModelDesc** volatile models, loops over 8 entries, and lbArchive_LoadSections; reviewer believed DynamicModelDesc was the correct type but was unsure why volatile was required."
+    },
+    {
+      "author": "lukechampine",
+      "file": "src/melee/if/ifstatus.c",
+      "feedback": "Author accepted the DynamicModelDesc direction and explained the earlier SceneDesc assumption came from gm_80181998 loading \"ScInfCnt_scene_models\" into that type, while acknowledging gm_80181998 might be buggy."
+    }
+  ],
+  "searchable_terms": [
+    "ifstatus work",
+    "ifStatus_802F7134",
+    "ifStatus_802F7220",
+    "ifStatus_803F9628",
+    "Element_803F9628",
+    "Thing_803F9628",
+    "DynamicModelDesc",
+    "DynamicModelDesc** volatile",
+    "ScInfCnt_scene_models",
+    "lbArchive_LoadSections",
+    "ifAll_802F3690",
+    "HSD_Archive",
+    "HSD_GObj",
+    "if_802F73C4",
+    "if_802F74D0",
+    "HSD_GObjPLink_80390228",
+    "SceneDesc",
+    "gm_80181998",
+    "M2C_FIELD",
+    "PAD_STACK(20)",
+    "u8 _[8]",
+    "if/types.h",
+    "if_2F72.h",
+    "ifstatus.c"
+  ],
+  "follow_up_queries": [
+    "Check whether gm_80181998 really should load \"ScInfCnt_scene_models\" as SceneDesc or whether that function has an incorrect type.",
+    "Search for other uses of ScInfCnt_scene_models to standardize the archive section's inferred type.",
+    "Investigate why DynamicModelDesc** volatile models is required for matching ifStatus_802F7134.",
+    "Confirm whether Element_803F9628.xC and x10 flag comments can be named based on usage of the initialized constants.",
+    "Look for remaining UNK_RET/UNK_PARAMS declarations in if_2F72.h adjacent functions fn_802F7288, fn_802F75D4, fn_802F7670, and fn_802F770C."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

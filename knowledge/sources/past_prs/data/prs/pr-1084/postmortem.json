@@ -1,0 +1,134 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1084",
+  "pr": {
+    "number": 1084,
+    "title": "Split `cw_map` from `main` in `config-dtk`",
+    "url": "https://github.com/doldecomp/melee/pull/1084",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-01-19T09:08:53Z",
+    "merged_at": "2024-01-19T09:25:59Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Refactored the Rust `tools/config-dtk` tool by moving CodeWarrior map parsing logic out of `main.rs` into a new `cw_map.rs` module. The PR appears to be almost entirely a file split: `main.rs` shrank from containing the parser implementation to importing `mod cw_map;` and using `cw_map::Context`, while `cw_map.rs` now owns section-name conversion, identifier formatting, parsed symbol structs, split/section tracking, source path mapping, and line matching over `cwparse` map/table/tree data.",
+  "change_classification": {
+    "primary_type": "tooling_refactor",
+    "categories": [
+      "tooling",
+      "refactor",
+      "rust_module_split",
+      "config_generation"
+    ],
+    "systems": [
+      "tools/config-dtk",
+      "CodeWarrior map parsing",
+      "DTK config tooling"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "tools/config-dtk/src/main.rs",
+      "change": "Removed the bulk of CodeWarrior map parsing implementation and replaced it with `mod cw_map;` plus imports of `cw_map::Context`; retained main/config output responsibilities."
+    },
+    {
+      "path": "tools/config-dtk/src/cw_map.rs",
+      "change": "New module containing the moved map parsing context, symbol structs, section/id formatting helpers, split and section tracking, source path handling, and cwparse line matching logic."
+    }
+  ],
+  "what_changed": [
+    "Added `tools/config-dtk/src/cw_map.rs` with roughly 501 lines of map parsing code formerly embedded in `main.rs`.",
+    "Reduced `tools/config-dtk/src/main.rs` by roughly 497 deleted lines, leaving it to import and use `cw_map::Context` rather than define the parser inline.",
+    "Made parser-facing types and fields visible within the crate where needed: `Context`, `TreeSymbol`, `TableSymbol`, and selected fields are marked `pub(crate)` in the new module.",
+    "Kept parser behavior visible in the diff largely intact: map lines are parsed in parallel with `par_lines`, symbols are stored in `AHashMap`s keyed by hashed translation unit plus identifier, and errors/warnings preserve contextual raw-line formatting.",
+    "Preserved CodeWarrior section and identifier normalization helpers, including names such as `.text`, `.data`, `.bss`, `.rodata`, `extab`, `extabindex`, `@stringBase{idx}`, `lbl{name}`, and section-derived labels."
+  ],
+  "smart_moves": [
+    "Separated a large parser subsystem from the executable entry point, making `main.rs` easier to scan and reducing coupling between CLI/config output code and CodeWarrior map parsing internals.",
+    "Used a crate-private module boundary instead of making the parser API fully public, exposing only what `main.rs` needs through `pub(crate)`.",
+    "Preserved the existing parser context shape rather than combining the refactor with semantic changes, which lowers review risk for a tooling cleanup.",
+    "Kept detailed parser diagnostics close to the parser state via `format_error_raw` and `format_error`, maintaining line/raw text context after the module split.",
+    "Maintained existing performance-oriented parsing structure using Rayon parallel line parsing and `AHashMap`/`RandomState` hashing."
+  ],
+  "decomp_lessons": [
+    "For decomp support tools, split large parsing logic out of `main.rs` once it grows into its own domain model; this makes future config-generation changes less likely to accidentally disturb parser behavior.",
+    "When moving code into a Rust module, prefer `pub(crate)` for structs and fields consumed by sibling modules instead of widening visibility to `pub` without need.",
+    "Refactors of build/config tools should be kept behavior-preserving when possible: a direct module extraction is easier to validate than a file split mixed with parser rewrites.",
+    "Keep CodeWarrior map normalization rules centralized; section names, symbol identifier formatting, TU stripping, and split tracking are reusable concepts for future DTK/config tooling.",
+    "Parser diagnostics that include source line number and raw line text are useful for maintaining decomp tooling that consumes compiler/linker artifacts with edge cases."
+  ],
+  "naming_conventions": [
+    "`cw_map` was chosen as the module name for CodeWarrior map parsing responsibilities.",
+    "The parser context type remains named `Context`, imported as `cw_map::Context` in `main.rs`.",
+    "Rust raw identifiers are used for reserved words such as `r#type` in structs that model symbol or section type fields.",
+    "CodeWarrior section names are normalized to output strings including `.bss`, `.ctors`, `.data`, `.init`, `.rodata`, `.sbss`, `.sbss2`, `.sdata`, `.sdata2`, `.text`, `.dtors`, plus `extab` and `extabindex` without leading dots as shown in the diff.",
+    "Identifier formatting conventions preserved include relative symbols as `@{idx}`, string-base symbols as `@stringBase{idx}`, duplicate named instances as `name$instance`, section indexed identifiers as `..section.idx`, and DotL labels as `lbl{name}`.",
+    "Translation unit names are normalized by stripping a trailing `.o` via `strip_tu`."
+  ],
+  "assembly_or_matching_tactics": [
+    "This PR is tooling-focused and does not directly change decompiled C/assembly matching.",
+    "The moved parser preserves tactics useful to config generation: detect split starts from section symbols whose object name ends with `.c.o`, close the previous split when a new one begins, and track section start/end addresses as `NonZeroU32`.",
+    "Symbol lookup keys are built by hashing the translation unit and CodeWarrior map identifier together, reducing collisions between same-named symbols from different object files.",
+    "Source paths are filtered to `.c` files and stored relative to the project root using `pathdiff::diff_paths`, which supports generating stable config paths.",
+    "Zero-size symbols or sections are not silently ignored everywhere: the parser emits warnings/debug messages, which helps diagnose map anomalies during config work."
+  ],
+  "review_feedback": [
+    {
+      "source": "PR context",
+      "feedback": "No issue comments, review comments, or formal reviews were present in the provided slice.",
+      "evidence": "Counts show issue_comments: 0, review_comments: 0, reviews: 0."
+    }
+  ],
+  "searchable_terms": [
+    "pr-1084",
+    "config-dtk",
+    "cw_map",
+    "CodeWarrior map",
+    "cwparse",
+    "tools/config-dtk/src/main.rs",
+    "tools/config-dtk/src/cw_map.rs",
+    "Context",
+    "TreeSymbol",
+    "TableSymbol",
+    "Split",
+    "Section",
+    "section_to_string",
+    "id_to_string",
+    "strip_tu",
+    "push_symbol",
+    "push_tree_symbol",
+    "push_table_symbol",
+    "push_split_start",
+    "push_split_end",
+    "push_section",
+    "push_src_paths",
+    "AHashMap",
+    "RandomState",
+    "rayon par_lines",
+    "pathdiff diff_paths",
+    "NonZeroU32",
+    "NonZeroU8",
+    ".text",
+    ".data",
+    ".bss",
+    ".rodata",
+    "extab",
+    "extabindex",
+    "DTK config"
+  ],
+  "follow_up_queries": [
+    "Find later PRs modifying `tools/config-dtk/src/cw_map.rs` to see whether the module split enabled parser fixes or API changes.",
+    "Search for changes to `cw_map::Context` consumers in `tools/config-dtk/src/main.rs` after PR 1084.",
+    "Look for PRs touching `cwparse` handling, section normalization, or split detection for `.c.o` objects.",
+    "Check whether later review feedback requested further splitting of `cw_map.rs` into symbol, section, and source-path submodules."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

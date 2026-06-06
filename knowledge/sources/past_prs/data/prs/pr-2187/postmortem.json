@@ -1,0 +1,153 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2187",
+  "pr": {
+    "number": 2187,
+    "title": "Samus charge shot",
+    "url": "https://github.com/doldecomp/melee/pull/2187",
+    "state": "MERGED",
+    "author": "jellejurre",
+    "created_at": "2026-02-24T23:59:04Z",
+    "merged_at": "2026-02-25T17:34:50Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Decompiled and matched a substantial slice of Samus charge shot behavior plus two Samus bomb animation callbacks, while also standardizing repeated full-turn angle constants through a new M_TAU macro. The bot report credited 9 new 100% matches totaling +2776 bytes, including itsamuschargeshot creation, destruction, pickup, reflected, shield-bounced, accessory/animation helpers, and itsamusbomb_UnkMotion1_Anim/2_Anim. Review centered on replacing hand-expanded inline code with existing inlines such as ABS, HSD_JObjSetRotationY, HSD_JObjSetScale, and itGetJObjGrandchild, consolidating duplicated bomb motion logic, and improving item/parent gobj naming.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "item-behavior",
+      "headers",
+      "types-structs",
+      "naming",
+      "inline-cleanup",
+      "math-constant-cleanup"
+    ],
+    "systems": [
+      "item",
+      "fighter",
+      "effect",
+      "baselib",
+      "MSL",
+      "camera",
+      "library"
+    ]
+  },
+  "key_files": [
+    "src/melee/it/items/itsamuschargeshot.c",
+    "src/melee/it/items/itsamuschargeshot.h",
+    "src/melee/it/items/itsamusbomb.c",
+    "src/melee/it/itCharItems.h",
+    "src/MSL/math.h",
+    "src/melee/ft/ftlib.c",
+    "src/melee/ft/ftlib.h",
+    "src/melee/ef/efasync.c",
+    "src/melee/ef/efsync.c",
+    "src/melee/it/itcoll.c",
+    "src/melee/lb/lbvector.c",
+    "src/sysdolphin/baselib/particle.c"
+  ],
+  "what_changed": [
+    "Added M_TAU to src/MSL/math.h and replaced many 2 * M_PI or M_PI * 2 expressions across camera, effects, fighters, items, lbvector, and particle code.",
+    "Filled in Samus charge shot functions in src/melee/it/items/itsamuschargeshot.c, including it_802B55C8, it_802B56E4, it_2725_Logic108_Destroyed, it_2725_Logic108_PickedUp, it_802B5CBC, itSamuschargeshot_UnkMotion8_Anim, it_802B5EDC, it_2725_Logic108_Reflected, and it_2725_Logic108_ShieldBounced.",
+    "Expanded itSamusChargeshot_ItemVars in itCharItems.h from sparse placeholders into offset-labeled fields through xE34 and added itSamusChargeShot_Attributes with lifetime and several float tuning fields.",
+    "Updated itsamuschargeshot.h prototypes to use Fighter_Part for it_802B55C8 and concrete void Item_GObj signatures for it_802B5CBC and it_802B5EDC.",
+    "Matched Samus bomb animation callbacks itSamusbomb_UnkMotion1_Anim and itSamusbomb_UnkMotion2_Anim by factoring common preprocessing and facing/rotation handling into inline helpers.",
+    "Renamed spawn helper locals/parameters in Samus bomb code from ambiguous gobj/n usage to parent_gobj and Item_GObj* gobj.",
+    "Changed ftLib_80086630 return type from void* to HSD_JObj* in both implementation and header, with a cast retained at an existing byte-offset use site in itlinkarrow.c.",
+    "Charge shot reflected and shield-bounced logic now normalizes angles with M_TAU, updates facing direction, mirrors velocity on shield bounce, and uses HSD_JObjSetRotationY."
+  ],
+  "smart_moves": [
+    "Factored repeated Samus bomb lifetime/rotation code into itSamusBomb_UnkMotion_PreProcess and itSamusBomb_UnkMotion_Process instead of duplicating two 512-byte animation functions.",
+    "Used existing HSD JObj inline wrappers such as HSD_JObjSetRotationY and HSD_JObjSetScale rather than keeping expanded assert/dirty-matrix sequences.",
+    "Introduced M_TAU once and reused it broadly, improving readability for angle normalization while preserving matching-sensitive float/double contexts.",
+    "Typed ftLib_80086630 as HSD_JObj* to reflect what the function actually returns, which simplified charge shot matrix/rotation access.",
+    "Used itGetJObjGrandchild for charge shot effect attachment/scaling instead of manually walking child->child with null checks.",
+    "Kept charge shot owner/parent relationships explicit through xE00 and owner checks before accessing fighter-owned state or resetting Samus/Kirby charge-shot state on destruction."
+  ],
+  "decomp_lessons": [
+    "A local redeclaration of the same macro-derived pointer, such as a second GET_ITEM(gobj), can be evidence of an inline call boundary; try isolating with a scope block or creating an inline helper.",
+    "Hand-expanded jobj.h assert and dirty-matrix code often corresponds to an HSD_JObj inline. Reviewers suggested converting assert line numbers from hex to decimal and searching jobj.h for the invoked inline.",
+    "Prefer ABS(expr) for small absolute-value checks when the decompiled source shows manual negative-value handling around a threshold.",
+    "When two unmatched callbacks contain nearly identical code, test whether one calls the other or whether both call a shared inline helper; consolidation can improve matches and readability.",
+    "For item variable structs, local struct offsets in member names are preferred over generic x0/x4 names when semantic names are not known.",
+    "Use existing JObj helpers like HSD_JObjSetRotationY, HSD_JObjSetScale, and itGetJObjGrandchild to collapse large generated-looking code blocks.",
+    "For spawn helpers, distinguish the newly spawned item gobj from the parent/owner gobj in names because parent assignment fields reveal the relationship."
+  ],
+  "naming_conventions": [
+    "Do not use vague locals like n for newly instantiated item objects; reviewers preferred gobj for the spawned item.",
+    "When a parameter is assigned into SpawnItem parent fields, name it parent_gobj rather than plain gobj if the function also creates/returns a child item gobj.",
+    "For unknown item-var fields, reviewer feedback preferred local offset names such as xDD8, xDDC, xE00 over struct-local x4/x8 when the fields map into item variable storage.",
+    "Concrete return types are preferred over void* when evidence is clear, as in ftLib_80086630 returning HSD_JObj*."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use ABS inline checks for absolute velocity thresholds, e.g. !(ABS(ip->x40_vel.x) < 0.0001f).",
+    "Use scope blocks and shadowed locals to probe suspected inline boundaries before extracting an inline helper.",
+    "Replace expanded jobj.h code with HSD_JObjSetRotationY(jobj, 0.0f), HSD_JObjSetRotationY(jobj, M_PI), or HSD_JObjSetScale(grandchild, &scale) when assert-line evidence points to those inlines.",
+    "Convert jobj.h assert line constants such as 0x294U to decimal line numbers to identify the original inline in the header.",
+    "Normalize repeated full-turn angle loops with M_TAU once the constant is introduced, while preserving casts where the original code needs float or double behavior.",
+    "Consolidate duplicated animation callback bodies into shared inline helpers to recover matches without preserving duplicated decompiler output."
+  ],
+  "review_feedback": [
+    "ribbanya identified a manual absolute-value sequence in itsamusbomb.c as an inline ABS check and suggested if (!(ABS(ip2->x40_vel.x) < 0.0001f)).",
+    "ribbanya noted that redeclarations such as another GET_ITEM(gobj) often indicate an inline function call and recommended scope blocks/name shadowing as a starting tactic.",
+    "ribbanya explained that expanded assert/dirty-matrix code from jobj.h should be replaced with the matching JObj inline; for line 0x294U/660 the suggestion was HSD_JObjSetRotationY(jobj, 0.0f).",
+    "ribbanya suggested HSD_JObjSetRotationY(jobj, M_PI) for the opposite-facing Samus bomb rotation case.",
+    "ribbanya suggested returning false instead of return 0 from bool callbacks.",
+    "ribbanya observed that Samus bomb UnkMotion1 and UnkMotion2 likely duplicated a direct call or shared inline and advised consolidating the duplicated code.",
+    "ribbanya objected to naming a spawned charge-shot object n and advised using gobj for the instantiated item and parent_gobj for the owner/parent argument.",
+    "ribbanya suggested replacing a manual child->child traversal with itGetJObjGrandchild.",
+    "ribbanya suggested replacing expanded JObj scale assignment and dirty-matrix code with HSD_JObjSetScale(grandchild, &scale).",
+    "jellejurre replied that the fixes were applied and specifically noted the jobj guidance made the code cleaner and easier.",
+    "ribbanya left a final struct naming note: using local struct offsets for member names is preferred."
+  ],
+  "searchable_terms": [
+    "Samus charge shot",
+    "itsamuschargeshot",
+    "itsamusbomb",
+    "it_802B55C8",
+    "it_802B56E4",
+    "it_2725_Logic108_Destroyed",
+    "it_2725_Logic108_PickedUp",
+    "it_802B5CBC",
+    "itSamuschargeshot_UnkMotion8_Anim",
+    "it_802B5EDC",
+    "it_2725_Logic108_Reflected",
+    "it_2725_Logic108_ShieldBounced",
+    "itSamusbomb_UnkMotion1_Anim",
+    "itSamusbomb_UnkMotion2_Anim",
+    "itSamusBomb_UnkMotion_Process",
+    "itSamusBomb_UnkMotion_PreProcess",
+    "itSamusChargeshot_ItemVars",
+    "itSamusChargeShot_Attributes",
+    "M_TAU",
+    "ABS inline",
+    "HSD_JObjSetRotationY",
+    "HSD_JObjSetScale",
+    "itGetJObjGrandchild",
+    "ftLib_80086630",
+    "Fighter_Part",
+    "lbVector_Mirror",
+    "efSync_Spawn",
+    "ftSs_SpecialN_801291F0",
+    "ftKb_SpecialNSs_800FCD04",
+    "jobj.h inline",
+    "local struct offsets"
+  ],
+  "follow_up_queries": [
+    "Find other item files with manual child->child JObj traversal that can use itGetJObjGrandchild.",
+    "Search for expanded jobj.h assert/dirty-matrix patterns still needing HSD_JObjSetRotationY or HSD_JObjSetScale.",
+    "Search for remaining 2 * M_PI expressions that should use M_TAU if they preserve matching.",
+    "Audit itSamusChargeshot_ItemVars fields xDD8 through xE34 for future semantic names once behavior is better understood.",
+    "Check other fighter/item spawn helpers for ambiguous n locals or parent gobj naming issues."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

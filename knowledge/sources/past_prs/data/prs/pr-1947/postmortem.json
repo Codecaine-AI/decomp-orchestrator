@@ -1,0 +1,138 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1947",
+  "pr": {
+    "number": 1947,
+    "title": "Match CaptureDamage callbacks in ftCo_Attack100",
+    "url": "https://github.com/doldecomp/melee/pull/1947",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-09-27T07:54:26Z",
+    "merged_at": "2025-09-27T08:00:08Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched several CaptureDamage-related callbacks and helpers in ftCo_Attack100, mainly covering high/low capture-damage transitions, physics/collision callbacks, and Yoshi-specific captured hurtbox handling. The PR also exposed needed prototypes, added the capturedamage motion-variable layout, and annotated nearby Capture motion-state enum values.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "motion-state-callbacks",
+      "fighter-common"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "capture",
+      "collision",
+      "Yoshi"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_Attack100.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Attack100.h",
+    "src/melee/ft/chara/ftCommon/types.h",
+    "src/melee/ft/chara/ftCommon/forward.h"
+  ],
+  "what_changed": [
+    "Implemented previously stubbed CaptureDamage and capture-position helpers in ftCo_Attack100.c, including fn_800DAA40, fn_800DAD18, fn_800DB5D8, ftCo_800DC284, ftCo_CaptureDamageHi_Phys, ftCo_CaptureDamageHi_Coll, fn_800DC384, ftCo_800DC3A4, fn_800DC404, ftCo_CaptureDamageLw_Phys, ftCo_CaptureDamageLw_Coll, and fn_800DC624.",
+    "Added Yoshi-specific handling in fn_800DB5D8: when the victim fighter is FTKIND_YOSHI, the captured fighter becomes invisible/intangible, gets accessory callback ftCo_800DB464, initializes a mid-height non-grabbable hurtbox on FtPart_XRotN, and scales that hurtbox using ftYs_Init_8012BAC0(victim_fp) divided by ftCommon_GetModelScale(fp).",
+    "Added capture damage state transitions between ftCo_MS_CaptureDamageHi and ftCo_MS_CaptureDamageLw, preserving current animation frame with Ft_MF_UpdateCmd where needed.",
+    "Added collision callbacks that guard on fp->x2226_b2 before calling ft_80083C00 or ft_8008403C with transition callbacks such as fn_800DC384 and fn_800DC624.",
+    "Added position synchronization logic using fn_800DAD18, fn_800DAA40, lb_8000B1CC, HSD_JObjSetTranslate, current fighter position, victim_gobj, and capturedamage.x18.",
+    "Added the ftCommon_MotionVars.capturedamage struct in types.h with fields x0, x4, pad_x8, and HSD_JObj* x18 at fp+2358.",
+    "Added prototypes for newly matched helpers/callbacks in ftCo_Attack100.h, including fn_800DAA40, fn_800DAC78, fn_800DC384, fn_800DC404, and fn_800DC624.",
+    "Annotated ftCommon_MotionState enum values for CaptureWaitHi, CaptureDamageHi, CapturePulledLw, and CaptureWaitLw with numeric comments 0x0E0 through 0x0E3.",
+    "Renamed one local in ftCo_800D8C54 from temp_r31 to fp and normalized Fighter_ChangeMotionState flags from 0U to 0."
+  ],
+  "smart_moves": [
+    "Used small static inline wrappers for ftCo_CaptureDamageLw_Phys_inline and fn_800DC624_inline to express shared logic while still satisfying matching constraints.",
+    "Used #pragma push / #pragma dont_inline on / #pragma pop around selected functions where inlining behavior mattered for matching.",
+    "Kept state-change helper logic close to the callback implementations, making the high/low CaptureDamage transition structure easy to compare against assembly.",
+    "Added only the motion-variable fields needed for capturedamage, with explicit offsets and padding, rather than guessing a larger struct layout.",
+    "Handled model-space/world-space offsets through lb_8000B1CC and FtPart_XRotN instead of hardcoding position deltas, matching the apparent bone/JObj-based capture behavior.",
+    "Preserved animation command progress during cross-state transitions by using Ft_MF_UpdateCmd with fp->cur_anim_frame where the diff shows same-animation transitions.",
+    "Updated headers alongside C implementations so newly matched callbacks can be reused by other files without implicit or local-only declarations."
+  ],
+  "decomp_lessons": [
+    "Capture/capturedamage callbacks often require both fighter state transitions and explicit position/JObj synchronization; matching one without the other may leave callback behavior incomplete.",
+    "When motion variables reveal a new union member, add the minimal known layout with offset comments and padding so future work can extend it safely.",
+    "For fighter callbacks that transition between related motion states, check whether the original code preserves current animation frame and update-command state rather than restarting the animation.",
+    "Yoshi capture interactions can need character-specific includes and special hurtbox/intangibility setup; do not assume common capture behavior is fully character-neutral.",
+    "Boolean guard fields such as x2226_b2 can determine whether ground/air collision transition callbacks are installed; preserve those guard conditions exactly.",
+    "Matching may require deliberate no-inline pragmas and inline helper extraction to reproduce compiler structure.",
+    "Header prototypes should include exact GObj type aliases used by the implementation, such as Fighter_GObj versus HSD_GObj, because callback signatures differ."
+  ],
+  "naming_conventions": [
+    "Known fighter pointers are preferably named fp when evidence is clear, replacing generic compiler-register names like temp_r31 in touched code.",
+    "Unknown matched functions retain address-style names such as fn_800DAA40, fn_800DAD18, fn_800DC384, fn_800DC404, and fn_800DC624.",
+    "Motion-state enum names use ftCo_MS_CaptureDamageHi and ftCo_MS_CaptureDamageLw for high/low capture damage states.",
+    "Motion-variable union member added as capturedamage, with currently unknown fields left as x0, x4, pad_x8, and x18.",
+    "Callback function names follow the existing ftCo_<State>_<CallbackKind> pattern, such as ftCo_CaptureDamageHi_Phys and ftCo_CaptureDamageLw_Coll."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used #pragma dont_inline around ftCo_800DC284, ftCo_CaptureDamageHi_Phys, ftCo_800DC3A4, and fn_800DC404 to control code generation.",
+    "Used PAD_STACK in fn_800DAD18 and fn_800DC624 to reproduce required stack layout.",
+    "Split low CaptureDamage physical and collision-transition logic into static inline helpers to match call/inlining structure.",
+    "Preserved explicit Vec3 temporaries and field-by-field position additions rather than simplifying to helper operations.",
+    "Used direct gobj->user_data in some functions and GET_FIGHTER in others, reflecting codegen-sensitive access patterns from the match.",
+    "Kept HSD_JObjSetTranslate calls after state/position updates in low-to-high transition paths to synchronize the rendered JObj with fp->cur_pos."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR context.",
+    "The PR had one issue comment according to counts, but the provided human_text_excerpt was empty, so no specific reviewer or author discussion can be extracted."
+  ],
+  "searchable_terms": [
+    "PR1947",
+    "CaptureDamage",
+    "ftCo_Attack100",
+    "ftCo_CaptureDamageHi_Phys",
+    "ftCo_CaptureDamageHi_Coll",
+    "ftCo_CaptureDamageLw_Phys",
+    "ftCo_CaptureDamageLw_Coll",
+    "ftCo_800DC284",
+    "ftCo_800DC3A4",
+    "fn_800DAA40",
+    "fn_800DAD18",
+    "fn_800DB5D8",
+    "fn_800DC384",
+    "fn_800DC404",
+    "fn_800DC624",
+    "fn_800DAC78",
+    "capturedamage",
+    "ftCommon_MotionVars",
+    "ftCo_MS_CaptureDamageHi",
+    "ftCo_MS_CaptureDamageLw",
+    "ftCo_MS_CaptureWaitHi",
+    "ftCo_MS_CaptureWaitLw",
+    "Ft_MF_UpdateCmd",
+    "FTKIND_YOSHI",
+    "ftYs_Init_8012BAC0",
+    "ftColl_HurtboxInit",
+    "ftColl_8007B0C0",
+    "ft_80083C00",
+    "ft_8008403C",
+    "HSD_JObjSetTranslate",
+    "lb_8000B1CC",
+    "FtPart_XRotN",
+    "PAD_STACK",
+    "dont_inline",
+    "r-burns"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename fn_800DAA40, fn_800DAD18, fn_800DB5D8, fn_800DC384, fn_800DC404, or fn_800DC624.",
+    "Check whether ftCommon_MotionVars.capturedamage fields x0, x4, and x18 receive semantic names in subsequent work.",
+    "Search for other Yoshi capture or egg-related PRs that use ftYs_Init_8012BAC0 or similar hurtbox scaling.",
+    "Compare CapturePulledHi/Lw and CaptureDamageHi/Lw callbacks for repeated transition patterns that can guide future matching.",
+    "Look for additional uses of #pragma dont_inline and static inline wrappers in ftCommon matching PRs."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

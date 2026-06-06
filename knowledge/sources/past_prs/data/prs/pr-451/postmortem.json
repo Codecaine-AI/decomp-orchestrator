@@ -1,0 +1,131 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-451",
+  "pr": {
+    "number": 451,
+    "title": "PR to add split_suggester.py tool",
+    "url": "https://github.com/doldecomp/melee/pull/451",
+    "state": "MERGED",
+    "author": "DRGN-DRC",
+    "created_at": "2022-08-10T23:58:27Z",
+    "merged_at": "2022-08-11T13:45:53Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added tools/split_suggester.py, a 569-line Python utility for analyzing monolithic ASM .s files and suggesting source file boundaries. The tool uses .s text/data/sdata2 parsing, float literal usage, duplicate float constants, suspicious sdata2 padding, intra-file function-call dependencies, and optional map-file names to recommend splits and optionally generate .c template files with function header comments.",
+  "change_classification": {
+    "primary_type": "tooling",
+    "categories": [
+      "tooling",
+      "asm splitting",
+      "workflow automation",
+      "file boundary analysis",
+      "template generation"
+    ],
+    "systems": [
+      "tools",
+      "decompilation workflow"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "tools/split_suggester.py",
+      "change": "new file",
+      "details": "Introduced a Python script for suggesting file splits from a source ASM file and optionally creating corresponding .c files with function metadata comments."
+    }
+  ],
+  "what_changed": [
+    "Added a new command-line tool, split_suggester.py, accepting a required .s file and an optional .map file.",
+    "Implemented parsing of ASM comments, labels, .global markers, .section .data, and .section .sdata2 to infer functions, byte totals, float literals, and section boundaries.",
+    "Added optional map-file parsing so generated function headers can include known function names, while filtering out names starting with zz or ending with an underscore.",
+    "Added Function objects that track a function's label name, optional map name, start address, end address, source lines, referenced float labels, and computed length.",
+    "Implemented a first split pass based on float literal usage: when a function uses a new sdata2 label for a float value already used earlier in the current candidate file, the script treats it as evidence of a file boundary.",
+    "Implemented detection of suspicious padding between single-precision floats in sdata2 and uses that as another file-break signal.",
+    "Implemented a second split pass that checks function call dependencies and moves functions from the previous candidate file into the current one if later functions require them.",
+    "Printed summary diagnostics including total function count, total float count, and aligned byte counts for text, data, and sdata2 sections.",
+    "Added interactive prompting to create output .c files under a derived src path, including overwrite handling for existing files.",
+    "Generated .c templates include an include line for the inferred header, function start/end/length comments, optional map names, a scratch-link placeholder comment, and comments listing float literals referenced by each function."
+  ],
+  "smart_moves": [
+    "Used float literal reuse as a practical boundary heuristic, which is specific to how split translation units often duplicate constants in sdata2.",
+    "Combined multiple weak signals rather than relying on one heuristic: duplicate float constants, padding between float literals, branch/function-end recognition, .global markers, and function-call dependency correction.",
+    "Added a second dependency-aware pass after the initial literal-based split so helper functions needed by later functions are kept with the file that needs them.",
+    "Computed and displayed aligned section byte totals, giving decompilers a quick sanity check against expected object sizes.",
+    "Made map-file support optional, allowing the tool to work on raw labels while improving generated headers when map information is available.",
+    "Generated starter .c files only after an interactive confirmation and included overwrite safeguards, reducing risk from a workflow automation script.",
+    "Supported both Python 2 and Python 3 input handling, which likely mattered for the repository/tooling environment at the time."
+  ],
+  "decomp_lessons": [
+    "When splitting large ASM files, sdata2 float constants can be strong evidence for translation-unit boundaries because equivalent values may appear under separate labels when they came from separate source files.",
+    "Padding in literal pools can be a useful boundary hint, but this PR treats it as suspicious rather than definitive and cross-checks it during analysis.",
+    "File-boundary tools should account for call dependencies after initial boundary detection; otherwise, helper functions may be stranded in the wrong generated source file.",
+    "Optional map-file integration is useful for workflow tools: raw ASM labels are enough to operate, but map names improve generated comments and human readability.",
+    "Generated source templates should preserve evidence useful for matching work, including function address ranges, byte lengths, map names, and referenced constants.",
+    "For decomp tooling, interactive file generation should be cautious about existing files and clearly state the output directory."
+  ],
+  "naming_conventions": [
+    "Tool file added under tools/ with snake_case name: split_suggester.py.",
+    "Generated C files are named from the input ASM basename plus a numeric suffix, such as filename1.c, filename2.c, etc.",
+    "Generated C files include a header named after the input basename: #include \"<filename>.h\".",
+    "For fighter character paths ending in asm/ft/chara, the script derives a src subfolder named using an ft-prefixed character folder convention, e.g. 'ft' plus capitalized characters from the filename.",
+    "Map names beginning with 'zz' or ending with '_' are intentionally ignored for generated function-name comments.",
+    "The script follows internal camelCase variable names such as mapFilePath, currentFunction, reachedDataSection, functionEndLikely, and sdataBytes rather than the repository's common C naming style."
+  ],
+  "assembly_or_matching_tactics": [
+    "Parses decompiled ASM comment address lines beginning with /* and counts each code line as 4 text bytes.",
+    "Recognizes likely function ends from lines ending in blr, while checking later labels and branch targets to avoid treating a branch-to-after-blr case as a true function boundary.",
+    "Treats .global lines as evidence that a function boundary is certain.",
+    "Extracts function start addresses from the first code line of each Function and sets previous function end addresses from the next function start.",
+    "Detects lfs and lfd references to lbl_ labels to infer whether sdata2 constants are single or double precision floats.",
+    "Uses struct.unpack with big-endian formats >f and >d to convert .4byte values from sdata2 into comparable float values.",
+    "Accounts for .data byte totals from .4byte and aligned .asciz lengths, then aligns text, data, and sdata2 byte totals to 8 bytes.",
+    "Uses duplicate float values under different labels as evidence that the current function may belong to a new file.",
+    "Checks function-line text for other known function names, excluding label definitions, to infer required functions for the dependency pass."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review records were present in the provided PR slice.",
+    "The PR body described the tool as useful for finding file boundaries and splitting .s files, and noted that it can create .c files with function headers after printing recommendations."
+  ],
+  "searchable_terms": [
+    "split_suggester.py",
+    "split suggester",
+    "ASM split tool",
+    "file boundary detection",
+    "sdata2",
+    "float constants",
+    "duplicate float literals",
+    "paddingBreaks",
+    "susPadding",
+    "Function class",
+    "mapFilePath",
+    "map names",
+    "function headers",
+    "generated C templates",
+    ".section .data",
+    ".section .sdata2",
+    "lfs",
+    "lfd",
+    "blr",
+    ".global",
+    "textBytes",
+    "dataBytes",
+    "sdataBytes",
+    "tools",
+    "DRGN-DRC",
+    "Daniel Cappel"
+  ],
+  "follow_up_queries": [
+    "Find later changes to tools/split_suggester.py to see whether heuristics, Python compatibility, or path handling were adjusted.",
+    "Search for PRs that used split_suggester.py output to split specific ASM files.",
+    "Look for tooling discussions about sdata2 float literal duplication as a file boundary heuristic.",
+    "Search for review or follow-up issues mentioning paddingBreaks, susPadding, or generated function headers."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

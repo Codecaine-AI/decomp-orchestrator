@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { PiPromptBundle, PiRunResult, RuntimeAgentRole } from "../../types/index.js";
+import { loadLocalEnv } from "../../env/local.js";
 
 export interface PiRunOptions {
   role: RuntimeAgentRole;
@@ -13,11 +15,25 @@ export interface PiRunOptions {
   model?: string;
   thinkingLevel?: string;
   timeoutMs?: number;
+  sessionDir?: string;
 }
 
 export const DEFAULT_PI_PROVIDER = "codex-lb";
 export const DEFAULT_PI_MODEL = "gpt-5.5";
 export const DEFAULT_PI_THINKING_LEVEL = "xhigh";
+export const DEFAULT_PI_SESSION_DIR_NAME = ".pi-sessions";
+
+function packageRoot(): string {
+  return fileURLToPath(new URL("../../..", import.meta.url));
+}
+
+export function defaultPiSessionRoot(): string {
+  return resolve(packageRoot(), DEFAULT_PI_SESSION_DIR_NAME);
+}
+
+export function defaultPiSessionDir(role: RuntimeAgentRole): string {
+  return resolve(defaultPiSessionRoot(), role);
+}
 
 async function writeOutput(path: string, text: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
@@ -40,6 +56,7 @@ function dryRunTranscript(options: PiRunOptions, paths: { systemPromptPath: stri
     `provider: ${config.provider}`,
     `model: ${config.model}`,
     `thinking: ${config.thinkingLevel}`,
+    `session_dir: ${options.sessionDir ?? defaultPiSessionDir(options.role)}`,
     `system_template: ${options.prompt.systemTemplatePath}`,
     `user_template: ${options.prompt.userTemplatePath}`,
     `system_prompt_artifact: ${paths.systemPromptPath}`,
@@ -86,6 +103,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number | undefined
 }
 
 export async function runPiAgent(options: PiRunOptions): Promise<PiRunResult> {
+  loadLocalEnv();
   const sessionId = randomUUID();
   const outputPath = resolve(options.outputDir, `${options.role}_${sessionId}.txt`);
   const systemPromptPath = resolve(options.outputDir, `${options.role}_${sessionId}.system.md`);
@@ -96,18 +114,31 @@ export async function runPiAgent(options: PiRunOptions): Promise<PiRunResult> {
   if (options.dryRun) {
     const rawText = dryRunTranscript(options, { systemPromptPath, userPromptPath });
     await writeOutput(outputPath, rawText);
-    return { sessionId, outputPath, systemPromptPath, userPromptPath, rawText, dryRun: true };
+    return {
+      sessionId,
+      sessionDir: options.sessionDir ?? defaultPiSessionDir(options.role),
+      outputPath,
+      systemPromptPath,
+      userPromptPath,
+      rawText,
+      dryRun: true,
+    };
   }
 
   const pi = (await import("@earendil-works/pi-coding-agent")) as Record<string, any>;
   const config = piConfig(options);
+  const sessionDir = options.sessionDir ?? defaultPiSessionDir(options.role);
+  await mkdir(sessionDir, { recursive: true });
   const authStorage = pi.AuthStorage?.create?.();
   const modelRegistry = pi.ModelRegistry?.create?.(authStorage);
   const model = modelRegistry?.find?.(config.provider, config.model);
   if (!model) {
     throw new Error(`Pi model not found: ${config.provider}/${config.model}`);
   }
-  const sessionManager = pi.SessionManager?.inMemory?.();
+  const sessionManager = pi.SessionManager?.create?.(options.cwd, sessionDir);
+  if (!sessionManager) {
+    throw new Error("Pi SessionManager.create is unavailable; cannot persist session files");
+  }
   let resourceLoader: any;
   if (typeof pi.DefaultResourceLoader === "function") {
     resourceLoader = new pi.DefaultResourceLoader({
@@ -156,6 +187,7 @@ export async function runPiAgent(options: PiRunOptions): Promise<PiRunResult> {
     return {
       sessionId: String(session.sessionId ?? sessionId),
       sessionFile: typeof session.sessionFile === "string" ? session.sessionFile : undefined,
+      sessionDir,
       outputPath,
       systemPromptPath,
       userPromptPath,
@@ -170,6 +202,7 @@ export async function runPiAgent(options: PiRunOptions): Promise<PiRunResult> {
     return {
       sessionId: String(session?.sessionId ?? sessionId),
       sessionFile: typeof session?.sessionFile === "string" ? session.sessionFile : undefined,
+      sessionDir,
       outputPath,
       systemPromptPath,
       userPromptPath,

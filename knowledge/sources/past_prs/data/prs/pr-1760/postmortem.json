@@ -1,0 +1,142 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1760",
+  "pr": {
+    "number": 1760,
+    "title": "Remove unions from Fighter struct, preferring bitfields where appropriate",
+    "url": "https://github.com/doldecomp/melee/pull/1760",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-07-29T00:36:38Z",
+    "merged_at": "2025-07-29T00:42:35Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Converted several Fighter struct byte/bitfield union overlays into direct bitfield members or named array fields, then updated fighter code to use those fields instead of manual shifts, masks, raw byte aliases, or M2C_FIELD accesses. The largest change was in src/melee/ft/types.h, with follow-up cleanup in common fighter code, collision, action command parsing, Marth counter effects, Game & Watch init, and attack combo interrupt logic. The PR also resolved at least one decompilation TODO around ft_data->x54 and simplified some matching-sensitive code by moving repeated Marth effect cleanup into a static inline helper.",
+  "change_classification": {
+    "primary_type": "types-structs",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "bitfields",
+      "cleanup"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "ftMars",
+      "ftGameWatch",
+      "ftcoll",
+      "ftaction"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/types.h",
+    "src/melee/ft/chara/ftCommon/ftCo_09F7.c",
+    "src/melee/ft/chara/ftCommon/ftCo_0A01.c",
+    "src/melee/ft/chara/ftGameWatch/ftGw_Init.c",
+    "src/melee/ft/chara/ftMars/ftMs_SpecialLw.c",
+    "src/melee/ft/ft_0877.c",
+    "src/melee/ft/ft_0D14.c",
+    "src/melee/ft/ftaction.c",
+    "src/melee/ft/ftattacks4combo.c",
+    "src/melee/ft/ftcoll.c"
+  ],
+  "what_changed": [
+    "Removed multiple anonymous unions in Fighter-related structs where a raw byte alias existed only to expose individual bitfields.",
+    "Flattened Fighter bitfields around offsets 0x2218, 0x2219, 0x2221 and similar locations so code can reference fields such as allow_interrupt, x2219_b0, x221B_b5, and x221D_b6 directly.",
+    "Changed x2220_flag from a union containing both named bitfields and a raw flags byte into a named struct of bitfields with b0 as a 3-bit field and b3-b7 as single-bit fields.",
+    "Replaced manual bit tests like ((fp->x221D >> 1) & 1), ((fp->x2218 >> 7) & 1), and shifts of x2220_flag.flags with direct bitfield reads such as fp->x221D_b6, fp->allow_interrupt, fp->x2220_flag.b5, and fp->x2220_flag.b6.",
+    "Added a concrete ftData field at offset 0x54, declared as int x54, replacing part of an opaque filler range.",
+    "In ftCo_8009F834, replaced a previous M2C_ERROR/TODO expression using M2C_FIELD(temp_r30->ft_data, s32*, 0x54) and x2220_flag.flags bit manipulation with temp_r30->ft_data->x54 + temp_r30->x2220_flag.b0 and direct increment/reset of the 3-bit b0 field.",
+    "In ftGw_Init_OnLoad, replaced access through the removed x614 alias with fp->x610_color_rgba[1] when storing the Game & Watch outline color.",
+    "In ftAction_80072B3C, simplified action command extraction by assigning fp->x2100 from a shifted signed int and assigning fp->x2101_bits_8 directly instead of using M2C_FIELD to preserve and patch a raw x2101 byte.",
+    "In ftMs_SpecialLw.c, introduced static inline ftMs_SpecialLw_80139140_inline to contain the effect-spawn and callback-clearing logic, replacing an inline block that previously included a raw x2219 access marked as required for regalloc.",
+    "Simplified OSReport in ftCo_8009F834 to pass only the argument used by the format string."
+  ],
+  "smart_moves": [
+    "Kept bitfield names offset-oriented, e.g. x2219_b0 and x221D_b6, when semantic names were not established, avoiding invented meaning while still eliminating unsafe raw-byte union access.",
+    "Used an existing semantic field name, allow_interrupt, where the bit's meaning was already known, improving readability in ftCo_AttackS42_IASA.",
+    "Preserved layout documentation with offset comments beside each bitfield, which is important when removing unions from a decompilation-critical struct.",
+    "Converted raw bit manipulation into direct bitfield operations only where the struct layout supported it, reducing M2C-style clutter without broad behavior changes.",
+    "Used a static inline helper in ftMs_SpecialLw.c to isolate matching-sensitive code generation while removing the previous artificial raw x2219 read used for register allocation.",
+    "Turned an opaque ftData padding region into an explicit x54 field once call sites demonstrated that offset's use, removing an M2C_ERROR/TODO and improving type knowledge."
+  ],
+  "decomp_lessons": [
+    "For large structs such as Fighter, raw-byte union aliases are not always worth keeping; direct bitfields can make call sites cleaner and can eliminate repetitive shifts and masks when the accessed bits are stable.",
+    "When replacing byte aliases with bitfields, update all call sites together so removed fields such as x2218, x2219, x221B, x221D, x2101, x614, or x2220_flag.flags do not linger in code.",
+    "Offset comments are essential when flattening unions: they preserve auditability of byte and bit positions after the syntactic structure changes.",
+    "M2C_FIELD and M2C_ERROR expressions often point to missing type information; once the underlying offset is understood, adding a named field can unblock a cleaner matched decompilation.",
+    "Bitfield numbering in this codebase may not visually match the manual shift expression names; for example prior code using shifts of x221D was rewritten to x221D_b6, so future edits should trust verified layout comments and matching results rather than infer names casually.",
+    "Inline helpers can be a useful matching tactic when a previous local block relied on artificial reads or awkward variable separation for register allocation.",
+    "When replacing union aliases for color or array overlays, prefer the canonical storage form used by the struct, as with x610_color_rgba[1] replacing x614."
+  ],
+  "naming_conventions": [
+    "Unknown Fighter bitfields retain offset-plus-bit names such as x2072_b0, x2219_b0, x221B_b5, x221D_b6, and x2221_b7.",
+    "Known semantic bits can use meaningful names, as shown by allow_interrupt at fp+2218:0.",
+    "Packed bitfield groups may remain named as structs when useful, e.g. x2220_flag with members b0, b3, b4, b5, b6, and b7.",
+    "Newly identified but semantically unknown struct fields may use offset names, e.g. ftData::x54.",
+    "Array-style canonical names are preferred over overlapping scalar aliases when the storage is fundamentally an array, e.g. x610_color_rgba[1] instead of x614.",
+    "Matching helper functions introduced only to shape codegen can use a symbol-derived suffix such as ftMs_SpecialLw_80139140_inline."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced manual byte-mask code with direct C bitfield access to produce cleaner source while preserving intended packed-byte behavior.",
+    "Changed x2220_flag.flags read/modify/write sequences into increment and reset of the 3-bit x2220_flag.b0 field.",
+    "Removed a raw x2219 read that was previously annotated as required for regalloc by moving the surrounding logic into a static inline helper.",
+    "Adjusted local padding in ftMs_SpecialLw_80139140 from u8 unused1[12] to u8 unused1[4], suggesting stack layout was retuned after the inline extraction.",
+    "Used signed shifting in ftAction_80072B3C, including *(int*) cmd->x8 << 7 and cmd_x8 >> 7, to express the action command sign/field extraction more directly.",
+    "Simplified an OSReport call to match its format string, removing extra unused floating-point arguments."
+  ],
+  "review_feedback": [
+    "No review comments were included in the provided PR slice.",
+    "The context reports one issue comment, but no human text excerpt was available, so reviewer intent or discussion cannot be assessed from this slice."
+  ],
+  "searchable_terms": [
+    "PR 1760",
+    "fighter-bitfields",
+    "Remove unions from Fighter struct",
+    "Fighter struct bitfields",
+    "src/melee/ft/types.h",
+    "x2218",
+    "allow_interrupt",
+    "x2219_b0",
+    "x221B_b5",
+    "x221D_b6",
+    "x2220_flag",
+    "x2220_flag.flags",
+    "x2220_flag.b0",
+    "x2220_flag.b5",
+    "x2220_flag.b6",
+    "x2101_bits_8",
+    "x610_color_rgba",
+    "x614",
+    "ftData x54",
+    "M2C_FIELD",
+    "M2C_ERROR",
+    "ftCo_8009F834",
+    "ftCo_800AFC40",
+    "ftGw_Init_OnLoad",
+    "ftMs_SpecialLw_80139140",
+    "ftMs_SpecialLw_80139140_inline",
+    "ft_80087C70",
+    "ftAction_80072B3C",
+    "ftCo_AttackS42_IASA",
+    "ftColl_80078C70"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching Fighter bitfields near offsets 0x2218-0x2221 to see whether more semantic names replaced xNNNN_bN placeholders.",
+    "Search for remaining M2C_FIELD uses in fighter code that may indicate missing struct fields like ftData::x54.",
+    "Search for remaining raw-byte aliases or unions in src/melee/ft/types.h that could be safely converted to direct bitfields.",
+    "Inspect later changes to ftMs_SpecialLw_80139140_inline to determine whether the inline helper remained necessary for matching.",
+    "Audit uses of x2220_flag.b0 to confirm its 3-bit counter semantics and whether it deserves a semantic name."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

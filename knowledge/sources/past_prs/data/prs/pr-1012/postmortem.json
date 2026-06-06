@@ -1,0 +1,136 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1012",
+  "pr": {
+    "number": 1012,
+    "title": "Partially match `itsword`",
+    "url": "https://github.com/doldecomp/melee/pull/1012",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-11-19T08:23:31Z",
+    "merged_at": "2023-11-19T08:34:07Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Partially decompiled the sword item by adding a large C implementation for `src/melee/it/items/itsword.c`, moving most text out of `asm/melee/it/items/itsword.s`, wiring the new object into `obj_files.mk`, and adding item-specific headers/types for sword article data and per-item variables. The match report showed the new file at 98.27% overall, with many functions at 100%; remaining weaker spots included `it_802852B8` and `itSword_Spawn`. No review comments were present in the slice.",
+  "change_classification": {
+    "primary_type": "partial_item_decompilation",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c migration",
+      "headers",
+      "item-types",
+      "tooling-config"
+    ],
+    "systems": [
+      "item",
+      "asm",
+      "tooling",
+      "fighter"
+    ]
+  },
+  "key_files": [
+    "src/melee/it/items/itsword.c",
+    "asm/melee/it/items/itsword.s",
+    "src/melee/it/items/itsword.h",
+    "src/melee/it/items/types.h",
+    "src/melee/it/items/forward.h",
+    "src/melee/it/itCommonItems.h",
+    "src/melee/it/types.h",
+    "src/melee/it/types.dox",
+    "src/melee/it/item.c",
+    "src/melee/it/item.h",
+    "src/melee/it/it_26B1.c",
+    "src/melee/it/it_3F14.c",
+    "obj_files.mk",
+    "tools/convert_data.py"
+  ],
+  "what_changed": [
+    "Added a new 1927-line C source file for the sword item, `src/melee/it/items/itsword.c`, with literals, an `ItemStateTable it_803F5800`, many static callback prototypes, and C versions of most functions previously in `asm/melee/it/items/itsword.s`.",
+    "Removed about 1432 lines of hand-assembly text/data from `asm/melee/it/items/itsword.s`, leaving the PR as a substantial asm-to-C migration while still keeping the asm object listed.",
+    "Added `$(BUILD_DIR)/src/melee/it/items/itsword.c.o` to `obj_files.mk` immediately before the residual `itsword.s.o`.",
+    "Renamed the known spawn entrypoint from the raw symbol `it_80284D54` to `itSword_Spawn` and updated a Bob-omb rain call site in `it_26B1.c` to call `itSword_Spawn(&bobOmbRain->x8_vec)`.",
+    "Renamed the shield callback from `it_80286048` to `itSword_BounceOffShield` and updated the sword entry in `it_803F14C4` in `it_3F14.c`.",
+    "Changed `Item_80268B5C` from a `void` API to returning `HSD_GObj*`/`Item_GObj*`, matching its use by `itSword_Spawn`, where the spawned item is conditionally initialized via `it_80285424`.",
+    "Added `itSword_ItemVars` to `itCommonItems.h` and inserted it into the `Item` union as `ip->xDD4_itemVar.sword`, documenting offsets from `ip+DD4` through `ip+E2C`.",
+    "Added item-local forward and types headers, including `itSword_UnkArticle1` and `itSword_UnkBytes`, used for sword article special attributes.",
+    "Reformatted or clarified `SpawnItem` field layout in `it/types.h` and copied a Doxygen-documented version into `types.dox`.",
+    "Adjusted includes in `ftcommon.c`, `it_26B1.c`, and `itsword.h` so callers use the new sword-specific header rather than broad declarations in `it_27CF.h`.",
+    "Changed `tools/convert_data.py`'s `input_glob` from `**/ft/ftcoll.s` to `**/it/items/itsword.s`, apparently to target data conversion work for this item."
+  ],
+  "smart_moves": [
+    "Kept known-but-not-fully-matching functions under `ASM` wrappers with a C implementation guarded by `#if !defined(MUST_MATCH) || defined(WIP)` and an inline-assembly fallback for stricter matching builds; this preserves progress while documenting intended C logic.",
+    "Promoted behaviorally understood symbols to semantic names only where evidence was strong: `itSword_Spawn` and `itSword_BounceOffShield`, while leaving most unknown functions as address-based names.",
+    "Fixed the return type of the shared spawn helper `Item_80268B5C` instead of working around it locally, making the sword spawn implementation type-correct and reusable by future item decompilation.",
+    "Introduced explicit item-variable and article-attribute structs before translating much of the logic, giving the decompiled code readable access through `ip->xDD4_itemVar.sword` instead of raw offsets.",
+    "Preserved address comments in the header prototypes, making it easy to cross-reference the decompiled functions with original addresses and match reports.",
+    "Documented duplicate-code concerns directly in `itsword.c` with a TODO about possible future inline cleanup, without risking match regressions during this partial-match PR."
+  ],
+  "decomp_lessons": [
+    "For item files with many repeated state/tween helper patterns, first model the per-item variable block in `xDD4_itemVar`; repeated offset clusters can become a named item-vars struct even when fields are still `xNN`.",
+    "When a common helper is discovered to return a value, update the shared declaration and implementation rather than casting or ignoring the mismatch at call sites; this can unlock clean spawn decompilation.",
+    "It is acceptable in this project to partially migrate an item from asm to C with `ASM` functions and guarded inline assembly for stubborn functions, as long as the match report and object wiring remain clear.",
+    "Use semantic names sparingly and evidence-groundedly: spawn functions and item collision callbacks are good candidates when call sites and logic clearly show behavior; less-understood state callbacks can remain address named.",
+    "Item headers benefit from address-prefixed prototypes, item-specific forward declarations, and small item-local `types.h` files to avoid bloating global headers with incomplete special-attribute structs.",
+    "When replacing declarations previously housed in broad headers like `it_27CF.h`, move them to the specific item header and update callers to include that item header directly."
+  ],
+  "naming_conventions": [
+    "Sword-specific semantic functions use the `itSword_` prefix, as in `itSword_Spawn` and `itSword_BounceOffShield`.",
+    "Unknown or not-yet-understood sword functions retain address-based names such as `it_80284E10`, `it_802852B8`, and `it_80285B00`.",
+    "Item-variable structs follow item-specific names with raw field offsets: `struct itSword_ItemVars` fields `x0`, `x4`, `x8`, etc., with comments tying them to `ip+DD4`, `ip+DD8`, and later offsets.",
+    "Item-local unknown article structs were named `itSword_UnkArticle1` and `itSword_UnkBytes`, reflecting limited semantic confidence while still scoping them to sword.",
+    "Header prototypes include original address comments, e.g. `/* 284D54 */ Item_GObj* itSword_Spawn(Vec3* pos);`.",
+    "The `Item` union member for sword variables is lower-case `sword`, accessed as `ip->xDD4_itemVar.sword`."
+  ],
+  "assembly_or_matching_tactics": [
+    "The PR used `ASM` function declarations plus guarded C/inline-assembly bodies for non-perfect matches, notably `itSword_Spawn` and several update helpers.",
+    "The match report recorded `src/melee/it/items/itsword.c` at 98.27% overall, with many functions at 100%, but `it_802852B8` at 33.33% and `itSword_Spawn` at 85.43%, supporting the 'partial match' title.",
+    "Constants formerly emitted from assembly were represented as `LITERAL` C constants such as `it_804DC8D0 = 0`, `it_804DC8D4 = -1`, `it_804DC8D8 = 0.3`, and `it_804DC8E8 = S32_TO_F32`.",
+    "Repeated frame/scale interpolation logic was expressed through the new `ip->xDD4_itemVar.sword` fields rather than raw offsets, which likely helped produce many exact matches.",
+    "The C implementation uses existing engine helpers such as `Item_80268B5C`, `HSD_JObjSetScaleY`, `HSD_JObjSetScale`, `itColl_BounceOffShield`, and `it_8026B894` to mirror the original assembly behavior.",
+    "`tools/convert_data.py` was retargeted to `**/it/items/itsword.s`, suggesting data/literal conversion support was part of the workflow for this decomp slice."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1012",
+    "ribbanya",
+    "Partially match itsword",
+    "itsword",
+    "itSword_Spawn",
+    "it_80284D54",
+    "itSword_BounceOffShield",
+    "it_80286048",
+    "it_803F5800",
+    "ItemStateTable",
+    "itSword_ItemVars",
+    "itSword_UnkArticle1",
+    "itSword_UnkBytes",
+    "Item_80268B5C return HSD_GObj",
+    "SpawnItem",
+    "xDD4_itemVar.sword",
+    "It_Kind_Sword",
+    "asm/melee/it/items/itsword.s",
+    "src/melee/it/items/itsword.c",
+    "src/melee/it/items/itsword.h",
+    "tools/convert_data.py",
+    "98.27%",
+    "partial match",
+    "item decomp",
+    "sword item"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that complete matching `src/melee/it/items/itsword.c`, especially `it_802852B8`, `itSword_Spawn`, `it_80285B00`, `it_80285804`, and `it_80285920`.",
+    "Search whether the committed `tools/convert_data.py` `input_glob` retargeting to `itsword.s` was later reverted or generalized.",
+    "Find later renames of `itSword_ItemVars` fields or `itSword_UnkArticle1` fields to recover semantics for the sword animation/scale variables.",
+    "Search for other item PRs that reused the `Item_80268B5C` return-type correction or the `ASM` guarded-C matching pattern.",
+    "Check whether the TODO about duplicate code in `itsword.c` was resolved with inlines or shared helpers in later decomp work."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

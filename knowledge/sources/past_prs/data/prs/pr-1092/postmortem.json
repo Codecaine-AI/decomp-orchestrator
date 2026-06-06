@@ -1,0 +1,157 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1092",
+  "pr": {
+    "number": 1092,
+    "title": "Generate and tweak `splits.todo.txt`",
+    "url": "https://github.com/doldecomp/melee/pull/1092",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-01-23T10:36:49Z",
+    "merged_at": "2024-01-23T10:44:08Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added a hand-tweaked `config/GALE01/splits.todo.txt` as a mostly accurate source of candidate objdiff split ranges, while also modifying `tools/config-dtk` to parse/generate split data from the CodeWarrior map and clean up symbol output. The PR body explicitly warns that the file is imperfect: config-dtk hit errors and later an infinite loop, and rerunning it may produce worse output unless the user knows what they are doing. The diff also includes supporting repository hygiene needed for the splits/symbol work: asm file relocations into subsystem/chara directories with `obj_files.mk` updates, MSL header relocation, item header path cleanup, and OSSerial symbol/name adjustments.",
+  "change_classification": {
+    "primary_type": "tooling_config_generation",
+    "categories": [
+      "tooling",
+      "config",
+      "splits",
+      "symbols",
+      "headers",
+      "asm_organization",
+      "naming_cleanup"
+    ],
+    "systems": [
+      "config/GALE01",
+      "tools/config-dtk",
+      "asm",
+      "obj_files.mk",
+      "MSL",
+      "dolphin/os",
+      "dolphin/card",
+      "fighter",
+      "item",
+      "sysdolphin/baselib"
+    ]
+  },
+  "key_files": [
+    "config/GALE01/splits.todo.txt",
+    "tools/config-dtk/src/main.rs",
+    "tools/config-dtk/src/cw_map.rs",
+    "tools/config-dtk/src/dtk_config.rs",
+    "tools/config-dtk/src/types.rs",
+    "tools/config-dtk/Cargo.toml",
+    "Cargo.lock",
+    "config/GALE01/symbols.txt",
+    "obj_files.mk",
+    "asm/dolphin/os/OSSerial_data.s",
+    "src/dolphin/os/OSSerial.c",
+    "src/MSL/math.h",
+    "src/math.h",
+    "src/melee/it/items/it_27CF.h",
+    "src/melee/it/it_27CF.h"
+  ],
+  "what_changed": [
+    "Created `config/GALE01/splits.todo.txt` with section layout declarations and many candidate per-translation-unit split ranges, including `.text`, `.rodata`, `.data`, `.bss`, `.sdata`, `.sbss`, `.sdata2`, `extab`, and `extabindex` entries.",
+    "Extended `tools/config-dtk` with CLI flags `--splits` and `--symbols`; without either flag it exits after printing `Pass --splits and/or --symbols to write config files.`",
+    "Changed `config-dtk` map parsing to track current section/current TU and collect split ranges from CodeWarrior map symbols, with split types moved into a new `tools/config-dtk/src/types.rs`.",
+    "Added parsing support for existing splits files in `dtk_config.rs`, including `SplitsFile`, `SplitKey`, `SplitValue`, layout parsing, duplicate split detection, and grouped split serialization.",
+    "Added TU path resolution in `config-dtk` by walking source/asm paths, filtering `h`, `c`, and `s` extensions, skipping header-only entries, warning and dropping ambiguous basename matches, and mapping file stems to paths without extensions.",
+    "Pinned `cwparse` for `tools/config-dtk` to git rev `3370024` and added `clap` and `itertools` dependencies; `Cargo.lock` reflects multiple version-qualified dependencies.",
+    "Renamed multiple asm files into more specific directories, such as `asm/melee/ft/chara/ftKb_Init.s` to `asm/melee/ft/chara/ftKirby/ftKb_Init.s`, and updated corresponding `obj_files.mk` entries.",
+    "Updated `config/GALE01/symbols.txt` ordering/naming around overlapping labels/functions, including replacing `fn_803435B0` with `__OSDBJump`, changing `__OSSystemCallVector` to `fn_8034AB80`, and changing `Packet` from local to global scope.",
+    "Renamed the OSSerial data symbol from `OSSerial_80402358` to `Si` in both `asm/dolphin/os/OSSerial_data.s` and `src/dolphin/os/OSSerial.c`, including inline asm references.",
+    "Moved MSL-style headers out of root include paths into `src/MSL`, notably deleting root `src/math.h` while adding equivalent content under `src/MSL/math.h`; related renames include `cstring.h` and `mem_funcs.h` in the diff excerpt.",
+    "Moved the item header `src/melee/it/it_27CF.h` to `src/melee/it/items/it_27CF.h` and updated many fighter/item includes from `it/it_27CF.h` to `it/items/it_27CF.h`."
+  ],
+  "smart_moves": [
+    "Kept the generated split data as `splits.todo.txt` rather than presenting it as final authoritative `splits.txt`, matching the PR body's warning that the data is only mostly accurate.",
+    "Added parsing of existing split files and merges newly found map splits while preserving already configured split entries, reducing the risk of overwriting hand-curated configuration.",
+    "Sorted split groups by earliest start address and sorted sections within a group by start address, making generated split output easier to inspect and compare.",
+    "Separated shared map symbol/split structs into `types.rs`, reducing coupling between map parsing and output generation code.",
+    "Used explicit command-line flags for potentially destructive config writes, avoiding accidental regeneration of symbols or splits.",
+    "Pinned `cwparse` to a specific revision for `config-dtk`, which makes tooling behavior more reproducible during fragile split generation work.",
+    "Logged ambiguous translation units instead of guessing when multiple source/asm paths share a basename, which avoids silently generating split paths for the wrong file.",
+    "Applied repository structure fixes alongside config generation, such as moving asm files under the same subsystem/chara hierarchy used by source paths."
+  ],
+  "decomp_lessons": [
+    "Generated split files are useful even when imperfect, but should be clearly marked as todo/provisional if the generator has known errors or can infinite loop.",
+    "For objdiff onboarding, a mostly accurate split candidate list can save time: the PR body explicitly says to check `splits.todo.txt` first when adding a file to objdiff.",
+    "Do not blindly rerun split-generation tooling after a hand-tuned output has been committed; this PR states that rerunning `config-dtk` can produce a worse `splits.todo.txt`.",
+    "TU resolution by basename is dangerous in large decomp repos; ambiguous basenames should be detected and skipped or manually resolved.",
+    "Split generation should merge with existing hand-authored config rather than replace it, because manual corrections may encode knowledge the tool cannot infer.",
+    "Asm fallback files should live in paths that mirror source/module structure so object lists and future decomp movement stay predictable.",
+    "Header path cleanup can be necessary for config/tooling work because include locations influence source discovery and translation-unit mapping.",
+    "Symbol aliases at the same address need careful ordering and naming in `symbols.txt`; this PR adjusts label/function adjacency for TRK, OS exception, ctor/dtor, and OS serial-related symbols."
+  ],
+  "naming_conventions": [
+    "`splits.todo.txt` is used for provisional split ranges; the PR body distinguishes it from a fully reliable generated config.",
+    "Split entries use paths without a `src/` prefix and group by translation unit, for example `melee/lb/lbcommand.c:` and `sysdolphin/baselib/dobj.c:`.",
+    "Split section lines use fixed-looking formatting: tab, section name, `start:0xXXXXXXXX`, `end:0xXXXXXXXX`.",
+    "Asm files for fighters should be nested under character directories, e.g. `ftKirby/ftKb_Init.s`, `ftPopo/ftPp_SpecialS.s`, `ftYoshi/ftYs_SpecialN.s`, and `ftCrazyHand/ftCh_Init.s`.",
+    "Generic top-level asm files were moved into module directories, e.g. `asm/melee/gm/gm_1A36.s`, `asm/melee/mn/mn_2295.s`, and `asm/melee/un/un_2FC9.s`.",
+    "MSL headers belong under `src/MSL`, as shown by `src/MSL/math.h` and related `cstring.h`/`mem_funcs.h` moves.",
+    "Item headers in this area use the `it/items/...` include path; many files changed from `#include \"it/it_27CF.h\"` to `#include \"it/items/it_27CF.h\"`.",
+    "The OSSerial global data symbol was renamed to the shorter SDK-like `Si` rather than the address-derived `OSSerial_80402358`."
+  ],
+  "assembly_or_matching_tactics": [
+    "When renaming a data symbol used inside inline asm, update both C references and asm operands such as `Si@ha` and `Si@l`; this PR did so for `OSSerial.c`.",
+    "Keep standalone asm paths synchronized with `obj_files.mk` when moving files, otherwise object build ordering/path resolution will break.",
+    "Use `symbols.txt` to prefer known SDK names where evidence is sufficient, such as introducing `__OSDBJump`, but retain address-derived names where naming is uncertain, such as `fn_8034AB80`.",
+    "Generated split ranges can be ordered by virtual start addresses to help validate object boundaries against the map.",
+    "Changing a symbol's scope in `symbols.txt`, such as `Packet` from local to global, can be part of making C/asm references and generated configs line up.",
+    "The `SISetXY` C code was adjusted around `Si.xy` masking/or-ing, while most OSSerial changes were renames in C and inline asm; evidence for a broader algorithmic change is limited."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The PR author self-reviewed the output quality in the body: `splits.todo.txt` is only sort of accurate, most splits are accurate, config-dtk encountered errors and an infinite loop, and rerunning the tool may generate worse output."
+  ],
+  "searchable_terms": [
+    "PR1092",
+    "splits.todo.txt",
+    "config-dtk",
+    "cwparse",
+    "CodeWarrior map",
+    "GALE01.map",
+    "GALE01 symbols.txt",
+    "splits generation",
+    "objdiff splits",
+    "SplitKey",
+    "SplitValue",
+    "SplitsFile",
+    "resolve_tu_paths",
+    "ambiguous translation unit",
+    "TreeSymbol",
+    "TableSymbol",
+    "Si",
+    "OSSerial_80402358",
+    "Packet global",
+    "__OSDBJump",
+    "__OSSystemCallVector",
+    "fn_8034AB80",
+    "MSL math.h",
+    "it/items/it_27CF.h",
+    "asm/melee/ft/chara/ftKirby",
+    "obj_files.mk asm rename",
+    "ribbanya"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that replaced `splits.todo.txt` with accurate `splits.txt` entries.",
+    "Find later fixes to `tools/config-dtk` infinite loop or split generation quality.",
+    "Search for subsequent changes involving `resolve_tu_paths` and ambiguous translation units.",
+    "Search for further MSL header relocation PRs after `src/MSL/math.h`.",
+    "Search for later OSSerial decomp work using the `Si` symbol and `Packet` global scope.",
+    "Search for PRs that add files to objdiff using split ranges from `config/GALE01/splits.todo.txt`."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

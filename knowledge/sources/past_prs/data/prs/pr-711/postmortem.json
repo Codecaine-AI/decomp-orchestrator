@@ -1,0 +1,135 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-711",
+  "pr": {
+    "number": 711,
+    "title": "Use `GET_FIGHTER` macro, pass 1",
+    "url": "https://github.com/doldecomp/melee/pull/711",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-19T20:07:32Z",
+    "merged_at": "2023-01-25T02:55:19Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large fighter cleanup pass replacing most direct `getFighter`, `getFighterPlus`, and some `fighter_gobj->user_data` uses with a new `GET_FIGHTER(gobj)` macro. The PR introduced `GET_FIGHTER` in `src/melee/ft/inlines.h` as `((Fighter*) HSD_GObjGetUserData(gobj))`, marked the old inline helpers as deprecated, and propagated the macro across many character move files and common fighter code. Several replacements required preserving match-sensitive stack layout with `#ifdef MUST_MATCH` unused byte arrays, especially where `getFighterPlus` had previously influenced stack usage. PR body notes this was only pass 1 and that more usages remained.",
+  "change_classification": {
+    "primary_type": "macro_adoption_cleanup",
+    "categories": [
+      "headers",
+      "refactor",
+      "matching_cleanup",
+      "deprecation"
+    ],
+    "systems": [
+      "fighter",
+      "character_specials",
+      "fighter_common",
+      "ft_inlines"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/inlines.h",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/ft_unknown_006.c",
+    "src/melee/ft/ftwalkcommon.c",
+    "src/melee/ft/ftcoll.c",
+    "src/melee/ft/chara/ftDonkey/ftdonkey_SpecialN.c",
+    "src/melee/ft/chara/ftSamus/ftsamus3.c",
+    "src/melee/ft/chara/ftNess/ftNess_AttackHi4.c",
+    "src/melee/ft/chara/ftFox/ftFox_SpecialHi.c",
+    "src/melee/ft/chara/ftCaptain/ftCaptain_SpecialN.c",
+    "src/melee/ft/chara/ftCaptain/ftCaptain_SpecialS.c",
+    "src/melee/ft/chara/ftGameWatch/ftGameWatch_AttackAir.c",
+    "src/melee/ft/chara/ftMewtwo/ftMewtwo_SpecialHi.c",
+    "src/melee/ft/chara/ftLuigi/ftLuigi_SpecialS.c"
+  ],
+  "what_changed": [
+    "Added `#define GET_FIGHTER(gobj) ((Fighter*) HSD_GObjGetUserData(gobj))` to `src/melee/ft/inlines.h`.",
+    "Marked existing `getFighter` and `getFighterPlus` inline helpers as deprecated in favor of `GET_FIGHTER`.",
+    "Replaced many `getFighter(fighter_gobj)` calls with `GET_FIGHTER(fighter_gobj)` across 69 changed files.",
+    "Replaced many `getFighterPlus(fighter_gobj)` calls with `GET_FIGHTER(fighter_gobj)`, especially in Donkey Kong and common fighter/walk code.",
+    "Converted at least one direct `fighter_gobj->user_data` access to `GET_FIGHTER(fighter_gobj)` in `ftDonkey_8010DE88`.",
+    "Updated inline helper code such as `Fighter_OnItemPickup` and `Fighter_OnItemInvisible` to use the new macro.",
+    "Preserved or recreated match-sensitive unused stack allocations with `#ifdef MUST_MATCH` blocks and `u8 unused[...]` arrays when removing `getFighterPlus` or unused locals changed stack behavior.",
+    "In some places, used direct special-attribute access through `fp->x2D4_specialAttributes` instead of helper calls when needed by the new matching shape."
+  ],
+  "smart_moves": [
+    "Centralized fighter user-data access behind `GET_FIGHTER`, making future code easier to search and standardize.",
+    "Used `HSD_GObjGetUserData(gobj)` inside the macro rather than open-coding `gobj->user_data`, aligning fighter access with a general object API.",
+    "Kept the old helpers temporarily but marked them deprecated, allowing a staged migration instead of a risky all-at-once removal.",
+    "Handled `getFighterPlus` replacement carefully: where the old helper affected stack layout, the diff added explicit `MUST_MATCH` unused stack buffers instead of hiding matching requirements in a misleading helper name.",
+    "Removed some unused or redundant locals while retaining match behavior through explicit stack annotations.",
+    "The PR was scoped as 'pass 1', acknowledging incomplete coverage and making the cleanup reviewable despite touching many files."
+  ],
+  "decomp_lessons": [
+    "Prefer explicit macros or inline accessors for common struct retrieval patterns so future decomp work can standardize code generation and search for remaining old idioms.",
+    "Do not rely on helper functions with side effects on stack layout, such as `getFighterPlus`, as a long-term matching crutch; replace them with clear access plus explicit `MUST_MATCH` stack padding when necessary.",
+    "When replacing a helper changes stack allocation, document the artificial stack with `/// @todo Unused stack.` and guard it with `#ifdef MUST_MATCH`.",
+    "A broad mechanical refactor can still be match-sensitive in decompilation: direct replacements may need local variable ordering, duplicate assignments, or explicit unused arrays preserved.",
+    "Deprecation comments in shared headers help guide future contributors away from legacy accessors without breaking unmatched or untouched files immediately.",
+    "Direct `fp->x2D4_specialAttributes` access may be used in matching contexts where helper calls alter codegen; choose the form that preserves both clarity and matching evidence."
+  ],
+  "naming_conventions": [
+    "`GET_FIGHTER(gobj)` is the preferred macro name for retrieving a `Fighter*` from an `HSD_GObj*`.",
+    "`getFighter` remains present but is annotated `@deprecated Use #GET_FIGHTER instead.`",
+    "`getFighterPlus` remains present but is annotated `@deprecated use #GET_FIGHTER instead.`",
+    "Local fighter pointers continue to use the project-standard `Fighter* fp` naming.",
+    "Character special attribute locals retain character-specific names such as `ftDonkeyAttributes* donkey_attr`, `ftCaptainAttributes* captainAttrs`, and `ftFoxAttributes* foxAttrs`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use `GET_FIGHTER(fighter_gobj)` in place of both `getFighter` and `getFighterPlus`, but check generated code because removing `getFighterPlus` can reduce stack usage.",
+    "If replacement removes a stack slot required for matching, add `#ifdef MUST_MATCH` with a byte array such as `u8 unused[8]`, `u8 unused[12]`, `u8 unused[16]`, or `u8 unused[20]` depending on the observed stack gap.",
+    "Prefer explicit byte-sized unused stack arrays over vague typed unused locals like `s32 unused[2]` when the purpose is purely matching padding.",
+    "Some duplicate assignment patterns were preserved, e.g. `Fighter* fp = fp = GET_FIGHTER(fighter_gobj);`, indicating that odd-looking source may still be required for matching.",
+    "Replacing direct `fighter_gobj->user_data` with `GET_FIGHTER` can normalize source without necessarily changing semantic intent.",
+    "When a removed helper call affects codegen, direct field access such as `fp->x2D4_specialAttributes` may better preserve match shape than calling a special-attribute helper."
+  ],
+  "review_feedback": [
+    "No inline review comments were present in the provided slice.",
+    "One collaborator review by `r-burns` approved the PR with an empty body on 2023-01-25.",
+    "PR body explicitly states: `Eliminates most usages of getFighter and getFighterPlus. There is still a lot to do.`"
+  ],
+  "searchable_terms": [
+    "PR711",
+    "GET_FIGHTER",
+    "getFighter",
+    "getFighterPlus",
+    "HSD_GObjGetUserData",
+    "fighter_gobj->user_data",
+    "MUST_MATCH",
+    "Unused stack",
+    "u8 unused",
+    "x2D4_specialAttributes",
+    "Fighter_OnItemPickup",
+    "Fighter_OnItemInvisible",
+    "ftDonkey_SpecialN",
+    "ftSamus3",
+    "ftNess_AttackHi4",
+    "ftFox_SpecialHi",
+    "ftCaptain_SpecialN",
+    "ftCaptain_SpecialS",
+    "ftGameWatch_AttackAir",
+    "ftMewtwo_SpecialHi",
+    "ftLuigi_SpecialS",
+    "ftwalkcommon",
+    "ft_unknown_006",
+    "fighter.c",
+    "inlines.h"
+  ],
+  "follow_up_queries": [
+    "Find remaining `getFighter(` usages after PR #711.",
+    "Find remaining `getFighterPlus(` usages after PR #711.",
+    "Search for `/// @todo Unused stack.` near `GET_FIGHTER` replacements to audit temporary match padding.",
+    "Check later PRs that complete additional `GET_FIGHTER` macro migration passes.",
+    "Search for direct `->user_data` fighter casts that should be converted to `GET_FIGHTER`."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

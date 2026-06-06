@@ -1,20 +1,33 @@
 import { resolve } from "node:path";
-import { checkoutRoot, decompResourcesRoot, knowledgeManifestPath, packageRoot, pastPrsRoot } from "./paths.js";
-import { knowledgeScripts, knowledgeSummary, type KnowledgeRole } from "./manifest.js";
+import { agentContextScripts, agentContextSummary, type AgentContextRole } from "../agents/context.js";
+import {
+  checkoutRoot,
+  decompResourcesRoot,
+  knowledgeSourcesRoot,
+  knowledgeToolsRoot,
+  packageRoot,
+  pastPrsRoot,
+  resourceGraphDbPath,
+  resourceGraphRoot,
+  sourceDataRoot,
+} from "./paths.js";
 
-export function resourceMap(repoRoot: string, role: KnowledgeRole, capabilities: string[] = []): Record<string, unknown> {
+export function resourceMap(repoRoot: string, role: AgentContextRole, capabilities: string[] = []): Record<string, unknown> {
   const checkout = checkoutRoot();
   const pastPrs = pastPrsRoot();
   const decompResources = decompResourcesRoot();
-  const dataSheetCsvDir = resolve(decompResources, "data_sheets/ssbm_data_sheet_1_02/csv");
-  const scripts = knowledgeScripts();
+  const dataSheetData = sourceDataRoot("ssbm_data_sheet");
+  const dataSheetCsvDir = resolve(dataSheetData, "csv");
+  const powerpcData = sourceDataRoot("powerpc_docs");
+  const externalMirrorsData = sourceDataRoot("external_mirrors");
+  const scripts = agentContextScripts();
   return {
     roots: {
       board_repo_root: repoRoot,
       checkout_root: checkout,
       orchestrator_package: packageRoot(),
     },
-    knowledge: knowledgeSummary(role, capabilities),
+    agent_context: agentContextSummary(role, capabilities),
     objective: {
       primary_metric: "matched_code_percent",
       telemetry_metric: "fuzzy_match_percent",
@@ -79,10 +92,6 @@ export function resourceMap(repoRoot: string, role: KnowledgeRole, capabilities:
           purpose: "review feedback, naming corrections, and review warnings",
         },
         {
-          path: resolve(pastPrs, "current/analysis/diff_lines.jsonl"),
-          purpose: "line-level historical diffs for relevant PRs",
-        },
-        {
           path: resolve(pastPrs, "current/analysis/decomp_tips_library.md"),
           purpose: "cross-PR matching and review lessons",
         },
@@ -92,7 +101,6 @@ export function resourceMap(repoRoot: string, role: KnowledgeRole, capabilities:
         `rg -n "<symbol>|<source_path>|<subsystem>|<mismatch_term>" "${resolve(pastPrs, "prs/index.jsonl")}" "${resolve(pastPrs, "prs/known_fixes.md")}"`,
         `jq 'select(.file=="<source_path>")' "${resolve(pastPrs, "current/analysis/changed_files.jsonl")}"`,
         `jq 'select(.pr == <number>)' "${resolve(pastPrs, "current/analysis/text_corpus.jsonl")}"`,
-        `jq 'select(.pr == <number>)' "${resolve(pastPrs, "current/analysis/diff_lines.jsonl")}"`,
       ],
     },
     decomp_resources: {
@@ -116,13 +124,79 @@ export function resourceMap(repoRoot: string, role: KnowledgeRole, capabilities:
         resolve(dataSheetCsvDir, "bones.csv"),
         resolve(dataSheetCsvDir, "debug_menu_map.csv"),
       ],
-      powerpc_index: resolve(decompResources, "documents/powerpc/indexes/powerpc_pdf_pages.csv"),
+      powerpc_index: resolve(powerpcData, "indexes/powerpc_pdf_pages.csv"),
       external_hint_indexes: [
-        resolve(decompResources, "external/training_mode/indexes/gtme01_map_symbols.csv"),
-        resolve(decompResources, "external/m_ex/indexes/header_symbols.csv"),
-        resolve(decompResources, "external/tockdom/compiler.txt"),
+        resolve(externalMirrorsData, "training_mode/indexes/gtme01_map_symbols.csv"),
+        resolve(externalMirrorsData, "m_ex/indexes/header_symbols.csv"),
+        resolve(externalMirrorsData, "tockdom/compiler.txt"),
       ],
       trust_rule: "local source, headers, symbols, splits, assembly, and objdiff outrank PR notes and mirrored external resources",
+    },
+    knowledge_graph: {
+      sources_root: knowledgeSourcesRoot(),
+      tools_root: knowledgeToolsRoot(),
+      graph_root: resourceGraphRoot(),
+      graph_db: resourceGraphDbPath(),
+      cli_policy: "CLI-first; no MCP server wrapper in v1.",
+      source_ids: [
+        "code_graph",
+        "past_prs",
+        "discord_knowledge",
+        "ssbm_data_sheet",
+        "powerpc_docs",
+        "external_mirrors",
+        "resource_guides",
+        "reference_docs",
+        "tool_outputs",
+      ],
+      tool_ids: ["ghidra", "opseq", "mismatch_db", "mwcc_debug"],
+      commands: [
+        {
+          command: "bun run kg:sources",
+          cwd: packageRoot(),
+          purpose: "list registered knowledge source slices and external tool integrations",
+        },
+        {
+          command: "bun run kg:rebuild -- --repo-root <repo_root>",
+          cwd: packageRoot(),
+          purpose: "rebuild the SQLite resource graph from code_graph, PRs, and graph-owned enrichments",
+        },
+        {
+          command: "bun run kg:curate -- --repo-root <repo_root> --state-dir <state_dir>",
+          cwd: packageRoot(),
+          purpose: "reduce worker reports and PR postmortems into graph-owned curator enrichment records",
+        },
+        {
+          command: "bun run kg:maintain -- --repo-root <repo_root> --state-dir <state_dir>",
+          cwd: packageRoot(),
+          purpose: "process pending PR postmortems, curate knowledge updates, and rebuild the graph",
+        },
+        {
+          command: "bun run kg:file-card -- --repo-root <repo_root> --source <source_path>",
+          cwd: packageRoot(),
+          purpose: "summarize file graph context, editability, PR history, resource hits, and graph scheduling signals",
+        },
+        {
+          command: "bun run kg:search -- --repo-root <repo_root> --source past_prs --query <term> --limit 10",
+          cwd: packageRoot(),
+          purpose: "search indexed graph chunks for a source slice such as past_prs",
+        },
+        {
+          command: "python3 knowledge/sources/<source_id>/api/search.py --query <term> --limit 10 --json",
+          cwd: packageRoot(),
+          purpose: "source-local search for registered source slices using generated JSONL indexes",
+        },
+        {
+          command: "python3 knowledge/sources/<source_id>/api/status.py --json",
+          cwd: packageRoot(),
+          purpose: "source-local readiness and index-count check for registered source slices",
+        },
+        {
+          command: "bun run kg:rank-features -- --repo-root <repo_root> --limit 30",
+          cwd: packageRoot(),
+          purpose: "show graph-derived ranking features for current board candidates",
+        },
+      ],
     },
     helper_scripts: [
       {
@@ -187,6 +261,26 @@ export function resourceMap(repoRoot: string, role: KnowledgeRole, capabilities:
         purpose: "search past PR summaries, comments, reviews, and diffs",
       },
       {
+        command: "python3 knowledge/sources/discord_knowledge/api/search.py --query <compiler_or_review_term> --limit 10 --json",
+        cwd: packageRoot(),
+        purpose: "search Discord-derived compiler and workflow knowledge with citations",
+      },
+      {
+        command: "python3 knowledge/sources/ssbm_data_sheet/api/search.py --query <address_or_offset_or_id> --limit 10 --json",
+        cwd: packageRoot(),
+        purpose: "search normalized data-sheet cells with row and CSV provenance",
+      },
+      {
+        command: "python3 knowledge/sources/powerpc_docs/api/lookup_instruction.py --mnemonic <mnemonic> --limit 10 --json",
+        cwd: packageRoot(),
+        purpose: "look up PowerPC PDF page chunks for ABI and instruction questions",
+      },
+      {
+        command: "python3 knowledge/tools/mismatch_db/api/search.py --query <mismatch_pattern> --limit 10 --json",
+        cwd: packageRoot(),
+        purpose: "search local mismatch-pattern/tool evidence",
+      },
+      {
         command: "bun run pr:refresh:dry",
         cwd: packageRoot(),
         purpose: "preview the PR knowledge refresh scope without writing",
@@ -197,9 +291,9 @@ export function resourceMap(repoRoot: string, role: KnowledgeRole, capabilities:
         purpose: "refresh missing recent PRs and rebuild deterministic PR knowledge records",
       },
       {
-        command: "bun run pr:postmortems -- --dump-root knowledge/past_prs/current --run-agent --rerun-existing --jobs 16",
+        command: "bun run pr:postmortems -- --dump-root knowledge/sources/past_prs/data/current --run-agent --pending-only --complete-only --jobs 16",
         cwd: packageRoot(),
-        purpose: "rerun Pi-reviewed PR postmortems for the orchestrator-owned PR dump",
+        purpose: "run Pi-reviewed PR postmortems for missing, draft, or failed records in the orchestrator-owned PR dump",
       },
       {
         command: "python configure.py --require-protos",

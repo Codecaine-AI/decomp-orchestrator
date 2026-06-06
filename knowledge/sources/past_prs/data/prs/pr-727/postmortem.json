@@ -1,0 +1,144 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-727",
+  "pr": {
+    "number": 727,
+    "title": "[skip editorconfig] Fix git subtrees",
+    "url": "https://github.com/doldecomp/melee/pull/727",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-28T09:10:37Z",
+    "merged_at": "2023-01-28T09:15:54Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Restored repository subtree handling after earlier squashed PRs (#463 and #719) caused Git to stop recognizing affected paths as subtrees. The PR explicitly warned not to squash the fix and also updated the vendored asm-differ tool to a newer upstream snapshot, including dependency updates and several asm-differ feature/refactor changes.",
+  "change_classification": {
+    "primary_type": "tooling_repo_maintenance",
+    "categories": [
+      "tooling",
+      "repo-maintenance",
+      "external-subtree-update",
+      "dependency-update",
+      "fix"
+    ],
+    "systems": [
+      "repo-root",
+      "tools/asm-differ",
+      "tools/m2ctx",
+      "python-dependencies",
+      "git-subtree"
+    ]
+  },
+  "key_files": [
+    "requirements.txt",
+    "tools/asm-differ/diff.py",
+    "tools/asm-differ/pyproject.toml",
+    "tools/asm-differ/.gitignore",
+    "tools/asm-differ/README.md",
+    "tools/m2ctx/README.md"
+  ],
+  "what_changed": [
+    "Fixed Git subtree state for vendored tool paths; PR body says #463 and #719 were squashed, so Git did not believe those paths were subtrees and could not merge them or use other git subtree functionality.",
+    "Updated tools/asm-differ to a newer commit, touching diff.py heavily and adding a Poetry pyproject.toml.",
+    "Updated Python dependency pins in requirements.txt: colorama 0.4.5 to 0.4.6, coverage 6.4.4 to 7.1.0, python_Levenshtein 0.12.2 to 0.20.9, watchdog 2.1.9 to 2.2.1, and added GitPython 3.1.30; capstone was removed from the visible requirements excerpt.",
+    "Updated asm-differ dependency docs from python-Levenshtein to levenshtein and cxxfilt.",
+    "Added asm-differ .gitignore entries for .vscode/ and poetry.lock.",
+    "Added DiffMode enum in asm-differ and replaced the old threeway string option with explicit modes: single, single_base, normal, 3prev, and 3base.",
+    "Added asm-differ CLI options for single current view (-1), single base view (-0), and disabling .rodata reference display (-R/--no-show-rodata-refs).",
+    "Refactored asm-differ table formatting around TableLine and TableData rather than passing table metadata plus tuples of OutputLine objects.",
+    "Added project setting expected_dir with default expected/ and used it when locating reference object files.",
+    "Changed map-file search to distinguish object lookup from binary address lookup via a for_binary flag.",
+    "Enhanced asm-differ architecture handling with mipsee settings, shared MIPS_ARCH_NAMES, .late_rodata reference support, R_MIPS_GPREL32 support, R_ARM_V4BX handling, and per-architecture is_end_of_function hooks.",
+    "Changed Levenshtein diff fallback logic so oversized or unsupported remapping falls back to difflib instead of relying on earlier hard size checks.",
+    "tools/m2ctx/README.md appears to have only a trailing newline/no-newline-at-EOF style change in the provided diff."
+  ],
+  "smart_moves": [
+    "Used an unsquashed PR to repair subtree ancestry; the PR body explicitly says not to squash because squashing is what broke Git subtree recognition.",
+    "Marked the PR title with [skip editorconfig], likely to avoid automated formatting churn on imported subtree content; evidence is limited to the title.",
+    "Updated vendored asm-differ as a subtree-style import rather than attempting to hand-minimize the diff, preserving compatibility with future upstream subtree merges.",
+    "Introduced DiffMode enum to avoid fragile stringly-typed threeway/single-mode logic.",
+    "Separated table data from formatter output with TableData/TableLine, making plain, ANSI, HTML, and JSON formatters consume one uniform representation.",
+    "Made single-view modes avoid requiring or reading base/reference object files when not needed.",
+    "Made .rodata reference rendering configurable, which helps when jump-table/data-reference noise obscures a decompilation comparison.",
+    "Added expected_dir configuration so projects with nonstandard expected object layouts can reuse asm-differ without hardcoded expected/ assumptions.",
+    "Factored end-of-function detection into architecture processors, making stop-at-return behavior extensible beyond hardcoded MIPS/PPC/i686 checks."
+  ],
+  "decomp_lessons": [
+    "Do not squash PRs that are intended to preserve or repair git subtree history; subtree operations depend on recognizable merge ancestry.",
+    "When importing or updating vendored tools, preserve upstream layout and metadata where possible so future subtree pulls/merges remain practical.",
+    "Use explicit enums for tool modes that drive many downstream branches; it prevents accidental confusion between threeway, normal diff, and single-view behavior.",
+    "Avoid hardcoded project paths in decomp tools; settings such as expected_dir make the same tooling usable across repositories with different build layouts.",
+    "For diff tools, separate comparison data from rendering so terminal, HTML, JSON, and plain text outputs stay consistent.",
+    "Architecture-specific assembly behavior belongs in architecture processors, especially return detection, relocation handling, and symbol/branch normalization.",
+    "Matching workflows benefit from optional display controls, such as hiding .rodata-to-.text references when they create visual noise."
+  ],
+  "naming_conventions": [
+    "DiffMode enum members use uppercase names with lowercase wire/string values: SINGLE='single', SINGLE_BASE='single_base', NORMAL='normal', THREEWAY_PREV='3prev', THREEWAY_BASE='3base'.",
+    "New asm-differ data containers use descriptive names TableLine and TableData rather than TableMetadata plus tuple-of-lines conventions.",
+    "Project setting expected_dir follows existing snake_case settings style and defaults to 'expected/'.",
+    "Shared MIPS architecture detection was named MIPS_ARCH_NAMES and includes mips, mipsel, and mipsee.",
+    "CLI option naming keeps negative display toggles explicit: --no-show-rodata-refs stores show_rodata_refs=false."
+  ],
+  "assembly_or_matching_tactics": [
+    "Added single-base and single-current modes so asm-differ can act as an assembly viewer rather than always forcing a target/current diff.",
+    "Added optional suppression of serialized .rodata references before objdump output; useful when jump table references are not relevant to the immediate match.",
+    "Extended ELF rodata reference parsing to include .late_rodata and MIPS relocation type R_MIPS_GPREL32, in addition to R_MIPS_32.",
+    "Added MIPSEE architecture settings using objdump arch flag mips:5900.",
+    "Handled MIPS jumps to .text symbols specially so text-relative j instructions can be treated as branch targets.",
+    "Added R_ARM_V4BX ignore handling because that relocation can rewrite bx register instructions to mov pc,register on some targets.",
+    "Improved stop-at-return through processor.is_end_of_function: MIPS waits until after jr ra delay-slot behavior, PPC checks blr, and base implementation defaults false.",
+    "Changed Levenshtein sequence diff remapping to catch ValueError and fall back to difflib when too many unique elements make chr-based remapping invalid.",
+    "Expanded parenthesis splitting guard from only %hi/%lo to also avoid splitting %got, %call16, and %gp_rel macro operands."
+  ],
+  "review_feedback": [
+    "No inline review comments were present in the slice.",
+    "One review by r-burns approved the PR with an empty body.",
+    "The PR body itself gave operational review guidance: 'Needless to say, do not squash this PR.'"
+  ],
+  "searchable_terms": [
+    "PR727",
+    "Fix git subtrees",
+    "skip editorconfig",
+    "git subtree",
+    "do not squash",
+    "asm-differ",
+    "m2ctx",
+    "requirements.txt",
+    "GitPython",
+    "python_Levenshtein",
+    "levenshtein",
+    "watchdog",
+    "colorama",
+    "pyproject.toml",
+    "poetry",
+    "DiffMode",
+    "SINGLE_BASE",
+    "THREEWAY_PREV",
+    "THREEWAY_BASE",
+    "show_rodata_refs",
+    "expected_dir",
+    "TableData",
+    "TableLine",
+    "MIPSEE_SETTINGS",
+    "MIPS_ARCH_NAMES",
+    "R_MIPS_GPREL32",
+    "R_ARM_V4BX",
+    ".late_rodata",
+    "for_binary"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that updated tools/asm-differ via git subtree after PR #727.",
+    "Search for usage of expected_dir in project settings or local asm-differ configs.",
+    "Search for later asm-differ changes involving DiffMode, single mode, or rodata reference display.",
+    "Check whether GitPython added in requirements.txt was used by subtree/tooling workflows elsewhere."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

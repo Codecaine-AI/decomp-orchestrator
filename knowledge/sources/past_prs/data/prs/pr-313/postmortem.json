@@ -1,0 +1,165 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-313",
+  "pr": {
+    "number": 313,
+    "title": "HSD Class match",
+    "url": "https://github.com/doldecomp/melee/pull/313",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2022-02-26T00:11:00Z",
+    "merged_at": "2022-05-02T20:22:27Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched and moved the HSD baselib class memory-entry helper from assembly into C as GetMemoryEntry. The PR removed the large asm body for func_80381D58, added a C implementation in src/sysdolphin/baselib/class.c, renamed the helper references to GetMemoryEntry, and named two sbss globals as memory_list and nb_memory_list. The implementation handles lazy allocation and resizing of the HSD_MemoryEntry pointer table, creates per-size memory entries, preserves linked-list ordering, and accounts for allocator bookkeeping after freeing the old table. The PR body notes the work began as a very small non-matching GetMemoryEntry attempt, but the merged diff shows the helper was accepted as a class match.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-renaming",
+      "memory-management"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "HSD class",
+      "HSD memory",
+      "asm",
+      "src",
+      "include"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/sysdolphin/baselib/class.c",
+      "role": "Added the C implementation of GetMemoryEntry and declared memory_list, nb_memory_list, the assert string, and memory allocator dependencies."
+    },
+    {
+      "path": "asm/sysdolphin/baselib/class.s",
+      "role": "Removed the asm body for func_80381D58 and updated remaining asm callsites and sbss labels to use GetMemoryEntry, memory_list, and nb_memory_list."
+    },
+    {
+      "path": "include/functions.h",
+      "role": "Updated the unknown function comment from func_80381D58 to GetMemoryEntry."
+    }
+  ],
+  "what_changed": [
+    "Deleted the assembly implementation of func_80381D58 from asm/sysdolphin/baselib/class.s.",
+    "Added HSD_MemoryEntry* GetMemoryEntry(s32 idx) to src/sysdolphin/baselib/class.c.",
+    "Changed asm callsites in hsdAllocMemPiece and hsdFreeMemPiece-related code from func_80381D58 to GetMemoryEntry.",
+    "Renamed sbss symbol lbl_804D7700 to memory_list.",
+    "Renamed sbss symbol lbl_804D7704 to nb_memory_list.",
+    "Added includes for <dolphin/os/os.h> and sysdolphin/baselib/memory.h in class.c.",
+    "Declared extern char lbl_80407698[] for the assert expression string \"idx >= 0\".",
+    "Declared extern HSD_MemoryEntry** memory_list and extern s32 nb_memory_list in class.c.",
+    "Implemented negative-index checking with __assert(lbl_804D5FA8, 171, lbl_80407698).",
+    "Implemented lazy initialization of memory_list with a minimum capacity of 32 entries, growing by powers of two until idx fits.",
+    "Implemented resize path for an existing memory_list by allocating a larger table, memcpying existing entries, zeroing new slots, freeing the old allocation with hsdFreeMemPiece, and incrementing allocator bookkeeping for the rounded old allocation size.",
+    "Implemented allocation and zero-initialization of a new HSD_MemoryEntry when memory_list[idx] is NULL.",
+    "Set entry->size to (idx + 1) * 32, matching the size-class indexing behavior used by nearby allocator code.",
+    "Inserted new entries into the memory-entry linked list by searching lower indices first and, if none are present, searching higher indices to seed entry->next.",
+    "Updated include/functions.h's placeholder comment to use the recovered name GetMemoryEntry."
+  ],
+  "smart_moves": [
+    "The C implementation mirrors the assembly's two separate table-growth cases: first-time allocation from zero capacity and resize from a nonzero capacity.",
+    "The table capacity growth uses powers of two, starting at 32 on first initialization and doubling from the current count on resize, matching the branch structure in the removed asm.",
+    "The resize path zeroes only the newly added slice of the pointer table with memset(&new_list[nb_memory_list], 0, 4 * (new_nb - nb_memory_list)), preserving existing entries while keeping new slots deterministic.",
+    "The old pointer table is saved before updating memory_list and nb_memory_list, then freed after the global table pointer is switched to the new allocation.",
+    "The code preserves the allocator side-effect visible in asm by incrementing memory_list[OSRoundUp32B(old_nb) / 32 - 1]->nb_alloc after hsdFreeMemPiece(old_list, old_nb).",
+    "The local variables old_list, new_list, old_nb, and new_nb make the resize sequence explicit and easier to match against the assembly's register lifetimes.",
+    "Recovered global names memory_list and nb_memory_list clarify previously anonymous sbss labels and make later allocator/class work more searchable.",
+    "The implementation keeps exact byte-size arithmetic in places such as HSD_MemAlloc(new_nb * 4), memcpy(..., 4 * nb_memory_list), and old_nb = OSRoundDown32B(nb_memory_list * 4), which likely helped preserve codegen."
+  ],
+  "decomp_lessons": [
+    "For matching old allocator code, preserve whether arithmetic is expressed in bytes versus typed element counts; this PR often uses explicit '* 4' operations even though the data is a pointer table.",
+    "When replacing an asm helper with C, update both the source implementation and remaining asm callsite comments/symbol references so the project stays coherent during partial decompilation.",
+    "Recovered sbss names should be propagated through asm labels as well as C extern declarations when other functions still live in assembly.",
+    "Allocator-table growth logic may include non-obvious bookkeeping side effects after freeing an old allocation; matching requires carrying over those side effects, not just the obvious realloc-like behavior.",
+    "An assert string and source-file string can be retained as extern labels when the surrounding string data is still not fully migrated to C.",
+    "Linked-list insertion logic can require preserving the exact search direction and fallback behavior from assembly: this function searches previous size classes first, then next size classes only if no previous entry exists.",
+    "Use narrow, descriptive names for recovered static/global state once behavior is understood: memory_list and nb_memory_list communicate table contents and count better than raw lbl_ symbols."
+  ],
+  "naming_conventions": [
+    {
+      "old": "func_80381D58",
+      "new": "GetMemoryEntry",
+      "lesson": "Recovered helper names can use PascalCase when matching existing HSD/internal style evidence; the PR does not provide rationale beyond the title/body and callsite update."
+    },
+    {
+      "old": "lbl_804D7700",
+      "new": "memory_list",
+      "lesson": "Name sbss pointer-table globals after their role rather than their address label."
+    },
+    {
+      "old": "lbl_804D7704",
+      "new": "nb_memory_list",
+      "lesson": "The prefix nb_ is used here for a count/capacity variable associated with a list."
+    },
+    {
+      "name": "old_list/new_list and old_nb/new_nb",
+      "lesson": "Use paired old_/new_ locals to make resizing code readable and to reflect the two-table transition."
+    },
+    {
+      "name": "HSD_MemoryEntry",
+      "lesson": "The matched helper returns HSD_MemoryEntry* and manipulates fields such as size, next, and nb_alloc, reinforcing the struct interpretation used by baselib memory code."
+    }
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted a complete assembly helper into C while leaving neighboring functions in asm, a common incremental matching tactic.",
+    "Kept explicit byte-count multiplications such as new_nb * 4 and 4 * nb_memory_list instead of relying entirely on sizeof(pointer) expression forms.",
+    "Used empty for-loop and while-loop doubling constructs to reproduce the capacity-growth branch pattern.",
+    "Used OSRoundDown32B and OSRoundUp32B around the old table byte size to match the allocator bookkeeping sequence visible in the asm.",
+    "Used BOOL found instead of a C99 bool, consistent with Dolphin/HSD code style and likely with expected codegen.",
+    "Preserved NULL checks immediately after HSD_MemAlloc calls, returning NULL on allocation failure in each path.",
+    "Placed the final memory-entry allocation/use block inside an inner scope, likely to control local variable lifetimes and improve matching."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The PR body says: \"This is so far only GetMemoryEntry, which is non-matching by a very small section of code. Just putting this up for posterity.\" This indicates the initial PR was posted before full confidence in the match, but no later review discussion is available in the slice."
+  ],
+  "searchable_terms": [
+    "HSD Class match",
+    "GetMemoryEntry",
+    "func_80381D58",
+    "class.c",
+    "asm/sysdolphin/baselib/class.s",
+    "src/sysdolphin/baselib/class.c",
+    "include/functions.h",
+    "HSD_MemoryEntry",
+    "HSD_MemAlloc",
+    "hsdFreeMemPiece",
+    "hsdAllocMemPiece",
+    "memory_list",
+    "nb_memory_list",
+    "lbl_804D7700",
+    "lbl_804D7704",
+    "lbl_80407698",
+    "idx >= 0",
+    "OSRoundDown32B",
+    "OSRoundUp32B",
+    "memcpy",
+    "memset",
+    "nb_alloc",
+    "sysdolphin",
+    "baselib",
+    "HSD class",
+    "PsiLupan"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully decompile hsdAllocMemPiece or hsdFreeMemPiece and reuse GetMemoryEntry, memory_list, or nb_memory_list.",
+    "Search for PRs that define or refine HSD_MemoryEntry fields such as size, next, and nb_alloc.",
+    "Search for later cleanup of lbl_80407698, lbl_804D5FA8, and other class.c string labels.",
+    "Look for subsequent convention changes around nb_ count variables in sysdolphin baselib.",
+    "Check whether GetMemoryEntry later becomes static, moves to a header, or gets a formal prototype beyond the placeholder in include/functions.h."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

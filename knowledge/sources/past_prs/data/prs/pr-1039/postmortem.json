@@ -1,0 +1,156 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1039",
+  "pr": {
+    "number": 1039,
+    "title": "TExp Match",
+    "url": "https://github.com/doldecomp/melee/pull/1039",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2023-12-21T15:37:06Z",
+    "merged_at": "2024-01-08T03:38:39Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Converted most of sysdolphin baselib TExp from the 3314-line assembly file into C, removing asm/sysdolphin/baselib/texp.s from obj_files.mk and adding extensive implementations, prototypes, typed GX enum usage, resource structs, and a new texpdag.h header. The PR body explicitly notes remaining matching gaps: HSD_TExpSetReg was not matched, and TExpAssignReg was expected to be matching except for a weird pre-section load order. Diff evidence shows HSD_TExpSetReg and TExpAssignReg still had inline assembly / fallback C handling, so this was a large partial-to-near-complete TExp decomp rather than a fully clean C-only match.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "GX enum typing",
+      "partial nonmatch handling"
+    ],
+    "systems": [
+      "sysdolphin/baselib",
+      "TExp",
+      "TEV",
+      "GX",
+      "build system"
+    ]
+  },
+  "key_files": [
+    "asm/sysdolphin/baselib/texp.s",
+    "src/sysdolphin/baselib/texp.c",
+    "src/sysdolphin/baselib/texp.h",
+    "src/sysdolphin/baselib/texpdag.h",
+    "src/dolphin/gx/GXEnum.h",
+    "src/sysdolphin/baselib/forward.h",
+    "obj_files.mk",
+    "compile_flags.txt",
+    ".vscode/settings.json"
+  ],
+  "what_changed": [
+    "Deleted asm/sysdolphin/baselib/texp.s, removing 3314 lines of standalone assembly.",
+    "Removed the texp assembly object entry from obj_files.mk, indicating TExp was now built primarily from src/sysdolphin/baselib/texp.c.",
+    "Expanded src/sysdolphin/baselib/texp.c by roughly 1800 lines, adding implementations for allocation, freeing, list management, TEV and constant construction, color and alpha op/input configuration, resource assignment, TEV descriptor conversion/setup, compile flow, and TEV descriptor cleanup.",
+    "Kept explicit nonmatch handling for HSD_TExpSetReg: the PR body states it was not matched, and the diff shows inline assembly guarded with a NOT_IMPLEMENTED fallback.",
+    "Added C for TExpAssignReg but the PR body states its pre-section load order was still suspicious; diff evidence shows inline assembly plus C fallback around that function.",
+    "Changed HSD_TEXP_RAS, HSD_TEXP_TEX, and HSD_TEXP_ZERO from integer sentinel macros to HSD_TExp* sentinel casts.",
+    "Replaced placeholder or generic enum_t/u32 TExp API and HSD_TevConf fields with concrete GX types such as GXTevOp, GXTevColorArg, GXTevAlphaArg, GXTevScale, GXTevBias, GXTevRegID, GXTevClampMode, GXTevSwapSel, GXTevKColorSel, GXTevKAlphaSel, GXChannelID, and HSD_TObj*.",
+    "Added HSD_TExpRes to texp.h for TEV register/resource assignment bookkeeping, including failed, texmap, cnst_remain, reg color/alpha state, and constant use/reference arrays.",
+    "Added src/sysdolphin/baselib/texpdag.h with HSD_TExpDag and prototypes for HSD_TExpSchedule, HSD_TExpSimplify, HSD_TExpSimplify2, and HSD_TExpMakeDag.",
+    "Added forward declarations for HSD_TExpDag and HSD_TExpRes in baselib/forward.h.",
+    "Added a GX enum block in GXEnum.h with GX_TC_LINEAR, GX_TC_GE, GX_TC_EQ, GX_TC_LE, GX_TC_NEVER, GX_TC_ALWAYS, and GX_TC_REG.",
+    "Updated editor/build-adjacent files: .vscode source.organizeImports changed to explicit, and compile_flags.txt changed by one line."
+  ],
+  "smart_moves": [
+    "Moved placeholder.h out of texp.h and into texp.c, reducing header pollution while still allowing the implementation to use placeholder support where needed.",
+    "Converted public TExp declarations away from variadic/unknown prototypes and enum_t toward exact typed signatures, which helps both matching and future call-site correctness.",
+    "Used pointer-typed sentinel macros for HSD_TEXP_RAS, HSD_TEXP_TEX, and HSD_TEXP_ZERO, matching how the code treats these values as special HSD_TExp* operands.",
+    "Introduced HSD_TExpRes as an explicit resource-assignment structure instead of leaving register and konst assignment state implicit or local-only.",
+    "Separated DAG scheduling declarations into texpdag.h, making the TExp compile pipeline easier to reason about: simplify, make DAG, schedule, assign regs, emit TEV descriptors.",
+    "Kept hard nonmatching functions isolated rather than pretending they matched; HSD_TExpSetReg remained explicitly identified as unmatched.",
+    "Preserved assertion file/message symbols such as texp.c and texp_list through local static strings and HSD_ASSERT-style macros, a common requirement for matching assert-heavy baselib code.",
+    "Used small static lookup tables for TEV register and konst selector assignment, reducing branch complexity and mirroring hardware selector tables."
+  ],
+  "decomp_lessons": [
+    "For large baselib modules, deleting the asm file can still coexist with inline assembly for the last stubborn functions; the useful milestone is often moving the file into C while isolating the remaining nonmatches.",
+    "When a module manipulates GX hardware state, replacing u32/enum_t with real GX enum types can clarify intent without necessarily changing layout, as long as the enum sizes remain compatible.",
+    "Pointer sentinels should be typed as pointers in headers when the implementation compares or passes them as pseudo-HSD_TExp* values.",
+    "Assert strings and exact assert line wrappers matter for matching; local static char symbols and custom HSD_ASSERT3/HSD_ASSERT4 macros can preserve emitted data and call shape.",
+    "List-removal code that frees nodes should use pointer-to-pointer handles; HSD_TExpFreeList demonstrates the pattern of maintaining a handle to the current next pointer while freeing and splicing.",
+    "Matching can depend on the broader file context: the PR body specifically notes TExpAssignReg's odd pre-section load order might require the rest of the file to match.",
+    "Keep scheduler/resource structs in headers when cross-module TExp DAG code needs them, but avoid overexposing placeholder-only implementation details.",
+    "Use concrete function prototypes early; they remove strict-prototype suppressions and make subsequent decompilation less ambiguous."
+  ],
+  "naming_conventions": [
+    "Public TExp functions use HSD_TExp* names, e.g. HSD_TExpFreeList, HSD_TExpTev, HSD_TExpCnst, HSD_TExpColorOp, HSD_TExpAlphaOp, HSD_TExpOrder, HSD_TExpSetReg, HSD_TExpSetupTev, HSD_TExpCompile.",
+    "Internal helpers use descriptive PascalCase-like or verb-object names such as TevAlloc, CnstAlloc, AssignColorReg, AssignAlphaReg, AssignColorKonst, AssignAlphaKonst, IsThroughColor, IsThroughAlpha, TExpAssignReg, and TExp2TevDesc.",
+    "Static data labels retained decomp-address style names such as HSD_TExp_804D5FC8 and HSD_TExp_80407738 when exact original names were not known.",
+    "TExp DAG symbols use HSD_TExpDag and HSD_TExpSchedule/HSD_TExpSimplify/HSD_TExpMakeDag naming, matching the subsystem prefix.",
+    "GX typed fields and APIs keep Nintendo/GX names rather than generic integer names, e.g. GXTevOp, GXTevBias, GXTevScale, GXTevRegID, GXChannelID."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed the standalone texp.s assembly file and the corresponding obj_files.mk entry once most functions were represented in C.",
+    "Left HSD_TExpSetReg as a known nonmatch, with inline assembly evidence in the diff and a NOT_IMPLEMENTED fallback in the non-MWERKS path.",
+    "TExpAssignReg was handled specially: the PR body says the function should be matching except for a weird pre-section load order, suggesting load scheduling/order was the blocker rather than algorithmic uncertainty.",
+    "Used inline assembly blocks with clang-format disabled and peephole control around difficult functions, preserving exact instruction sequences while allowing the surrounding file to compile as C.",
+    "Rewrote HSD_TExpRef from nested conditionals to a switch over HSD_TExpType, likely to improve control-flow matching and readability.",
+    "Used explicit memset initialization of HSD_TETev to 0xFF followed by field resets to mirror the original allocation/setup pattern.",
+    "Used typed static selector arrays for TEV konst/register mapping instead of repeated manual branches where table-driven code matched or simplified the emitted code."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The only explicit caveat came from the PR body: HSD_TExpSetReg was not matched.",
+    "The PR body also noted TExpAssignReg should be matching except for a strange load order in the pre-section, possibly dependent on the rest of the file matching."
+  ],
+  "searchable_terms": [
+    "TExp Match",
+    "HSD_TExp",
+    "HSD_TExpSetReg",
+    "TExpAssignReg",
+    "HSD_TExpCompile",
+    "HSD_TExpSetupTev",
+    "HSD_TExpFreeList",
+    "HSD_TExpTev",
+    "HSD_TExpCnst",
+    "HSD_TExpColorOp",
+    "HSD_TExpAlphaOp",
+    "HSD_TExpColorIn",
+    "HSD_TExpAlphaIn",
+    "HSD_TExpDag",
+    "HSD_TExpRes",
+    "HSD_TExpSchedule",
+    "HSD_TExpSimplify",
+    "HSD_TExpMakeDag",
+    "TExp2TevDesc",
+    "AssignColorReg",
+    "AssignAlphaReg",
+    "AssignColorKonst",
+    "AssignAlphaKonst",
+    "IsThroughColor",
+    "IsThroughAlpha",
+    "GXTevOp",
+    "GXTevColorArg",
+    "GXTevAlphaArg",
+    "GXTevKColorSel",
+    "GXTevKAlphaSel",
+    "GX_TEV_SWAP0",
+    "GX_TEV_KCSEL",
+    "GX_TEV_KASEL",
+    "HSD_TEXP_RAS",
+    "HSD_TEXP_TEX",
+    "HSD_TEXP_ZERO",
+    "texp.s removed",
+    "inline asm nonmatch",
+    "peephole",
+    "texpdag.h"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match HSD_TExpSetReg.",
+    "Find later PRs that remove inline assembly from TExpAssignReg.",
+    "Search for changes to HSD_TExpRes or HSD_TExpDag after PR 1039.",
+    "Search for GX_TC_LINEAR or GX_TC_REG usage added after this PR.",
+    "Compare later texp.c revisions for removal of placeholder.h or NOT_IMPLEMENTED in HSD_TExpSetReg."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

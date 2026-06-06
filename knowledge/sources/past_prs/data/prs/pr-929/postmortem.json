@@ -1,0 +1,136 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-929",
+  "pr": {
+    "number": 929,
+    "title": "Partially match HSD cobj",
+    "url": "https://github.com/doldecomp/melee/pull/929",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-06-15T06:11:51Z",
+    "merged_at": "2023-06-15T06:25:51Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large partial decompilation of sysdolphin baselib cobj: most of asm/sysdolphin/baselib/cobj.s was removed and cobj.c gained C implementations, declarations, struct refinements, and some remaining inline asm for hard-to-match camera math paths. The PR also adjusted GX/VI and caller headers to support the CObj work, notably changing GXSetProjection to take Mtx44 and adding VIGetNextField. The PR body specifically notes a tools/frank.py patch needed for HSD_CObjGetViewingMtxPtr.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "tooling",
+      "struct-layout",
+      "camera"
+    ],
+    "systems": [
+      "sysdolphin/baselib",
+      "dolphin/gx",
+      "dolphin/vi",
+      "melee/lb",
+      "melee/ft",
+      "tools"
+    ]
+  },
+  "key_files": [
+    "asm/sysdolphin/baselib/cobj.s",
+    "src/sysdolphin/baselib/cobj.c",
+    "src/sysdolphin/baselib/cobj.h",
+    "src/dolphin/gx/GXTransform.c",
+    "src/dolphin/gx/GXTransform.h",
+    "src/dolphin/vi/vi.h",
+    "src/melee/lb/lbvector.c",
+    "src/sysdolphin/baselib/displayfunc.h",
+    "src/melee/ft/ftdrawcommon.c",
+    "tools/frank.py"
+  ],
+  "what_changed": [
+    "Deleted almost all of asm/sysdolphin/baselib/cobj.s, leaving the file at only its include/section stub while moving substantial CObj logic into src/sysdolphin/baselib/cobj.c.",
+    "Added C implementations or prototypes for many CObj APIs, including HSD_CObjAddAnim, HSD_CObjAnim, HSD_CObjReqAnim, makeProjectionMtx, HSD_CObjSetupViewingMtx, HSD_CObjSetCurrent, HSD_CObjGetViewingMtxPtr, HSD_CObjGetInvViewingMtxPtr, projection getters/setters, viewport/scissor helpers, flag helpers, HSD_CObjInit, and HSD_CObjLoadDesc.",
+    "Kept some functions as inline asm or asm blocks in cobj.c, including setupNormalCamera/setupTopHalfCamera/setupBottomHalfCamera and vector/roll-related routines, reflecting that this was a partial match rather than a complete clean-C decompilation.",
+    "Refined HSD_CObj layout in cobj.h: grouped viewport fields into struct Viewport, grouped scissor fields into struct Scissor, renamed eye_position to eyepos, and corrected projection spelling from FRUSTRUM/frustrum to FRUSTUM/frustum.",
+    "Expanded cobj.h declarations from loose/unknown prototypes to typed signatures using HSD_CObj*, Vec3*, Mtx, MtxPtr, struct Viewport, and struct Scissor.",
+    "Changed GXSetProjection from f32* indexing to Mtx44 indexing in GXTransform.c/.h so projection matrices are passed with their true 4x4 matrix type.",
+    "Added VIGetNextField declaration to dolphin/vi/vi.h for camera viewport jitter paths.",
+    "Updated lbVector_WorldToScreen to read cobj->viewport.left/top/right/bottom instead of flat viewport_left/right/top/bottom fields.",
+    "Removed a stale extern declaration of HSD_CObjGetInvViewingMtxPtr from ftdrawcommon.c after cobj.h gained the proper declaration.",
+    "Patched tools/frank.py instruction-reordering logic by decoding RT/RA fields and blocking one lwz/addi epilogue reorder case; PR body says this was needed for HSD_CObjGetViewingMtxPtr."
+  ],
+  "smart_moves": [
+    "The PR did not force every hard camera function into C at once; it moved matchable CObj pieces into C while preserving asm blocks for remaining fragile math/codegen cases.",
+    "Structuring viewport and scissor as nested structs improved layout readability while preserving offsets, making later CObj/camera work less error-prone.",
+    "Changing GXSetProjection to Mtx44 avoided misleading flattened f32* indexing and matched how CObj projection matrix builders naturally produce matrices.",
+    "Adding precise prototypes reduced duplicate externs and made call sites such as ftdrawcommon.c and lbvector.c depend on the shared cobj.h contract.",
+    "The frank.py fix targeted instruction decoding rather than a one-off symbol hack, making the tool less likely to perform an invalid epilogue reorder in similar cases."
+  ],
+  "decomp_lessons": [
+    "For large baselib modules, a partial decomp can still remove most standalone asm by mixing matched C, inline asm islands, and improved headers.",
+    "Camera/object structs should reflect semantic sub-objects when offsets permit it: nested Viewport and Scissor fields made downstream uses clearer without changing layout intent.",
+    "Correct spelling matters for future searchability and consistency: this PR standardized FRUSTUM/frustum instead of the prior FRUSTRUM/frustrum spelling.",
+    "When decompiling matrix-heavy code, update supporting library prototypes to the real matrix type; otherwise callers are forced into artificial flattened indexing.",
+    "If a match depends on tool behavior, document and patch the tool in the same PR so future matching work is reproducible."
+  ],
+  "naming_conventions": [
+    "CObj public APIs use the HSD_CObj prefix, e.g. HSD_CObjGetViewingMtxPtr, HSD_CObjSetProjectionType, HSD_CObjSetViewportfx4.",
+    "Internal helpers use CObj-prefixed or lower-case helper names, e.g. CObjUpdateFunc, CObjInit, CObjLoad, makeProjectionMtx, setupNormalCamera.",
+    "Projection constants use PROJ_PERSPECTIVE, PROJ_FRUSTUM, and PROJ_ORTHO.",
+    "Nested layout fields use semantic lower-case names: cobj->viewport.left/right/top/bottom and cobj->scissor.left/right/top/bottom.",
+    "The eye position WObj field was named eyepos in HSD_CObj, matching added assertions such as cobj->eyepos."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used inline asm in cobj.c for functions that were not yet cleanly matched, while still eliminating the bulk external assembly file.",
+    "Used extern float/double constants such as HSD_CObj_804DE478, HSD_CObj_804DE47C, HSD_CObj_804DE480, and related CObj constants to preserve expected sdata references.",
+    "Retained assertion string/data symbols such as cobj.c and cobj to match HSD assertion behavior and line-numbered asserts.",
+    "Patched frank.py to decode PowerPC instruction fields with int.from_bytes and RT/RA helpers, then prevented a problematic lwz/addi swap when the lwz uses r1 and the addi has nonzero RA.",
+    "The PR body directly identifies HSD_CObjGetViewingMtxPtr as the function that required the frank tooling patch."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The only human text beyond the title was the author note: \"Patch to frank needed for HSD_CObjGetViewingMtxPtr\"."
+  ],
+  "searchable_terms": [
+    "Partially match HSD cobj",
+    "HSD_CObj",
+    "cobj.c",
+    "cobj.s",
+    "HSD_CObjGetViewingMtxPtr",
+    "HSD_CObjGetInvViewingMtxPtr",
+    "HSD_CObjSetupViewingMtx",
+    "HSD_CObjSetCurrent",
+    "HSD_CObjAddAnim",
+    "HSD_CObjReqAnim",
+    "makeProjectionMtx",
+    "setupNormalCamera",
+    "setupTopHalfCamera",
+    "setupBottomHalfCamera",
+    "roll2upvec",
+    "HSD_CObjSetRoll",
+    "HSD_CObjSetViewport",
+    "HSD_CObjSetScissor",
+    "PROJ_FRUSTUM",
+    "Viewport",
+    "Scissor",
+    "GXSetProjection",
+    "Mtx44",
+    "VIGetNextField",
+    "GXSetViewportJitter",
+    "GXSetScissor",
+    "lbVector_WorldToScreen",
+    "frank.py",
+    "epilogue reorder",
+    "RT RA instruction decoding"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully matched remaining asm functions in src/sysdolphin/baselib/cobj.c, especially setupNormalCamera, setupTopHalfCamera, setupBottomHalfCamera, roll2upvec, HSD_CObjGetUpVector, and HSD_CObjSetRoll.",
+    "Search for later cleanups that rename or further validate HSD_CObj fields viewport, scissor, eyepos, and frustum.",
+    "Search for later changes to tools/frank.py epilogue reorder logic to see whether this HSD_CObjGetViewingMtxPtr fix generalized or was replaced.",
+    "Check whether GXSetProjection(Mtx44, s32) affected other matrix callers beyond cobj."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

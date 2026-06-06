@@ -1,0 +1,104 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-169",
+  "pr": {
+    "number": 169,
+    "title": "Match HSD_Randi",
+    "url": "https://github.com/doldecomp/melee/pull/169",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-10T23:10:41Z",
+    "merged_at": "2021-12-10T23:10:47Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched HSD_Randi in src/sysdolphin/baselib/random.c by replacing the handwritten assembly implementation with C. The PR introduced a small inline helper, HSD_Rand_inline, to express the shared random-state update and high-16-bit extraction pattern, then implemented HSD_Randi as `(max_val * HSD_Rand_inline()) / 0x10000`. It also adjusted nearby HSD_Randf non-matching code to use the correct denominator symbol in the retained NON_MATCHING path. There was no PR body or review discussion in the provided slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "random-number-generation",
+      "baselib"
+    ],
+    "systems": [
+      "src",
+      "sysdolphin",
+      "baselib"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/random.c"
+  ],
+  "what_changed": [
+    "Removed the inline assembly version of `HSD_Randi(s32 max_val)` and replaced it with a C implementation.",
+    "Added `inline s32 HSD_Rand_inline(void)` to update `*lbl_804D5F94` using the same linear congruential generator constants as `HSD_Rand` and return the upper 16 bits.",
+    "Implemented `HSD_Randi` as `return (max_val * HSD_Rand_inline()) / 0x10000;`, matching the assembly sequence that multiplied by the random high word and divided by 65536 via signed shift/addze behavior.",
+    "Kept `HSD_Randf` under `#ifdef NON_MATCHING` / asm fallback, but changed its non-matching denominator from `lbl_804DE798` to `lbl_804DE790` in the shown diff.",
+    "Removed `#pragma force_active on` near the random forget-memory section while retaining `#pragma push` and `#pragma peephole on` around the matched C."
+  ],
+  "smart_moves": [
+    "Factored the repeated RNG state update into an inline helper so the compiler could emit the same instruction pattern expected by `HSD_Randi` without duplicating complex expression code directly in the function.",
+    "Used the literal divisor `0x10000` rather than a float/global denominator, reflecting the integer scaling performed by the original assembly.",
+    "Preserved the existing asm fallback for `HSD_Randf` instead of overclaiming that the floating-point random function was matched in the same PR.",
+    "Leveraged an inline helper to make the source-level intent clearer while still guiding code generation for matching."
+  ],
+  "decomp_lessons": [
+    "For integer random scaling functions, the original assembly may implement division by 65536 as a signed shift plus addze sequence; writing `/ 0x10000` can be the C expression that matches it.",
+    "When two functions share an LCG update, introducing an inline helper can help both readability and instruction selection, especially when a callee call would not match.",
+    "Do not assume float denominator symbols used by nearby functions are appropriate for integer random functions; `HSD_Randi` needed integer scaling by `0x10000`.",
+    "Small matching PRs can remove substantial inline assembly by identifying the compact mathematical expression behind a multiply/shift sequence."
+  ],
+  "naming_conventions": [
+    "Used the existing HSD/baselib function prefix convention: `HSD_Rand`, `HSD_Randf`, `HSD_Randi`, `_HSD_RandForgetMemory`.",
+    "Named the helper `HSD_Rand_inline`, explicitly indicating that it is intended to inline the shared RNG update/extract behavior.",
+    "Kept the existing parameter name `max_val` for the upper-bound argument to `HSD_Randi`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Translated the assembly LCG constants into C: multiply by `214013` / `0x343FD` and add `2531011` / `0x269EC3`.",
+    "Matched the high-16-bit extraction with `*lbl_804D5F94 >> 0x10`.",
+    "Replaced the assembly multiply and signed divide-by-65536 sequence with `(max_val * HSD_Rand_inline()) / 0x10000`.",
+    "Used an `inline` helper to avoid an actual function call and to encourage the compiler to emit the expected in-place RNG update sequence.",
+    "Kept `#pragma peephole on` in the region containing the new C implementation, which may have been relevant to the emitted instruction pattern."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR 169",
+    "Match HSD_Randi",
+    "PsiLupan",
+    "src/sysdolphin/baselib/random.c",
+    "HSD_Randi",
+    "HSD_Rand",
+    "HSD_Randf",
+    "HSD_Rand_inline",
+    "_HSD_RandForgetMemory",
+    "lbl_804D5F94",
+    "lbl_804DE790",
+    "lbl_804DE798",
+    "NON_MATCHING",
+    "random.c",
+    "baselib random",
+    "LCG",
+    "214013",
+    "2531011",
+    "0x343FD",
+    "0x269EC3",
+    "0x10000",
+    "max_val",
+    "pragma peephole",
+    "force_active"
+  ],
+  "follow_up_queries": [
+    "Check whether `HSD_Randf` was matched in a later PR and whether the denominator symbol change to `lbl_804DE790` was part of that effort.",
+    "Search for other baselib RNG functions that can reuse the `HSD_Rand_inline` pattern or the `/ 0x10000` integer scaling tactic.",
+    "Verify whether removing `#pragma force_active on` affected symbol retention or was simply unnecessary in this region."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

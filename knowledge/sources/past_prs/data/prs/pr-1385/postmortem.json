@@ -1,0 +1,141 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1385",
+  "pr": {
+    "number": 1385,
+    "title": "Match some ftparts functions",
+    "url": "https://github.com/doldecomp/melee/pull/1385",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2024-05-12T20:28:49Z",
+    "merged_at": "2024-05-12T21:04:26Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched several previously stubbed ftparts functions and adjusted JObj header helpers needed by those matches. The PR filled in fighter part/JObj/PObj behavior including class changing, custom interpreted JObj loading, PObj matrix setup dispatch with z-scale handling, bone JObj removal/reset, rotation setting, and rotation X/Y getters with quaternion fallback/assert behavior. Header updates included correcting ftParts_800755E8's prototype and adding/strengthening HSD_JObj rotation helper inlines.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "inline-helpers",
+      "fighter-parts"
+    ],
+    "systems": [
+      "fighter",
+      "ftparts",
+      "sysdolphin",
+      "baselib",
+      "jobj",
+      "pobj"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/ftparts.c",
+      "reason": "Main matching work: replaced multiple ftparts stubs with C implementations for JObj/PObj setup, bone cleanup, and rotation accessors."
+    },
+    {
+      "path": "src/melee/ft/ftparts.h",
+      "reason": "Updated ftParts_800755E8 prototype from an empty void signature to Fighter* and u8* arguments."
+    },
+    {
+      "path": "src/sysdolphin/baselib/jobj.h",
+      "reason": "Adjusted HSD_JObjSetRotation inline parameter/assert behavior and added HSD_JObjGetRotationX helper used by matched ftparts functions."
+    }
+  ],
+  "what_changed": [
+    "Implemented ftParts_80073758 as a thin hsdChangeClass wrapper that changes a JObj to the ftJObj class.",
+    "Implemented ftParts_IntpJObjLoad by temporarily clearing joint->u.dobjdesc before delegating to hsdJObj.load, then restoring the saved descriptor.",
+    "Implemented ftParts_PObjSetupMtx with a fast path to hsdPObj.setup_mtx when ft_jobj_scale.has_z_scale is false, otherwise dispatching based on pobj->flags & 0x3000 and whether pobj->u.jobj is NULL.",
+    "Implemented ftParts_800755E8 to remove two FighterBone JObjs, null the joint pointers, and clear two bone flags.",
+    "Implemented ftParts_JObjSetRotation as a wrapper around HSD_JObjSetRotation followed by clearing JOBJ_USE_QUATERNION.",
+    "Implemented ftParts_80075E78 and ftParts_80075F48 to return rotation X/Y from a fighter part's primary joint, with fallback to x4_jobj2 when the primary joint uses quaternion rotation and assert/report behavior if both use quaternion.",
+    "Changed ftParts_800755E8 declaration in ftparts.h to void ftParts_800755E8(Fighter*, u8*).",
+    "Renamed the HSD_JObjSetRotation inline parameter from quat to rotate, added an HSD_ASSERT for the rotation pointer, and assigned jobj->rotate from that pointer.",
+    "Added static inline HSD_JObjGetRotationX with an HSD_ASSERT and direct return of jobj->rotate.x."
+  ],
+  "smart_moves": [
+    "Preserved joint->u.dobjdesc around hsdJObj.load in ftParts_IntpJObjLoad, which suggests the match depended on temporarily suppressing descriptor loading while keeping the caller-visible joint data intact.",
+    "Used existing class vtable-style hooks such as hsdJObj.load and hsdPObj.setup_mtx rather than duplicating base-class behavior.",
+    "Kept ftParts_PObjSetupMtx structured around the exact PObj flag mask 0x3000 and delegated to existing unresolved helpers, allowing partial matching without over-solving adjacent functions.",
+    "Added a small HSD_JObjGetRotationX inline in the same style as the existing HSD_JObjGetRotationY helper, reusing baselib conventions and assertion numbering.",
+    "Modeled quaternion fallback logic by checking JOBJ_USE_QUATERNION on the primary joint and then using the alternate x4_jobj2 joint for Euler rotation reads."
+  ],
+  "decomp_lessons": [
+    "For ftparts functions, thin wrappers around HSD class operations can be valid complete matches; do not overcomplicate functions like class change or rotation-set wrappers.",
+    "When matching loader functions, save/restore fields around base loader calls can reproduce side effects precisely while preventing unwanted descriptor processing.",
+    "Partial matching can proceed by leaving neighboring helpers named by address, as shown by ftParts_PObjSetupMtx dispatching to ftParts_80073830, ftParts_800739B8, and ftParts_80073CA8.",
+    "Header inline changes may be required for source matches, especially when the target function expects a helper such as HSD_JObjGetRotationX or an extra pointer assert in HSD_JObjSetRotation.",
+    "FighterBone cleanup should clear both object pointers and associated boolean flags after HSD_JObjRemove calls.",
+    "Rotation getter functions in ftparts need to account for JOBJ_USE_QUATERNION and may assert if both the primary and fallback JObjs are quaternion-based."
+  ],
+  "naming_conventions": [
+    "ftparts address-named functions retain the ftParts_800xxxxx style until semantic names are known.",
+    "Class-specific initialization and hooks use names like ftParts_JObjInfoInit, ftParts_IntpJObjInfoInit, ftParts_PObjInfoInit, ftJObj, and ftPObj.",
+    "Baselib JObj helpers use HSD_JObjVerbNoun naming, such as HSD_JObjSetRotation, HSD_JObjGetRotationX, and HSD_JObjGetRotationY.",
+    "The HSD_JObjSetRotation parameter was renamed from quat to rotate, matching the jobj->rotate field terminology rather than the quaternion-specific abbreviation."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use temporary local save/restore variables to force the same load/store pattern around calls, as in saving HSD_DObjDesc* dobjdesc before clearing joint->u.dobjdesc.",
+    "Use early returns for base-class fallback paths, as in ftParts_PObjSetupMtx returning immediately after hsdPObj.setup_mtx when z-scale handling is not needed.",
+    "Mask flag fields directly with constants when enum names are unavailable or not yet established, as with pobj->flags & 0x3000.",
+    "Introduce small static inline accessors in headers when the target code relies on direct field access plus HSD_ASSERT behavior.",
+    "Match assert/report flows with exact external string symbols and line numbers when available, as seen with ftParts_803C0A08, ftParts_803C0BB4, ftParts_803C0BD0, ftParts_804D3A58, and assert lines 0x499 and 0x4AC."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1385",
+    "Match some ftparts functions",
+    "r-burns",
+    "ftparts",
+    "ftParts_80073758",
+    "ftParts_IntpJObjLoad",
+    "ftParts_PObjSetupMtx",
+    "ftParts_800755E8",
+    "ftParts_JObjSetRotation",
+    "ftParts_80075E78",
+    "ftParts_80075F48",
+    "ftParts_JObjMakePositionMtx",
+    "ftParts_JObjInfoInit",
+    "ftParts_IntpJObjInfoInit",
+    "ftParts_PObjInfoInit",
+    "HSD_JObj",
+    "HSD_Joint",
+    "HSD_DObjDesc",
+    "HSD_PObj",
+    "Fighter",
+    "FighterBone",
+    "hsdChangeClass",
+    "hsdJObj.load",
+    "hsdPObj.setup_mtx",
+    "ft_jobj_scale.has_z_scale",
+    "HSD_JObjRemove",
+    "HSD_JObjSetRotation",
+    "HSD_JObjGetRotationX",
+    "HSD_JObjGetRotationY",
+    "HSD_JObjGetFlags",
+    "HSD_JObjClearFlags",
+    "JOBJ_USE_QUATERNION",
+    "JOBJ_MTX_INDEP_SRT",
+    "OSReport",
+    "__assert",
+    "src/melee/ft/ftparts.c",
+    "src/melee/ft/ftparts.h",
+    "src/sysdolphin/baselib/jobj.h"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename ftParts_80073758, ftParts_800755E8, ftParts_80075E78, or ftParts_80075F48 to semantic names.",
+    "Search for subsequent matches of ftParts_80073830, ftParts_800739B8, and ftParts_80073CA8 to complete the PObj z-scale matrix setup path.",
+    "Check whether JOBJ_USE_QUATERNION rotation fallback patterns recur in other fighter-part rotation getter/setter functions.",
+    "Review later header changes to HSD_JObjSetRotation and HSD_JObjGetRotationX/Y for assertion-number or type refinements."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

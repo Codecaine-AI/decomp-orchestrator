@@ -1,0 +1,136 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2176",
+  "pr": {
+    "number": 2176,
+    "title": "Partially match `itseakchain`",
+    "url": "https://github.com/doldecomp/melee/pull/2176",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2026-02-13T22:10:51Z",
+    "merged_at": "2026-02-13T22:15:30Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Partially decompiled Sheik's chain item code by replacing several m2c stubs in `itseakchain.c`, naming the spawn entrypoint as `itSeakChain_Spawn`, tightening related prototypes, and clarifying the chain item variable field that stores the owning fighter GObj. The PR also added a helper shell function for broad source-symbol replacement. Evidence for reviewer intent is limited because there were no review comments in the slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "symbol-renaming",
+      "headers",
+      "tooling",
+      "item-behavior"
+    ],
+    "systems": [
+      "item",
+      "fighter",
+      "Sheik",
+      "config",
+      "tooling"
+    ]
+  },
+  "key_files": [
+    "src/melee/it/items/itseakchain.c",
+    "src/melee/it/items/itseakchain.h",
+    "src/melee/it/items/itseakchain.static.h",
+    "src/melee/it/itCharItems.h",
+    "src/melee/ft/chara/ftSeak/ftSk_SpecialS.c",
+    "config/GALE01/symbols.txt",
+    "src/melee/it/items/it_27CF.dox",
+    "tools/functions.sh"
+  ],
+  "what_changed": [
+    "Renamed symbol `it_802BB290` to `itSeakChain_Spawn` in `config/GALE01/symbols.txt`, the Sheik side-special caller, item headers, and dox declarations.",
+    "Implemented `itSeakChain_Spawn` in `src/melee/it/items/itseakchain.c`; it builds a `SpawnItem` for `It_Kind_Seak_Chain`, initializes parent fields, zeroes chain-related item-var storage using `M2C_FIELD`, calls `it_80272A3C`, initializes against Sheik's `FtPart_L3rdNa` joint via `it_802BAF2C`, and attaches the item to the fighter with `Item_8026AB54`.",
+    "Renamed `itSeakChain_ItemVars.x8` to `parent_gobj`, then updated chain cleanup, hitbox update, collision, item event, and accessory paths to use the clearer field name.",
+    "Added C implementations for previously stubbed chain routines including `it_802BB938`, `it_802BBD64`, and `it_802BBED0`, covering chain segment collision state, position propagation, and return modes used by accessory callbacks.",
+    "Adjusted `fn_802BB44C` and `fn_802BB574` to pass the matrix argument into `it_802BBD64` and `it_802BBED0` instead of the `itSeakChain_Attrs*`, and updated the corresponding header prototypes to accept `Mtx`.",
+    "Updated `it_802BAF2C` prototype from `UNK_RET/UNK_PARAMS` to `int it_802BAF2C(Item* ip, HSD_JObj* jobj)`.",
+    "Added includes needed by the new code, including fighter inlines/forward declarations, `it_2725`, `lb/lbaudio_ax`, and `mp/mpcoll`.",
+    "Added `_m2c_stack_it_802BB290` stack layout with a `SpawnItem` member and `STATIC_ASSERT`, plus a new zero vector symbol `it_803B8680` in `itseakchain.static.h`.",
+    "Added `melee_sd` to `tools/functions.sh`, a helper wrapping `sd` over source, docs, symbols, splits, ldscripts, and configure files."
+  ],
+  "smart_moves": [
+    "The spawn function was named semantically as `itSeakChain_Spawn` once the call site in `ftSk_SpecialS_CheckInitChain` made its role clear.",
+    "Renaming the item-var field from `x8` to `parent_gobj` made multiple later call sites self-documenting, especially cleanup and collision code that interact with the owning fighter.",
+    "The PR improved prototypes at the same time as matching code, reducing reliance on `UNK_PARAMS` and mismatched argument types.",
+    "Using `M2C_FIELD` preserved partially understood layout accesses for the chain segment vector/array area instead of inventing a full struct layout prematurely.",
+    "The inline comment on `itSeakChain_Spawn` explicitly marks the zeroed `0xDF0`-range storage as probably a Vec3 array, documenting uncertainty without overcommitting.",
+    "Adding a stack-layout static assert for the spawned item function records known stack evidence and supports future matching work.",
+    "The `melee_sd` helper institutionalizes broad symbol rename workflow across source, docs, config, and symbols files."
+  ],
+  "decomp_lessons": [
+    "When a formerly numeric item function has a single meaningful fighter call site, use the call site semantics to rename both the symbol file and all declarations consistently.",
+    "Do not wait for a perfect struct before matching: use `M2C_FIELD` for unknown offsets and annotate likely structure patterns, such as suspected Vec3 arrays.",
+    "Header cleanup is part of matching work; replacing `UNK_RET` and `UNK_PARAMS` with concrete types prevents later call-site drift.",
+    "If a function actually consumes matrix elements such as `mtx[0][1]` and `mtx[1][2]`, update the prototype to carry `Mtx` rather than forcing it through an unrelated attrs struct.",
+    "Field names should capture ownership semantics. `parent_gobj` communicates why fighter collision and hitbox helpers are called through this stored GObj.",
+    "For chain or hookshot-like item systems, the item code may coordinate item links, fighter hitboxes, collision data, audio, and bone attachment in one matching unit."
+  ],
+  "naming_conventions": [
+    "`itSeakChain_Spawn` uses the project item naming pattern `it<Character><Item>_<Verb>` for a now-understood spawn routine.",
+    "`parent_gobj` replaces an offset-style field name when the stored GObj is known to be the owning fighter.",
+    "The existing file keeps many unresolved functions with address-style names such as `it_802BB938`, `it_802BBD64`, and `it_802BBED0` when semantics are not yet strong enough for a descriptive name.",
+    "The Sheik fighter code uses `ftSk_SpecialS_CheckInitChain` and stores the spawned chain in `fp->fv.sk.x8` and `fp->x1984_heldItemSpec`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Preserved matching-sensitive control flow in `it_802BBD64` and `it_802BBED0` using explicit labels and `goto` structure.",
+    "Used `PAD_STACK` and a dedicated `_m2c_stack_it_802BB290` static stack struct to satisfy stack layout requirements.",
+    "Kept unresolved memory layout accesses as explicit offset writes with `M2C_FIELD(ip, f32*, 0xDF0..0xE4C)` while matching initialization behavior.",
+    "Converted parenthesized arithmetic like `(origin.x * scale) + offset->x` to `origin.x * scale + offset->x`, likely to match compiler expression output.",
+    "Matched bitfield behavior in `it_802BB938` using direct byte access through `M2C_FIELD(link, u8*, 0x2C)` alongside named bitfields such as `x2C_b0`, `x2C_b1`, and `x2C_b2`.",
+    "Used matrix element indexing directly for chain length/gravity-like parameters, for example `mtx[0][1]` and `mtx[1][2]`."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "There was one issue comment counted, but the provided excerpt contains no body text, so no specific human feedback can be extracted."
+  ],
+  "searchable_terms": [
+    "pr-2176",
+    "itseakchain",
+    "itSeakChain_Spawn",
+    "it_802BB290",
+    "it_802BB938",
+    "it_802BBD64",
+    "it_802BBED0",
+    "it_802BAF2C",
+    "itSeakChain_ItemVars",
+    "parent_gobj",
+    "It_Kind_Seak_Chain",
+    "SpawnItem",
+    "Item_80268B18",
+    "Item_8026AB54",
+    "it_80272A3C",
+    "FtPart_L3rdNa",
+    "ftSk_SpecialS_CheckInitChain",
+    "ftSk_SpecialS_UpdateHitboxes",
+    "ftColl_8007AFF8",
+    "ItemLink",
+    "CollData",
+    "mpColl_80048844",
+    "lbAudioAx_800237A8",
+    "M2C_FIELD",
+    "PAD_STACK",
+    "_m2c_stack_it_802BB290",
+    "melee_sd",
+    "tools/functions.sh",
+    "Sheik chain",
+    "Seak chain"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that replace `M2C_FIELD` accesses around offsets `0xDF0` to `0xE4C` in `itSeakChain_ItemVars` with a real Vec3 array or chain segment storage.",
+    "Search for later renames of `it_802BB938`, `it_802BBD64`, and `it_802BBED0` once their chain physics/collision roles are better understood.",
+    "Check whether `it_802BAF2C` was later named and whether its prototype remained `int it_802BAF2C(Item* ip, HSD_JObj* jobj)`.",
+    "Look for future use of `melee_sd` or similar symbol replacement tooling in mass rename PRs.",
+    "Compare this chain implementation with Link hookshot item code to identify reusable matching patterns for linked item segments."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

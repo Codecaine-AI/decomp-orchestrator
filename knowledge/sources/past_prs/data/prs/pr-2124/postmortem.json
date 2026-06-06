@@ -1,0 +1,153 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2124",
+  "pr": {
+    "number": 2124,
+    "title": "Menu cleanup",
+    "url": "https://github.com/doldecomp/melee/pull/2124",
+    "state": "MERGED",
+    "author": "sadkellz",
+    "created_at": "2026-01-23T22:35:16Z",
+    "merged_at": "2026-01-23T22:40:39Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Cleaned up menu and game-mode code by replacing generic decompiler names and raw menu constants with semantic names, consolidating menu data structs into shared types, and renaming menu input/event helpers. The PR improved readability around major/minor scene dispatch, main-menu entry/exit data, GameRules fields, and menu selection enums without evidence of large behavioral changes.",
+  "change_classification": {
+    "primary_type": "cleanup",
+    "categories": [
+      "cleanup",
+      "headers",
+      "naming",
+      "types",
+      "enum-documentation"
+    ],
+    "systems": [
+      "menu",
+      "game-mode",
+      "melee-core"
+    ]
+  },
+  "key_files": [
+    "src/melee/mn/mnmain.c",
+    "src/melee/gm/gm_1B03.c",
+    "src/melee/mn/forward.h",
+    "src/melee/gm/gm_1A3F.c",
+    "src/melee/mn/inlines.h",
+    "src/melee/gm/types.h",
+    "src/melee/gm/gm_1B03.h",
+    "src/melee/gm/gm_1B03.static.h",
+    "src/melee/gm/gmmain_lib.c",
+    "src/melee/mn/mndeflicker.c",
+    "src/melee/mn/mnhyaku.c",
+    "src/melee/mn/mninfobonus.c",
+    "src/melee/mn/mnlanguage.c",
+    "src/melee/mn/mnsound.c",
+    "src/melee/mn/mnsoundtest.c",
+    "src/melee/mn/mnmain.h"
+  ],
+  "what_changed": [
+    "Renamed local variables in scene-control code from decompiler temporaries to domain names: `scene` to `major_scene`, `var_r27` to `minor_scene`, `temp_r26` to `handler`, and `temp_r25` to `info` in `gm_801A4014`.",
+    "Renamed `gm_801A43A0` parameter `arg0` to `major_kind` and local `var_r30` to `major_scene`, clarifying that the function finds and runs a major scene by kind.",
+    "In `gm_801B0FF8`, replaced `arg0`, `temp_r3`, and `temp_r31` with `scene`, `rules`, and `data`, respectively.",
+    "Replaced raw `MenuEnterData` field usage such as `x0`, `x1`, and `x2` with semantic fields visible in the diff: `menu_kind`, `hovered_selection`, and `load_assets`.",
+    "Mapped many raw menu constants in `gm_801B0FF8` to named menu and selection enums, for example `MENU_KIND_REG`, `SEL_REG_CLASSIC`, `MENU_KIND_STADIUM`, `SEL_STADIUM_TARGET`, `MENU_KIND_MULTI_VS`, and `SEL_MULTI_VS_10MAN`.",
+    "Renamed `GameRules` fields in `src/melee/gm/types.h`: `unk_x0` became `force_main_menu` and `unk_x1` became `bgm`; corresponding references in `gm_1B03.c` and `gmmain_lib.c` were updated.",
+    "Removed local duplicate/temporary struct definitions from `gm_1B03.h` and `gm_1B03.static.h`, including `gm_801B0FF8_arg0_x10_t` and `MainMenuExitData`, in favor of shared menu data types.",
+    "Updated `gm_801B138C` to use `MenuExitData*` and access `pending_major` instead of `MainMenuExitData` and raw field `x0`.",
+    "Adjusted `MenuExitData` in `gm/types.h` so it only exposes `pending_major` plus padding; the previously named `pending_minor` byte was removed or folded back into padding in the shown diff.",
+    "Renamed the menu input bitmask enum from `_MenuEvent`/`MenuEvent_*` to `_MenuInput`/`MenuInput_*`, including `MenuEvent_Forward` becoming `MenuInput_Confirm`.",
+    "Renamed menu input helper inlines from `Menu_GetAllEvents` and `Menu_GetEventsForPort` to `Menu_GetAllInputs` and `Menu_GetInputsForPort`, with call sites in menu files updated.",
+    "Improved `MenuKind` names by replacing ambiguous entries such as `MENU_KIND_7` with `MENU_KIND_EVENT` and `MENU_KIND_33` with `MENU_KIND_MULTI_VS`.",
+    "Added `MultiVsMenuSelection` enum values for Multi-Man VS selections: `SEL_MULTI_VS_10MAN`, `SEL_MULTI_VS_100MAN`, `SEL_MULTI_VS_3MIN`, `SEL_MULTI_VS_15MIN`, `SEL_MULTI_VS_ENDLESS`, and `SEL_MULTI_VS_CRUEL`."
+  ],
+  "smart_moves": [
+    "Converted raw numeric menu routing data into named enums at the use site, making `gm_801B0FF8` read as a table of major-scene-to-menu-selection mappings rather than unexplained byte writes.",
+    "Kept struct sizes guarded with `STATIC_ASSERT`, including `MenuEnterData` and `MenuExitData`, which helps preserve ABI/layout correctness while renaming fields.",
+    "Moved from one-off structs in game-mode headers to shared menu-facing types, reducing duplicated type knowledge between `gm` and `mn` code.",
+    "Renamed input-related concepts from `Event` to `Input`, which better reflects that the bitmask represents controller/menu input state rather than a queued event object.",
+    "Separated menu category from highlighted option through `menu_kind` and `hovered_selection`, making future menu transitions easier to audit.",
+    "Used domain-specific names for major/minor scene execution code without changing the apparent control flow, lowering risk while improving future readability."
+  ],
+  "decomp_lessons": [
+    "When a byte field repeatedly receives known constants, derive a named enum and update all assignments together; this produces more useful decomp output than leaving `x0`/`x1` fields with scattered magic numbers.",
+    "Scene dispatch code benefits from naming variables by role: `MajorScene`, `MinorScene`, `MinorSceneHandler`, and `MinorSceneInfo` are clearer than register-derived temporaries.",
+    "Prefer shared forward/header types for cross-system callback data instead of keeping local placeholder structs in static headers.",
+    "For layout-sensitive structs, semantic field renames should be paired with `STATIC_ASSERT(sizeof(...))` so matching work does not accidentally change binary layout.",
+    "If a field's meaning is uncertain or unsupported, it can be safer to leave it as padding rather than over-name it; this PR removed an exposed `pending_minor` from `MenuExitData` in the diff.",
+    "Renaming helper APIs should include both the enum type and all accessor functions to keep terminology consistent across call sites."
+  ],
+  "naming_conventions": [
+    "Use `MenuKind` names with `MENU_KIND_*` for menu categories, e.g. `MENU_KIND_MAIN`, `MENU_KIND_REG`, `MENU_KIND_EVENT`, `MENU_KIND_STADIUM`, `MENU_KIND_SPECIAL`, and `MENU_KIND_MULTI_VS`.",
+    "Use `SEL_*` enum prefixes for highlighted menu selections, grouped by menu family: `SEL_REG_*`, `SEL_STADIUM_*`, `SEL_MULTI_VS_*`, `SEL_SPECIAL_VS_*`, `SEL_TOY_*`, and similar.",
+    "Use `MenuInput_*` for menu input bit flags instead of `MenuEvent_*`; `Confirm` is preferred over `Forward` for the 0x10 confirm/advance input.",
+    "Name `GameRules` fields by gameplay purpose where known, such as `force_main_menu` and `bgm`, instead of `unk_x0` and `unk_x1`.",
+    "Name callback data structs by direction and owning menu context, such as `MenuEnterData` for OnLoad/load data and `MenuExitData` for OnLeave/leave data.",
+    "Use local variable names like `major_scene`, `minor_scene`, `handler`, `info`, `rules`, and `data` instead of register-derived names such as `temp_r31` or `var_r27`."
+  ],
+  "assembly_or_matching_tactics": [
+    "The diff appears to be mostly semantic renaming and type/header cleanup rather than a matching trick; no explicit assembly manipulation or reviewer-noted matching tactic is present in the provided context.",
+    "Preserving struct sizes with static assertions is the main matching-safety tactic evidenced in the diff.",
+    "Replacing duplicate placeholder structs with equivalent shared types can improve type propagation while preserving generated code if the layouts remain identical."
+  ],
+  "review_feedback": [
+    "No review comments were included in the provided PR context.",
+    "The PR had one issue comment according to counts, but the human text excerpt is empty, so no substantive reviewer feedback can be extracted."
+  ],
+  "searchable_terms": [
+    "Menu cleanup",
+    "sadkellz",
+    "pr-2124",
+    "gm_801A4014",
+    "gm_801A43A0",
+    "gm_801B0FF8",
+    "gm_801B138C",
+    "gm_1A3F.c",
+    "gm_1B03.c",
+    "gmmain_lib.c",
+    "gm/types.h",
+    "mn/forward.h",
+    "mn/inlines.h",
+    "MenuKind",
+    "MenuEnterData",
+    "MenuExitData",
+    "MenuInput",
+    "MenuInput_Confirm",
+    "Menu_GetAllInputs",
+    "Menu_GetInputsForPort",
+    "GameRules",
+    "force_main_menu",
+    "bgm",
+    "MENU_KIND_EVENT",
+    "MENU_KIND_MULTI_VS",
+    "MultiVsMenuSelection",
+    "SEL_MULTI_VS_10MAN",
+    "SEL_MULTI_VS_100MAN",
+    "SEL_MULTI_VS_3MIN",
+    "SEL_MULTI_VS_15MIN",
+    "SEL_MULTI_VS_ENDLESS",
+    "SEL_MULTI_VS_CRUEL",
+    "SEL_REG_CLASSIC",
+    "SEL_STADIUM_TARGET",
+    "SEL_SPECIAL_VS_CAMERA",
+    "minor_scene",
+    "major_scene",
+    "MinorSceneHandler",
+    "MinorSceneInfo"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching `MenuEnterData` or `MenuExitData` to see whether the padding bytes received confirmed names.",
+    "Search for remaining `MenuEvent_` or `Menu_GetAllEvents` references to verify the input terminology migration was complete.",
+    "Search for remaining raw menu kind constants assigned to `menu_kind` or `hovered_selection` that could be converted to `MENU_KIND_*` or `SEL_*` enums.",
+    "Inspect later changes to `GameRules.force_main_menu` and `GameRules.bgm` to confirm the field meanings held up.",
+    "Look for PRs that further name `MENU_KIND_8`, `MENU_KIND_10`, `MENU_KIND_11`, `MENU_KIND_14`, `MENU_KIND_22`, `MENU_KIND_27`, or `MENU_KIND_34`."
+  ],
+  "confidence": 0.83,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

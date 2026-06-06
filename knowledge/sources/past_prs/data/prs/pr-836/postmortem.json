@@ -1,0 +1,162 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-836",
+  "pr": {
+    "number": 836,
+    "title": "Match `ftPe_SpecialN`",
+    "url": "https://github.com/doldecomp/melee/pull/836",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-07T23:45:09Z",
+    "merged_at": "2023-05-07T23:51:01Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched Peach's neutral special implementation by replacing the remaining ftPe_Init assembly slice with a new C source for ftPe_SpecialN/Toad behavior, wiring the new object into obj_files.mk, and adding the needed fighter/Peach struct names and prototypes. The diff also improved adjacent naming for fighter motion-state parameters, SpecialN facing direction, Peach fighter variables, and shield-related fields. There were no PR body comments or review comments in the slice, so rationale is inferred from the title and diff.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-naming",
+      "fighter-action-state",
+      "item-callbacks"
+    ],
+    "systems": [
+      "fighter",
+      "ftPeach",
+      "item",
+      "asm",
+      "build",
+      "docs"
+    ]
+  },
+  "key_files": [
+    "asm/melee/ft/chara/ftPe_Init.s",
+    "src/melee/ft/chara/ftPeach/ftPe_SpecialN.c",
+    "src/melee/ft/chara/ftPeach/ftPe_SpecialN.h",
+    "src/melee/ft/chara/ftPeach/types.h",
+    "src/melee/ft/chara/ftPeach/ftPe_Init.c",
+    "src/melee/ft/chara/ftPeach/ftPe_Init.h",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/fighter.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/ftcommon.h",
+    "src/melee/it/it_27CF.h",
+    "asm/melee/it/it_27CF.s",
+    "obj_files.mk",
+    "docs/glossary.md"
+  ],
+  "what_changed": [
+    "Deleted asm/melee/ft/chara/ftPe_Init.s, removing 889 lines of assembly that included Peach SpecialN and related helper labels.",
+    "Added src/melee/ft/chara/ftPeach/ftPe_SpecialN.c with 424 lines implementing Peach's ground and aerial neutral special, neutral-special hit states, collision transitions, physics, animation, hitlag callbacks, item cleanup, and Toad item spawning.",
+    "Added public declarations in ftPe_SpecialN.h for ftPe_SpecialN_DoDeath2, ftPe_SpecialN_OnDeath2, and ftPe_SpecialN_IsActive, in addition to the existing SpecialN action callbacks.",
+    "Updated obj_files.mk to build src/melee/ft/chara/ftPeach/ftPe_SpecialN.c.o instead of relying on the old assembly object.",
+    "Renamed Peach fighter variables at offsets fp+2240 and fp+2244 from x14/x18 to specialairn_used and toad_gobj, and added mv.pe.specialn.facing_dir at fp+2340.",
+    "Expanded ftPe_DatAttrs around +94 through +AC with named fields used by the SpecialN implementation, including specialairn_vel_x_div, specialairn_vel_y, x98, xA0, xA4, xA8, and xAC.",
+    "Changed Peach init/reset code to initialize specialairn_used to false and toad_gobj to NULL.",
+    "Retargeted Peach item cleanup callbacks in SpecialHi and SpecialLw from ftPe_Init_8011B704 to ftPe_Init_OnDeath2.",
+    "Updated it_27CF callsites/prototypes so item-side Peach Toad callbacks refer to ftPe_SpecialN_DoDeath2 and ftPe_SpecialN_IsActive.",
+    "Improved Fighter_ChangeMotionState signature and internal variable names: new_motion_state_index became FtMotionId msid, arg2 became MotionFlags flags, otherObj became arg3, and animation arguments became anim_start, anim_speed, and anim_blend.",
+    "Renamed fighter fields x19AC to specialn_facing_dir and x19B4/x19B8 shield-related fields to shield_unk0/shield_unk1, with linked updates in CLink, Link, Mars, and Peach code.",
+    "Added a glossary entry for div, presumably to support the new specialairn_vel_x_div naming."
+  ],
+  "smart_moves": [
+    "Used small local enums for cmd_vars indices and states, replacing raw command-variable slots with cmd_phys_state, cmd_anim_state, cmd_accessory4, cmd_hit_anim_state and explicit state enum names.",
+    "Factored shared ground/aerial behavior into helpers such as reset, doAnim, setupColl, setupHitColl, doHitAnim, and common coll_mf flags instead of duplicating every SpecialN and SpecialAirN path.",
+    "Kept matching-only stack padding guarded behind #ifdef MUST_MATCH with explicit TODO comments, preserving decomp matchability without making the normal code path rely on fake locals.",
+    "Preserved item lifecycle semantics by setting held-item spec to toad_gobj, installing OnDeath/OnTakeDamage callbacks when the item exists, and clearing those callbacks in ftPe_SpecialN_DoDeath2.",
+    "Modeled hitlag behavior through onEnterHitlag/onExitHitlag callbacks that forward to it_802BDFA0 and it_802BDFC0 only when toad_gobj is non-NULL.",
+    "Centralized ground-air transition flags in a static MotionFlags const coll_mf, making the exact state-preservation mask reusable across normal and hit collision transitions.",
+    "Improved API types in Fighter_ChangeMotionState to FtMotionId and MotionFlags, reducing ambiguity for future action-state matching work."
+  ],
+  "decomp_lessons": [
+    "When matching fighter special moves, naming cmd_vars slots with local enums makes event-script-driven state changes much easier to audit than raw fp->cmd_vars[N] accesses.",
+    "FighterVars offsets should be named as soon as behavior is understood; here fp+2240 became Peach's specialairn_used latch and fp+2244 became toad_gobj, clarifying both aerial physics and item cleanup.",
+    "Ground/aerial paired actions can often share animation, collision, and hit-state helpers while still selecting the correct return callback, such as ft_8008A2BC for ground and ft_800CC730 for air.",
+    "Item-backed special moves need cleanup and hitlag callbacks to survive state transitions; setup functions should reinstall callbacks after Fighter_ChangeMotionState when the spawned item still exists.",
+    "MotionFlags constants are safer and more searchable than inline numeric masks when preserving animation, hit status, item visibility, model flags, and command update behavior across state changes.",
+    "Struct/header cleanup can be part of a matching PR when the C implementation exposes enough evidence for better names, but broad renames should be tied to concrete callsites as done for Fighter_ChangeMotionState and shield_unk fields.",
+    "If a match requires otherwise-unused stack storage, isolate it under MUST_MATCH and document it instead of obscuring the real logic."
+  ],
+  "naming_conventions": [
+    "Peach neutral-special functions use the ftPe_SpecialN and ftPe_SpecialAirN prefixes for normal states and ftPe_SpecialNHit / ftPe_SpecialAirNHit for hit states.",
+    "Static callbacks in ftPe_SpecialN.c are named by role: onAccessory4, onHitAccessory4, onEnterHitlag, onExitHitlag, onUnkHit.",
+    "Internal shared helpers use do*/setup* names for action fragments: doAnim, doColl, doAirColl, doHitAnim, setupColl, setupHitColl.",
+    "Command-variable enum names use cmd_* for indices and *_state_N for value enums, for example cmd_phys_state and phys_state_2.",
+    "Peach-specific fighter vars are stored under fp->fv.pe.* and motion vars under fp->mv.pe.specialn.*.",
+    "The matched item pointer at fp+2244 is named toad_gobj, while the aerial-use latch at fp+2240 is named specialairn_used.",
+    "Fighter_ChangeMotionState parameters are typed and named semantically: FtMotionId msid, MotionFlags flags, anim_start, anim_speed, anim_blend.",
+    "Field x19AC is named specialn_facing_dir, and x19B4/x19B8 are named shield_unk0/shield_unk1."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced a full assembly file with a C implementation and updated obj_files.mk so the C object participates in the build.",
+    "Used address comments on static prototypes, such as /* 11E174 */ and /* 11EC6C */, to map C helpers back to the original assembly labels.",
+    "Used MUST_MATCH-only dummy stack arrays in several functions where the original assembly required unused stack space.",
+    "Preserved exact animation/collision transition semantics with Fighter_ChangeMotionState calls carrying current animation frame, speed 1, blend 0, and a shared coll_mf bitmask.",
+    "Matched boolean/null checks around toad_gobj before forwarding to item functions, mirroring assembly guard branches.",
+    "Kept small wrapper IASA functions empty where the original assembly was just blr.",
+    "Introduced typed MotionFlags and FtMotionId usage to avoid raw integer drift while still matching existing motion-state logic."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "One in-code TODO says an unused stack remains for matching under MUST_MATCH.",
+    "One in-code TODO says doAirHitColl can maybe be combined with doAirColl; this is author-side code commentary, not reviewer feedback."
+  ],
+  "searchable_terms": [
+    "pr-836",
+    "Match ftPe_SpecialN",
+    "ribbanya",
+    "Peach SpecialN",
+    "Peach Toad",
+    "ftPe_SpecialN.c",
+    "ftPe_SpecialN_DoDeath2",
+    "ftPe_SpecialN_OnDeath2",
+    "ftPe_SpecialN_IsActive",
+    "ftPe_SpecialNHit",
+    "ftPe_SpecialAirNHit",
+    "toad_gobj",
+    "specialairn_used",
+    "specialairn_vel_x_div",
+    "specialairn_vel_y",
+    "specialn_facing_dir",
+    "cmd_vars",
+    "cmd_phys_state",
+    "cmd_anim_state",
+    "cmd_accessory4",
+    "cmd_hit_anim_state",
+    "onAccessory4",
+    "onEnterHitlag",
+    "onExitHitlag",
+    "onUnkHit",
+    "it_802BDE18",
+    "it_802BE214",
+    "it_802BDF40",
+    "it_802BDFA0",
+    "it_802BDFC0",
+    "it_802BE100",
+    "Fighter_ChangeMotionState",
+    "FtMotionId",
+    "MotionFlags",
+    "coll_mf",
+    "shield_unk0",
+    "shield_unk1",
+    "MUST_MATCH",
+    "ftPe_Init.s deleted"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename Peach Toad item functions it_802BDE18, it_802BE214, it_802BDF40, it_802BDFA0, it_802BDFC0, or it_802BE100.",
+    "Find PRs that further refine ftPe_DatAttrs fields x98, xA0, xA4, xA8, and xAC used by Peach SpecialN.",
+    "Find PRs that remove or reduce MUST_MATCH unused stack arrays in ftPe_SpecialN.c.",
+    "Find PRs that combine doAirHitColl with doAirColl or otherwise refactor Peach SpecialN collision helpers.",
+    "Find PRs that improve shield_unk0 and shield_unk1 names after this provisional rename."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

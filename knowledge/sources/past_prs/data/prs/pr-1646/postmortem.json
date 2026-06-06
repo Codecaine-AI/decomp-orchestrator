@@ -1,0 +1,137 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1646",
+  "pr": {
+    "number": 1646,
+    "title": "Restore OSMemory match",
+    "url": "https://github.com/doldecomp/melee/pull/1646",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-27T06:34:42Z",
+    "merged_at": "2025-06-27T06:46:40Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Restored the external Dolphin SDK OSMemory.c unit to matching status after the switch to extern/dolphin. The PR added the missing memory-protection implementation, including reset handling, memory interrupt handling, BAT/MMU setup asm helpers for 24MB and 48MB configurations, and __OSInitMemoryProtection. It also renamed the data symbol at .data:0x80402348 from the generic OSMemory_80402348 to ResetFunctionInfo and flipped configure.py from Object(NonMatching, \"dolphin/os/OSMemory.c\") to Object(Matching, \"dolphin/os/OSMemory.c\").",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "external-sdk-restoration",
+      "inline-assembly",
+      "symbol-naming",
+      "build-configuration"
+    ],
+    "systems": [
+      "extern/dolphin",
+      "dolphin/os",
+      "OSMemory",
+      "memory-protection",
+      "interrupts",
+      "reset",
+      "config/GALE01",
+      "configure.py"
+    ]
+  },
+  "key_files": [
+    "extern/dolphin/src/dolphin/os/OSMemory.c",
+    "config/GALE01/symbols.txt",
+    "configure.py"
+  ],
+  "what_changed": [
+    "Added #include \"__os.h\" to OSMemory.c so the unit can reference internal OS declarations such as __MEMRegs, __OSMaskInterrupts, __OSSetInterruptHandler, OSErrorTable, and related internals.",
+    "Added static BOOL OnReset(BOOL final), which masks memory-related interrupts and writes __MEMRegs[8] = 0xFF when final reset is true, then returns TRUE.",
+    "Added static void MEMIntrruptHandler(__OSInterrupt interrupt, OSContext* context), which reads memory fault cause/address registers, clears __MEMRegs[0x10], dispatches through OSErrorTable[0xF] when present, and otherwise calls __OSUnhandledException.",
+    "Added __MWERKS__-guarded inline asm helpers Config24MB, Config48MB, and RealMode for BAT/MMU reconfiguration and real-mode transition behavior.",
+    "Added static OSResetFunctionInfo ResetFunctionInfo initialized with OnReset and priority 0x7F.",
+    "Added void __OSInitMemoryProtection(void), including interrupt disable/restore, simulated-memory size checks, calls through RealMode(Config24MB/Config48MB), memory register initialization, five memory interrupt handler registrations, reset-function registration, conditional simulated-memory register setup, and unmasking interrupt bit 0x08000000.",
+    "Renamed the symbol at .data:0x80402348 in config/GALE01/symbols.txt from OSMemory_80402348 to ResetFunctionInfo.",
+    "Changed configure.py so dolphin/os/OSMemory.c is built as Matching instead of NonMatching."
+  ],
+  "smart_moves": [
+    "Restored the unit by adding the missing SDK implementation rather than only changing the build status; the matching flip in configure.py is backed by substantial source recovery.",
+    "Used a meaningful data symbol name, ResetFunctionInfo, instead of keeping an address-derived placeholder, making the .data object correspond to the static OSResetFunctionInfo instance in OSMemory.c.",
+    "Kept low-level assembly helpers behind #ifdef __MWERKS__, matching the existing pattern needed for CodeWarrior inline asm while avoiding exposing that syntax to other compilers.",
+    "Preserved exact low-level register operations in inline asm for BAT setup and real-mode entry, which is appropriate for SDK OS code where instruction selection and ordering are critical to matching.",
+    "Included a dummy local stack object, u8 _[40], in __OSInitMemoryProtection, suggesting stack-frame shaping was needed for the matching binary layout."
+  ],
+  "decomp_lessons": [
+    "When a file is moved or restored under extern/dolphin, confirm that previously matched SDK units did not lose source-only pieces during the migration; the PR body explicitly says OSMemory 'Was matched before switch to extern/dolphin'.",
+    "A NonMatching-to-Matching configure.py change should be paired with source and symbol updates that explain why the unit now matches.",
+    "For Dolphin OS internals, adding __os.h may be necessary when public dolphin/os.h is insufficient for internal globals and interrupt/reset helper declarations.",
+    "Address-derived symbols in symbols.txt should be renamed once the recovered source identifies the object; here OSMemory_80402348 became ResetFunctionInfo.",
+    "Memory-protection and MMU/BAT setup code may require exact inline assembly rather than C approximations, especially around isync, mtdbatu/mtdbatl, mtibatu/mtibatl, mtsrr0/mtsrr1, and rfi sequences.",
+    "Dummy local arrays can be a legitimate matching tactic for stack layout, but future work should keep them evidence-grounded and localized."
+  ],
+  "naming_conventions": [
+    "Static reset-function objects should use semantic names matching their type and role, e.g. ResetFunctionInfo for an OSResetFunctionInfo object.",
+    "Internal Dolphin OS functions retain double-underscore prefixes, e.g. __OSInitMemoryProtection, __OSMaskInterrupts, __OSSetInterruptHandler, and __OSUnhandledException.",
+    "The recovered interrupt handler is spelled MEMIntrruptHandler in the diff, including the missing 'e' in 'Interrupt'; future searches should preserve this exact spelling unless later PRs rename it.",
+    "Config24MB, Config48MB, and RealMode use PascalCase-style names matching low-level SDK helper naming in this file."
+  ],
+  "assembly_or_matching_tactics": [
+    "Implemented Config24MB and Config48MB as static asm functions under __MWERKS__ with nofralloc to avoid compiler-generated prologue/epilogue.",
+    "Used explicit lis/addi sequences with @ha/@l relocations to construct BAT register constants.",
+    "Cleared and restored DBAT/IBAT entries with ordered mtdbatu/mtdbatl/mtibatu/mtibatl instructions and isync barriers.",
+    "Used mfmsr plus bit manipulation, then mtspr/mtsrr instructions and rfi to enter the desired execution state.",
+    "RealMode clears low address bits with clrlwi, writes the target function to SRR0, adjusts MSR bits with rlwinm, writes SRR1, and returns from interrupt with rfi.",
+    "Added u8 _[40] in __OSInitMemoryProtection, likely to force stack layout for matching; the diff does not include comments explaining the exact matching constraint."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "The only human text evidence says: 'Was matched before switch to extern/dolphin'."
+  ],
+  "searchable_terms": [
+    "PR1646",
+    "Restore OSMemory match",
+    "OSMemory.c",
+    "extern/dolphin/src/dolphin/os/OSMemory.c",
+    "dolphin/os/OSMemory.c",
+    "Object(Matching, \"dolphin/os/OSMemory.c\")",
+    "Object(NonMatching, \"dolphin/os/OSMemory.c\")",
+    "ResetFunctionInfo",
+    "OSMemory_80402348",
+    "__OSInitMemoryProtection",
+    "OnReset",
+    "MEMIntrruptHandler",
+    "Config24MB",
+    "Config48MB",
+    "RealMode",
+    "__MEMRegs",
+    "OSErrorTable",
+    "__OSUnhandledException",
+    "__OSMaskInterrupts",
+    "__OSSetInterruptHandler",
+    "OSRegisterResetFunction",
+    "__OSUnmaskInterrupts",
+    "OSGetConsoleSimulatedMemSize",
+    "OSGetPhysicalMemSize",
+    "__MWERKS__",
+    "nofralloc",
+    "mtdbatu",
+    "mtdbatl",
+    "mtibatu",
+    "mtibatl",
+    "mtsrr0",
+    "mtsrr1",
+    "rfi",
+    "BAT setup",
+    "memory protection",
+    "simulated memory",
+    "GALE01 symbols"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs touching MEMIntrruptHandler spelling or OSMemory.c formatting to see whether the typo-like name was preserved for matching or renamed.",
+    "Search for other extern/dolphin migration regressions where a file was previously matched but became NonMatching after relocation.",
+    "Compare other Dolphin OS reset-function objects to confirm consistent OSResetFunctionInfo symbol naming and priority conventions.",
+    "Search for uses of dummy local arrays such as u8 _[40] in matched SDK code to understand stack-shaping patterns."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

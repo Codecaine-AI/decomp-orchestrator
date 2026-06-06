@@ -1,0 +1,160 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-419",
+  "pr": {
+    "number": 419,
+    "title": "matched some donkey kong functions",
+    "url": "https://github.com/doldecomp/melee/pull/419",
+    "state": "MERGED",
+    "author": "snuffysasa",
+    "created_at": "2022-07-16T20:50:21Z",
+    "merged_at": "2022-07-16T20:52:05Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched a block of Donkey Kong fighter code by moving roughly 0x8010DB3C-0x8010DFF8 behavior out of asm/melee/ft/chara/ftdonkey_2.s into C across ftdonkey2.c and a new ftdonkey3.c. The work covered Donkey Kong SpecialLw action startup and action callbacks, updated the Donkey action-state table to point at ftDonkey_* C symbols, exposed newly understood special-attribute fields, and added the new object file to the build.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "fighter-action-callbacks",
+      "headers",
+      "build-system"
+    ],
+    "systems": [
+      "fighter",
+      "ftDonkey",
+      "asm",
+      "include",
+      "obj_files"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "asm/melee/ft/chara/ftdonkey_2.s",
+      "role": "Removed matched assembly for Donkey Kong functions and changed as_table_donkey callback entries from lbl_/func_ symbols to ftDonkey_* C symbols; retained later unmatched asm."
+    },
+    {
+      "path": "src/melee/ft/chara/ftDonkey/ftdonkey2.c",
+      "role": "Added C implementation of ftDonkey_8010DB3C, including throw-flag handling, collision probing with func_80056C54, Vec fallback to fighter position, y offset, and x914 vector updates."
+    },
+    {
+      "path": "src/melee/ft/chara/ftDonkey/ftdonkey3.c",
+      "role": "New source file containing ftDonkey_SpecialLw_StartAction and related callbacks ftDonkey_8010DCD8 through ftDonkey_8010DFF8."
+    },
+    {
+      "path": "src/melee/ft/chara/ftDonkey/ftdonkey.h",
+      "role": "Expanded ftDonkeyAttributes to expose fields at x68, x6C, and x70; added prototypes for ftDonkey_8010DB3C, ftDonkey_8010DE88, and ftDonkey_8010DFF8."
+    },
+    {
+      "path": "include/functions.h",
+      "role": "Updated commented prototypes from func_8010DE88/func_8010DFF8 to ftDonkey_8010DE88/ftDonkey_8010DFF8."
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "Added src/melee/ft/chara/ftDonkey/ftdonkey3.c.o to TEXT_O_FILES so the new matched C compiles into the build."
+    }
+  ],
+  "what_changed": [
+    "Removed 399 lines from ftdonkey_2.s and added 175 lines across C/header/build files, indicating a substantial assembly-to-C match for Donkey Kong code.",
+    "Added ftDonkey_8010DB3C in ftdonkey2.c to handle a Donkey throw/accessory callback: it checks fighter->x2210_ThrowFlags.b3, clears it, checks colldata->x134_envFlags & 0x18000, loops over four vectors, probes ground/collision via func_80056C54, falls back to fighter->xB0_pos when the probe fails, raises y by 2.0f, and writes vectors with func_8007B8A8(&fighter->x914[i], ...).",
+    "Created ftdonkey3.c with C implementations for ftDonkey_SpecialLw_StartAction, multiple animation/IASA/physics/collision callbacks, and action transitions using Fighter_ActionStateChange_800693AC for action IDs 0x17F, 0x180, and 0x181.",
+    "Moved callback table references in as_table_donkey from anonymous assembly names like lbl_8010DCD8 and func_8010DF5C to ftDonkey_8010DCD8, ftDonkey_8010DD74, ftDonkey_8010DF5C, and related ftDonkey_* names.",
+    "Split ftDonkey_8010DE88 behavior by adding ftDonkey_8010DE88_inner, which handles effect spawning with efAsync_Spawn, hitlag effect callbacks efLib_PauseAll/efLib_ResumeAll, and x2219_flag.bits.b0 guarding.",
+    "Updated Donkey special attributes by replacing filler through 0x71 with filler to 0x68 plus f32 x68, f32 x6C, and f32 x70, matching the fields used by ftDonkey_8010DB3C.",
+    "Removed local sdata2 float constants from asm for 1.5f, 2.0f, 0.0f, 1.0f, and the int-to-double conversion constant; inserted a .balign 8 before the remaining lbl_804D95D0."
+  ],
+  "smart_moves": [
+    "Kept the action-state table in asm but retargeted entries to C function symbols, allowing partial decompilation without needing to move the whole table out of assembly.",
+    "Introduced a new ftdonkey3.c and added it to obj_files.mk instead of overloading the existing ftdonkey2.c with all newly matched SpecialLw callbacks.",
+    "Exposed only the ftDonkeyAttributes fields needed for the matched code at x68, x6C, and x70 while retaining filler for unknown earlier bytes.",
+    "Used explicit ftDonkey_* prefixes for previously anonymous labels/functions, making table callbacks searchable and character-scoped.",
+    "Preserved matching-sensitive local stack artifacts with comments such as unused[2] and 'can't remove with get inlines', showing deliberate handling of compiler/codegen constraints.",
+    "Factored repeated post-action setup into ftDonkey_8010DE88_inner, matching the apparent asm structure while keeping the outer action-change routine readable."
+  ],
+  "decomp_lessons": [
+    "When matching fighter action callbacks, update both the C implementation and the asm action-state table symbol references in the same change; otherwise tables can continue to point at removed labels.",
+    "For character-specific callbacks with unknown semantic names, use the project convention ftCharacter_address rather than leaving lbl_ or generic func_ names in tables.",
+    "Special-attribute structs can be incrementally refined: replace filler only at offsets proven by loads/stores in matched functions, and leave unknown regions as filler.",
+    "Build integration is part of matching: adding a new C source file requires updating obj_files.mk, especially when replacing assembly code in the same text ordering region.",
+    "Small dummy locals or unused stack arrays may be necessary to reproduce stack layout and match old MWCC output; document them so future cleanup does not break matching.",
+    "Literal floats in matched C can replace sdata2 labels, but remaining assembly data may need alignment preservation such as .balign 8."
+  ],
+  "naming_conventions": [
+    "Renamed anonymous Donkey callbacks from lbl_8010DCD8/lbl_8010DD14/lbl_8010DD18/lbl_8010DD38 to ftDonkey_8010DCD8/ftDonkey_8010DD14/ftDonkey_8010DD18/ftDonkey_8010DD38.",
+    "Renamed generic Donkey functions from func_8010DF5C/func_8010DF98/func_8010DF9C/func_8010DFBC to ftDonkey_8010DF5C/ftDonkey_8010DF98/ftDonkey_8010DF9C/ftDonkey_8010DFBC.",
+    "Kept the public semantic name ftDonkey_SpecialLw_StartAction for the grounded Donkey down-special start action.",
+    "Used address-suffixed names for still-unknown behavior, e.g. ftDonkey_8010DB3C, ftDonkey_8010DE88, and ftDonkey_8010DFF8.",
+    "Named newly identified attribute fields by offset, x68/x6C/x70, rather than inventing semantic names without stronger evidence."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted a four-iteration assembly loop into a for (i = 0; i < 4; i++) loop over Vec vec_list[4], with pointer arithmetic expressed through fighter->x914[i].",
+    "Preserved stack/codegen shape using unused local arrays in ftDonkey_8010DB3C and ftDonkey_8010DCD8/ftDonkey_8010DF5C.",
+    "Matched bitfield operations through existing Fighter fields: x2210_ThrowFlags.b3, x2210_ThrowFlags.flags, x2219_flag.bits.b0, input.x668 & 0x200, and x2340_stateVar1.",
+    "Expressed action transitions with Fighter_ActionStateChange_800693AC using NULL and literal floats 0.0f/1.0f rather than retaining sdata2 labels.",
+    "Represented callback writes directly through fighter->cb fields: x21EC_callback, x21D4_callback_EnterHitlag, x21D8_callback_ExitHitlag, and x21BC_callback_Accessory4.",
+    "Maintained sdata2 alignment after deleting constants by adding .balign 8 before lbl_804D95D0."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or formal reviews were present in the provided PR slice.",
+    "The only human text body repeats the title: 'matched some donkey kong functions', so rationale beyond the diff is weak."
+  ],
+  "searchable_terms": [
+    "pr-419",
+    "snuffysasa",
+    "Donkey Kong",
+    "ftDonkey",
+    "ftdonkey_2.s",
+    "ftdonkey2.c",
+    "ftdonkey3.c",
+    "ftdonkey.h",
+    "ftDonkey_SpecialLw_StartAction",
+    "ftDonkey_8010DB3C",
+    "ftDonkey_8010DCD8",
+    "ftDonkey_8010DD14",
+    "ftDonkey_8010DD18",
+    "ftDonkey_8010DD38",
+    "ftDonkey_8010DD74",
+    "ftDonkey_8010DDDC",
+    "ftDonkey_8010DDF8",
+    "ftDonkey_8010DE18",
+    "ftDonkey_8010DE54",
+    "ftDonkey_8010DE88",
+    "ftDonkey_8010DE88_inner",
+    "ftDonkey_8010DF5C",
+    "ftDonkey_8010DF98",
+    "ftDonkey_8010DF9C",
+    "ftDonkey_8010DFBC",
+    "ftDonkey_8010DFF8",
+    "as_table_donkey",
+    "Fighter_ActionStateChange_800693AC",
+    "func_80056C54",
+    "func_8007B8A8",
+    "ftAnim_IsFramesRemaining",
+    "efAsync_Spawn",
+    "efLib_PauseAll",
+    "efLib_ResumeAll",
+    "x2340_stateVar1",
+    "x2210_ThrowFlags",
+    "x2219_flag",
+    "x21BC_callback_Accessory4",
+    "ftDonkeyAttributes",
+    "x68 x6C x70",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename ftDonkey_8010DE88, ftDonkey_8010DFF8, or other ftDonkey_8010D* callbacks to semantic SpecialLw names.",
+    "Search for subsequent changes to ftDonkeyAttributes x68/x6C/x70 to determine their semantic meaning.",
+    "Look for PRs that move as_table_donkey fully from assembly to C or define Donkey action-state enum names for IDs 0x17F, 0x180, and 0x181.",
+    "Search for matching patterns using unused[2] or dummy stack locals in fighter callback decompilation.",
+    "Check whether ftDonkey_8010DE88_inner remains factored or is later merged/renamed during cleanup."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

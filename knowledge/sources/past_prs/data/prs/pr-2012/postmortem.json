@@ -1,0 +1,174 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2012",
+  "pr": {
+    "number": 2012,
+    "title": "Match various functions across ft, gm, if, it, lb modules",
+    "url": "https://github.com/doldecomp/melee/pull/2012",
+    "state": "MERGED",
+    "author": "itsgrimetime",
+    "created_at": "2025-12-27T12:05:07Z",
+    "merged_at": "2025-12-30T03:00:00Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Batch decomp/matching PR that replaced several placeholders and commented-out item command logic with matched C across game-mode stats, interface prize archive handling, item command execution, box drop behavior, and collision debug drawing. It also updated gm_1601.h prototypes from UNK_RET/UNK_PARAMS to concrete return and argument types. Review feedback specifically pushed back on an AI-generated rename of the Green Shell item state table from descriptive `ItemStateTable_GShell` to address-style `it_803F5BA8`, with the author acknowledging the rename was likely a shortcut to avoid fixing references elsewhere.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "function-implementation",
+      "bugfix",
+      "headers",
+      "naming",
+      "review-cleanup"
+    ],
+    "systems": [
+      "game-mode",
+      "interface",
+      "item",
+      "library-collision",
+      "baselib-gobj",
+      "GX-rendering"
+    ]
+  },
+  "key_files": [
+    "src/melee/gm/gm_1601.c",
+    "src/melee/gm/gm_1601.h",
+    "src/melee/if/if_2F72.c",
+    "src/melee/it/it_2725.c",
+    "src/melee/it/items/itbox.c",
+    "src/melee/it/items/itgshell.c",
+    "src/melee/lb/lbcollision.c"
+  ],
+  "what_changed": [
+    "Implemented `gm_801623D8` as a typed integer load from `gmMainLib_8015CCF0()`.",
+    "Implemented `gm_80162574` as a stats/counter update routine that ignores `arg1` values 7 and 8, increments two u16 counters, and saturates them at `0xFFFF`.",
+    "Implemented `gm_8016279C` as a sum of five u32 values loaded via `gmMainLib_8015CD2C`, `gmMainLib_8015CD38`, `gmMainLib_8015CD44`, `gmMainLib_8015CD50`, and `gmMainLib_8015CD5C`.",
+    "Implemented `gm_80162968`, `gm_801629B4`, `gm_80162A00`, and `gm_80162A4C` as stat accumulator/accessor-style functions using `gmMainLib_8015CD74`, `gmMainLib_8015CD80`, `gmMainLib_8015CD14`, and `gmMainLib_8015CDA4` with `MAX(..., (u32)-1)` saturation-like expressions shown in the diff.",
+    "Updated `gm_1601.h` prototypes for several matched functions from `UNK_RET`/`UNK_PARAMS` to concrete `long`, `u32`, `s32 amount`, and `void` signatures.",
+    "Created implementations in `if_2F72.c` for `if_802F7E24` and `if_802F7E7C`, including archive section loading of `\"ifPrize_scene_data\"`, storage in static `lbl_804A1340[13]`, GObj unlink/destruction through `HSD_GObjPLink_80390228`, and cleanup via `memzero`.",
+    "Replaced a commented-out sketch of `it_802799E4` with live item command execution code using `GET_ITEM`, `item->x524_cmd`, `frame_count`, `timer`, `F32_MAX`, opcode extraction from `cmd->u`, `Command_Execute`, and dispatch through `it_803F22A8[opcode - 10]`.",
+    "Changed `it_3F14_Logic1_Dropped` in `itbox.c` from simply calling the thrown-state logic to explicitly calling `it_8026B3A8(gobj)` and `Item_80268E5C(gobj, 4, ITEM_ANIM_UPDATE | ITEM_DROP_UPDATE)`.",
+    "Added `lbColl_80009DD4`, a GX quad drawing/debug collision helper that configures TEV/GX state, uses the current camera viewing matrix, emits four vertices from two Vec3 bounds, applies the supplied GXColor, and restores HSD state.",
+    "Attempted to rename `ItemStateTable_GShell` to `it_803F5BA8`; review feedback questioned this because the original descriptive name was better, and the author agreed it was likely an AI shortcut. The final merged state is not fully evidenced by the excerpt."
+  ],
+  "smart_moves": [
+    "Converted header declarations at the same time as function implementations, reducing stale `UNK_RET` and `UNK_PARAMS` usage and making later callsite work more type-safe.",
+    "For `it_802799E4`, retained the command interpreter control-flow shape with an explicit loop/goto structure, which is often necessary for matching item command bytecode routines.",
+    "Used field names such as `frame_count`, `timer`, `x524_cmd`, `x5CC_currentAnimFrame`, and `x5D0_animFrameSpeed` rather than keeping the old commented temporary-variable sketch, improving readability while preserving low-level matching constraints.",
+    "In `if_802F7E7C`, preserved the static data layout and cleanup pattern by walking `lbl_804A1340` as a pairwise `HSD_GObj**` table and zeroing the 0x34-byte block after freeing linked GObjs.",
+    "The review process caught a harmful naming regression where an address-style symbol replaced a descriptive item state table name."
+  ],
+  "decomp_lessons": [
+    "Do not rename descriptive symbols to raw address labels merely to avoid fixing references; descriptive names like `ItemStateTable_GShell` carry more long-term value than `it_803F5BA8` when the role is known.",
+    "When matching command interpreter loops, opcode extraction and dispatch order matter: this PR used `(*(u8*)cmd->u >> 2) & 0x3F`, called `Command_Execute`, then dispatched to `it_803F22A8[opcode - 10]` only when `Command_Execute` returned zero.",
+    "Header cleanup is part of matching: once return types and parameters are known, replace `UNK_RET` and `UNK_PARAMS` immediately to make future decompilation less ambiguous.",
+    "Small game-stat functions may match as pointer-return helper loads plus integer arithmetic/saturation; preserving exact casts and accumulator widths can be important.",
+    "Archive-backed interface modules may use file-scope static pointer arrays plus explicit `memzero` before/after archive loading and GObj cleanup.",
+    "Review AI-generated diffs carefully for suspicious argument swaps and naming changes, especially when the diff does not clearly justify them."
+  ],
+  "naming_conventions": [
+    "Known/descriptive item state tables should keep semantic names such as `ItemStateTable_GShell` instead of reverting to address-style names like `it_803F5BA8`.",
+    "Matched unknown functions in this slice still mostly retained address-based names such as `gm_80162574`, `if_802F7E24`, `it_802799E4`, and `lbColl_80009DD4` when no better semantic name was evidenced.",
+    "Parameter names in headers were improved where meaning was apparent, e.g. `seconds` and `amount` for game-mode stat accumulator functions.",
+    "Local variable names in `it_802799E4` were simplified around domain objects: `item`, `cmd`, and `opcode`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used explicit `goto loop` control flow in `it_802799E4` to model repeated command execution without introducing high-level loop structure that might perturb matching.",
+    "Used direct casts from helper-returned pointers in `gm_1601.c`, e.g. `*(s32*) gmMainLib_8015CCF0()` and `(u16*) gmMainLib_8015CFB4(...)`, to match low-level memory access patterns.",
+    "Preserved exact byte/bit opcode extraction from command data: `(*(u8*)cmd->u >> 2) & 0x3F`.",
+    "Used temporary scalar variables in `lbColl_80009DD4` for Vec3 coordinates and color channels before GX calls, likely to align register/order requirements for a graphics emission routine.",
+    "Used static array sizing and byte counts directly in `if_2F72.c`, including `lbl_804A1340[13]` and `memzero(..., 0x34)`, preserving observed data layout."
+  ],
+  "review_feedback": [
+    {
+      "file": "src/melee/it/it_2725.c",
+      "topic": "argument order",
+      "comment": "Author noted uncertainty about why an argument order was switched in `it_8027990C` and planned to inspect whether the swap was justified.",
+      "lesson": "Treat argument swaps in command handlers as high-risk unless backed by matching or behavioral evidence."
+    },
+    {
+      "file": "src/melee/it/items/itgshell.c",
+      "topic": "naming",
+      "comment": "Reviewer r-burns questioned renaming `ItemStateTable_GShell` to `it_803F5BA8`, saying the original seemed more descriptive.",
+      "lesson": "Prefer semantic names over address labels when the symbol role is known."
+    },
+    {
+      "file": "src/melee/it/items/itgshell.c",
+      "topic": "AI-generated shortcut",
+      "comment": "Author agreed the rename was likely Claude trying to avoid fixing references elsewhere and said they would fix it.",
+      "lesson": "AI-assisted matching can introduce cleanup-avoidance edits; reviewers should flag suspicious non-matching-driven renames."
+    }
+  ],
+  "searchable_terms": [
+    "PR2012",
+    "itsgrimetime",
+    "match batch",
+    "gm_1601",
+    "gm_801623D8",
+    "gm_80162574",
+    "gm_8016279C",
+    "gm_80162968",
+    "gm_801629B4",
+    "gm_80162A00",
+    "gm_80162A4C",
+    "gmMainLib_8015CCF0",
+    "gmMainLib_8015CFB4",
+    "gmMainLib_8015EDBC",
+    "gmMainLib_8015CD74",
+    "gmMainLib_8015CD80",
+    "gm_1601.h",
+    "UNK_RET",
+    "UNK_PARAMS",
+    "if_2F72",
+    "if_802F7E24",
+    "if_802F7E7C",
+    "ifPrize_scene_data",
+    "lbArchive_LoadSections",
+    "ifAll_802F3690",
+    "lbl_804A1340",
+    "HSD_GObjPLink_80390228",
+    "it_2725",
+    "it_802799E4",
+    "Item_GObj",
+    "GET_ITEM",
+    "CommandInfo",
+    "Command_Execute",
+    "it_803F22A8",
+    "F32_MAX",
+    "x524_cmd",
+    "x5CC_currentAnimFrame",
+    "x5D0_animFrameSpeed",
+    "xDBC_itcmd_var4",
+    "itbox",
+    "it_3F14_Logic1_Dropped",
+    "Item_80268E5C",
+    "ITEM_ANIM_UPDATE",
+    "ITEM_DROP_UPDATE",
+    "itgshell",
+    "ItemStateTable_GShell",
+    "it_803F5BA8",
+    "lbcollision",
+    "lbColl_80009DD4",
+    "GX_QUADS",
+    "GXColor",
+    "HSD_StateInitTev",
+    "HSD_CObjGetViewingMtx"
+  ],
+  "follow_up_queries": [
+    "Check final merged `itgshell.c` to confirm whether `ItemStateTable_GShell` was restored after review.",
+    "Investigate the `it_8027990C` argument-order switch mentioned in review and whether it remained in the merge.",
+    "Compare `it_802799E4` against neighboring item command handlers for reusable command interpreter patterns.",
+    "Look for later PRs that rename `gm_80162574`, `gm_8016279C`, or the `gmMainLib_8015CDxx` accessors to semantic stat names.",
+    "Verify the PR summary mention of `ftColl_80077464`; the provided changed-files list and diff excerpt do not include an `ftcoll` file."
+  ],
+  "confidence": 0.82,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

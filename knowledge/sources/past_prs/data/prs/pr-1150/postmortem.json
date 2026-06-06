@@ -1,0 +1,141 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1150",
+  "pr": {
+    "number": 1150,
+    "title": "Re-link `if`",
+    "url": "https://github.com/doldecomp/melee/pull/1150",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-01-29T05:54:54Z",
+    "merged_at": "2024-01-29T05:55:55Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Re-linked part of the `melee/if` interface/HUD area by moving `ifstatus` and `ifmagnify` back to nonmatching assembly/object linkage while preserving minimal C entry points and improving shared type/header coverage. The PR replaced a large inline-asm-heavy `src/melee/if/ifstatus.c` body with small C stubs plus globals, added `asm/melee/if/ifstatus.s`, regenerated/reformatted `asm/melee/if/ifmagnify.s`, adjusted build config and split metadata, and introduced `if/types.h` plus forward declarations for HUD, magnify, and related gm placeholder structs. There were no review comments or PR body text in the slice, so intent is inferred mainly from the title and diff.",
+  "change_classification": {
+    "primary_type": "relink_asm_nonmatching",
+    "categories": [
+      "asm",
+      "headers",
+      "types",
+      "build_config",
+      "symbols",
+      "tooling"
+    ],
+    "systems": [
+      "melee/if",
+      "ifstatus",
+      "ifmagnify",
+      "gm",
+      "config/GALE01",
+      "rust-utils"
+    ]
+  },
+  "key_files": [
+    "asm/melee/if/ifstatus.s",
+    "asm/melee/if/ifmagnify.s",
+    "src/melee/if/ifstatus.c",
+    "src/melee/if/ifstatus.h",
+    "src/melee/if/types.h",
+    "src/melee/if/forward.h",
+    "src/melee/if/ifmagnify.h",
+    "src/melee/gm/types.h",
+    "src/melee/gm/forward.h",
+    "src/melee/gm/gm_1601.h",
+    "configure.py",
+    "obj_files.mk",
+    "config/GALE01/splits.txt",
+    "config/GALE01/symbols.txt",
+    "tools/rust-utils/src/utils.rs"
+  ],
+  "what_changed": [
+    "Added a new full assembly file `asm/melee/if/ifstatus.s` and changed `obj_files.mk` to build `asm/melee/if/ifstatus.s.o` instead of `src/melee/if/ifstatus.c.o` and the separate `ifstatus_data.s.o` text entry.",
+    "Reduced `src/melee/if/ifstatus.c` from a large source file containing many `#ifdef MUST_MATCH` inline assembly blocks to a small C shell: it includes the needed headers, defines `Thing_803F9628 ifStatus_803F9628` and `s8 ifStatus_804D6D60`, returns `&ifStatus_HudInfo` from `ifStatus_802F4910`, and leaves functions such as `ifStatus_802F491C` as `NOT_IMPLEMENTED`.",
+    "Updated `configure.py` so `melee/if/ifstatus.c` and `melee/if/ifmagnify.c` are classified as `NonMatching` instead of `Unknown`, and removed the separate `ifstatus_data.c` object entry.",
+    "Updated `config/GALE01/splits.txt` to fold `ifstatus_data.c` data/bss/sdata/sdata2 ranges under `melee/if/ifstatus.c`, add the `ifstatus.c` text range `0x802F4910-0x802F7288`, and shrink the listed `ifstatus` sbss range from ending at `0x804D7058` to `0x804D6D68`.",
+    "Renamed the bss symbol at `0x804A10C8` in `config/GALE01/symbols.txt` from `ifStatus_804A10C8` to the descriptive `ifStatus_HudInfo`.",
+    "Regenerated/re-linked `asm/melee/if/ifmagnify.s`: the diff shows a switch from absolute-address style labels and `.section .text` to `.file \"ifmagnify.c\"`, `.text`, `.balign 4`, `.fn/.endfn`, object-local offsets, and local labels such as `.L_0000003C`.",
+    "Added `src/melee/if/types.h` containing HUD and interface-related structs including `HudFlags`, `HudValue`, `HudIndex`, `Thing_803F9628`, `Placeholder_8016AE50_ret_val`, and `ifMagnify`.",
+    "Added `src/melee/if/forward.h` with forward declarations for new interface structs such as `HudFlags`, `HudIndex`, `HudValue`, `ifMagnify`, `Thing_803F9628`, and placeholder gm-related types.",
+    "Moved the `ifMagnify` struct definition out of `ifmagnify.h` into `if/types.h`; `ifmagnify.h` now includes `if/types.h` and keeps only address-commented prototypes plus the `ifMagnify_804A1DE0` extern.",
+    "Added gm placeholder return/flag structs in `src/melee/gm/types.h`, moved `struct datetime` there, and updated `gm/forward.h` and `gm_1601.h` prototypes to use forward-declared `datetime`, `Placeholder_8016AE38_ret_val`, and `Placeholder_8016AE50_ret_val`.",
+    "Added `src/melee/if/if_2F72.h` for prototypes `if_802F7AF8`, `if_802F7BB4`, `if_802F7C30`, and `if_802F7D08`; adjusted `ifall.h` and `ifstock.h` style/guards/prototypes.",
+    "Changed `tools/rust-utils/src/utils.rs` so `is_identifier` no longer treats `.` as an identifier character, and reformatted the config glob construction."
+  ],
+  "smart_moves": [
+    "Kept `ifstatus.c` as a minimal C translation unit with includes, globals, and public stubs while moving the hard-to-match body to assembly. This preserves source-level declarations and link visibility without blocking the relink on full C matching.",
+    "Consolidated data ownership in `splits.txt` by putting `ifstatus` text/data/bss/sdata/sdata2 under `melee/if/ifstatus.c` rather than leaving a separate `ifstatus_data.c` split, reducing object-boundary confusion for future work.",
+    "Introduced `if/types.h` and `if/forward.h` instead of keeping large structs inside a narrow module header. That lets `ifstatus`, `ifmagnify`, and neighboring modules share layout knowledge without circular include pressure.",
+    "Renamed the central HUD bss symbol from address-style `ifStatus_804A10C8` to semantic `ifStatus_HudInfo`, making decomp work more searchable and reducing dependence on raw addresses.",
+    "Used placeholder structs and explicit bitfields for gm return values where exact naming is still unknown. This records layout constraints needed for matching while avoiding overconfident semantic names.",
+    "Changed object classification to `NonMatching` rather than leaving these files `Unknown`, which makes the build state clearer: the module is known, linked, and intentionally not yet matched as C.",
+    "Kept address comments on prototypes and GALE01-address-style header guards in several headers, preserving the project’s convention for anchoring unknown symbols to their original addresses."
+  ],
+  "decomp_lessons": [
+    "For difficult interface/HUD files, a useful intermediate state is: keep a small C file for exported API/globals, move the body to assembly, and mark the object `NonMatching` until functions can be re-decompiled one by one.",
+    "When relinking a module, update all three build metadata layers together: `configure.py` object classification, `obj_files.mk` object list, and `config/GALE01/splits.txt` section ownership.",
+    "If data was previously split into a `_data.c` placeholder, verify whether relinking allows the data sections to live under the real module name; otherwise future symbol ownership and object ordering can become misleading.",
+    "Promoting discovered structs into `types.h` plus forward declarations is preferable to leaving them in a single function header when multiple modules need layout-compatible access.",
+    "Descriptive names for stable globals, even partial ones like `ifStatus_HudInfo`, are better than address-only names once enough semantic evidence exists.",
+    "Bitfield placeholder structs are acceptable for preserving ABI/layout evidence, but names like `unk80`, `unk40`, and `Placeholder_...` signal that semantics are still provisional.",
+    "Tooling symbol replacement needs careful identifier boundaries; this PR removed `.` from `is_identifier`, suggesting dotted section/symbol text can interfere with safe replacements."
+  ],
+  "naming_conventions": [
+    "Use semantic global names when justified: `ifStatus_HudInfo` replaced `ifStatus_804A10C8` for the HUD bss object.",
+    "Keep provisional layouts visibly provisional with names such as `Placeholder_8016AE38_ret_val`, `Placeholder_8016AE50_flags`, `unk24CA`, and `unk80` until semantics are known.",
+    "Use module/address-style header guards for not-yet-semantic headers, e.g. `GALE01_2FB6E8`, `GALE01_2F7288`, and `GALE01_2F3394`.",
+    "Keep address comments before function declarations, e.g. `/* 2FB6E8 */ s32 ifMagnify_802FB6E8(s32);`, to aid cross-reference and search.",
+    "Centralize shared interface structs in `src/melee/if/types.h` and expose only forward declarations from `src/melee/if/forward.h`.",
+    "Prefer module-prefixed unknown symbols for globals and functions when no semantic name is available, e.g. `ifMagnify_804A1DE0`, `ifStatus_803F9628`, and `if_802F7AF8`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Re-linked `ifstatus` by replacing inline assembly guarded by `MUST_MATCH` with a standalone assembly object `asm/melee/if/ifstatus.s` while keeping C stubs for declarations.",
+    "Regenerated `ifmagnify.s` into object-local assembly format using `.file`, `.text`, `.balign 4`, `.fn`, and `.endfn`, with labels rebased from absolute `.L_802F...` style to `.L_000...` style.",
+    "Updated `obj_files.mk` object order so the `if` text objects now include `ifall.s.o`, `iftime.s.o`, `ifstatus.s.o`, `if_2F72.s.o`, `ifstock.s.o`, and `ifmagnify.s.o` in sequence.",
+    "Preserved minimal callable C declarations while the matched implementation is assembly-backed, allowing future work to progressively replace `NOT_IMPLEMENTED` functions with real C.",
+    "Kept exact section ranges in `splits.txt` for `ifstatus` text/data/bss/sdata/sbss/sdata2, which is critical for relinking object boundaries."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "Re-link if",
+    "ifstatus relink",
+    "ifmagnify relink",
+    "asm/melee/if/ifstatus.s",
+    "asm/melee/if/ifmagnify.s",
+    "ifStatus_HudInfo",
+    "ifStatus_804A10C8",
+    "HudValue",
+    "HudIndex",
+    "HudFlags",
+    "Thing_803F9628",
+    "ifMagnify_804A1DE0",
+    "Placeholder_8016AE38_ret_val",
+    "Placeholder_8016AE50_ret_val",
+    "NonMatching",
+    "configure.py Object NonMatching",
+    "obj_files.mk TEXT_O_FILES",
+    "config/GALE01/splits.txt",
+    "config/GALE01/symbols.txt",
+    "tools/rust-utils is_identifier",
+    "replace_symbols dot identifier",
+    "GALE01_2FB6E8",
+    "GALE01_2F7288",
+    "MUST_MATCH inline asm removal"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that replace `ifStatus_802F491C` or other `ifstatus.c` `NOT_IMPLEMENTED` stubs with matching C.",
+    "Find follow-up renames for `Thing_803F9628`, `Element_803F9628`, `UnknownClassTypeE`, and placeholder gm return structs.",
+    "Check whether the `tools/rust-utils` `is_identifier` dot removal fixed symbol replacement around section names or dotted labels.",
+    "Search for later changes to `ifStatus_HudInfo` layout or `HudIndex` size to validate the new `if/types.h` definitions.",
+    "Compare subsequent `ifmagnify.s` diffs to see which functions were converted from re-linked assembly back into C."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

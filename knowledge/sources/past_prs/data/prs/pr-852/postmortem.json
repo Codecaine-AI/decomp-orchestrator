@@ -1,0 +1,144 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-852",
+  "pr": {
+    "number": 852,
+    "title": "Match `ftCo_AttackHi4`",
+    "url": "https://github.com/doldecomp/melee/pull/852",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-14T07:01:17Z",
+    "merged_at": "2023-05-14T07:10:10Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common fighter up-smash action/input code by moving the `ftCo_AttackHi4` functions out of `asm/melee/ft/ft_08A4.s` into a new C translation unit and header. The PR added `ftCo_AttackHi4.c` to `obj_files.mk`, exposed typed prototypes in `ftCo_AttackHi4.h`, updated include users, removed stale declarations from `ft_0877.h`, and renamed the remaining assembly callsite in `ftCo_KneeBend_IASA` from a local label to `ftCo_AttackHi4_CheckInputNoD0`.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "fighter-action",
+      "asm-to-c"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "asm",
+      "build"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_AttackHi4.c",
+    "src/melee/ft/chara/ftCommon/ftCo_AttackHi4.h",
+    "asm/melee/ft/ft_08A4.s",
+    "obj_files.mk",
+    "src/melee/ft/ft_0877.h",
+    "src/melee/ft/ft_08A4.h",
+    "src/melee/ft/chara/ftCommon/ftCo_Attack1.c",
+    "src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c",
+    "src/melee/ft/chara/ftCommon/ftCo_AttackS4.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Wait.c",
+    "src/melee/ft/chara/ftGameWatch/ftGw_AttackLw3.c",
+    "src/melee/ft/chara/ftSamus/ftSs_SpecialLw_0.c"
+  ],
+  "what_changed": [
+    "Removed the assembly implementations for `ftCo_AttackHi4_CheckInput`, the formerly local `08C948` helper, `doEnter` at `08CA38`, and the action callbacks `ftCo_AttackHi4_Anim`, `ftCo_AttackHi4_IASA`, `ftCo_AttackHi4_Phys`, and `ftCo_AttackHi4_Coll` from `asm/melee/ft/ft_08A4.s`.",
+    "Added `src/melee/ft/chara/ftCommon/ftCo_AttackHi4.c` with C implementations for up-smash input detection, Ness-specific dispatch via `ftNs_AttackHi4_Enter`, item/light-throw handling via `ft_800957F4(gobj, ftCo_MS_LightThrowHi4)`, normal entry via `Fighter_ChangeMotionState(... ftCo_MS_AttackHi4 ...)`, and standard anim/IASA/phys/coll callbacks.",
+    "Added `src/melee/ft/chara/ftCommon/ftCo_AttackHi4.h` with address-commented prototypes for the matched functions, including `ftCo_AttackHi4_CheckInputNoD0` for the `08C948` variant.",
+    "Updated `obj_files.mk` so `ftCo_AttackHi4.c.o` is built in the ftCommon object list after `ftCo_AttackS4.c.o`.",
+    "Changed the remaining assembly call inside `ftCo_KneeBend_IASA` from `.L_8008C948` to the named symbol `ftCo_AttackHi4_CheckInputNoD0`.",
+    "Removed `ftCo_AttackHi4_CheckInput` and `ftCo_AttackS4_CheckInput` declarations from the broad `src/melee/ft/ft_0877.h` header and added more targeted includes of `ftCo_AttackHi4.h` and `ftCo_AttackS4.h` to files that need attack input declarations.",
+    "Added prototypes for `ft_800DF30C` and `ft_800DF2D8` to `src/melee/ft/ft_08A4.h`, matching their use in the new C implementation."
+  ],
+  "smart_moves": [
+    "Split the two similar input checks into `checkLStick` and `checkLStickNoD0`, preserving the assembly distinction: the normal path checks both stick threshold `p_ftCommonData->xCC` and tilt timer `p_ftCommonData->xD0`, while the NoD0 knee-bend path omits the timer check.",
+    "Kept the special-case dispatch for Ness explicit with `switch (fp->kind)` and `FTKIND_NESS`, matching the original branch to `ftNs_AttackHi4_Enter` while keeping the common case in `doEnter`.",
+    "Preserved item-holding behavior before normal attack entry: if `fp->item_gobj` exists and either `ft_80094E54(fp)` or `ft_800DF30C(fp)` passes, the code enters `ftCo_MS_LightThrowHi4` through `ft_800957F4` and returns true.",
+    "Moved declarations out of a catch-all fighter header into the action-specific header and updated direct include users, reducing header pollution and making dependencies more precise.",
+    "Renamed an internal assembly label used from still-asm code to `ftCo_AttackHi4_CheckInputNoD0`, improving cross-boundary readability while the surrounding file remains partially unmatched.",
+    "Matched simple callbacks by delegating to existing common routines: `ftCo_AttackHi4_Anim` uses `ftAnim_IsFramesRemaining` then `ft_8008A2BC`, `Phys` calls `ft_80084F3C`, and `Coll` calls `ft_80084104`."
+  ],
+  "decomp_lessons": [
+    "When matching duplicated input routines, name the semantic difference rather than leaving address labels; here `CheckInputNoD0` records that the second variant omits the `p_ftCommonData->xD0` timer comparison.",
+    "For fighter common actions, action-specific headers such as `ftCo_AttackHi4.h` are preferable to adding declarations to broad numbered headers like `ft_0877.h`.",
+    "A matched C file must be added to `obj_files.mk`; otherwise removing assembly text is not enough for the build to link the replacement object.",
+    "Preserve character-specific branches in common action code even when most fighters share the same entry routine; up-smash uses a Ness-specific enter function.",
+    "For bitfield-backed fighter state such as `allow_interrupt`, direct semantic fields can replace raw byte/bit operations when the struct field is already known.",
+    "Small wrapper callbacks often match cleanly as single-call C functions and should be moved together with their action's input/enter code to keep the action module coherent."
+  ],
+  "naming_conventions": [
+    "`ftCo_AttackHi4_*` names are used for common fighter up-smash functions.",
+    "`ftCo_AttackHi4_CheckInputNoD0` names the `08C948` variant that skips the `xD0` stick-tilt timer threshold.",
+    "`doEnter` is a local/common enter helper for the normal `ftCo_MS_AttackHi4` motion-state transition.",
+    "Header guards in this slice use address-based names such as `GALE01_08C830`.",
+    "Function prototypes in the new header retain address comments like `/* 08C830 */`, `/* 08C948 */`, and `/* 08CA98 */`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced assembly float constants `.L_804D8490`, `.L_804D8498`, and `.L_804D849C` with C literals/arguments through existing fields and function calls.",
+    "Mapped the `x668` input bit test to `fp->input.x668 & HSD_Pad_A`.",
+    "Mapped the vertical stick threshold load from `0x624` to `fp->input.lstick.y` and compared it against `p_ftCommonData->xCC`.",
+    "Mapped the tilt timer byte at `0x671` to `fp->x671_timer_lstick_tilt_y` and compared it against `p_ftCommonData->xD0` for the normal check only.",
+    "Mapped the raw item pointer check at fighter offset `0x1974` to `fp->item_gobj != NULL`.",
+    "Mapped the kind comparison against value `8` to `FTKIND_NESS`.",
+    "Mapped the motion-state change arguments to `Fighter_ChangeMotionState(gobj, ftCo_MS_AttackHi4, Ft_MF_None, NULL, 0, 1, 0)`.",
+    "Preserved the remaining asm caller by exporting the formerly local `08C948` routine as `ftCo_AttackHi4_CheckInputNoD0`."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-852",
+    "ribbanya",
+    "ftCo_AttackHi4",
+    "ftCo_AttackHi4.c",
+    "ftCo_AttackHi4.h",
+    "ftCo_AttackHi4_CheckInput",
+    "ftCo_AttackHi4_CheckInputNoD0",
+    "checkLStick",
+    "checkLStickNoD0",
+    "doEnter",
+    "ftCo_AttackHi4_Anim",
+    "ftCo_AttackHi4_IASA",
+    "ftCo_AttackHi4_Phys",
+    "ftCo_AttackHi4_Coll",
+    "ftCo_MS_AttackHi4",
+    "ftCo_MS_LightThrowHi4",
+    "ftNs_AttackHi4_Enter",
+    "FTKIND_NESS",
+    "HSD_Pad_A",
+    "p_ftCommonData",
+    "xCC",
+    "xD0",
+    "x668",
+    "x671_timer_lstick_tilt_y",
+    "item_gobj",
+    "allow_interrupt",
+    "Fighter_ChangeMotionState",
+    "ftAnim_8006EBA4",
+    "ftAnim_IsFramesRemaining",
+    "ft_8008A2BC",
+    "ftCo_Wait_IASA",
+    "ft_80084F3C",
+    "ft_80084104",
+    "ft_800DF2D8",
+    "ft_800DF30C",
+    "ft_80094E54",
+    "ft_800957F4",
+    "ftCo_KneeBend_IASA",
+    "asm/melee/ft/ft_08A4.s",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename `doEnter` to a more specific `ftCo_AttackHi4_Enter`-style symbol.",
+    "Search for PRs matching `ftCo_AttackLw4_CheckInput`, which remains in `asm/melee/ft/ft_08A4.s` immediately after the removed up-smash block.",
+    "Check whether `ftCo_AttackS4_CheckInput` was also moved to an action-specific header in a nearby PR, since this slice adds `ftCo_AttackS4.h` includes and removes its broad declaration from `ft_0877.h`.",
+    "Search for future struct-field naming improvements around `input.x668`, `input.lstick.y`, and `x671_timer_lstick_tilt_y`."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

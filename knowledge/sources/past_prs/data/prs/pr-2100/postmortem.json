@@ -1,0 +1,152 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2100",
+  "pr": {
+    "number": 2100,
+    "title": "Match 8031D858_OnEnter, fixup splits across vi files",
+    "url": "https://github.com/doldecomp/melee/pull/2100",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2026-01-17T01:24:33Z",
+    "merged_at": "2026-01-17T01:54:01Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched vi0402's un_8031D858_OnEnter and corrected several adjacent vi file split boundaries so short helper functions and .sbss objects live in the right translation units. The PR introduced a shared ViCharaDesc type for the small character/costume/spawn descriptor passed through visual-scene OnEnter paths, moved setters such as vi0401_8031D020, un_8031D9E4, un_8031E110, and un_8031F980 to the files indicated by the corrected splits, converted many leaked extern sbss declarations to file-local static objects, and updated gm_1BA8 includes/calls accordingly. decomp.dev reported +324 matched code bytes, +96 matched data bytes, +8 linked data bytes, and 8 new matches, including un_8031D858_OnEnter reaching 100%.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "split-boundary-fix",
+      "headers",
+      "sbss-attribution",
+      "type-cleanup"
+    ],
+    "systems": [
+      "melee/vi",
+      "melee/gm",
+      "config/GALE01"
+    ]
+  },
+  "key_files": [
+    "config/GALE01/splits.txt",
+    "config/GALE01/symbols.txt",
+    "src/melee/vi/vi0402.c",
+    "src/melee/vi/types.h",
+    "src/melee/vi/forward.h",
+    "src/melee/vi/vi0102.c",
+    "src/melee/vi/vi0401.c",
+    "src/melee/vi/vi0501.c",
+    "src/melee/vi/vi0502.c",
+    "src/melee/vi/vi1201v1.c",
+    "src/melee/gm/gm_1BA8.c"
+  ],
+  "what_changed": [
+    "Adjusted GALE01 splits around the vi block: vi0102 now ends at 0x8031D020, vi0401 starts at 0x8031D020, vi0402 ends at 0x8031D9E4, vi0501 starts at 0x8031D9E4 and ends at 0x8031E110, vi0502 starts at 0x8031E110, vi1101 ends at 0x8031F980, vi1201v1 starts at 0x8031F980, and downstream vi1201v2/vi1202 text and .sbss ranges were updated.",
+    "Added explicit .sbss split ranges for tydisplay and vi0102 through vi1202, taking most of the previous broad soundtest .sbss range and assigning it to the correct units.",
+    "Renamed the symbol at 0x8031D020 from vi0102_8031D020 to vi0401_8031D020 and updated gm_1BA8 to call vi0401_8031D020.",
+    "Introduced typedef struct ViCharaDesc in src/melee/vi/forward.h and defined struct ViCharaDesc in src/melee/vi/types.h with p1_char_index, p1_costume_index, p2_char_index, p2_costume_index, spawn_count, and unk fields.",
+    "Replaced raw byte-index access and the old un_804D6F60_t in vi0102/vi0401/vi0501 with ViCharaDesc field access.",
+    "Moved the small descriptor-populating helper un_8031D9E4 from vi0402 to vi0501 and made it write the static ViCharaDesc un_804D6F84.",
+    "Moved un_8031E110 into vi0502 and made it write through a static ViCharaDesc* un_804D6FA8 instead of M2C_FIELD access to an extern un_804D7004_t.",
+    "Moved un_8031F980 out of vi1101 and into vi1201v1, matching the corrected 0x8031F980 split boundary.",
+    "Changed many scene, archive, color, and related sbss symbols from extern declarations to static file-local definitions in vi0102, vi0402, vi0501, vi0502, vi0601, vi0801, and vi1201v1.",
+    "Deleted vi0801.static.h and folded its relevant declarations directly into vi0801.c.",
+    "Matched un_8031D858_OnEnter by assigning the result of lb_80011AC4(un_804D6F68->lights) to a local HSD_LObj* lobj before passing it to HSD_GObjObject_80390A70.",
+    "Changed vi0102_RunFrame to compare curr_frame against the literal 190.0f instead of static f32 un_804DE048, improving .sdata2 matching according to the bot report."
+  ],
+  "smart_moves": [
+    "The fix treated the decomp mismatch as a split-boundary problem, not only a local function problem: after correcting text starts/ends, several short helpers naturally belonged to neighboring vi files.",
+    "Replacing byte-array casts with ViCharaDesc gave the compiler typed field accesses while preserving the observed layout used by multiple visual-scene OnEnter functions.",
+    "Making sbss objects static in the owning C file aligned source ownership with the new split ranges and reduced misleading cross-file extern declarations.",
+    "The lobj temporary in un_8031D858_OnEnter is a small but important codegen tactic: separating lb_80011AC4 from the HSD_GObjObject_80390A70 call produced a 100% match for that function.",
+    "Deleting vi0801.static.h avoided a dedicated static-header workaround once the .sbss ownership could be expressed directly in vi0801.c.",
+    "The gm_1BA8 include updates were kept in step with moved function declarations, so call sites reference the header for the corrected owning vi unit."
+  ],
+  "decomp_lessons": [
+    "When a tiny function at a file boundary matches only in the wrong file, inspect the split table before overfitting the C source; this PR shows multiple 0x10/0x14 boundary corrections across adjacent vi units.",
+    ".sbss ownership can be as important as .text ownership for match accounting. Adding per-unit .sbss ranges turned several vi .sbss sections from 0% to fully or partially matched.",
+    "Shared scene parameter blobs should be promoted from byte arrays or placeholder structs to named common structs once multiple units reveal consistent offsets.",
+    "A decomp.dev report may list 'broken matches' when functions are intentionally moved to the correct split unit; compare the new matches/improvements table before interpreting those as regressions.",
+    "Prefer file-local static sbss symbols where the split and usage indicate local ownership; keeping them extern can hide split mistakes.",
+    "Header cleanup should follow split cleanup: remove prototypes from the old owner header and add them to the new owner header so downstream users include the right vi header."
+  ],
+  "naming_conventions": [
+    "The new shared descriptor is named ViCharaDesc and uses semantic field names p1_char_index, p1_costume_index, p2_char_index, p2_costume_index, spawn_count, and unk.",
+    "Address-based helper names remain where semantics are not yet known, such as un_8031D9E4, un_8031E110, and un_8031F980.",
+    "The 0x8031D020 helper was renamed from vi0102_8031D020 to vi0401_8031D020 after the split showed the function belongs to vi0401.",
+    "File-local sbss symbols retain address-style names such as un_804D6F68 and un_804D6F84 when no better semantic name is evidenced.",
+    "Headers keep address comments for exported functions, for example /* 31D020 */ void vi0401_8031D020(int, int); and /* 31F980 */ void un_8031F980(int arg0, int arg1);"
+  ],
+  "assembly_or_matching_tactics": [
+    "Correct split starts/ends around 0x8031D020, 0x8031D9E4, 0x8031E110, and 0x8031F980 allowed boundary helpers to be compiled in the intended translation units.",
+    "Use a named local temporary for call results when matching argument evaluation/codegen, as with HSD_LObj* lobj = lb_80011AC4(un_804D6F68->lights) before HSD_GObjObject_80390A70.",
+    "Replace placeholder M2C_FIELD byte writes with typed struct fields when the layout is known; this was applied to ViCharaDesc descriptor setters and OnEnter consumers.",
+    "Use constants directly when evidence supports them and it improves data matching, as with 190.0f replacing the static f32 un_804DE048 comparison in vi0102_RunFrame.",
+    "Moving static storage into the correct file can recover .sbss matches without changing runtime behavior.",
+    "Do not leave old prototypes in the former owner header after split movement; stale prototypes can mask incorrect unit ownership."
+  ],
+  "review_feedback": [
+    {
+      "source": "decomp.dev bot",
+      "summary": "Reported matched code improved to 49.33% (+0.01%, +324 bytes), matched data to 20.44% (+0.01%, +96 bytes), and linked data to 28.63% (+8 bytes)."
+    },
+    {
+      "source": "decomp.dev bot",
+      "summary": "Listed 8 new matches, including main/melee/vi/vi0402 un_8031D858_OnEnter from 98.68% to 100%, vi0501 .sbss to 100%, vi0102 .sbss to 100%, vi0601 .sbss to 100%, vi0801 .sbss to 100%, vi0501 .data to 100%, and boundary functions in vi1201v1/vi1201v2."
+    },
+    {
+      "source": "decomp.dev bot",
+      "summary": "Listed 4 broken matches in old units: vi0402 un_8031D9E4, vi0501 un_8031E110, vi0102 vi0102_8031D020, and vi1101 un_8031F980. The diff shows these helpers were moved to corrected split owners rather than simply deleted."
+    },
+    {
+      "source": "human review",
+      "summary": "No human review comments were present in the provided slice."
+    }
+  ],
+  "searchable_terms": [
+    "PR2100",
+    "PsiLupan",
+    "8031D858_OnEnter",
+    "un_8031D858_OnEnter",
+    "vi0402",
+    "vi split fixup",
+    "splits.txt",
+    "symbols.txt",
+    "vi0102_8031D020",
+    "vi0401_8031D020",
+    "un_8031D9E4",
+    "un_8031E110",
+    "un_8031F980",
+    "ViCharaDesc",
+    "p1_char_index",
+    "p1_costume_index",
+    "p2_costume_index",
+    "spawn_count",
+    "un_804D6F60",
+    "un_804D6F84",
+    "un_804D6FA8",
+    "un_804D7004_t",
+    "vi0801.static.h",
+    "lb_80011AC4",
+    "HSD_GObjObject_80390A70",
+    "HSD_LObj",
+    ".sbss",
+    "GALE01"
+  ],
+  "follow_up_queries": [
+    "Search adjacent vi PRs for additional split-boundary corrections around vi1201v2 and vi1202 after this sbss reassignment.",
+    "Look for later renames of ViCharaDesc fields, especially the remaining unk field at offset 0x8.",
+    "Check whether un_804D6FA8 in vi0502 is later initialized or retyped more precisely as a ViCharaDesc storage object rather than a pointer.",
+    "Find future PRs that remove M2C_FIELD usage from un_8031F980 or replace un_804D7004_t with a named struct.",
+    "Search for other deleted *.static.h files to reuse the pattern of moving local statics into the owning C file after split cleanup."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

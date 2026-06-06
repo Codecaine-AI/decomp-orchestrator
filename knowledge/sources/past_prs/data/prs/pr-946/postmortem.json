@@ -1,0 +1,146 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-946",
+  "pr": {
+    "number": 946,
+    "title": "Match itstar",
+    "url": "https://github.com/doldecomp/melee/pull/946",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-06-30T22:03:49Z",
+    "merged_at": "2023-06-30T22:13:12Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common item star module by replacing asm/melee/it/items/itstar.s with src/melee/it/items/itstar.c and wiring it into the build. The PR added an itstar header, moved the star state table and callbacks into C, introduced ItStarVars as item special attributes, added the star variant to Item::xDD4_itemVar, and removed local extern declarations from it_803F1418.c in favor of including itstar.h. There were no issue or review comments in the provided slice, so intent beyond matching itstar is inferred from the diff.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "item-state-table",
+      "struct-typing",
+      "build-system"
+    ],
+    "systems": [
+      "item",
+      "common-items",
+      "itstar",
+      "asm",
+      "src",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "asm/melee/it/items/itstar.s",
+    "src/melee/it/items/itstar.c",
+    "src/melee/it/items/itstar.h",
+    "src/melee/it/itCommonItems.h",
+    "src/melee/it/types.h",
+    "src/melee/it/it_266F.h",
+    "src/melee/it/it_803F1418.c",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted the 186-line assembly implementation asm/melee/it/items/itstar.s.",
+    "Added src/melee/it/items/itstar.c with C definitions for it_80284644, it_802846D4, it_802846FC, it_80284704, it_80284734, it_8028482C, it_80284834, and ItemStateTable it_803F57A0.",
+    "Changed obj_files.mk so itstar is built from $(BUILD_DIR)/src/melee/it/items/itstar.c.o instead of the assembly object.",
+    "Added src/melee/it/items/itstar.h with the state table extern and function prototypes.",
+    "Added ItStarVars to itCommonItems.h with fields dir, x4, x8, xC, xvel, and yvel.",
+    "Added ItStarVars star to the xDD4_itemVar union in src/melee/it/types.h.",
+    "Added prototypes in it_266F.h for helper functions used by the star behavior: it_8026DA08, it_80276308, it_802763E0, and it_80272860.",
+    "Updated it_803F1418.c to include <melee/it/items/itstar.h> and removed redundant local declarations for itstar functions and state table."
+  ],
+  "smart_moves": [
+    "Converted the assembly constants +1.0F, -1.0F, and 0.0F into direct C float literals rather than preserving synthetic sdata2 symbols, keeping the matched C readable.",
+    "Modeled the per-item data at xDD4 as item->xDD4_itemVar.star.dir, making the stored horizontal direction explicit instead of treating offset 0xDD4 as an untyped float.",
+    "Separated item special attributes from runtime item variables: spawn/reset velocity uses ItStarVars from xC4_article_data->x4_specialAttributes, while runtime horizontal direction is stored in xDD4_itemVar.star.dir.",
+    "Kept the original one-entry ItemStateTable layout intact while moving it to C, preserving callback order: NULL/0, it_802846FC, it_80284704, it_80284734.",
+    "Replaced scattered extern declarations in it_803F1418.c with a dedicated item header, improving cross-file type checking and reducing local declaration drift.",
+    "Used existing item helper enums/macros such as GET_ITEM, ITEM_ANIM_UPDATE, ITEM_UNK_0x1, and ITEM_HIT_PRESERVE to express magic constants from the assembly where available."
+  ],
+  "decomp_lessons": [
+    "When matching an item asm file, update obj_files.mk in the same PR so the build switches from asm object to C object.",
+    "Small item modules often need both a per-item runtime union entry in Item::xDD4_itemVar and an item-specific special-attributes struct referenced through xC4_article_data->x4_specialAttributes.",
+    "A dedicated item header is preferable to local extern declarations in item registry files once callbacks and state tables have been decompiled.",
+    "State table matching can be done directly in C with an ItemStateTable array when the assembly data section is just callback pointers.",
+    "Collision/physics callback functions may return a bool even when the matched implementation always returns false; preserve the observed return behavior rather than generalizing from the local val flag.",
+    "For item bounce/contact logic, maintain side effects separately from return values: this code tracks val to decide whether to call Item_8026AE84, but still returns false at the end."
+  ],
+  "naming_conventions": [
+    "The item module follows the existing filename convention src/melee/it/items/itstar.c and header src/melee/it/items/itstar.h.",
+    "The new special-attribute struct is named ItStarVars, matching nearby item-specific names such as ItCapsuleAttrs and BobOmbVars.",
+    "Unknown or not-yet-understood fields in ItStarVars retain offset-style names x4, x8, and xC, while understood fields are named dir, xvel, and yvel.",
+    "The runtime item variable union member is lowercase item-specific name star, accessed as item->xDD4_itemVar.star.",
+    "Unmatched function symbols retain address-style names such as it_80284644 and it_80284734 while gaining typed prototypes."
+  ],
+  "assembly_or_matching_tactics": [
+    "Matched the assembly branch choosing between +1.0F and -1.0F with the ternary expression HSD_Randi(2) ? +1.0F : -1.0F.",
+    "Mapped assembly loads from item offset 0x2C through GET_ITEM(item_gobj), improving readability while preserving access pattern.",
+    "Mapped xC4 article-data special attributes to ItStarVars to replace raw loads from offsets 0x10 and 0x14 with star->xvel and star->yvel.",
+    "Represented the assembly writes to velocity offsets 0x40, 0x44, and 0x48 as item->x40_vel.x, item->x40_vel.y, and item->x40_vel.z.",
+    "Preserved the reset/action-change calls from assembly: it_802846D4 calls Item_80268E5C(item_gobj, 0, ITEM_ANIM_UPDATE), and the ground/contact branch calls Item_80268E5C(item_gobj, 0, ITEM_UNK_0x1 | ITEM_HIT_PRESERVE).",
+    "Preserved wall/ground response behavior from the asm: horizontal collision flips dir and x velocity, vertical collision clamps positive y velocity to 0.0F, and any collision-like update triggers Item_8026AE84(item, 0xFA, 0x7F, 0x40).",
+    "Moved the data symbol it_803F57A0 from the assembly .data section into a C ItemStateTable initializer."
+  ],
+  "review_feedback": [
+    "No issue comments or review comments were present in the provided PR slice.",
+    "The PR had one review recorded, but the slice contains no review body or inline feedback, so no reviewer intent can be extracted."
+  ],
+  "searchable_terms": [
+    "pr-946",
+    "Match itstar",
+    "r-burns",
+    "itstar",
+    "asm/melee/it/items/itstar.s",
+    "src/melee/it/items/itstar.c",
+    "src/melee/it/items/itstar.h",
+    "it_80284644",
+    "it_802846D4",
+    "it_802846FC",
+    "it_80284704",
+    "it_80284734",
+    "it_8028482C",
+    "it_80284834",
+    "it_803F57A0",
+    "ItStarVars",
+    "xDD4_itemVar.star.dir",
+    "xC4_article_data",
+    "x4_specialAttributes",
+    "x40_vel",
+    "HSD_Randi",
+    "ItemStateTable",
+    "Item_80268E5C",
+    "Item_8026AE84",
+    "it_8026B390",
+    "it_8026B894",
+    "it_8026DA08",
+    "it_80276308",
+    "it_802763E0",
+    "it_80272860",
+    "ITEM_ANIM_UPDATE",
+    "ITEM_UNK_0x1",
+    "ITEM_HIT_PRESERVE",
+    "obj_files.mk",
+    "itCommonItems.h",
+    "types.h",
+    "it_266F.h",
+    "it_803F1418.c"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename ItStarVars fields x4, x8, or xC.",
+    "Find item modules that use xDD4_itemVar for runtime direction or velocity state.",
+    "Find other asm-to-c item PRs that replace local extern declarations in it_803F1418.c with item headers.",
+    "Find matches that use HSD_Randi(2) ? +1.0F : -1.0F for random horizontal direction.",
+    "Find callers or table references to it_803F57A0 after this PR."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

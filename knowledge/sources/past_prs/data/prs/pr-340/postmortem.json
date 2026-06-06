@@ -1,0 +1,140 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-340",
+  "pr": {
+    "number": 340,
+    "title": "Match some more of fobj",
+    "url": "https://github.com/doldecomp/melee/pull/340",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-04-02T06:52:18Z",
+    "merged_at": "2022-04-02T13:05:44Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched more of sysdolphin baselib fobj by replacing several hand-written/remaining assembly routines with C in src/sysdolphin/baselib/fobj.c, including parseFloat, func_8036ADDC, func_8036AE38, func_8036AE70, and the previously NON_MATCHING HSD_FObjReqAnimAll path. The PR also added a typed splGetHelmite prototype and adjusted remaining fobj.s references to SDA2 constants after moving constants/code into C.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "baselib-animation"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "fobj",
+      "spline",
+      "include",
+      "asm"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/sysdolphin/baselib/fobj.c",
+      "role": "Main C matching work; removed NON_MATCHING/inline asm fallback for HSD_FObjReqAnimAll and added C implementations for fobj helper routines."
+    },
+    {
+      "path": "asm/sysdolphin/baselib/fobj.s",
+      "role": "Large assembly deletion for newly matched routines; remaining HSD_FObjInterpretAnim assembly retained with adjusted SDA2 label references."
+    },
+    {
+      "path": "include/functions.h",
+      "role": "Replaced unknown splGetHelmite declaration with f32 splGetHelmite(f32, f32, f32, f32, f32, f32)."
+    }
+  ],
+  "what_changed": [
+    "Converted HSD_FObjReqAnim to an inline C helper and removed the old NON_MATCHING conditional plus inline assembly implementation of HSD_FObjReqAnimAll.",
+    "Added C implementation of parseFloat(u8** pos, u8 arg1), handling raw 32-bit float reads when arg1 is zero and scaled signed/unsigned 1-byte or 2-byte fixed-point encodings selected by arg1 & 0xE0.",
+    "Added C implementation of func_8036ADDC(u8** pos), decoding a variable-length byte sequence using the high bit as continuation and accumulating 7-bit chunks after an initial 3-bit field.",
+    "Added C implementation of func_8036AE38(HSD_FObj* fobj), moving a pending op into op_intrp when flag 0x40 is set, clearing 0x40, setting 0x80, and copying p1 to p0.",
+    "Added C implementation of func_8036AE70(HSD_FObj* fobj, void* arg1, void (*arg2)(void*, s32, f32*)), calculating an animation value based on op_intrp cases and invoking the object update callback with obj_type and a stack f32.",
+    "Added a concrete prototype for splGetHelmite so C fobj interpolation code can call it with six f32 arguments.",
+    "Removed local sdata2 definitions for lbl_804DE4D0, lbl_804DE4D8, lbl_804DE4E0, and lbl_804DE4E8 from fobj.s, leaving lbl_804DE4F0.",
+    "Added .set entries for _SDA2_BASE_, lbl_804DE4D0, and lbl_804DE4E0 in fobj.s and rewrote some remaining HSD_FObjInterpretAnim loads to use label-_SDA2_BASE_(r2)."
+  ],
+  "smart_moves": [
+    "Inlining HSD_FObjReqAnim let HSD_FObjReqAnimAll share the reset logic directly in C, replacing an asm fallback that existed because the startframe integer-to-float conversion had not previously matched.",
+    "The parseFloat implementation mirrors the assembly's encoding dispatch with arg1 & 0xE0 and denom = 1 << (arg1 & 0x1F), making the packed animation-data format explicit and reusable.",
+    "The func_8036AE70 implementation preserves callback behavior by computing the result into a local f32 and passing its address, matching the assembly pattern that stores to stack then calls through a function pointer.",
+    "Adding the splGetHelmite prototype avoided keeping the Hermite interpolation call opaque, enabling typed C code for op_intrp cases 3, 4, and 5.",
+    "Keeping HSD_FObjInterpretAnim in assembly while matching adjacent helpers limited scope: the PR removed hundreds of asm lines without forcing the largest remaining interpreter routine to match at the same time."
+  ],
+  "decomp_lessons": [
+    "When a nonmatching wrapper exists only because of a numeric conversion, try making the inner helper inline; this can force the compiler to emit the same conversion sequence in the caller.",
+    "Packed animation byte streams often encode type and scale in one byte; preserve exact signedness for each case, such as signed 8-bit, unsigned 8-bit, signed 16-bit assembled from little-endian bytes, and unsigned 16-bit.",
+    "For variable-length integer decoders, model the continuation bit and shift progression explicitly rather than over-abstracting; here the first byte contributes a 3-bit amount and later bytes contribute 7-bit groups.",
+    "For fobj interpolation code, HSD_FObj fields observed in the diff include flags, op, op_intrp, time, fterm, p0, p1, d0, d1, obj_type, ad, ad_head, startframe, and next; preserving these field-level side effects is central to matching.",
+    "Partial asm retention may require explicit SDA2 label plumbing if constants move from local assembly data into C-generated data or another compilation unit."
+  ],
+  "naming_conventions": [
+    "Existing exported HSD names use HSD_FObj* capitalization, such as HSD_FObjGetState, HSD_FObjReqAnim, HSD_FObjReqAnimAll, HSD_FObjStopAnim, HSD_FObjStopAnimAll, and HSD_FObjInterpretAnim.",
+    "Unknown helper functions remained address-style names where no semantic name was evidenced: func_8036ADDC, func_8036AE38, and func_8036AE70.",
+    "parseFloat used a semantic camelCase name already present as an assembly global.",
+    "Spline helper naming in this area uses spl-prefixed camelCase, evidenced by splGetHelmite and splArcLengthPoint.",
+    "The diff spells the function as splGetHelmite, not the usual English spelling Hermite; future work should preserve the existing symbol spelling unless separate evidence supports renaming."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed assembly for parseFloat, func_8036ADDC, func_8036AE38, func_8036AE70, and HSD_FObjReqAnimAll after matching them in C.",
+    "Used an inline C helper for HSD_FObjReqAnim to affect caller code generation in HSD_FObjReqAnimAll.",
+    "Used pointer post-increment patterns like ((*pos)++)[0] and *(*pos)++ to match byte-stream reads and pointer advancement.",
+    "Used bit masks matching assembly behavior: arg1 & 0x1F, arg1 & 0xE0, val & 0x80, val & 0x7F, fobj->flags & 0x40, flags clearing with ~0x40/~0x80-equivalent masks, and flag setting with 0x80.",
+    "Preserved stack-local callback argument behavior in func_8036AE70 by storing the computed f32 in sp14 and passing &sp14 to arg2.",
+    "For remaining assembly, replaced some @sda21 references with explicit label-_SDA2_BASE_(r2) after adding .set _SDA2_BASE_, .set lbl_804DE4D0, and .set lbl_804DE4E0."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review records were present in the provided PR slice."
+  ],
+  "searchable_terms": [
+    "pr-340",
+    "Match some more of fobj",
+    "r-burns",
+    "fobj",
+    "sysdolphin",
+    "baselib",
+    "HSD_FObj",
+    "HSD_FObjReqAnim",
+    "HSD_FObjReqAnimAll",
+    "HSD_FObjInterpretAnim",
+    "HSD_FObjGetState",
+    "parseFloat",
+    "func_8036ADDC",
+    "func_8036AE38",
+    "func_8036AE70",
+    "splGetHelmite",
+    "splArcLengthPoint",
+    "HSD_A_OP_KEY",
+    "op_intrp",
+    "fterm",
+    "p0",
+    "p1",
+    "d0",
+    "d1",
+    "SDA2",
+    "_SDA2_BASE_",
+    "lbl_804DE4D0",
+    "lbl_804DE4D8",
+    "lbl_804DE4E0",
+    "lbl_804DE4E8",
+    "lbl_804DE4F0",
+    "NON_MATCHING",
+    "asm removal",
+    "fixed point animation data",
+    "Hermite interpolation"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename or document func_8036ADDC, func_8036AE38, or func_8036AE70.",
+    "Search subsequent fobj PRs for matching HSD_FObjInterpretAnim and cleanup of remaining fobj.s assembly.",
+    "Check later header organization for whether splGetHelmite moved out of include/functions.h into a dedicated spline header.",
+    "Investigate whether splGetHelmite spelling is confirmed by symbols or should remain as-is for matching."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

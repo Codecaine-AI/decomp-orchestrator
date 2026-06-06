@@ -1,0 +1,181 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1924",
+  "pr": {
+    "number": 1924,
+    "title": "Match all item functions <= 40 bytes",
+    "url": "https://github.com/doldecomp/melee/pull/1924",
+    "state": "MERGED",
+    "author": "lukechampine",
+    "created_at": "2025-09-18T20:19:23Z",
+    "merged_at": "2025-09-19T20:41:03Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Mass decompilation pass over the item subsystem that matched all item functions of 40 bytes or less in the easy_funcs range cited by the author. The PR replaced many placeholder markers with small C wrappers, trivial callbacks, item state transitions, collision/reflect/bounce handlers, simple physics/animation functions, and small item-var accesses across 121 files. It also added or refined item attribute/item-var structs and header prototypes needed to type those functions. Review focused heavily on avoiding misleading casts, preserving correct Item_GObj arguments through tiny wrapper chains, and not letting UNK_PARAMS hide missing arguments.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "cleanup",
+      "decomp-matching",
+      "headers",
+      "naming",
+      "tooling",
+      "types-structs"
+    ],
+    "systems": [
+      "item"
+    ]
+  },
+  "key_files": [
+    "src/melee/it/itCharItems.h",
+    "src/melee/it/itCommonItems.h",
+    "src/melee/it/items/it_27CF.c",
+    "src/melee/it/items/itbombhei.c",
+    "src/melee/it/items/itbox.c",
+    "src/melee/it/items/itclimbersice.c",
+    "src/melee/it/items/itclimbersstring.c",
+    "src/melee/it/items/itcrazyhandbomb.c",
+    "src/melee/it/items/itdosei.c",
+    "src/melee/it/items/itevyoshiegg.c",
+    "src/melee/it/items/itfire.c",
+    "src/melee/it/items/itflipper.c",
+    "src/melee/it/items/ithammerhead.c",
+    "src/melee/it/items/ithouou.c",
+    "src/melee/it/items/itseakchain.c",
+    "src/melee/it/items/itsonans.c",
+    "src/melee/it/items/itzgshell.c"
+  ],
+  "what_changed": [
+    "Matched the remaining item functions of size <= 40 bytes for the tool range shown in the PR body: `python tools/easy_funcs.py -v 80259869 -V 802F6507 -S 40 --names` reportedly produced no output after the change.",
+    "Converted many `/// #symbol` placeholders into small item C implementations, usually one-call wrappers or simple callbacks such as `Dropped` forwarding to `Thrown`, `Reflected` returning `it_80273030(gobj)`, `ShieldBounced` returning `itColl_BounceOffShield(gobj)`, and motion anim functions returning `it_802751D8(gobj)` or `false`.",
+    "Added many direct item state changes via `Item_80268E5C(gobj, state, ITEM_ANIM_UPDATE)` or similar constants in files such as `itbox.c`, `itevyoshiegg.c`, and `itflipper.c`.",
+    "Added small item-var and attribute struct definitions in shared item headers, including `itFireAttributes`, `itPikachutJoltAir_ItemVars`, `itDosei_ItemVars`, `itLipstickAttributes`, `itSScopeAttributes`, and `itSonans_ItemVars`.",
+    "Refined headers from generic `UNK_RET`/`UNK_PARAMS` declarations to typed prototypes where small functions revealed signatures, for example changing `it_8027D820` to `void it_8027D820(Item_GObj* gobj)` in `itbombhei.h` and `it_802C1A58` to `void it_802C1A58(Item_GObj* gobj)` in `itclimbersice.h`.",
+    "Added needed includes such as `it/inlines.h`, `it/it_26B1.h`, `it/it_2725.h`, `it/item.h`, and game/header includes where newly decompiled functions used `GET_ITEM`, item callbacks, collision helpers, or external functions.",
+    "Implemented small item callback patterns around `it_8026B894(gobj, ref_gobj)` for many `EvtUnk`-style functions, with review pushing removal of unnecessary `HSD_GObj*` casts when both parameters were `Item_GObj*` or compatible.",
+    "Added a very small `itclimbersstring.c` wrapper `fn_802C28B8(Item_GObj* gobj)` that calls a static helper with `GET_ITEM(gobj)`."
+  ],
+  "smart_moves": [
+    "Targeted a mechanically bounded slice of the codebase: item functions <= 40 bytes. This made a large PR reviewable because most functions were trivial wrappers, callbacks, or state transitions.",
+    "Used `easy_funcs.py` as an objective progress gate and reported the exact command whose output became empty, making the decomp milestone easy to verify.",
+    "Leveraged automated assistants for repetitive small-function decompilation but kept human oversight and review, which surfaced subtle signature and cast problems that matching alone may not catch.",
+    "Converted small matched functions into typed prototypes and shared structs instead of leaving callers behind `UNK_PARAMS`, improving future decomp readability and type propagation.",
+    "Introduced narrowly scoped item-var structs only where offsets were needed by matched functions, such as Sonans accessing `xDD4_itemVar.sonans.x60` and Dosei storing `ip->pos` into `xDE4`.",
+    "Reused recurring item idioms consistently: `Dropped` delegating to `Thrown`, event callbacks calling `it_8026B894`, reflection using `it_80273030`, shield bounce using `itColl_BounceOffShield`, and motion transitions using `Item_80268E5C`."
+  ],
+  "decomp_lessons": [
+    "Do not trust successful compilation through `UNK_PARAMS`; it can hide missing arguments. Review specifically noted that `UNK_PARAMS` resolves to nothing, so calls with omitted parameters may compile even when the real callee takes a `GObj` or multiple arguments.",
+    "For tiny wrapper functions, decompile or inspect the callee to infer the wrapper signature. Reviewer r-burns used `decomp.py` on a non-decompiled callee to verify that surrounding functions also needed an `Item_GObj*` argument.",
+    "Avoid forcing matches with broad casts between GObj subtypes. Casts like `(HSD_GObj*) ref_gobj` or `(Ground_GObj*) gobj` were review red flags and often indicated that a callee signature or wrapper signature should be fixed instead.",
+    "Item callbacks commonly carry `Item_GObj* gobj` even when the body is just a forwarder. Preserve that argument through wrapper chains such as `it_80299F94` -> `it_80299FB4(gobj)` and Sonans phys functions -> `it_802CD4FC(gobj)`.",
+    "When an argument type is genuinely unknown, prefer an explicit placeholder type such as `UNK_T` over inventing an incorrect concrete pointer type. The `itseakchain.c` discussion recommended `void it_802BBAEC(UNK_T arg0, int arg1, float arg2)` until `arg0` could be identified.",
+    "Small decomp passes can produce useful struct knowledge: even single-field or padded item-var structs can replace raw unknown offsets and unlock clean `GET_ITEM(gobj)` expressions.",
+    "A match is not the same as a correct type model. Review comments repeatedly addressed signatures, argument propagation, and casts rather than instruction-level matching."
+  ],
+  "naming_conventions": [
+    "Kept existing item callback naming patterns such as `it_3F14_LogicN_PickedUp`, `Dropped`, `Thrown`, `EnteredAir`, `DmgReceived`, `Reflected`, `ShieldBounced`, and `EvtUnk`.",
+    "Kept motion callback naming patterns like `itBombhei_UnkMotion6_Anim`, `itBox_UnkMotion6_Anim`, `itFire_UnkMotion2_Phys`, and `itSonans_UnkMotion0_Phys` when behavior was still unnamed.",
+    "Used address-based names such as `it_802B26C0`, `it_802C17DC`, `it_802CD4DC`, and `fn_802C28B8` where semantic names were not established.",
+    "Added item-specific struct names following existing conventions: `itFireAttributes`, `itLipstickAttributes`, `itSScopeAttributes`, `itDosei_ItemVars`, `itSonans_ItemVars`, and `itPikachutJoltAir_ItemVars`.",
+    "Preserved offset-style field names in newly inferred structs (`x0`, `x4`, `xC`, `xDD8`, `xDE4`, `x60`) when semantics were not yet known.",
+    "Used `Item_GObj* gobj` and `Item_GObj* ref_gobj` for item callback signatures rather than generic `HSD_GObj*` casts when the surrounding item system made the type clear."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use `tools/easy_funcs.py` with a function-size threshold to find a bounded set of low-risk candidates; this PR used `-S 40` on the item address range and aimed for zero remaining names.",
+    "The author described using Codex and Claude for many of the repetitive decomps, guided by written instructions, then reviewing the output manually.",
+    "The author mentioned a workflow using `tools/auto_add_includes.py` and `objdiff-cli diff --format diff` to iterate on includes and compare generated code.",
+    "For wrapper matches, propagate the same argument list as the callee when the callee expects `Item_GObj*`; do not omit arguments just because `UNK_PARAMS` lets the code compile.",
+    "Use callee decompilation or `decomp.py` to verify hidden signatures behind non-decompiled callees before finalizing tiny wrappers.",
+    "Recognize recurring short-function patterns: empty phys functions, `return false`, `return true`, call-and-return wrappers, state transition wrappers, and simple item-var assignment or sign flip."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "r-burns",
+      "file": "src/melee/it/items/ithammerhead.c",
+      "feedback": "A surrounding wrapper needed to take `Item_GObj*` because the function it calls takes an item GObj. Reviewer later explained this was found by checking the callee with `decomp.py` and by knowing most item callbacks take a GObj."
+    },
+    {
+      "reviewer": "r-burns",
+      "file": "src/melee/it/items/ithouou.c",
+      "feedback": "Remove unnecessary `HSD_GObj` casts around `it_8026B894`; suggested passing `gobj, ref_gobj` directly."
+    },
+    {
+      "reviewer": "r-burns",
+      "file": "src/melee/it/items/itsonans.c",
+      "feedback": "Pass `gobj` into `it_802CD4FC` from Sonans phys wrappers instead of calling it with no arguments."
+    },
+    {
+      "reviewer": "r-burns",
+      "file": "src/melee/it/items/itcrazyhandbomb.c",
+      "feedback": "Pass `gobj` into `it_802F1344` in the damage-dealt path."
+    },
+    {
+      "reviewer": "r-burns",
+      "file": "src/melee/it/items/itseakchain.c",
+      "feedback": "`it_802BBAEC` needed multiple arguments; reviewer recommended `UNK_T arg0, int arg1, float arg2` while arg0 type remained uncertain."
+    },
+    {
+      "reviewer": "lukechampine",
+      "file": "src/melee/it/items/itseakchain.c",
+      "feedback": "Suggested `ItemLink` as a possible type for the unknown first argument because it has `CollData` at 0x30 and a bitfield at 0x2C, matching the decomp of `it_802BB938`."
+    },
+    {
+      "reviewer": "r-burns",
+      "file": "src/melee/it/items/itzgshell.c",
+      "feedback": "Flagged a questionable cast to `Ground_GObj*`; after checking, concluded `grZakoGenerator_801CACB8` should take an `Item_GObj`, so its signature should be updated and the cast dropped."
+    }
+  ],
+  "searchable_terms": [
+    "easy_funcs.py -S 40",
+    "small item functions",
+    "item callbacks",
+    "Item_GObj",
+    "UNK_PARAMS",
+    "decomp.py callee signature",
+    "objdiff-cli diff --format diff",
+    "auto_add_includes.py",
+    "it_8026B894",
+    "it_80273030",
+    "itColl_BounceOffShield",
+    "itColl_BounceOffVictim",
+    "Item_80268E5C",
+    "ITEM_ANIM_UPDATE",
+    "GET_ITEM",
+    "itCommonItems.h",
+    "itCharItems.h",
+    "itFireAttributes",
+    "itDosei_ItemVars",
+    "itLipstickAttributes",
+    "itSScopeAttributes",
+    "itSonans_ItemVars",
+    "itPikachutJoltAir_ItemVars",
+    "itBombhei_UnkMotion6_Anim",
+    "itBox_UnkMotion6_Anim",
+    "itClimbersice_UnkMotion1_Anim",
+    "itCrazyhandbomb_UnkMotion1_Anim",
+    "itDosei_UnkMotion6_Anim",
+    "itFire_UnkMotion2_Phys",
+    "itFlipper_UnkMotion4_Anim",
+    "itHammerhead_UnkMotion1_Phys",
+    "itSonans_UnkMotion0_Phys",
+    "itseakchain ItemLink",
+    "grZakoGenerator_801CACB8 Item_GObj"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that update `grZakoGenerator_801CACB8` signature to take `Item_GObj*` and remove Ground_GObj casts.",
+    "Search for remaining `UNK_PARAMS` item callbacks that call known functions with omitted arguments.",
+    "Audit item `EvtUnk` wrappers around `it_8026B894` for unnecessary `HSD_GObj*` casts.",
+    "Search for `it_802BB938` and `it_802BBAEC` to see whether `arg0` was later named `ItemLink` or given a concrete type.",
+    "Find uses of `itSonans_ItemVars.x60` and `itDosei_ItemVars.xDE4` to refine field semantics.",
+    "Look for future automation/tooling PRs that add or formalize `tools/auto_add_includes.py`."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

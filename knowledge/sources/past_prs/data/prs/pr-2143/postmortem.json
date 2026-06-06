@@ -1,0 +1,257 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2143",
+  "pr": {
+    "number": 2143,
+    "title": "Miscellaneous matches",
+    "url": "https://github.com/doldecomp/melee/pull/2143",
+    "state": "MERGED",
+    "author": "malvarezcastillo",
+    "created_at": "2026-01-28T22:21:18Z",
+    "merged_at": "2026-02-01T18:28:21Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large automated \"vacuum system\" PR that converted many small unmatched functions across fighter, game-mode, stage, item, interface, and toy code into C matches while updating headers, structs, and item/stage union fields. The PR was valuable both for the matches and for exposing recurring agent/m2c failure modes: wrong union enum variants, overuse of void*/raw offsets, local ad-hoc structs that belong in shared headers, and accepting fake matches that should be reverted until types are fixed. Review feedback led to concrete guardrails and static quality checks for future autonomous decomp work.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "cleanup",
+      "decomp-matching",
+      "headers",
+      "tooling",
+      "types-structs",
+      "review-driven-fixes"
+    ],
+    "systems": [
+      "fighter",
+      "game-mode",
+      "item",
+      "stage",
+      "toy",
+      "interface"
+    ]
+  },
+  "key_files": [
+    "src/melee/ty/toy.c",
+    "src/melee/ty/toy.h",
+    "src/melee/gm/gm_18A5.c",
+    "src/melee/gm/gm_17C0.c",
+    "src/melee/gm/gm_17C0.h",
+    "src/melee/gm/gm_1832.c",
+    "src/melee/gm/gm_1832.h",
+    "src/melee/gm/gm_1601.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Attack100.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Attack100.h",
+    "src/melee/ft/chara/ftKirby/ftKb_Init.c",
+    "src/melee/ft/chara/ftKirby/ftKb_Init.h",
+    "src/melee/ft/chara/ftPopo/ftPp_SpecialS.c",
+    "src/melee/gr/types.h",
+    "src/melee/gr/grbigblue.c",
+    "src/melee/gr/grrcruise.c",
+    "src/melee/it/itCommonItems.h",
+    "src/melee/it/itCharItems.h",
+    "src/melee/it/items/itbombhei.c",
+    "src/melee/it/items/itfreeze.c",
+    "src/melee/it/items/ithouou.c",
+    "src/melee/it/items/itkyasarin.c",
+    "src/melee/it/items/itlikelike.c",
+    "src/melee/it/items/itseakchain.c",
+    "src/melee/it/items/ittaru.c",
+    "src/melee/it/items/ittincle.c",
+    "src/melee/it/items/itwstar.c"
+  ],
+  "what_changed": [
+    "Matched many small previously stubbed functions across 67 files, replacing `/// #symbol` placeholders with C implementations.",
+    "Added game-mode accessor functions in `gm_17C0.c` and `gm_1832.c` that index difficulty/stage-slot table entries and return `u8` fields from `pad_6` or `pad_14`; corresponding headers changed from `UNK_RET`/`UNK_PARAMS` to typed prototypes.",
+    "Matched `gm_80162B4C` in `gm_1601.c` as a saturating update to the value returned by `gmMainLib_8015CDBC`, and changed its header prototype to `void gm_80162B4C(s32 amount)`.",
+    "Matched fighter callbacks such as `ftCo_CatchCut_Coll`, `fn_800D86B8`, and `ftPp_SpecialHiThrow2_Anim`, with header visibility updated where needed.",
+    "Adjusted Kirby DK-copy cancel animation prototypes from `Fighter_GObj*` to `HSD_GObj*` in `ftKb_Init.h` and preserved an existing fake-match comma-operator formatting in `ftKb_SpecialAirHi3_Phys`.",
+    "Matched or attempted many item logic/motion callbacks, including Bombhei, Freeze, Houou, Kyasarin, Likelike, Ness PK Flush explode, Oldkuri, Seakchain, Taru, Tincle, Wstar, Thunder, and others.",
+    "Added or changed item variable and attribute declarations in shared item headers such as `itCommonItems.h`, `itCharItems.h`, and item-specific headers/static headers.",
+    "Touched stage ground code and ground type definitions, including `grbigblue`, `grrcruise`, and `gr/types.h`, to support stage-specific ground variable fields.",
+    "Review identified at least one sufficiently fake stage match in `grRCruise_80200540`; author replied that it was reverted.",
+    "The PR doubled as a test of an autonomous decompilation workflow, with the author later adding static quality checks and guardrails informed by review comments."
+  ],
+  "smart_moves": [
+    "Used the PR as a reviewable stress test of autonomous decomp rather than only as a batch of matches, explicitly asking reviewers for fundamental failure modes to convert into guardrails.",
+    "Kept fake matches annotated instead of silently hiding them, which made reviewer triage possible; however, reviewers recommended being more conservative and reverting fake matches.",
+    "Updated headers alongside matched implementations, replacing unknown prototypes with concrete return/argument types where the diff showed enough evidence.",
+    "Responded to enum-variant review feedback by changing a stage union access to the specific `gv.bigblue` variant and adding missing `xC8`/`xCC` fields to `grBigBlue_GroundVars` according to the author reply.",
+    "Started building static non-AI quality checks after review feedback so common actionable issues could be caught before future PRs.",
+    "The author concluded that autonomous matching works better when directed at one unit with a supervising Claude instance, rather than letting the vacuum system roam across the entire codebase."
+  ],
+  "decomp_lessons": [
+    "m2c/agent output may pick the first union enum variant that type-checks; reviewers specifically called this out for `grbigblue` and `itbombhei`. Future decomp should explicitly choose the correct union variant instead of trusting inferred fields.",
+    "Use m2c `--union-field` when decompiling code that accesses a known item, stage, fighter, or ground union variant; consider per-system skills that force the right variant.",
+    "Use m2c `--void-field-type` for accesses through `void*` fields such as item special attributes, rather than leaving casts or weakly typed data in the final code.",
+    "If a field is only used as one concrete type, change the struct field type instead of preserving bad fake-match casts; review noted `itFreeze_ItemVars.x0` could become `f32`.",
+    "Item variable structs and attributes should be placed in shared headers such as `itCommonItems.h` and added to `xDD4_itemVar` when they are real item state, not declared locally in `.c` files as one-off typedefs.",
+    "Raw offset access usually indicates a missing struct field; review called out `itLikelike_ItemVars` lacking a field at `+0x50` and recommended adding the field.",
+    "Fake matches with type punning through wrong struct fields should usually be reverted and revisited after struct layout corrections, as with the reviewed `grRCruise_80200540` attempt.",
+    "`gobj->user_data` at the top of a block can indicate an inlined helper function; splitting the helper may be more idiomatic even if not required for a match.",
+    "Prefer existing helper functions when they express intent, e.g. review noted `itResetVelocity` rather than manually setting all three velocity components to zero.",
+    "Stack-size and regalloc issues can require unusual but documented tactics such as `PAD_STACK`, direct `user_data` access instead of `GET_ITEM`, or even keeping an empty `if` block; reviewers noted the Taru and Tincle matches as stack-sensitive examples.",
+    "Autonomous agents should be conservative about fake matches and more willing to modify existing structs where evidence supports a real field or type."
+  ],
+  "naming_conventions": [
+    "Preserve address-based unknown names where no semantic name is known, e.g. `gm_8017E5FC`, `fn_800D86B8`, `it_2725_Logic54_PickedUp`.",
+    "Use subsystem prefixes consistently: `ftCo_` for common fighter code, `ftKb_` for Kirby, `ftPp_` for Popo, `gm_` for game-mode code, `grBigBlue_`/`grRCruise_` for stage code, and `it<Item>_` or `it_2725_LogicNN_` for item callbacks.",
+    "Item variable structs follow item-specific names such as `itKyasarin_ItemVars` and should be integrated into `itCommonItems.h` and the `xDD4_itemVar` union when applicable.",
+    "Item attribute structs should be named after the item, e.g. `itKyasarinAttributes`, and belong in shared item headers when used as article special attributes.",
+    "Ground variable fields should use the specific stage union variant name such as `gv.bigblue`, not an arbitrary compatible variant such as `gv.corneria`.",
+    "Headers should replace `UNK_RET`/`UNK_PARAMS` with explicit signatures once matched, preserving address comments like `/* 17E5FC */`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use `--union-field` to force m2c to select the correct union variant for item/stage/ground/fighter data.",
+    "Use `--void-field-type` for `void*` special-attribute fields to avoid casts and fake-looking code.",
+    "Use `PAD_STACK` for stack-sensitive small functions, as discussed for `itTincle_UnkMotion11_Anim` and other item callbacks.",
+    "Consider direct `gobj->user_data` access instead of `GET_ITEM` only when stack usage prevents a match, but treat it as a tactical compromise rather than preferred style.",
+    "Some matches are affected by surprising stack behavior; review observed that removing an empty `if (ip->xCC_item_attr) {}` in `itTaru_UnkMotion3_Phys` increased stack size and broke the match.",
+    "Comma-operator expressions may be needed for regalloc in rare fake/fragile matches, as seen in the existing Kirby `ftKb_SpecialAirHi3_Phys` comment.",
+    "For repeated table accessors in game-mode files, precise small integer casts and index arithmetic such as `stage_slot + difficulty * 5` and `arg2 * 3 + offset` were used to match.",
+    "When type punning or raw offsets are needed only because structs are wrong, fix the struct layout first or leave the function unmatched."
+  ],
+  "review_feedback": [
+    {
+      "author": "lukechampine",
+      "file": "src/melee/gr/grbigblue.c",
+      "feedback": "Wrong union variant is a common m2c+agent failure mode; m2c picks the first enum variant that fits. Use `--union-field` and subsystem-specific skills to force the right field, e.g. `gv.bigblue`."
+    },
+    {
+      "author": "lukechampine",
+      "file": "src/melee/gr/grrcruise.c",
+      "feedback": "`grRCruise_80200540` was sufficiently fake due to type punning through wrong Ground map fields and should be reverted and revisited later."
+    },
+    {
+      "author": "lukechampine",
+      "file": "src/melee/it/items/itbombhei.c",
+      "feedback": "Same enum-variant issue as stage union fields; choose the correct `xDD4_itemVar` variant instead of relying on m2c inference."
+    },
+    {
+      "author": "lukechampine",
+      "file": "src/melee/it/items/itfreeze.c",
+      "feedback": "If `.x0` is not referenced elsewhere, change the item-var field to `f32` rather than keeping fake-match typing."
+    },
+    {
+      "author": "lukechampine",
+      "file": "src/melee/it/items/ithouou.c",
+      "feedback": "Use `--void-field-type` for special attributes accessed through `void*`."
+    },
+    {
+      "author": "lukechampine",
+      "file": "src/melee/it/items/itkyasarin.c",
+      "feedback": "`itKyasarin_ItemVars` should be defined in `itCommonItems.h` and added to the `xDD4_itemVar` enum/union; `itKyasarinAttributes` should also be in `itCommonItems.h`."
+    },
+    {
+      "author": "lukechampine",
+      "file": "src/melee/it/items/itlikelike.c",
+      "feedback": "A missing field should be added to `itLikelike_ItemVars` instead of using raw offset access at `+0x50`."
+    },
+    {
+      "author": "lukechampine",
+      "file": "src/melee/it/items/itnesspkflushexplode.c",
+      "feedback": "`gobj->user_data` at the top of a block often indicates an inlined helper; splitting it out is more idiomatic though not critical."
+    },
+    {
+      "author": "lukechampine",
+      "file": "src/melee/it/items/itoldkuri.c",
+      "feedback": "Use the helper `itResetVelocity` for zeroing velocity; the original likely chained assignments `ip->x40_vel.x = ip->x40_vel.y = ip->x40_vel.z = 0.0F`."
+    },
+    {
+      "author": "lukechampine",
+      "file": "src/melee/it/items/itseakchain.c",
+      "feedback": "An accessory callback cast was unnecessary."
+    },
+    {
+      "author": "lukechampine",
+      "file": "src/melee/it/items/ittaru.c",
+      "feedback": "An empty `if` block preserved stack size and match; reviewer noted this unusual stack behavior and mentioned direct access as a possible but guilt-inducing stack tactic."
+    },
+    {
+      "author": "lukechampine",
+      "file": "src/melee/it/items/ittincle.c",
+      "feedback": "Suggested a cleaner local version using `PAD_STACK(16)`, direct condition, and `return false` instead of temporary integer variables."
+    },
+    {
+      "author": "lukechampine",
+      "file": "src/melee/it/items/itwstar.c",
+      "feedback": "Special attributes need a proper struct rather than using `f32* attr`."
+    },
+    {
+      "author": "lukechampine",
+      "file": "general",
+      "feedback": "Overall promising, but needs guardrails around enum variants and `void*` fields; can be more willing to modify existing structs, but should be more conservative with fake matches."
+    },
+    {
+      "author": "malvarezcastillo",
+      "file": "general",
+      "feedback": "Author acknowledged short easy functions made Claude exit early without quality checks, fixed missing sandbox docs, and later found directed unit-level vacuuming plus a supervising Claude instance worked better than an undirected sweep."
+    },
+    {
+      "author": "ribbanya",
+      "file": "general",
+      "feedback": "Asked what the static checks were; author linked `melee-ai/quality_check.py`, and ribbanya replied it was not bad."
+    }
+  ],
+  "searchable_terms": [
+    "PR2143",
+    "Miscellaneous matches",
+    "vacuum system",
+    "autonomous agent decomp",
+    "quality_check.py",
+    "m2c union-field",
+    "--union-field",
+    "--void-field-type",
+    "fake match",
+    "enum variant failure mode",
+    "void* fields",
+    "xDD4_itemVar",
+    "itCommonItems.h",
+    "grBigBlue_801E68B8",
+    "gv.bigblue",
+    "gv.corneria",
+    "grRCruise_80200540",
+    "it_3F14_Logic6_DmgDealt",
+    "it_3F14_Logic17_Destroyed",
+    "itFreeze_ItemVars.x0",
+    "it_2725_Logic42_Spawned",
+    "itKyasarin_ItemVars",
+    "itKyasarinAttributes",
+    "itLikelike_ItemVars",
+    "it_2725_Logic103_Destroyed",
+    "itResetVelocity",
+    "itTaru_UnkMotion3_Phys",
+    "itTincle_UnkMotion11_Anim",
+    "itWstar_UnkMotion0_Phys",
+    "PAD_STACK",
+    "GET_ITEM",
+    "gobj->user_data",
+    "ftCo_CatchCut_Coll",
+    "fn_800D86B8",
+    "ftPp_SpecialHiThrow2_Anim",
+    "gm_80162B4C",
+    "gm_8017E5FC",
+    "gm_8017EB64",
+    "gm_8018A228",
+    "toy.c"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that added or refined static quality checks from `melee-ai/quality_check.py`.",
+    "Search for subsequent fixes to `itFreeze_ItemVars.x0` becoming `f32`.",
+    "Search for later work adding `itKyasarin_ItemVars` or `itKyasarinAttributes` to `itCommonItems.h`.",
+    "Search for `grRCruise_80200540` to see if the reverted fake match was later matched with corrected Ground struct fields.",
+    "Search for PRs referencing `--union-field` and `--void-field-type` guardrails after PR #2143.",
+    "Search for later cleanup of `itTaru_UnkMotion3_Phys` empty-if stack workaround.",
+    "Search for later cleanup of `itTincle_UnkMotion11_Anim` using the reviewer-suggested `PAD_STACK(16)` shape.",
+    "Search for PR #2076 for detailed m2c flag guidance referenced by review."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

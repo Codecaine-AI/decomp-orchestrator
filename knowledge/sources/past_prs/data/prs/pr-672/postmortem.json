@@ -1,0 +1,218 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-672",
+  "pr": {
+    "number": 672,
+    "title": "Fix context syntax",
+    "url": "https://github.com/doldecomp/melee/pull/672",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-13T07:27:20Z",
+    "merged_at": "2023-01-13T07:51:36Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Cherry-picked from #670, this PR cleaned up C/header syntax so the codebase remained usable for context generation while preserving MWERKS-specific behavior where needed. The main pattern was to hide compiler-only constructs such as __declspec(section \".init\"), address-qualified declarations, and unknown-size arrays behind cross-tool macros in Runtime/platform.h, then apply those macros across startup/runtime/TRK headers. It also moved FILE/__file_modes structure definitions into stdio.h, trimmed duplicate or misplaced declarations from wchar_io and GX unknown headers, added small GX public headers/prototypes, and standardized fighter action enums to start character-specific IDs at ASID_MAX instead of redefining AS_FTCOMMON = 340 in each character header.",
+  "change_classification": {
+    "primary_type": "context_syntax_header_fix",
+    "categories": [
+      "fix",
+      "headers",
+      "context-generation",
+      "toolchain-compatibility",
+      "prototype-cleanup",
+      "enum-cleanup"
+    ],
+    "systems": [
+      "Runtime",
+      "MSL",
+      "MetroTRK",
+      "Dolphin OS init",
+      "Dolphin GX",
+      "Dolphin AI",
+      "fighter headers",
+      "m2ctx"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/Runtime/platform.h",
+      "why": "Introduced SECTION_INIT and UNK_SIZE_ARRAY and changed AT_ADDRESS to suppress MWERKS-only syntax under M2CTX."
+    },
+    {
+      "path": "src/dolphin/os/init/__start.h",
+      "why": "Replaced inline address and init-section syntax with AT_ADDRESS and SECTION_INIT for Pad3Button, startup functions, and linker-provided arrays."
+    },
+    {
+      "path": "src/Runtime/__mem.h",
+      "why": "Converted memset, __fill_mem, and memcpy init-section declarations to the new SECTION_INIT macro."
+    },
+    {
+      "path": "src/MetroTRK/mem_TRK.h",
+      "why": "Converted TRK_memcpy and TRK_memset init-section declarations to SECTION_INIT."
+    },
+    {
+      "path": "src/Runtime/__init_cpp_exceptions.c",
+      "why": "Converted _eti_init_info_ extern declaration to SECTION_INIT while keeping the existing linker-name HACK comment."
+    },
+    {
+      "path": "src/stdio.h",
+      "why": "Replaced placeholder FILE layout with named __file_modes and struct FILE fields used by MSL/wchar_io."
+    },
+    {
+      "path": "src/MSL/wchar_io.h",
+      "why": "Removed duplicate FILE, wchar_t, and __file_modes definitions and included common_structs.h instead."
+    },
+    {
+      "path": "src/dolphin/gx/GX_unknown_001.h",
+      "why": "Removed address comments from extern declarations and moved several GX declarations to more specific headers."
+    },
+    {
+      "path": "src/dolphin/gx/GXInit.c",
+      "why": "Added proper GX headers and changed asm function signatures from unk_t/no-args to typed prototypes for GXInit and __GXInitGX."
+    },
+    {
+      "path": "src/dolphin/gx/GXDisplayList.h",
+      "why": "New small public header declaring GXCallDisplayList."
+    },
+    {
+      "path": "src/dolphin/gx/GXPixel.h",
+      "why": "New small public header declaring GXSetFieldMode."
+    },
+    {
+      "path": "src/melee/ft/types.h",
+      "why": "Added ASID_MAX sentinel to ftCommonAction."
+    },
+    {
+      "path": "src/melee/ft/chara/ftCaptain/ftCaptain.h",
+      "why": "One of several character headers changed from a local AS_FTCOMMON = 340 enum entry to first character-specific action = ASID_MAX."
+    }
+  ],
+  "what_changed": [
+    "Added SECTION_INIT in Runtime/platform.h, expanding to __declspec(section \".init\") only for __MWERKS__ when not building M2CTX; otherwise it expands empty.",
+    "Changed AT_ADDRESS so MWERKS address-colon syntax is not emitted when M2CTX is defined, while PERMUTER still uses FIXEDADDR.",
+    "Added UNK_SIZE_ARRAY in Runtime/platform.h, using [] for MWERKS outside M2CTX and [0] otherwise.",
+    "Replaced repeated #ifdef MWERKS_GEKKO / __declspec(section \".init\") declaration blocks with SECTION_INIT in Runtime/__mem.h, Runtime/__init_cpp_exceptions.c, MetroTRK/mem_TRK.h, and dolphin/os/init/__start.h.",
+    "Replaced raw address-qualified declarations such as extern vu32 __AIRegs[8] : 0xCC006C00 and Pad3Button : PAD3_BUTTON_ADDR with AT_ADDRESS(...) forms.",
+    "Moved the detailed FILE layout and __file_modes definition into src/stdio.h, and removed duplicate definitions from MSL/wchar_io.h.",
+    "Removed the stray sprintf declaration from MSL.h; stdio.h remains the home for stdio declarations.",
+    "Added #include <stdio.h> to MSL/wchar_io.c so fwide has FILE from the proper header.",
+    "Marked common_structs.h with a file-level todo: Delete this.",
+    "Added Dolphin GX headers GXDisplayList.h and GXPixel.h for GXCallDisplayList and GXSetFieldMode declarations.",
+    "Moved or exposed GX transform/pixel/display-list declarations through more specific headers, including GXLoadTexMtxImm, GXSetCurrentMtx, GXLoadNrmMtxImm, GXLoadPosMtxImm, GXSetScissor, GXSetScissorBoxOffset, and GXSetFieldMode.",
+    "Simplified GX_unknown_001.h declarations by removing address comments and deleting declarations that were moved elsewhere.",
+    "Typed GXInit assembly as asm GXFifoObj* GXInit(GXFifoObj* fifo, u32 size) instead of asm unk_t GXInit(), and made __GXInitGX static void.",
+    "Typed GXSetFieldMode assembly as asm void GXSetFieldMode(s8, s32) instead of asm unk_t GXSetFieldMode().",
+    "Added ASID_MAX to ftCommonAction and updated Captain, Fox, GameWatch, Luigi, Mario, Mewtwo, and Ness action enums so their first character-specific action equals ASID_MAX rather than carrying a duplicate AS_FTCOMMON = 340 enumerator.",
+    "Removed an M2CTX guard around declarations in melee/lb/lbunknown_001.h, making those prototypes visible in context builds.",
+    "Minor include cleanup in ftparts.c: added GXTransform.h and os.h explicitly and changed MAX_FT_PARTS from parenthesized macro value to plain 140."
+  ],
+  "smart_moves": [
+    "Centralized toolchain syntax differences in Runtime/platform.h instead of scattering M2CTX conditionals through many headers.",
+    "SECTION_INIT preserves the MWERKS section attribute for real builds while making declarations parseable for m2ctx and non-MWERKS tools.",
+    "AT_ADDRESS abstracts the unusual MWERKS address placement syntax, allowing the same declaration to satisfy PERMUTER, MWERKS, and context-generation modes.",
+    "Moving FILE to stdio.h reduced duplicate standard-library struct definitions and made MSL/wchar_io.c include the canonical source of FILE.",
+    "Using ASID_MAX as the boundary between common and character-specific fighter actions avoids hard-coded 340 repetition across individual character headers.",
+    "Splitting GX prototypes into more specific headers is safer for context generation than accumulating unrelated extern declarations in GX_unknown_001.h.",
+    "Adding real prototypes to asm functions improves header/source consistency without attempting to rewrite the assembly bodies."
+  ],
+  "decomp_lessons": [
+    "If a declaration needs MWERKS-only syntax, wrap that syntax in a macro that is explicitly disabled for M2CTX rather than using multiline preprocessor fragments in the middle of declarations.",
+    "Address-bound globals should use AT_ADDRESS(...) instead of raw `: address` syntax so context tooling does not have to parse MWERKS extensions.",
+    "Init-section functions and externs should use SECTION_INIT; this keeps section placement information in matching builds while keeping headers C-parser friendly.",
+    "Avoid duplicating standard library structs in feature headers; define FILE-related layout in stdio.h and include it where needed.",
+    "For fighter action-state enums, prefer a shared sentinel such as ASID_MAX to repeated magic constants and duplicate enum names.",
+    "Header cleanup can be a matching enabler: cleaner prototypes and includes make generated contexts more stable even when no C function is newly matched.",
+    "When adding typed signatures to inline assembly functions, align the .c asm signature with the public header prototype to reduce context and compiler disagreement.",
+    "Large catch-all unknown headers are useful early, but declarations should migrate to subsystem headers as names and ownership become clearer."
+  ],
+  "naming_conventions": [
+    "Use all-caps macro names for toolchain abstraction helpers: SECTION_INIT, AT_ADDRESS, UNK_SIZE_ARRAY.",
+    "Use ASID_MAX as the end-of-common-action sentinel for ftCommonAction and initialize character-specific action enums from it.",
+    "Use Dolphin-style subsystem header names for GX public declarations, e.g. GXDisplayList.h, GXPixel.h, GXTransform.h, GXInit.h.",
+    "Keep internal GX names with double-underscore prefixes when already internal, e.g. __GXInitGX and __GX_unknown_001.h.",
+    "Use named FILE fields from the MSL layout such as open_mode, file_orientation, buffer_ptr, read_proc, write_proc, and next_file_struct instead of placeholder unk/filler fields when evidence supports the layout."
+  ],
+  "assembly_or_matching_tactics": [
+    "Changed asm function declarations from generic unk_t/no-argument forms to concrete signatures for GXInit, __GXInitGX, and GXSetFieldMode while leaving assembly bodies intact.",
+    "Used SECTION_INIT to keep functions and linker-provided objects in the .init section for MWERKS matching builds without breaking M2CTX parsing.",
+    "Used AT_ADDRESS for fixed hardware/register symbols such as __AIRegs and Pad3Button so fixed-address semantics remain available without raw extension syntax.",
+    "Added exact includes in GXInit.c and ftparts.c so prototypes come from headers instead of local or unknown declarations.",
+    "Removed address comments from GX_unknown_001.h declarations; these comments may have been useful as breadcrumbs, but the diff's purpose was syntax/context cleanliness rather than preserving address annotations in that header."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "r-burns",
+      "state": "APPROVED",
+      "submitted_at": "2023-01-13T07:46:09Z",
+      "body": ""
+    },
+    {
+      "note": "No inline review comments or issue comments were present in the provided PR slice; reviewer rationale is not evidenced beyond approval."
+    }
+  ],
+  "searchable_terms": [
+    "Fix context syntax",
+    "cherry-picked from #670",
+    "M2CTX",
+    "m2ctx",
+    "SECTION_INIT",
+    "__declspec(section \".init\")",
+    "AT_ADDRESS",
+    "FIXEDADDR",
+    "UNK_SIZE_ARRAY",
+    "MWERKS",
+    "__MWERKS__",
+    "PERMUTER",
+    "Runtime/platform.h",
+    "Runtime/__mem.h",
+    "MetroTRK/mem_TRK.h",
+    "Runtime/__init_cpp_exceptions.c",
+    "dolphin/os/init/__start.h",
+    "Pad3Button",
+    "PAD3_BUTTON_ADDR",
+    "__AIRegs",
+    "0xCC006C00",
+    "stdio.h",
+    "FILE",
+    "__file_modes",
+    "wchar_io",
+    "fwide",
+    "GX_unknown_001.h",
+    "GXDisplayList.h",
+    "GXPixel.h",
+    "GXTransform.h",
+    "GXInit",
+    "__GXInitGX",
+    "GXSetFieldMode",
+    "GXSetScissorBoxOffset",
+    "ASID_MAX",
+    "AS_FTCOMMON",
+    "ftCommonAction",
+    "ftCaptainAction",
+    "ftFoxAction",
+    "ftGameWatchAction",
+    "ftLuigiAction",
+    "ftMarioAction",
+    "ftMewtwoAction",
+    "ftNessAction",
+    "lbunknown_001.h",
+    "ftparts.c"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that replace common_structs.h or complete the todo to delete it.",
+    "Search for remaining raw `__declspec(section \".init\")` declarations not converted to SECTION_INIT.",
+    "Search for remaining raw MWERKS address declarations using `: 0x` or `: SOME_ADDR` instead of AT_ADDRESS.",
+    "Audit other fighter action enums for AS_FTCOMMON or hard-coded 340 after ASID_MAX was introduced.",
+    "Find subsequent GX header cleanup that moves declarations out of GX_unknown_001.h into subsystem headers.",
+    "Look for uses of UNK_SIZE_ARRAY introduced by this PR to understand the intended unknown-size array pattern."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

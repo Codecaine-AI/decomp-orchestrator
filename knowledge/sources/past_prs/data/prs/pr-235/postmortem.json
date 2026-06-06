@@ -1,0 +1,158 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-235",
+  "pr": {
+    "number": 235,
+    "title": "Match `MSL/math`",
+    "url": "https://github.com/doldecomp/melee/pull/235",
+    "state": "MERGED",
+    "author": "FluentCoding",
+    "created_at": "2022-01-04T23:50:44Z",
+    "merged_at": "2022-08-23T19:52:06Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched much of the MSL math area by replacing asm object references for math_1 and trigf with source-side implementations, adding an MSL math header, and moving frexp/fabsf plus trigonometric symbols into src/MSL. The final diff removes asm/MSL/math_1.s and asm/MSL/trigf.s from the object list, adds src/MSL/math_1.c and expands src/MSL/trigf.c. The trigf work retains high-level NON_MATCHING C for cosf/sinf while using inline asm in the matching build path, so the evidence supports a hybrid decomp/matching step rather than fully cleaned C for every trig function. The PR also includes small newline-only asm cleanups in GX files and an added errors.log/build log file.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "naming",
+      "build-system",
+      "cleanup"
+    ],
+    "systems": [
+      "MSL",
+      "MSL/math",
+      "MSL/trigf",
+      "asm",
+      "dolphin/gx",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "src/MSL/trigf.c",
+    "src/MSL/math_1.c",
+    "src/MSL/math.h",
+    "obj_files.mk",
+    "asm/MSL/trigf.s",
+    "asm/MSL/math_1.s",
+    "errors.log",
+    "asm/dolphin/gx/GXInit.s",
+    "asm/dolphin/gx/GXStubs.s"
+  ],
+  "what_changed": [
+    "Deleted asm/MSL/math_1.s and added src/MSL/math_1.c containing frexp and fabsf__Ff.",
+    "Deleted asm/MSL/trigf.s from standalone asm and expanded src/MSL/trigf.c with trig constants, tables, cosf/sinf handling, __sinit_trigf_c-related data, NON_MATCHING high-level C, and matching inline asm fallback.",
+    "Added src/MSL/math.h with include guard MSL_MATH_H, bit-access macros __HI and __LO, and declarations for frexp, fabsf__Ff, tanf, cos__Ff, sin__Ff, cosf, sinf, __sinit_trigf_c, and func_803265A8.",
+    "Updated obj_files.mk to build $(BUILD_DIR)/src/MSL/math_1.c.o instead of asm/MSL/math_1.s.o and removed asm/MSL/trigf.s.o while keeping src/MSL/trigf.c.o.",
+    "Added src/MSL/trigf.c include of <MSL/math.h>.",
+    "Added constants and symbols such as tmp_float, lbl_80400770, lbl_80400774, __four_over_pi_m1, __two_over_pi, lbl_804DE19C, __SQRT_FLT_EPSILON__, and lbl_804DE1A8.",
+    "Made newline-at-end-of-file cleanup changes in asm/dolphin/gx/GXInit.s and asm/dolphin/gx/GXStubs.s.",
+    "Added errors.log containing a local build log with NON_MATCHING=0, GENERATE_MAP=1, EPILOGUE_PROCESS=1, and build OK output."
+  ],
+  "smart_moves": [
+    "Moved object linkage in obj_files.mk at the same time as deleting asm files, which made the source-side math_1/trigf work participate in the normal build instead of leaving stale asm objects linked.",
+    "Introduced a dedicated MSL math header so shared math symbols and prototypes could be included explicitly by source files instead of relying on ad hoc declarations.",
+    "For frexp, used __HI and __LO macros to express the original double bit manipulation directly in C, preserving the exponent/significand behavior visible in the deleted assembly.",
+    "Kept trig polynomial/range-reduction constants as named source symbols, making the cosf/sinf implementation more searchable than raw lbl_ addresses alone.",
+    "Preserved matching behavior for difficult trig functions with inline asm while keeping NON_MATCHING C documentation/attempts nearby, which can be useful when an exact high-level match is not yet ready."
+  ],
+  "decomp_lessons": [
+    "When decompiling library math routines, bit-level macros like __HI(x) and __LO(x) can be necessary to match fdlibm/MSL-style implementations such as frexp.",
+    "Source migration is not complete until obj_files.mk is switched from asm objects to src objects; otherwise the new C may compile but not be linked into the target object set.",
+    "For difficult float math, preserve exact constants and FPU operation order. The trigf code relies on range reduction constants, polynomial tables, fctiwz-style integer conversion behavior, and fmadds/fnmadds sequences.",
+    "A practical intermediate state is to keep NON_MATCHING readable C and a matching inline asm body under #else, but future work should not mistake that for a fully matched high-level C decomp.",
+    "Use explicit project include paths for shared headers. Review specifically requested replacing a local relative include like \"./math.h\" with an explicit MSL path.",
+    "Committing generated build logs such as errors.log may help show build context but is usually noisy for decomp history; this PR contains one, but the context does not show reviewer discussion about it."
+  ],
+  "naming_conventions": [
+    "Header guard used: MSL_MATH_H.",
+    "Project include style preferred by review: use an explicit MSL path such as <MSL/math.h> or \"MSL/math.h\" instead of \"./math.h\".",
+    "MSL C++-mangled wrapper-style symbols were kept where present: fabsf__Ff, cos__Ff, sin__Ff.",
+    "Known or inferred math constants were given semantic names where possible: __four_over_pi_m1, __two_over_pi, __SQRT_FLT_EPSILON__, __sincos_poly, __sincos_on_quadrant.",
+    "Some raw lbl_ names remained for data whose semantics were not fully renamed: lbl_80400770, lbl_80400774, lbl_804DE19C, lbl_804DE1A8, lbl_804DE190.",
+    "Unmatched or not-yet-understood function name func_803265A8 remained in the header and PR checklist rather than being guessed."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted standalone asm files only after moving equivalent symbols into src/MSL and updating obj_files.mk.",
+    "Used inline asm inside src/MSL/trigf.c for the matching build path while placing high-level C under #ifdef NON_MATCHING.",
+    "Preserved PowerPC floating-point details in trig routines, including fctiwz conversion, paired stack stores/loads for integer extraction, fmadds/fnmadds polynomial evaluation, and exact quadrant indexing.",
+    "Used the 0x43300000/0x80000000 double conversion constant represented as lbl_804DE1A8 to reproduce int-to-float conversion behavior.",
+    "Used __HI/__LO double word access in frexp to match exponent and mantissa manipulation, including subnormal scaling by lbl_804DE190 and exponent adjustment by -54.",
+    "Retained exact data layout symbols for constants/tables so relocations and sdata2/data placement could continue to match."
+  ],
+  "review_feedback": [
+    {
+      "author": "PsiLupan",
+      "file": "src/MSL/math.c",
+      "feedback": "Fix the include to be the explicit path: \"MSL/math.h\" instead of \"./math.h\"."
+    },
+    {
+      "author": "FluentCoding",
+      "file": "src/MSL/math.c",
+      "feedback": "Marked the include-path review item done in commit ed6194cefb838f1ef1b3ca7e05e1973bcdfce662."
+    },
+    {
+      "author": "EpochFlame",
+      "feedback": "Noted that PR #241 accomplished most of the labeling."
+    },
+    {
+      "author": "ribbanya",
+      "feedback": "Noted that merge conflicts were resolved in FluentCoding#2."
+    }
+  ],
+  "searchable_terms": [
+    "PR235",
+    "Match MSL/math",
+    "MSL math",
+    "MSL trigf",
+    "src/MSL/trigf.c",
+    "src/MSL/math_1.c",
+    "src/MSL/math.h",
+    "asm/MSL/trigf.s",
+    "asm/MSL/math_1.s",
+    "obj_files.mk",
+    "frexp",
+    "fabsf__Ff",
+    "cosf",
+    "sinf",
+    "tanf",
+    "cos__Ff",
+    "sin__Ff",
+    "__sinit_trigf_c",
+    "func_803265A8",
+    "__HI",
+    "__LO",
+    "__four_over_pi_m1",
+    "__two_over_pi",
+    "__SQRT_FLT_EPSILON__",
+    "__sincos_poly",
+    "__sincos_on_quadrant",
+    "lbl_804DE190",
+    "lbl_804DE19C",
+    "lbl_804DE1A8",
+    "tmp_float",
+    "NON_MATCHING",
+    "inline asm",
+    "explicit include path",
+    "MSL/math.h"
+  ],
+  "follow_up_queries": [
+    "Check whether func_803265A8 was later matched and whether its declaration/name changed after PR #235.",
+    "Search PR #241 for labeling work related to MSL/math constants and trig functions.",
+    "Audit whether errors.log remained in the repository or was later removed as generated build noise.",
+    "Find later PRs that replace the inline asm cosf/sinf bodies in src/MSL/trigf.c with fully matching high-level C.",
+    "Verify whether raw lbl_80400770/lbl_80400774/lbl_804DE19C/lbl_804DE1A8 names received semantic names in later MSL math cleanup."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

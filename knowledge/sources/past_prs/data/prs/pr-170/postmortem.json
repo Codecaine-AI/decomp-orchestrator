@@ -1,0 +1,138 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-170",
+  "pr": {
+    "number": 170,
+    "title": "Match HSD_RObjGetByType, RObjUpdateFunc, and HSD_RObjAnimAll",
+    "url": "https://github.com/doldecomp/melee/pull/170",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-10T23:59:59Z",
+    "merged_at": "2021-12-11T00:00:09Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched three SysDolphin baselib RObj routines by moving HSD_RObjGetByType, the static RObjUpdateFunc callback, and HSD_RObjAnimAll out of assembly into src/sysdolphin/baselib/robj.c. The PR also renamed callsites from func_8037AEA8/func_8037AF58 to the recovered HSD_* names, added robj.o to the Epilogue build list, exposed HSD_RObjGetByType in robj.h, and corrected FObjData from a struct to a union so the animation callback could access the same argument as float/int/vector data.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "function-rename",
+      "headers",
+      "types-structs",
+      "build-list"
+    ],
+    "systems": [
+      "sysdolphin/baselib",
+      "robj",
+      "jobj",
+      "wobj",
+      "lb",
+      "include",
+      "asm"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/robj.c",
+    "asm/sysdolphin/baselib/robj.s",
+    "src/sysdolphin/baselib/robj.h",
+    "src/sysdolphin/baselib/fobj.h",
+    "include/functions.h",
+    "e_files.mk",
+    "asm/sysdolphin/baselib/jobj.s",
+    "asm/sysdolphin/baselib/wobj.s",
+    "asm/melee/lb/code_8000B074.s"
+  ],
+  "what_changed": [
+    "Removed the assembly bodies for func_8037AEA8 and func_8037AF58 from asm/sysdolphin/baselib/robj.s after replacing them with C implementations.",
+    "Implemented HSD_RObjGetByType in robj.c. It walks an HSD_RObj linked list, checks the high flag bit indicating a typed RObj, compares flags masked by TYPE_MASK against the requested type, and optionally checks the low 28-bit subtype when subtype is nonzero.",
+    "Implemented static RObjUpdateFunc in robj.c as an HSD_AObjInterpretAnim callback. It ignores NULL objects and non-TYPE_ROBJ updates, casts the object to HSD_RObj, then sets or clears the high flag bit based on whether val.fv is at least the external double constant lbl_804DE6A0, commented as 1.75.",
+    "Added inline HSD_RObjAnim as a thin NULL-guarded wrapper around HSD_AObjInterpretAnim(robj->aobj, robj, RObjUpdateFunc).",
+    "Implemented HSD_RObjAnimAll to iterate the RObj linked list and call HSD_RObjAnim for every entry, with an early return on NULL.",
+    "Renamed assembly callsites in jobj.s, wobj.s, and lb/code_8000B074.s from func_8037AEA8 to HSD_RObjGetByType and from func_8037AF58 to HSD_RObjAnimAll.",
+    "Updated include/functions.h comment placeholders to use HSD_RObjGetByType and HSD_RObjAnimAll instead of raw func_* names.",
+    "Added HSD_RObjGetByType prototype to src/sysdolphin/baselib/robj.h and included fobj.h there for FObjData used by the callback implementation.",
+    "Changed HSD_FObjData from a struct typedef to a union typedef in fobj.h, matching the callback use where the same value storage is read as val.fv, val.iv, or val.p.",
+    "Added src/sysdolphin/baselib/robj.o to EPILOGUE_UNSCHEDULED in e_files.mk."
+  ],
+  "smart_moves": [
+    "Recovered semantic HSD names and immediately propagated them through existing assembly callsites, making future decompilation around JObj/WObj animation and RObj lookup easier to read.",
+    "Matched the assembly’s boolean-looking high-bit test in HSD_RObjGetByType with an explicit BOOL has_type temporary rather than over-simplifying; this likely helped preserve compiler control flow.",
+    "Used a static callback for RObjUpdateFunc because it is an implementation detail passed to HSD_AObjInterpretAnim rather than an exported API.",
+    "Introduced the FObjData union type correction to support the animation callback signature cleanly; reading val.fv is evidence that FObjData represents overlapping typed payloads, not independent struct fields.",
+    "Kept HSD_RObjAnim inline while exposing only HSD_RObjAnimAll and HSD_RObjGetByType, reflecting the apparent API boundary from the matched assembly and callsites.",
+    "Moved robj.o into the Epilogue object list alongside neighboring baselib objects such as fobj.o and wobj.o, ensuring the new C translation unit participates in the matching build."
+  ],
+  "decomp_lessons": [
+    "When matching animation callbacks, verify whether payload structs are actually unions; callback parameters like FObjData may be interpreted as float, int, or vector depending on animation channel type.",
+    "For baselib linked-list helpers, preserving explicit NULL early returns and simple for-loop traversal can match compact assembly patterns.",
+    "Do not rename only the function definition: update remaining asm callsites and global placeholder comments so the codebase consistently uses recovered names.",
+    "High-bit flag tests may need to be represented as explicit boolean temporaries to match generated branches even when the logic could be simplified in idiomatic C.",
+    "External floating-point constants such as lbl_804DE6A0 may need to remain extern labels until better symbol names or constant ownership are known.",
+    "Small decomp PRs can combine function matching with required header/type/build-list fixes; the type/header changes are part of the match, not incidental cleanup."
+  ],
+  "naming_conventions": [
+    "Recovered HSD_RObjGetByType for former func_8037AEA8, following the HSD_RObj* baselib naming style.",
+    "Recovered HSD_RObjAnimAll for former func_8037AF58, matching neighboring animation traversal APIs such as HSD_JObjAnimAll.",
+    "Named the static animation callback RObjUpdateFunc, consistent with its local role and PR title.",
+    "Used HSD_RObj, HSD_FObjData/FObjData, TYPE_MASK, and TYPE_ROBJ names rather than address-based labels where available.",
+    "Left unresolved data symbol lbl_804DE6A0 as an extern const f64 with a comment noting its value as 1.75, avoiding an unsupported semantic name."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted 87 lines of matched RObj assembly only after adding equivalent C in robj.c.",
+    "HSD_RObjGetByType mirrors the assembly: NULL check, linked-list loop, high-bit flag test, TYPE_MASK comparison, optional subtype comparison against flags & 0x0FFFFFFF, and NULL return on no match.",
+    "RObjUpdateFunc mirrors the assembly early exits for NULL obj and type != TYPE_ROBJ, then uses a floating-point compare against lbl_804DE6A0 to set bit 0x80000000 or clear it with mask 0x7fffffff.",
+    "HSD_RObjAnimAll mirrors the assembly loop that loads each RObj aobj and calls HSD_AObjInterpretAnim with the update callback before advancing through next.",
+    "Assembly callsite renames preserve branch targets and instruction encodings while replacing raw labels with recovered function names for better cross-reference quality.",
+    "The fobj.h struct-to-union change is a matching tactic: it allows FObjData val to be passed by value and accessed as val.fv in the callback without inventing separate argument types."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR170",
+    "PsiLupan",
+    "HSD_RObjGetByType",
+    "RObjUpdateFunc",
+    "HSD_RObjAnimAll",
+    "HSD_RObjAnim",
+    "func_8037AEA8",
+    "func_8037AF58",
+    "robj.c",
+    "robj.s",
+    "robj.h",
+    "fobj.h",
+    "FObjData",
+    "HSD_FObjData",
+    "union _HSD_FObjData",
+    "TYPE_MASK",
+    "TYPE_ROBJ",
+    "0x80000000",
+    "0x7fffffff",
+    "0x0FFFFFFF",
+    "lbl_804DE6A0",
+    "1.75",
+    "HSD_AObjInterpretAnim",
+    "HSD_JObjAnim",
+    "HSD_JObjAnimAll",
+    "wobj.s",
+    "jobj.s",
+    "e_files.mk",
+    "EPILOGUE_UNSCHEDULED",
+    "baselib RObj animation",
+    "RObj linked list lookup"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename lbl_804DE6A0 or replace the 1.75 constant with a symbolic name.",
+    "Search for follow-up work that exposes HSD_RObjAnim in robj.h or keeps it inline/static only.",
+    "Check later changes to FObjData/HSD_FObjData to confirm the union layout and callback signature were retained.",
+    "Find subsequent PRs decompiling func_8037AFC0 and neighboring RObj functions after this PR removed func_8037AEA8 and func_8037AF58 from assembly.",
+    "Search for additional callsites of HSD_RObjGetByType using type constants 0x10000000, 0x20000000, or 0x40000000 to recover RObj type/subtype names."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

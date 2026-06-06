@@ -1,0 +1,152 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1439",
+  "pr": {
+    "number": 1439,
+    "title": "Finish match of sysdolphin's tev",
+    "url": "https://github.com/doldecomp/melee/pull/1439",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-08-30T20:37:57Z",
+    "merged_at": "2024-08-30T20:42:38Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Finished matching sysdolphin/baselib/tev.c enough to delete the 1311-line asm/sysdolphin/baselib/tev.s fallback and switch tev.c from NonMatching to Matching in the build. The substantive C work implemented HSD_SetupChannel with GX channel color/control caching behavior, added small color comparison/copy helpers, adjusted HSD_SetupTevStageAll loop structure, and tightened HSD_Chan field types in state.h to GX enum types.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "build-configuration",
+      "graphics-state"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "tev",
+      "GX",
+      "state"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "asm/sysdolphin/baselib/tev.s",
+      "role": "Deleted matched assembly fallback for sysdolphin baselib TEV."
+    },
+    {
+      "path": "src/sysdolphin/baselib/tev.c",
+      "role": "Implemented remaining matching C, especially HSD_SetupChannel, helpers, and HSD_SetupTevStageAll cleanup."
+    },
+    {
+      "path": "src/sysdolphin/baselib/state.h",
+      "role": "Changed HSD_Chan fields from generic integer types to GXChannelID, GXColorSrc, GXLightID, GXDiffuseFn, and GXAttnFn."
+    },
+    {
+      "path": "configure.py",
+      "role": "Changed sysdolphin/baselib/tev.c from NonMatching to Matching."
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "Swapped object list from asm/sysdolphin/baselib/tev.s.o to src/sysdolphin/baselib/tev.c.o."
+    }
+  ],
+  "what_changed": [
+    "Removed asm/sysdolphin/baselib/tev.s, a 1311-line assembly fallback for tev.c.",
+    "Marked Object(Matching, \"sysdolphin/baselib/tev.c\") in configure.py instead of Object(NonMatching, ...).",
+    "Updated obj_files.mk so the build links src/sysdolphin/baselib/tev.c.o instead of asm/sysdolphin/baselib/tev.s.o.",
+    "Implemented HSD_SetupChannel in C, replacing NOT_IMPLEMENTED with logic for null/GX_COLOR_NULL early return, channel index calculation, ambient/material color updates, GXSetChanAmbColor, GXSetChanMatColor, GXSetChanCtrl, and prev_ch cache updates.",
+    "Added static helpers CompareRGB, CompareRGBA, CopyRGB, setAmbColor, and setMatColor in tev.c.",
+    "Changed HSD_SetupTevStageAll from a while loop mutating desc and using var_r31/temp_r3 names to a for loop over a separate HSD_TevDesc* td and int num/tmp variables.",
+    "Retyped HSD_Chan fields in state.h: chan became GXChannelID, amb_src/mat_src became GXColorSrc, light_mask became GXLightID, diff_fn became GXDiffuseFn, and attn_fn became GXAttnFn."
+  ],
+  "smart_moves": [
+    "Factored color word comparisons into CompareRGB and CompareRGBA, mirroring the assembly behavior that compared full RGBA or masked off alpha with 0xFFFFFF00.",
+    "Used CopyRGB to preserve the destination alpha byte while copying only RGB bits, matching the assembly pattern that kept low 8 bits and updated upper 24 bits.",
+    "Wrapped GXSetChanAmbColor and GXSetChanMatColor in setAmbColor/setMatColor helpers taking GXColor by value and then passing a local pointer, a likely stack-shape/control-flow matching tactic for these GX APIs.",
+    "Preserved state-cache semantics around prev_amb_invalid, prev_mat_invalid, prev_ch, and combined COLOR0A0/COLOR1A1 channel mirroring instead of blindly issuing GX calls.",
+    "Used explicit goto labels set_amb and set_mat to share the GX call path and match branch structure without duplicating calls.",
+    "Kept HSD_SetupTevStageAll logically identical while changing iteration shape and variable lifetimes to match: separate td cursor, max stage count in num, then GXSetNumTevStages and current_tev reset."
+  ],
+  "decomp_lessons": [
+    "For GX color structs, exact matching may require treating GXColor as a u32 and masking bytes rather than comparing fields one by one.",
+    "When the original code caches hardware state, reproduce both the visible GX calls and the cache updates; omitting cache mirroring can alter later branch behavior and matching.",
+    "Typed headers can help matching and readability: replacing u32/s32 placeholders in structs with GX enum typedefs documents API intent without changing layout.",
+    "Small helper functions can be necessary to recover stack temporaries and call signatures when SDK functions expect pointers to by-value local data.",
+    "Loop cursor choice matters for matching: using a separate iterator variable instead of mutating the parameter can change register allocation enough to match.",
+    "When a file becomes fully matched, remember all build-system transitions: delete the asm fallback, update obj_files.mk, and change configure.py from NonMatching to Matching."
+  ],
+  "naming_conventions": [
+    "New static helper names use concise behavior names: CompareRGB, CompareRGBA, CopyRGB.",
+    "Local labels in HSD_SetupChannel use action-oriented names set_amb and set_mat.",
+    "HSD_SetupTevStageAll replaced decomp scratch names var_r31 and temp_r3 with semantic locals num, td, and tmp.",
+    "Header fields use GX SDK type names where available: GXChannelID, GXColorSrc, GXLightID, GXDiffuseFn, GXAttnFn."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted the asm fallback only after marking tev.c Matching and updating the object list to compile C instead of assembly.",
+    "Used u32 pointer casts on GXColor to generate word-level XOR/equality operations matching the assembly's packed color comparisons.",
+    "Used the mask 0xFFFFFF00 to compare/copy RGB while preserving alpha, corresponding to assembly bit operations such as clrrwi/rlwimi behavior shown in the deleted tev.s.",
+    "Used small non-inline-looking wrappers around GXSetChanAmbColor and GXSetChanMatColor to force a local GXColor pointer argument pattern.",
+    "Used gotos to converge multiple condition branches onto one GX setter call site.",
+    "Adjusted HSD_SetupTevStageAll loop form to a for loop with a separate cursor, which is a common register-allocation matching lever."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1439",
+    "PsiLupan",
+    "Finish match of sysdolphin's tev",
+    "sysdolphin",
+    "baselib",
+    "tev.c",
+    "tev.s",
+    "state.h",
+    "HSD_SetupChannel",
+    "HSD_SetupTevStageAll",
+    "HSD_RenderInitAllocData",
+    "HSD_RenderGetAllocData",
+    "HSD_TevRegGetAllocData",
+    "HSD_ChanGetAllocData",
+    "CompareRGB",
+    "CompareRGBA",
+    "CopyRGB",
+    "setAmbColor",
+    "setMatColor",
+    "GXSetChanAmbColor",
+    "GXSetChanMatColor",
+    "GXSetChanCtrl",
+    "GXSetNumTevStages",
+    "GX_COLOR_NULL",
+    "GX_COLOR0A0",
+    "GX_COLOR1A1",
+    "GX_COLOR0",
+    "GX_COLOR1",
+    "GX_SRC_REG",
+    "GX_DISABLE",
+    "GXChannelID",
+    "GXColorSrc",
+    "GXLightID",
+    "GXDiffuseFn",
+    "GXAttnFn",
+    "prev_ch",
+    "prev_amb_invalid",
+    "prev_mat_invalid",
+    "current_tev",
+    "NonMatching to Matching",
+    "asm removal"
+  ],
+  "follow_up_queries": [
+    "Find other PRs that use u32 casts on GXColor for RGB/RGBA comparison matching.",
+    "Find other sysdolphin baselib files switched from asm fallback to src C object in obj_files.mk.",
+    "Search for HSD_SetupChannel cache semantics around prev_ch, prev_amb_invalid, and prev_mat_invalid.",
+    "Look for other matching fixes where SDK enum typedefs in headers improved decomp output."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

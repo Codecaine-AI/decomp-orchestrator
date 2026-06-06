@@ -1,0 +1,158 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-723",
+  "pr": {
+    "number": 723,
+    "title": "migrate `lbcollision` to C",
+    "url": "https://github.com/doldecomp/melee/pull/723",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-26T05:27:12Z",
+    "merged_at": "2023-01-26T05:43:58Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Migrated the large lb collision translation unit from raw asm into src/melee/lb/lbcollision.c, mostly by wrapping existing assembly in MWERKS_GEKKO inline asm while beginning selective C recovery. The PR explicitly scoped itself as a migration, not a full matching pass: the author wrote, \"I started matching it but just migration is enough for this PR.\" It added lbcollision.c to obj_files.mk, moved/expanded hitbox-related declarations into lbcollision.h, introduced a shared HitVictim type, and cleaned up several duplicate or local extern declarations exposed by the migration.",
+  "change_classification": {
+    "primary_type": "asm-to-C migration",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "inline-asm-migration",
+      "struct-layout",
+      "prototype-cleanup"
+    ],
+    "systems": [
+      "melee/lb",
+      "lbcollision",
+      "hitbox",
+      "hurtbox",
+      "item",
+      "fighter",
+      "MSL",
+      "dolphin/gx",
+      "sysdolphin/baselib",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/lbcollision.c",
+    "asm/melee/lb/lbcollision.s",
+    "src/melee/lb/lbcollision.h",
+    "obj_files.mk",
+    "src/melee/it/types.h",
+    "src/melee/it/forward.h",
+    "src/melee/lb/forward.h",
+    "src/melee/lb/lbaudio_ax.h",
+    "src/MSL/string.c",
+    "src/MSL/string.h",
+    "src/dolphin/gx/GXDisplayList.h",
+    "src/sysdolphin/baselib/jobj.h",
+    "src/sysdolphin/baselib/tev.h",
+    "src/melee/ft/code_8007C114.c",
+    "src/melee/ft/code_8007C630.c"
+  ],
+  "what_changed": [
+    "Added a new 5970-line src/melee/lb/lbcollision.c and removed nearly all contents of asm/melee/lb/lbcollision.s, moving the lbcollision code into the C source tree.",
+    "Added $(BUILD_DIR)/src/melee/lb/lbcollision.c.o to TEXT_O_FILES in obj_files.mk while the asm lbcollision object entry remains present in the surrounding build list.",
+    "Implemented func_80005BB0 in C using Hitbox fields sfx_kind and sfx_severity and the lbl_803B9880 sound-effect lookup table, calling func_80024184 with the special case for sfx_kind 0xD and severity 2.",
+    "Implemented func_8000ACFC in C as a HitVictim log membership check over hitbox->victims_1 using ARRAY_SIZE, returning true when the victim entity is present.",
+    "Preserved most migrated functions as inline asm blocks under #ifdef MWERKS_GEKKO with #pragma push/#pragma pop and clang-format off comments, including functions such as func_80005C44, func_80005EBC, func_80005FC0, func_80006094, func_800067F8, func_80006E58, func_800077A0, func_80007BCC, func_80007ECC, func_8000805C, func_80008248, func_80008440, func_80009F54, func_8000A044, and others.",
+    "Moved the item-specific itHitVictim layout into a shared lb-level HitVictim struct with fields HSD_GObj* entity and s32 iframes, then changed itHit.x74_tipLog and itHit.xD4_damageLog to use HitVictim.",
+    "Expanded struct Hitbox in lbcollision.h with more explicit offsets: x1C, a union exposing byte x43 and x43 bitfields, x44/x45, x4C, x58/x5C/x60/x64, and victims_1/victims_2 arrays at 0x74 and 0xD4.",
+    "Added HitVictim to src/melee/lb/forward.h and removed itHitVictim from src/melee/it/forward.h.",
+    "Added func_80024184 to lbaudio_ax.h and removed local extern declarations for lbcollision functions from fighter source files once header prototypes covered them.",
+    "Adjusted prototypes in lbcollision.h, including HSD_JObjUnkMtxPtr from void* to void, func_80008248 from s32 to bool with a bool first argument, func_8000ACFC from Fighter* to UNK_T, func_80007AFC from bool to void, and func_80008428 to take Hitbox*.",
+    "Removed duplicate declarations in GXDisplayList.h and tev.h.",
+    "Changed MSL string strncpy/strcpy declarations and definitions from __restrict to ATTRIBUTE_RESTRICT."
+  ],
+  "smart_moves": [
+    "Kept the PR scope narrow: instead of forcing a full match of a very large collision module, it first made lbcollision build as a C translation unit with inline asm, creating a better base for incremental matching.",
+    "Recovered small, tractable routines in C during migration: func_80005BB0 exposes the sfx_kind/sfx_severity table access, and func_8000ACFC exposes the HitVictim victim-log scan.",
+    "Used MWERKS_GEKKO-gated inline asm and #pragma push/#pragma pop around migrated assembly, which preserves compiler-specific assembly without pretending the code is portable C.",
+    "Promoted HitVictim to the lb collision layer rather than keeping a duplicate item-local itHitVictim, making fighter/item collision logs share one type.",
+    "Converted opaque padding in Hitbox into named fields only where offsets were evidenced by the migrated code, while leaving unknown regions as padding instead of over-naming them.",
+    "Centralized prototypes in headers and removed stale local externs from fighter files, reducing drift between call sites and the newly migrated translation unit."
+  ],
+  "decomp_lessons": [
+    "Large asm modules can be migrated before they are fully matched; preserving inline asm in a C file can unblock type/header work and make future matching smaller and more searchable.",
+    "When a migration reveals the same struct layout in multiple subsystems, prefer a shared forward-declared type in the owning library layer; here HitVictim belongs with lb collision, not item-only types.",
+    "Keep offset comments and padding in partially understood structs. The Hitbox changes show a useful pattern: introduce known fields at fixed offsets while retaining byte arrays for still-unknown spans.",
+    "Header cleanup is part of migration work: adding real prototypes often allows local externs and duplicate declarations to be removed elsewhere.",
+    "Inline asm migrations may require constants to be materialized as C globals with the same lbl_ names and exact f32/f64 types to preserve references from asm blocks.",
+    "Use compiler abstraction macros such as ATTRIBUTE_RESTRICT instead of raw __restrict when moving code across contexts that may be sensitive to compiler dialect."
+  ],
+  "naming_conventions": [
+    "Preserved unknown function names in address form, e.g. func_80005BB0, func_80005C44, func_80007BCC, func_8000ACFC.",
+    "Preserved label-style data names such as lbl_803B9880, lbl_804D79F0, lbl_804D7A00, and lbl_804D7A10 where semantic names were not yet established.",
+    "Named the shared victim-log type HitVictim, with fields entity and iframes, replacing the item-local itHitVictim name.",
+    "Used Hitbox fields sfx_kind and sfx_severity in the newly C-coded sound-effect helper.",
+    "Kept unknown Hitbox members in offset form such as x1C, x43, x4C, x58, x5C, x60, x64, victims_1, and victims_2 rather than inventing semantics."
+  ],
+  "assembly_or_matching_tactics": [
+    "Migrated raw .s code into inline asm functions guarded by #ifdef MWERKS_GEKKO.",
+    "Wrapped inline asm regions with #pragma push/#pragma pop and nofralloc, preserving original prolog/epilog behavior where needed.",
+    "Used clang-format off comments around inline asm blocks to avoid formatting churn.",
+    "Lifted small leaf/utility routines to C first while leaving complex geometry, hitbox, hurtbox, GX drawing, and JObj-related routines in asm.",
+    "Declared C constants for asm-referenced floating-point labels, including 1e-5, -1e-5, 0, 1, 0.5, 2, 3, 4, M_PI, 5, and related lbl_804D7Axx symbols.",
+    "Retained address-label function names and labels inside inline asm, enabling later one-function-at-a-time matching."
+  ],
+  "review_feedback": [
+    "One review by r-burns approved the PR; the review body was empty.",
+    "No issue comments or review comments were present in the provided slice.",
+    "The author explicitly noted that matching had started but the accepted scope was migration only: \"I started matching it but just migration is enough for this PR.\""
+  ],
+  "searchable_terms": [
+    "pr-723",
+    "migrate lbcollision to C",
+    "lbcollision.c",
+    "lbcollision.s",
+    "Hitbox",
+    "Hurtbox",
+    "HitVictim",
+    "itHitVictim",
+    "victims_1",
+    "victims_2",
+    "x74_tipLog",
+    "xD4_damageLog",
+    "func_80005BB0",
+    "func_8000ACFC",
+    "func_80005C44",
+    "func_80005EBC",
+    "func_80005FC0",
+    "func_80006094",
+    "func_800067F8",
+    "func_80007AFC",
+    "func_80007B78",
+    "func_80007BCC",
+    "func_80007ECC",
+    "func_8000805C",
+    "func_80008248",
+    "func_80008440",
+    "func_800089B8",
+    "func_80008FC8",
+    "func_800096B4",
+    "HSD_JObjUnkMtxPtr",
+    "func_80024184",
+    "lbl_803B9880",
+    "ATTRIBUTE_RESTRICT",
+    "MWERKS_GEKKO",
+    "inline asm migration",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that match individual functions migrated in PR 723 from inline asm to C.",
+    "Search for later renames of HitVictim fields entity and iframes or Hitbox victims_1/victims_2.",
+    "Check whether HSD_JObjUnkMtxPtr was later moved out of lbcollision or given a more accurate prototype.",
+    "Search for later cleanup of lbl_803B9880 and func_80005BB0 sound-effect semantics.",
+    "Find follow-up changes replacing lbcollision.h placeholder/UNK_T usage with concrete fighter/item types."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

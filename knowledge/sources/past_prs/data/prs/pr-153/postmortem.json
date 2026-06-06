@@ -1,0 +1,150 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-153",
+  "pr": {
+    "number": 153,
+    "title": "Postprocess epilogues with frank.py.",
+    "url": "https://github.com/doldecomp/melee/pull/153",
+    "state": "MERGED",
+    "author": "RevoSucks",
+    "created_at": "2021-12-05T22:06:49Z",
+    "merged_at": "2021-12-05T22:06:53Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added an opt-in Makefile path for fixing functions with problematic compiler-generated epilogues by compiling selected files with a profiling MWCC executable and then postprocessing the profile object with tools/frank.py to splice corrected code bytes into the normal object. The first tracked target was src/melee/lb/lblanguage.o, allowing removal of the local scheduling-off pragma around func_8000ADF4. This was a tooling/build-system workaround rather than a direct source decomp change.",
+  "change_classification": {
+    "primary_type": "tooling",
+    "categories": [
+      "tooling",
+      "build-system",
+      "matching-workaround",
+      "object-postprocessing"
+    ],
+    "systems": [
+      "repo-root",
+      "tooling",
+      "Makefile",
+      "lb",
+      "lblanguage"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "tools/frank.py",
+      "role": "New object-file postprocessor that compares a vanilla object and a profile-built object, strips profile-only bytes, replaces the code region, and restores branch-to-link-register byte sequences where needed."
+    },
+    {
+      "path": "Makefile",
+      "role": "Introduced EPILOGUE_PROCESS build toggle, EPILOGUE_DIR, MWCC_EPI_VERSION/MWCC_EPI_EXE, CC_EPI, frank.py invocation, and extra object-file rules for epilogue-processed C/C++ files."
+    },
+    {
+      "path": "e_files.mk",
+      "role": "New list of files with unscheduled epilogues; initially contains $(EPILOGUE_DIR)/src/melee/lb/lblanguage.o."
+    },
+    {
+      "path": "src/melee/lb/lblanguage.c",
+      "role": "Removed scheduling pragmas around func_8000ADF4 after moving the epilogue fix into the build/postprocess path."
+    },
+    {
+      "path": ".gitignore",
+      "role": "Ignored the generated epilogue/ directory."
+    }
+  ],
+  "what_changed": [
+    "Added tools/frank.py, an 81-line Python script described in its comment as taking vanilla.o, profile.o, and output.o inputs.",
+    "frank.py reads vanilla and profile object bytes, removes the profile byte sequence 48 00 00 01 60 00 00 00, detects an end-of-code marker, asserts matching end-of-code offsets, splices profile code bytes from offset 0x34 to the detected end-of-code into the vanilla object, and writes the target object.",
+    "frank.py includes explicit byte lists for end-of-code markers and conditional branch-to-link-register encodings, then restores missing branch encodings from the vanilla object when counts differ.",
+    "Makefile added EPILOGUE_PROCESS := 1 as an 'Overkill epilogue fixup strategy' toggle.",
+    "When EPILOGUE_PROCESS is enabled, the build defines EPILOGUE_DIR := epilogue/$(TARGET), includes e_files.mk, defines E_FILES := $(EPILOGUE_UNSCHEDULED), creates EPI_DIRS, and makes $(ELF) depend on both $(O_FILES) and $(E_FILES).",
+    "Makefile added MWCC_EPI_VERSION := 1.0 and MWCC_EPI_EXE := mwcceppc_profile.exe, while changing MWCC_LD_VERSION from 1.1 to 1.2.5.",
+    "Makefile added CC_EPI pointing at tools/mwcc_compiler/$(MWCC_EPI_VERSION)/$(MWCC_EPI_EXE), and FRANK := tools/frank.py.",
+    "Added pattern rules for $(EPILOGUE_DIR)/%.o from %.c, %.cp, and %.cpp that first compile with CC_EPI, then run python3 tools/frank.py with the normal build object as both vanilla input and final target and the epilogue object as the profile input.",
+    "Added e_files.mk with EPILOGUE_UNSCHEDULED listing only $(EPILOGUE_DIR)/src/melee/lb/lblanguage.o.",
+    "Removed '#pragma scheduling off' and '#pragma scheduling on' around func_8000ADF4 in src/melee/lb/lblanguage.c.",
+    "Added epilogue/ to .gitignore as an generated 'Epilogue hack folder'."
+  ],
+  "smart_moves": [
+    "Kept the workaround opt-in through EPILOGUE_PROCESS, making the unusual epilogue fixup path explicit and easy to disable.",
+    "Isolated files requiring this treatment in e_files.mk rather than applying the profile compiler/postprocessor globally.",
+    "Preserved the ordinary object-file build as the vanilla baseline, then used the profile object only as a source of corrected code bytes.",
+    "Had frank.py assert that the detected end-of-code offset matches between vanilla and stripped profile objects, reducing the risk of silently corrupting unrelated object sections.",
+    "Handled conditional branch-to-link-register and branch-to-link-register byte patterns after splicing, which directly targets the class of epilogue/return-instruction mismatch implied by the PR title.",
+    "Moved a source-level scheduling pragma workaround out of lblanguage.c and into a centralized build/postprocess mechanism."
+  ],
+  "decomp_lessons": [
+    "For files that otherwise match except for unscheduled or incorrect epilogues, a targeted object postprocess can be less invasive than leaving source pragmas in individual functions.",
+    "Keep exceptional compiler/profile hacks enumerated in a separate makefile variable so future contributors can audit exactly which objects depend on the workaround.",
+    "When mixing outputs from two compiler variants, validate structural assumptions such as code-region boundaries before writing the final object.",
+    "Generated alternate object directories should be ignored explicitly; here epilogue/ was added to .gitignore.",
+    "A matching workaround can involve preserving the normal object layout while replacing only the known code-byte range from another compiler output."
+  ],
+  "naming_conventions": [
+    "EPILOGUE_PROCESS is used as a Makefile feature toggle for the workaround.",
+    "EPILOGUE_DIR names the generated alternate object directory under epilogue/$(TARGET).",
+    "EPILOGUE_UNSCHEDULED in e_files.mk lists objects requiring this epilogue-processing path.",
+    "E_FILES is the Makefile aggregate for epilogue-processed objects.",
+    "CC_EPI names the profiling MWCC compiler executable used for the alternate object build.",
+    "MWCC_EPI_VERSION and MWCC_EPI_EXE distinguish the epilogue/profile compiler from the normal compiler and linker versions.",
+    "FRANK names the tools/frank.py postprocessor in the Makefile."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use a profiling compiler executable, mwcceppc_profile.exe from MWCC version 1.0, to produce an alternate object for files with epilogue scheduling problems.",
+    "Strip a known profile-only byte sequence before comparing/splicing profile object bytes.",
+    "Detect end-of-code with byte signatures including 4E 80 00 20 02 and 48 00 00 01 02.",
+    "Replace the vanilla object bytes in the code range from offset 0x34 to the detected end-of-code with the stripped profile object's bytes.",
+    "Restore conditional branch-to-link-register encodings from the vanilla object if the final object has fewer occurrences than the vanilla object.",
+    "Restore remaining 4E 80 00 20 branch-to-link-register instructions from the vanilla object when needed.",
+    "For func_8000ADF4 in lblanguage.c, the build-level epilogue postprocess replaced the previous '#pragma scheduling off/on' source workaround."
+  ],
+  "review_feedback": [
+    {
+      "type": "none_recorded",
+      "detail": "The PR context includes no issue comments, review comments, reviews, or PR body text, so there is no explicit reviewer rationale or requested change to extract."
+    }
+  ],
+  "searchable_terms": [
+    "PR153",
+    "frank.py",
+    "Postprocess epilogues",
+    "EPILOGUE_PROCESS",
+    "EPILOGUE_DIR",
+    "EPILOGUE_UNSCHEDULED",
+    "E_FILES",
+    "CC_EPI",
+    "MWCC_EPI_VERSION",
+    "MWCC_EPI_EXE",
+    "mwcceppc_profile.exe",
+    "MWCC_LD_VERSION 1.2.5",
+    "e_files.mk",
+    "epilogue/$(TARGET)",
+    "tools/frank.py",
+    "object postprocess",
+    "unscheduled epilogues",
+    "conditional branch to link register",
+    "branch to link register",
+    "CBLR_BYTES",
+    "EOC_BYTES",
+    "func_8000ADF4",
+    "src/melee/lb/lblanguage.c",
+    "lblanguage.o",
+    "pragma scheduling off",
+    "pragma scheduling on",
+    "epilogue hack folder"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching tools/frank.py or EPILOGUE_PROCESS to see whether the workaround was retained, generalized, or removed.",
+    "Search e_files.mk history for additional EPILOGUE_UNSCHEDULED objects added after lblanguage.o.",
+    "Search for remaining '#pragma scheduling off' usages to identify candidates for the same epilogue postprocess tactic.",
+    "Check build documentation for required mwcceppc_profile.exe availability and MWCC 1.0 setup.",
+    "Investigate why MWCC_LD_VERSION changed from 1.1 to 1.2.5 in the same PR, since the diff does not explain that linker-version change."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

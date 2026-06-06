@@ -1,0 +1,149 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-606",
+  "pr": {
+    "number": 606,
+    "title": "Misc MetroTRK labeling",
+    "url": "https://github.com/doldecomp/melee/pull/606",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-12-10T09:55:21Z",
+    "merged_at": "2022-12-10T10:15:42Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large assembly-only MetroTRK labeling pass that replaced many address-style lbl_/func_ names with sourced debug-map names. The PR mainly clarified leftover MetroTRK debugger code by consistently naming globals, state blocks, communication tables, exception/step status variables, memory maps, and one function, while also removing some unnecessary .global exports on local jump-table labels. Author said the names came from the Zoids VS debug map and that most functions were exact matches; evidence also notes this TRK code was likely leftover debugging tooling with known matching issues and low decomp priority.",
+  "change_classification": {
+    "primary_type": "naming",
+    "categories": [
+      "asm-labeling",
+      "decomp-matching-support",
+      "symbol-recovery",
+      "cleanup"
+    ],
+    "systems": [
+      "MetroTRK",
+      "Runtime",
+      "asm"
+    ]
+  },
+  "key_files": [
+    "asm/MetroTRK/targimpl.s",
+    "asm/MetroTRK/dolphin_trk.s",
+    "asm/MetroTRK/dolphin_trk_glue.s",
+    "asm/MetroTRK/msgbuf.s",
+    "asm/MetroTRK/nubinit.s",
+    "asm/MetroTRK/msghndlr.s",
+    "asm/MetroTRK/mpc_7xx_603e.s",
+    "asm/MetroTRK/main_TRK.s",
+    "asm/MetroTRK/mainloop.s",
+    "asm/Runtime/NMWException.s",
+    "asm/Runtime/runtime.s",
+    "asm/init.s"
+  ],
+  "what_changed": [
+    "Renamed the MetroTRK CPU-state storage from lbl_804A4C98 to gTRKCPUState across InitMetroTRK, TRKTargetTranslate, TRKSaveExtended1Block, TRKRestoreExtended1Block, targimpl routines, and data declarations.",
+    "Renamed core MetroTRK globals including gTRKState, gTRKBigEndian, gTRKInputPendingPtr, gTRKFramingState, gTRKRestoreFlags, gTRKExceptionStatus, gTRKStepStatus, TRK_mainError, TRKvalue128_temp, and gTRKMemMap.",
+    "Renamed communication/vector data globals such as lbl_80400878 to TRK_ISR_OFFSETS and lbl_804008B8 to gDBCommTable, then updated all assembly references to the new names.",
+    "Renamed func_8032905C to TRKValidMemory32 in targimpl.s and updated nearby calls to use that symbol.",
+    "Cleaned msghndlr.s by removing .global directives from several local branch-table targets such as lbl_80327F5C through lbl_80327F84 and lbl_80328158 through lbl_80328180.",
+    "Touched Runtime and init assembly files as part of the same cross-file label propagation for MetroTRK-related symbols."
+  ],
+  "smart_moves": [
+    "Used an external debug-map source rather than guessing names; the author explicitly cited the Zoids VS debug map and noted most functions were exact matches.",
+    "Applied names consistently at both use sites and data definitions, avoiding mixed old lbl_ names and new semantic names for the same address.",
+    "Labeled data by behavior observed in surrounding code: gDBCommTable is accessed as a function-pointer table for Init, EnableInterrupts, Poll, ReadUARTN, WriteUARTN, ReserveEXI2Port, and UnreserveEXI2Port; gTRKBigEndian is checked by buffer append/read helpers.",
+    "Kept the work scoped to symbol labeling and assembly cleanup instead of attempting a risky C decompilation of MetroTRK code that the author described as unnecessary and hard to match.",
+    "Removed exported status from internal switch/jump targets in msghndlr.s, reducing symbol noise without changing instructions."
+  ],
+  "decomp_lessons": [
+    "For vendor/debugger subsystems like MetroTRK, external maps from closely related titles can provide high-confidence names even when the code is not an immediate decompilation target.",
+    "A labeling PR can still materially improve future matching work by turning anonymous address labels into meaningful state, table, and helper names across all assembly references.",
+    "When a subsystem is leftover debug infrastructure and not needed for gameplay decompilation, naming and documentation may be a better return-on-effort than forcing C matches.",
+    "Global data names should be propagated everywhere the address is loaded with @h/@ha/@l relocations; partial renames make later grep-driven analysis harder.",
+    "Do not mark local branch-table labels as .global unless they are real exported symbols; excessive global labels pollute symbol search and can imply false APIs."
+  ],
+  "naming_conventions": [
+    "MetroTRK globals use gTRK-prefixed camel/Pascal-style names, for example gTRKCPUState, gTRKState, gTRKBigEndian, gTRKInputPendingPtr, gTRKExceptionStatus, and gTRKStepStatus.",
+    "Non-TRK debugger communication global uses gDB prefix: gDBCommTable.",
+    "Constant/table-like data can use uppercase underscore style when the map name indicates a table, as with TRK_ISR_OFFSETS.",
+    "Function names preserve MetroTRK-style TRK prefixes, for example InitMetroTRK, TRKInitializeTarget, TRKSaveExtended1Block, TRKRestoreExtended1Block, and TRKValidMemory32.",
+    "Some sourced names are awkward, such as TRKvalue128_temp and TRK_mainError; reviewer questioned the naming quality, but author explained the names came from a debug map."
+  ],
+  "assembly_or_matching_tactics": [
+    "Mass label replacement in .s files updated lis/addi/ori relocation operands such as lbl_804A4C98@h/@l to gTRKCPUState@h/@l and lbl_804008B8@ha/@l to gDBCommTable@ha/@l.",
+    "Data labels were renamed in their .data or .bss declarations as well as all code references, preserving addresses and instruction bytes.",
+    "A function symbol was promoted from func_8032905C to TRKValidMemory32, then branch-and-link call sites were updated to the named target.",
+    "The PR treated matching knowledge from a related debug map as symbol evidence, not as a reason to rewrite code.",
+    "Local jump-table entries in msghndlr.s were left as labels but no longer exported with .global."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "ribbanya",
+      "state": "COMMENTED",
+      "feedback": "Asked: \"This is really horrible naming, where is it from?\""
+    },
+    {
+      "author": "r-burns",
+      "response": "Explained that names were taken from the Zoids VS debug map, most functions were exact matches, and MetroTRK was likely leftover debug tooling with matching issues and low need to decompile."
+    },
+    {
+      "reviewer": "ribbanya",
+      "state": "APPROVED",
+      "feedback": "Approved after the explanation; no inline review comments were present in the slice."
+    }
+  ],
+  "searchable_terms": [
+    "MetroTRK",
+    "TRK",
+    "Zoids VS debug map",
+    "debug map names",
+    "asm labeling",
+    "gTRKCPUState",
+    "gTRKState",
+    "gTRKBigEndian",
+    "gTRKInputPendingPtr",
+    "gTRKFramingState",
+    "gTRKRestoreFlags",
+    "gTRKExceptionStatus",
+    "gTRKStepStatus",
+    "gTRKMemMap",
+    "gDBCommTable",
+    "TRK_ISR_OFFSETS",
+    "TRKvalue128_temp",
+    "TRK_mainError",
+    "TRKValidMemory32",
+    "InitMetroTRK",
+    "TRKInitializeTarget",
+    "TRKSaveExtended1Block",
+    "TRKRestoreExtended1Block",
+    "TRKNubMainLoop",
+    "TRKInitializeEndian",
+    "TRKAppendBuffer1_ui16",
+    "TRKAppendBuffer1_ui32",
+    "TRKAppendBuffer1_ui64",
+    "TRKReadBuffer1_ui16",
+    "TRKReadBuffer1_ui32",
+    "TRKReadBuffer1_ui64",
+    "targimpl.s",
+    "dolphin_trk.s",
+    "dolphin_trk_glue.s",
+    "msgbuf.s",
+    "nubinit.s",
+    "msghndlr.s"
+  ],
+  "follow_up_queries": [
+    "Search later PRs for C decompilation or header struct definitions for gTRKCPUState, gTRKState, gTRKExceptionStatus, and gTRKStepStatus.",
+    "Check whether later MetroTRK work reused Zoids VS debug map names or revised awkward map-derived names like TRKvalue128_temp and TRK_mainError.",
+    "Look for follow-up cleanup of remaining lbl_ symbols in asm/MetroTRK/targimpl.s and msghndlr.s.",
+    "Verify whether gDBCommTable and TRK_ISR_OFFSETS were eventually modeled as C structs/arrays."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,160 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-960",
+  "pr": {
+    "number": 960,
+    "title": "Match grtemblem",
+    "url": "https://github.com/doldecomp/melee/pull/960",
+    "state": "MERGED",
+    "author": "ndhaba",
+    "created_at": "2023-08-09T05:57:35Z",
+    "merged_at": "2023-08-09T06:24:55Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Temple Emblem stage file by replacing asm/melee/gr/grtemblem.s with src/melee/gr/grtemblem.c and adding a matching grtemblem.h. The PR moved grtemblem from assembly to C in obj_files.mk, reconstructed its StageCallbacks and StageData, and implemented the stage init, object creation, animation, update, and collision/helper callbacks using existing ground, anime, display, zako generator, lb, OSReport, and HSD GObj APIs.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "stage-data",
+      "callbacks"
+    ],
+    "systems": [
+      "stage",
+      "ground",
+      "asm",
+      "build-system",
+      "headers"
+    ]
+  },
+  "key_files": [
+    "asm/melee/gr/grtemblem.s",
+    "src/melee/gr/grtemblem.c",
+    "src/melee/gr/grtemblem.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted the 282-line assembly implementation at asm/melee/gr/grtemblem.s.",
+    "Added a 174-line C implementation at src/melee/gr/grtemblem.c.",
+    "Added src/melee/gr/grtemblem.h with static prototypes for all local grTRoy_* functions used by the file.",
+    "Updated obj_files.mk so grtemblem builds from $(BUILD_DIR)/src/melee/gr/grtemblem.c.o instead of $(BUILD_DIR)/asm/melee/gr/grtemblem.s.o.",
+    "Recreated grTFe_803E97C0 as a StageCallbacks table with callback groups for three stage gobj IDs, including the bitfield value expressed as (1 << 30) | (1 << 31).",
+    "Recreated grTFe_803E981C as a StageData object with stage ID 64, data file path \"/GrTFe.dat\", init/load/exit callbacks, item/position callbacks, and final flag value 1.",
+    "Implemented stage startup grTRoy_802243F8 by setting stage_info.unk8C.b4 to 0 and b5 to 1, spawning gobj IDs 0, 1, and 2 through grTRoy_80224498, then calling Ground_801C39C0, Ground_801C3BB4, Ground_801C4210, and Ground_801C42AC.",
+    "Implemented grTRoy_80224498 as the shared stage gobj setup helper: fetch Ground_801C14D0(gobj_id), clear Ground x8_callback and xC_callback, call GObj_SetupGXLink with grDisplay_801C5DB0, install callback3 into x1C_callback when present, run callback0 when present, and install callback2 as an HSD_GObjProc_8038FD54 process when present.",
+    "Preserved the failure path in grTRoy_80224498 by calling OSReport with \"%s:%d: couldn t get gobj(id=%d)\\n\", file name \"grtemblem.c\", line 0xC3, and the gobj ID.",
+    "Implemented animation setup callbacks using grAnime_801C8138 and Ground map_id from gobj->user_data or GET_GROUND(gobj).",
+    "Implemented the two similar map-object callbacks grTRoy_802245BC and grTRoy_8022464C using Ground_801C2ED0(gobj->hsd_obj, gp->map_id) followed by grAnime_801C8138(gobj, gp->map_id, false), with MUST_MATCH-only dummy stack padding.",
+    "Implemented simple stubs and boolean callbacks that return false or true according to the deleted assembly: several no-op callbacks, false-returning update checks, grTRoy_802246C8 returning false, and grTRoy_802246D0 returning true.",
+    "Implemented grTRoy_8022446C to call grZakoGenerator_801CAE04(0), grTRoy_80224614 to call lb_800115F4 then Ground_801C2FE0, and grTRoy_802246A4 to call Ground_801C2FE0."
+  ],
+  "smart_moves": [
+    "Used existing project stage abstractions, especially StageCallbacks and StageData, instead of keeping raw .4byte data tables from assembly.",
+    "Translated stage_info byte bit manipulation into named bitfield assignments stage_info.unk8C.b4 and stage_info.unk8C.b5, making the intent clearer while matching the emitted code.",
+    "Centralized object setup behavior in grTRoy_80224498 and indexed directly into grTFe_803E97C0 by gobj_id, mirroring the assembly table stride while keeping the C idiom simple.",
+    "Preserved nullable callback behavior exactly: callback3 is installed only when non-null, callback0 is invoked only when non-null, and callback2 is scheduled only when non-null.",
+    "Retained the original diagnostic string and source-line value for the OSReport failure path, which is often required for matching data/string layout.",
+    "Used MUST_MATCH-only local padding arrays in functions where the stack frame needed to match without changing normal semantics.",
+    "Expressed the 0xC0000000 callback flag as (1 << 30) | (1 << 31), documenting the bit composition while keeping the same value."
+  ],
+  "decomp_lessons": [
+    "For stage files, the asm data section often maps cleanly to StageCallbacks arrays plus a StageData initializer; reconstructing those tables first helps drive function signatures.",
+    "Ground gobj setup code commonly follows a reusable pattern: obtain the gobj by ID, access Ground via user_data, clear callbacks, set up GX link with grDisplay_801C5DB0, then attach table-driven callbacks/processes.",
+    "Bitfield accesses on stage_info can replace rlwimi/lbz/stb sequences when the relevant struct fields are known.",
+    "Preserving OSReport strings, file names, and line numbers can matter for matching, especially when those strings were embedded after stage data.",
+    "MUST_MATCH dummy stack padding can be isolated behind preprocessor guards to satisfy stack layout without affecting non-matching builds.",
+    "Repeated stage object callback bodies can often identify a shared stage pattern: call Ground_801C2ED0 on gobj->hsd_obj with Ground map_id, then start grAnime_801C8138 with the same map_id.",
+    "Even trivial no-op and constant-return callbacks should be declared and implemented with signatures matching their StageData or StageCallbacks slots, because callback table typing drives data layout."
+  ],
+  "naming_conventions": [
+    "The matched file keeps address-based symbol names with the existing stage prefix grTRoy_* even though the file is grtemblem.c and data symbols are grTFe_*.",
+    "Stage data symbols use the existing address-suffixed naming convention: grTFe_803E97C0 for the callback table and grTFe_803E981C for the StageData object.",
+    "Local static functions are declared in grtemblem.h with their address-based names and argument types.",
+    "The header guard uses the project-local lowercase form _grtemblem_h_.",
+    "Ground pointer locals use the short project convention gp, and callback-table locals use cb."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed the assembly object from the build only after adding the matching C object in obj_files.mk.",
+    "Translated assembly table data into typed C initializers for StageCallbacks and StageData while preserving ordering, null slots, string path, and flag values.",
+    "Matched stage_info bit writes using named bitfields instead of manual byte masks.",
+    "Used callback null checks to reproduce the branch structure around callback3 assignment, callback0 invocation, and callback2 process creation.",
+    "Kept grTRoy_802245BC and grTRoy_8022464C stack behavior with `#ifdef MUST_MATCH u8 _[8]; #endif`.",
+    "Preserved constant return values from leaf assembly functions as simple C returns: false for several bool callbacks and true for grTRoy_802246D0.",
+    "Kept OSReport arguments equivalent to the assembly, including line constant 0xC3."
+  ],
+  "review_feedback": [
+    "No issue comments or review comments were present in the provided PR context.",
+    "The PR had one review but no review body or feedback excerpt was included, so reviewer intent cannot be inferred."
+  ],
+  "searchable_terms": [
+    "pr-960",
+    "Match grtemblem",
+    "grtemblem",
+    "grtemblem.c",
+    "grtemblem.h",
+    "asm/melee/gr/grtemblem.s",
+    "src/melee/gr/grtemblem.c",
+    "obj_files.mk",
+    "grTRoy_802243F4",
+    "grTRoy_802243F8",
+    "grTRoy_80224468",
+    "grTRoy_8022446C",
+    "grTRoy_80224490",
+    "grTRoy_80224498",
+    "grTRoy_80224580",
+    "grTRoy_802245AC",
+    "grTRoy_802245B4",
+    "grTRoy_802245B8",
+    "grTRoy_802245BC",
+    "grTRoy_8022460C",
+    "grTRoy_80224614",
+    "grTRoy_80224648",
+    "grTRoy_8022464C",
+    "grTRoy_8022469C",
+    "grTRoy_802246A4",
+    "grTRoy_802246C4",
+    "grTRoy_802246C8",
+    "grTRoy_802246D0",
+    "grTFe_803E97C0",
+    "grTFe_803E981C",
+    "StageCallbacks",
+    "StageData",
+    "stage_info.unk8C.b4",
+    "stage_info.unk8C.b5",
+    "Ground_801C14D0",
+    "Ground_801C39C0",
+    "Ground_801C3BB4",
+    "Ground_801C4210",
+    "Ground_801C42AC",
+    "Ground_801C2ED0",
+    "Ground_801C2FE0",
+    "grAnime_801C8138",
+    "grDisplay_801C5DB0",
+    "GObj_SetupGXLink",
+    "HSD_GObjProc_8038FD54",
+    "grZakoGenerator_801CAE04",
+    "lb_800115F4",
+    "OSReport",
+    "GET_GROUND",
+    "MUST_MATCH",
+    "/GrTFe.dat"
+  ],
+  "follow_up_queries": [
+    "Find other trophy/stage files with StageCallbacks tables that can be converted from asm to typed C initializers.",
+    "Search for grTFe_803E97C0 or StageData grTFe_803E981C consumers to confirm naming and linkage expectations.",
+    "Compare grtemblem.c against neighboring matched stage files for common callback helper patterns around Ground_801C14D0 and GObj_SetupGXLink.",
+    "Search for other functions requiring MUST_MATCH dummy stack padding around Ground_801C2ED0 plus grAnime_801C8138.",
+    "Investigate whether grTRoy_* names in grtemblem should eventually receive semantic names once enough related stage code is understood."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

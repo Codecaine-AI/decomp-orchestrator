@@ -1,0 +1,116 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1530",
+  "pr": {
+    "number": 1530,
+    "title": "Merge `mapData` struct into `Ground`",
+    "url": "https://github.com/doldecomp/melee/pull/1530",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2025-05-27T15:25:07Z",
+    "merged_at": "2025-05-27T15:42:50Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Merged the local `mapData` definition in `src/melee/gr/ground.c` into the shared `Ground` struct in `src/melee/gr/types.h`, replacing hard-coded 0x204 allocations with `sizeof(Ground)`, moving known velocity/position fields into named `Vec3` members, and adding a static size assertion. This reduced duplicate layout knowledge for stage ground user data and made the `Ground` type the single source of truth for the 0x204-byte allocation.",
+  "change_classification": {
+    "primary_type": "struct-layout-consolidation",
+    "categories": [
+      "headers",
+      "types-structs",
+      "cleanup",
+      "stage"
+    ],
+    "systems": [
+      "stage",
+      "ground"
+    ]
+  },
+  "key_files": [
+    "src/melee/gr/ground.c",
+    "src/melee/gr/types.h"
+  ],
+  "what_changed": [
+    "Removed the private `typedef struct _mapData` from `ground.c`.",
+    "Changed ground user-data allocations from `HSD_MemAlloc(0x204)` to `HSD_MemAlloc(sizeof(Ground))` in multiple paths, including `alloc_user_data_ground`, `Ground_801C14D0`, and `Ground_801C1A20`.",
+    "Replaced local `mapData*` variables with `Ground*` in `Ground_801C14D0`.",
+    "Renamed/used callback fields through the shared struct: `x8_callback`, `xC_callback`, and `x1C_callback` instead of raw `x8`, `xC`, and `x1C`.",
+    "Collapsed individual initialization of `x20` through `x3C` to a loop over `temp_r3->x20` using `ARRAY_SIZE`.",
+    "Added `#include \"platform.h\"` in `ground.c`, apparently to provide `ARRAY_SIZE` and/or `STATIC_ASSERT` support used by the refactor.",
+    "Expanded `struct Ground` in `types.h` to include fields previously present in `mapData`: `Vec3 self_vel`, `Vec3 cur_pos`, `x58` through `x70`, and adjusted padding before the ground-vars union.",
+    "Changed `struct Ground`'s `x20` region from separate implied integer fields to `int x20[8]`.",
+    "Reduced the `GroundVars` union padding from `0x218 - 0xC4` to `0x204 - 0xC4`, aligning the shared `Ground` size with actual allocations.",
+    "Removed trailing per-stage ground-vars padding arrays that had padded individual `GroundVars_*` structs out to 0x218.",
+    "Added `STATIC_ASSERT(sizeof(struct Ground) == 0x204)` to lock the merged layout size."
+  ],
+  "smart_moves": [
+    "Made `Ground` the canonical type instead of maintaining a duplicate local `mapData` layout in `ground.c`.",
+    "Used `sizeof(Ground)` rather than the literal allocation size `0x204`, reducing future risk when the struct layout changes.",
+    "Added a static size assertion to catch accidental layout drift during future header edits.",
+    "Converted repeated sentinel assignments for contiguous fields into an `ARRAY_SIZE` loop over `x20[8]`, documenting that offsets 0x20 through 0x3C are an array-like region.",
+    "Promoted known coordinate fields into semantic `Vec3 self_vel` and `Vec3 cur_pos` members rather than keeping separate `selfVelX/Y/Z` and `posX/Y/Z` names in a local struct.",
+    "Removed excessive padding from stage-specific `GroundVars_*` structs once the enclosing `Ground` union carried the correct total-size responsibility."
+  ],
+  "decomp_lessons": [
+    "When a local C file struct and a shared header struct describe the same allocation, merge them so offsets, field names, and size assertions live in one place.",
+    "Prefer `sizeof(Type)` for user-data allocation when the type is known; literal sizes like `0x204` should be guarded or eliminated.",
+    "If several adjacent unknown fields are initialized identically and accessed as a contiguous range, representing them as an array can simplify matching and clarify layout intent.",
+    "For nested variant data, keep total-object padding in the enclosing struct or union rather than padding every variant to the full object size.",
+    "Static asserts are valuable for decomp layout refactors because they preserve ABI/offset expectations while allowing field names to improve.",
+    "Replacing scalar XYZ fields with `Vec3` can improve readability without changing layout when offsets and size are preserved."
+  ],
+  "naming_conventions": [
+    "Shared ground user-data type is `Ground`, replacing local `mapData`.",
+    "Callback-like fields use `_callback` suffix: `x8_callback`, `xC_callback`, `x1C_callback`.",
+    "Velocity and position vectors are named `self_vel` and `cur_pos`.",
+    "Ground variant union is named `GroundVars` with member `gv`.",
+    "Stage-specific variant structs keep names such as `grBigBlue_GroundVars`, `grCorneria_GroundVars`, `GroundVars_flatzone`, and `grZebes_GroundVars`.",
+    "Unknown integer array at offsets 0x20-0x3C is represented as `x20[8]` rather than separate `x20`, `x24`, `x28`, etc."
+  ],
+  "assembly_or_matching_tactics": [
+    "Preserved the 0x204 allocation size through `sizeof(Ground)` plus `STATIC_ASSERT(sizeof(struct Ground) == 0x204)`.",
+    "Used `ARRAY_SIZE(temp_r3->x20)` for loop initialization, likely maintaining equivalent initialization while avoiding eight separate assignments.",
+    "The diff does not provide explicit reviewer discussion or before/after match status, so any effect on matching beyond layout preservation is not evidenced."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1530",
+    "mapData",
+    "Ground",
+    "ground.c",
+    "types.h",
+    "stage",
+    "ground user data",
+    "HSD_MemAlloc",
+    "sizeof(Ground)",
+    "STATIC_ASSERT",
+    "ARRAY_SIZE",
+    "x20[8]",
+    "self_vel",
+    "cur_pos",
+    "GroundVars",
+    "x8_callback",
+    "xC_callback",
+    "x1C_callback",
+    "0x204",
+    "0x218",
+    "Vec3",
+    "grKongo_GroundVars",
+    "grCorneria_GroundVars",
+    "GroundVars_flatzone"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or type `Ground::x20` entries beyond the array representation.",
+    "Search for subsequent uses of `self_vel` and `cur_pos` to see whether the vector naming propagated through ground/stage code.",
+    "Check whether any remaining hard-coded `HSD_MemAlloc(0x204)` ground allocations exist after this PR.",
+    "Look for later changes to `GroundVars` union size or `STATIC_ASSERT(sizeof(struct Ground) == 0x204)`."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

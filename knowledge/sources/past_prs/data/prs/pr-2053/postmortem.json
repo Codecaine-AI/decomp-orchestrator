@@ -1,0 +1,138 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2053",
+  "pr": {
+    "number": 2053,
+    "title": "vi: Define CrowdConfig struct and rename Fighter_804D6500",
+    "url": "https://github.com/doldecomp/melee/pull/2053",
+    "state": "MERGED",
+    "author": "itsgrimetime",
+    "created_at": "2025-12-30T17:26:32Z",
+    "merged_at": "2026-01-05T19:35:23Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Renamed the misleading global `Fighter_804D6500` to `gCrowdConfig`, moved its declaration out of the fighter header into `vi1202.h`, and introduced a typed `CrowdConfig` struct for crowd/announcer reaction configuration. The PR replaced many `M2C_FIELD(..., offset)` accesses in `src/melee/vi/vi1202.c` with named fields such as `kb_threshold_low`, `max_gasp_count`, `horiz_margin`, and `blastzone_y_offset`, making the crowd gasp/cheer logic substantially more readable. Review feedback pushed the author away from pointer math and toward creating a proper type, and the final change incorporated evidence from UnclePunch Training Mode map names, `lbAudio_PlayCrowdSFX`, debugger validation, and runtime field behavior.",
+  "change_classification": {
+    "primary_type": "types-structs",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "naming",
+      "types-structs",
+      "readability-cleanup"
+    ],
+    "systems": [
+      "vi",
+      "fighter",
+      "config",
+      "audio-crowd-sfx",
+      "melee-core"
+    ]
+  },
+  "key_files": [
+    "config/GALE01/symbols.txt",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/fighter.h",
+    "src/melee/vi/vi1202.c",
+    "src/melee/vi/vi1202.h"
+  ],
+  "what_changed": [
+    "Updated `config/GALE01/symbols.txt` so `.sbss:0x804D6500` is named `gCrowdConfig` instead of `Fighter_804D6500`.",
+    "Changed the global definition in `src/melee/ft/fighter.c` from `UNK_T Fighter_804D6500 = NULL;` to `CrowdConfig* gCrowdConfig = NULL;`.",
+    "Kept the common-data load source the same, but assigned `pData[21]` into `gCrowdConfig` instead of `Fighter_804D6500`.",
+    "Removed the old `extern UNK_T Fighter_804D6500;` declaration from `src/melee/ft/fighter.h`.",
+    "Added `CrowdConfig` to `src/melee/vi/vi1202.h` with offset-annotated fields for knockback thresholds, angle modifier data, cheer/gasp limits, blast-zone margins, recovery-y thresholds, and proximity thresholds.",
+    "Added `extern CrowdConfig* gCrowdConfig;` to `vi1202.h`, reflecting that this data is used by the vi/crowd-reaction code rather than being fighter-owned data.",
+    "Replaced many raw `M2C_FIELD(Fighter_804D6500, ..., offset)` reads in `vi1202.c` with typed accesses such as `gCrowdConfig->cheer_limit`, `gCrowdConfig->max_gasp_count`, `gCrowdConfig->blastzone_y_offset`, `gCrowdConfig->fighters_near_blastzone`, `gCrowdConfig->horiz_margin`, `gCrowdConfig->kb_threshold_high`, `gCrowdConfig->angle_min`, and `gCrowdConfig->recovery_y_low`.",
+    "Left at least one field partially unresolved as `x24`, showing the struct was improved where evidence existed but not overnamed everywhere."
+  ],
+  "smart_moves": [
+    "The rename corrected a misleading subsystem prefix: reviewers noted the variable was not fighter data, and the final name `gCrowdConfig` matches the vi/crowd SFX usage better than `Fighter_804D6500`.",
+    "The author used a typed struct to eliminate unreadable pointer math, directly addressing review feedback that creating a type is an essential part of decomp work.",
+    "The struct uses explicit offset comments and padding (`pad18[0x20 - 0x18]`) to preserve binary layout while allowing semantic field names.",
+    "The PR grounded the `Crowd` naming in multiple pieces of evidence: UnclePunch Training Mode map names for `CrowdSFXManager_*`, an audio function named `lbAudio_PlayCrowdSFX`, code behavior matching crowd gasps/cheers, and debugger/memory validation.",
+    "The implementation avoided overclaiming on uncertain data by retaining an unresolved field name `x24` rather than inventing a purpose.",
+    "Moving the extern declaration into `vi1202.h` made ownership and use-site locality clearer than keeping the global exposed as fighter data."
+  ],
+  "decomp_lessons": [
+    "When a global loaded from fighter common data is only meaningfully used by another subsystem, do not keep the original address-based `Fighter_*` name if behavior shows a better owner; rename based on use and evidence.",
+    "Replacing `M2C_FIELD` offset reads with an offset-annotated struct is a major readability and decomp-quality improvement, even if some fields remain unknown.",
+    "Fixing argument/global types first and rerunning m2c can produce better code than manually massaging AI-generated or pointer-math-heavy output.",
+    "Runtime validation and external symbol maps can justify semantic names, but the final code should still preserve uncertainty for fields that are not fully understood.",
+    "Header placement matters: declare subsystem-specific globals/types near the subsystem that consumes them instead of in broad unrelated headers.",
+    "For config blobs, document field offsets and behavioral use cases together; this helps future decompers connect thresholds to gameplay/audio effects."
+  ],
+  "naming_conventions": [
+    "Use `g` prefix for global data pointers with semantic subsystem names, as in `gCrowdConfig`.",
+    "Prefer subsystem/behavior names over address-derived names once evidence exists; `Fighter_804D6500` became `gCrowdConfig`.",
+    "Use lower_snake_case field names that describe gameplay/audio thresholds: `kb_threshold_low`, `kb_threshold_mid`, `kb_threshold_high`, `angle_min`, `angle_max`, `angle_mult`, `cheer_limit`, `max_gasp_count`, `horiz_margin`, `recovery_y_high`, `recovery_y_mid`, `recovery_y_low`, `fighters_near_blastzone`, `blastzone_y_offset`.",
+    "Keep unknown fields explicitly unknown, e.g. `x24`, instead of assigning unsupported semantics.",
+    "Use offset comments in structs, e.g. `/* 0x2C */ f32 horiz_margin;`, to make layout verifiable against data offsets."
+  ],
+  "assembly_or_matching_tactics": [
+    "Reviewer suggested fixing the argument/type information first and rerunning through m2c to get better output than manual or Claude-derived pointer-math code.",
+    "Typed `CrowdConfig*` locals such as `CrowdConfig* vdata = gCrowdConfig;` replaced `void* fighter = Fighter_804D6500;`, enabling field accesses while preserving likely matching structure.",
+    "Padding was inserted in the struct to align known fields at their observed offsets, specifically `pad18[0x20 - 0x18]`.",
+    "The diff also normalized some hex casing in decompiled code, e.g. `0xe` to `0xE` and `0x1c` to `0x1C`, though this was incidental compared with the struct typing.",
+    "Offset-to-field mapping was inferred from uses in existing code: knockback category thresholds at `0x00/0x04/0x08`, angle modifier at `0x0C/0x10/0x14`, cheer/gasp limits at `0x20/0x28`, horizontal blast-zone margin at `0x2C`, recovery Y thresholds at `0x30/0x34/0x38`, fighter proximity count at `0x3C`, and bottom blast-zone Y offset at `0x40`."
+  ],
+  "review_feedback": [
+    "Ribbanya questioned stray files `.build_validated` and `orig/GALE01/sys/.gitkeep`; the author explained a precommit hook was not installed in that worktree and intended to prevent recurrence.",
+    "Ribbanya advised that fixing argument types and rerunning m2c should produce better results than Claude/manual output for this kind of code.",
+    "Ribbanya noted the variable was not fighter data but a new or existing type related to `vi`.",
+    "Ribbanya explicitly requested creating a type for `Fighter_804D6500`, saying otherwise the codebase would devolve into unreadable pointer math.",
+    "The author initially suspected blast-zone-related data despite the vi module location, then updated the interpretation toward crowd cheering after further investigation."
+  ],
+  "searchable_terms": [
+    "pr-2053",
+    "CrowdConfig",
+    "gCrowdConfig",
+    "Fighter_804D6500",
+    "vi1202",
+    "src/melee/vi/vi1202.c",
+    "src/melee/vi/vi1202.h",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/fighter.h",
+    "config/GALE01/symbols.txt",
+    "M2C_FIELD",
+    "CrowdSFXManager",
+    "lbAudio_PlayCrowdSFX",
+    "UnclePunch Training Mode map",
+    "crowd gasps",
+    "crowd cheers",
+    "announcer reactions",
+    "kb_threshold_low",
+    "kb_threshold_mid",
+    "kb_threshold_high",
+    "angle_min",
+    "angle_max",
+    "angle_mult",
+    "cheer_limit",
+    "max_gasp_count",
+    "horiz_margin",
+    "recovery_y_high",
+    "recovery_y_mid",
+    "recovery_y_low",
+    "fighters_near_blastzone",
+    "blastzone_y_offset",
+    "blast zone",
+    "m2c type fix",
+    "pointer math cleanup"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename `vi1202` functions around `0x80321900` to `CrowdSFXManager_*` or otherwise confirm the UnclePunch map names.",
+    "Investigate unresolved `CrowdConfig::x24` at offset `0x24` and its relationship to `max_gasp_count` and `data->x1C`.",
+    "Check whether other `Fighter_804D6504/6508/650C` globals are also misattributed common-data pointers that deserve typed names.",
+    "Search for remaining `M2C_FIELD(gCrowdConfig` or old `Fighter_804D6500` references after the merge to confirm the rename was complete.",
+    "Look for later cleanup of `vi1202_UnkStruct` and `un_80321900`/`un_80321A00`/`un_803224DC` names in the crowd SFX manager path."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

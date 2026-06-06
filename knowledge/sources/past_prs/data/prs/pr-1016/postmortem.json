@@ -1,0 +1,138 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1016",
+  "pr": {
+    "number": 1016,
+    "title": "Migrate `ftafterimage` to C",
+    "url": "https://github.com/doldecomp/melee/pull/1016",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-11-19T14:06:12Z",
+    "merged_at": "2023-11-19T14:13:57Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Migrated the fighter afterimage unit from a large raw asm file into a new C translation unit while preserving matching assembly for `ftCo_800C2600` and `ftCo_800C2FD8`. The PR added `src/melee/ft/ftafterimage.c`, updated prototypes and inferred stack/header data, exposed jump tables and labels needed by inline asm, expanded fighter and sword item type layouts around afterimage-related offsets, and added the new C object to `obj_files.mk`. Evidence indicates this was primarily a relocation/matching-enabling migration rather than a full high-level C rewrite: the new C file uses `ASM` functions with `nofralloc` under `MUST_MATCH` and `NOT_IMPLEMENTED` otherwise.",
+  "change_classification": {
+    "primary_type": "asm_to_c_migration",
+    "categories": [
+      "headers",
+      "inline_asm",
+      "matching",
+      "build_system",
+      "type_layout"
+    ],
+    "systems": [
+      "fighter",
+      "afterimage",
+      "item",
+      "GX",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "asm/melee/ft/ftafterimage.s",
+    "src/melee/ft/ftafterimage.c",
+    "src/melee/ft/ftafterimage.h",
+    "src/melee/ft/types.h",
+    "src/melee/it/items/types.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Removed almost all text/sdata2 content from `asm/melee/ft/ftafterimage.s`, leaving the `ftCo_804D3C30` sdata string globalized.",
+    "Added `src/melee/ft/ftafterimage.c` with literals, jump-table definitions, and `ASM` implementations for `ftCo_800C2600(Fighter_GObj* gobj, u32 arg1)` and `ftCo_800C2FD8(Fighter_GObj* gobj)`.",
+    "Moved constants such as `ftCo_804D8C88`, `ftCo_804D8C90`, `ftCo_804D8C98`, `ftCo_804D8CA0`, `ftCo_804D8CA4`, `ftCo_804D8CA8`, `ftCo_804D8CB0`, and `ftCo_804D8CB8` into the C file as typed literals.",
+    "Added generated jump tables `jtbl_803C6C00` and `jtbl_803C6C54` in C, with external label declarations in the header for their branch targets.",
+    "Replaced placeholder `UNK_RET`/`UNK_PARAMS` declarations in `ftafterimage.h` with typed prototypes and an inferred `_m2c_stack_ftCo_800C2600` stack layout.",
+    "Expanded `struct Fighter` around offsets `0x20B0` through `0x20FC`, replacing a filler block with individual `UNK_T` fields and floats `x20F8` and `x20FC`, while retaining `x2100` and the `x2101` union.",
+    "Expanded `struct itSword_UnkBytes` from only `x0` to byte fields `x0` through `x10`, matching byte accesses used by the afterimage code.",
+    "Added `$(BUILD_DIR)/src/melee/ft/ftafterimage.c.o` to `obj_files.mk` while the asm object line still remained present for the leftover sdata symbol."
+  ],
+  "smart_moves": [
+    "Kept the migration match-safe by embedding the original instructions inside `ASM` functions with `nofralloc`, rather than attempting a risky full high-level rewrite in one step.",
+    "Separated data ownership carefully: most literals and jump tables moved into C, but the small remaining `ftCo_804D3C30` sdata string stayed in the asm file and was made global so the C header could reference it.",
+    "Declared generated jump tables and branch labels explicitly, making switch/jump-table dependencies searchable and easier to revisit later.",
+    "Introduced an inferred stack struct for `ftCo_800C2600`, documenting large stack offsets and suspected array/padding regions even though the function body remained inline asm.",
+    "Updated dependent type layouts in both fighter and item headers so future high-level decompilation has named offsets for the afterimage trail positions, timing values, and sword color/byte data.",
+    "Included relevant GX, HSD, vector, item, and intrinsic headers in the new C file, establishing the dependency surface needed for future C conversion."
+  ],
+  "decomp_lessons": [
+    "For large effects/rendering routines, an intermediate C file with inline asm can be valuable: it moves symbols, literals, jump tables, prototypes, and type information into the C ecosystem before the function is fully decompiled.",
+    "When a function uses branch tables, preserve label names and `jtbl_t` declarations explicitly; this keeps jump-table relocation and ordering visible during migration.",
+    "Do not hide struct knowledge in filler if the migrated code repeatedly accesses specific offsets. Even `UNK_T` and byte-field expansion can improve future decomp work by anchoring offsets.",
+    "Large stack frames can be documented with an `_m2c_stack_*` struct to capture inferred locals, padding, and uncertain array regions without overclaiming exact semantics.",
+    "If a leftover asm file only contains data needed by the migrated C unit, make the symbol global and declare it in the header rather than duplicating or guessing data placement.",
+    "A PR can be a useful decomp step even if the new C functions are still `ASM`; the matching report for this slice lists `ftCo_800C2600` and `ftCo_800C2FD8` at 0.00% diff."
+  ],
+  "naming_conventions": [
+    "`ftCo_` prefix was retained for common fighter afterimage functions and literals, e.g. `ftCo_800C2600`, `ftCo_800C2FD8`, and `ftCo_804D8C88`.",
+    "Generated jump tables used `jtbl_` plus address naming, e.g. `jtbl_803C6C00` and `jtbl_803C6C54`.",
+    "Assembly labels migrated to C references used `lbl_` plus address naming, replacing local `.L_` labels from the asm excerpt.",
+    "Inferred stack-local names used `sp` plus hex offset inside `_m2c_stack_ftCo_800C2600`, with comments marking uncertain or inferred regions.",
+    "Unknown struct fields retained offset-based names such as `x20B0`, `x20F8`, `x2100`, and `itSword_UnkBytes::x10` rather than speculative semantic names."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `ASM void` functions with `nofralloc` to preserve the exact original instruction stream in the C translation unit.",
+    "Guarded function bodies with `#if !defined(MUST_MATCH) || defined(WIP)` producing `NOT_IMPLEMENTED`, and the inline asm body under `MUST_MATCH`.",
+    "Disabled formatting around inline asm with `clang-format off` comments to avoid perturbing assembly text.",
+    "Used explicit literal constants and typed float/double declarations to reproduce sdata2 values from the original asm.",
+    "Used `S32_TO_F32` and `U32_TO_F32` constants for integer-to-float conversion double literals.",
+    "Preserved jump-table ordering exactly in `jtbl_t` initializers for two switch-like tables.",
+    "Kept dependency includes for GX state setup calls such as `GXSetColorUpdate`, `GXSetAlphaUpdate`, `GXSetBlendMode`, `GXSetAlphaCompare`, `GXSetZMode`, `GXSetZCompLoc`, `GXSetNumTexGens`, `GXSetTevClampMode`, `GXSetNumTevStages`, `GXSetTevOrder`, `GXSetTevOp`, `GXSetNumChans`, `GXSetChanCtrl`, and `GXSetCullMode`."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The PR merged very quickly on the same day it was created; no explicit reviewer rationale is available in the evidence."
+  ],
+  "searchable_terms": [
+    "pr-1016",
+    "ftafterimage",
+    "Migrate ftafterimage to C",
+    "ftCo_800C2600",
+    "ftCo_800C2FD8",
+    "ftCo_804D3C30",
+    "ftCo_803C6BD8",
+    "ftCo_803C6BF0",
+    "jtbl_803C6C00",
+    "jtbl_803C6C54",
+    "lbl_800C27B4",
+    "lbl_800C27C0",
+    "lbl_800C27C8",
+    "lbl_800C30C0",
+    "lbl_800C30CC",
+    "lbl_800C30D4",
+    "_m2c_stack_ftCo_800C2600",
+    "Fighter x20B0",
+    "Fighter x20F8",
+    "Fighter x20FC",
+    "Fighter x2100",
+    "Fighter x2101",
+    "itSword_UnkBytes",
+    "ASM void",
+    "nofralloc",
+    "MUST_MATCH",
+    "NOT_IMPLEMENTED",
+    "GXSetBlendMode",
+    "GXSetTevOrder",
+    "lbVector_CrossprodNormalized",
+    "lbVector_Angle",
+    "itGetKind",
+    "it_80285300",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that convert `ftCo_800C2600` or `ftCo_800C2FD8` from inline asm to high-level C.",
+    "Search for later renames or semantic typing of Fighter offsets `x20B0` through `x20FC` and flags at `x2100`/`x2101`.",
+    "Search for follow-up work on `itSword_UnkBytes` to determine the meaning of byte fields `x8` through `x10` used by afterimage rendering.",
+    "Check whether `ftCo_804D3C30` eventually moves out of `asm/melee/ft/ftafterimage.s` once the leftover asm data dependency is resolved.",
+    "Compare later jump-table handling for `jtbl_803C6C00` and `jtbl_803C6C54` to see if the switch structure was recovered."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

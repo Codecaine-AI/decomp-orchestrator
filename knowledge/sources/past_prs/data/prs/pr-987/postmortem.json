@@ -1,0 +1,142 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-987",
+  "pr": {
+    "number": 987,
+    "title": "Partially match `ftCo_ThrownKirby`",
+    "url": "https://github.com/doldecomp/melee/pull/987",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-10-12T12:18:16Z",
+    "merged_at": "2023-10-12T12:33:36Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Partially decompiled the common Kirby thrown/copy-star code by replacing most of the ft_08A4 assembly and the older ftCo_ThrownKirbyStar.c object with a new ftCo_ThrownKirby.c translation unit. The generated report shows the new file at 95.36% overall, with many small anim/IASA/coll/phys functions fully matching and the remaining larger entry/transition functions still partial or wrapped in ASM. The PR also tightened related fighter/Kirby headers and motion-var layout so the new C could refer to thrown Kirby state, Kirby special-N helpers, callbacks, accessory scaling, collision boxes, and victim kind fields with more specific types.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "struct-layout",
+      "fighter-motion-state"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "Kirby",
+      "asm",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_ThrownKirby.c",
+    "src/melee/ft/chara/ftCommon/ftCo_ThrownKirbyStar.c",
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/chara/ftCommon/types.h",
+    "src/melee/ft/chara/ftKirby/ftKb_Init.h",
+    "src/melee/ft/chara/ftCommon/ftCo_ThrownKirby.h",
+    "src/melee/ft/chara/ftCommon/ftCo_ThrownCopyStar.h",
+    "obj_files.mk",
+    "src/melee/ft/types.h",
+    "src/melee/ft/chara/ftKirby/types.h"
+  ],
+  "what_changed": [
+    "Added new C implementation file `src/melee/ft/chara/ftCommon/ftCo_ThrownKirby.c` with 1298 lines covering `ftCo_800BD9E0`, `ftCo_800BDA50`, `ftCo_800BDA74`, `ftCo_800BDB58`, `ftCo_800BE000`, `ftCo_800BE494`, `ftCo_800BE6AC`, `ftCo_800BE7C0`, and the `ThrownKirby`, `ThrownKirbyStar`, and `ThrownCopyStar` anim/IASA/phys/coll callbacks.",
+    "Removed 564 lines of corresponding handwritten assembly from `asm/melee/ft/ft_08A4.s` and deleted the old 571-line `src/melee/ft/chara/ftCommon/ftCo_ThrownKirbyStar.c` translation unit.",
+    "Swapped the build object in `obj_files.mk` from `ftCo_ThrownKirbyStar.c.o` to `ftCo_ThrownKirby.c.o` while leaving the remaining `ft_08A4.s.o` in the build.",
+    "Changed the common motion-var member from `thrownkirbystar` to `thrownkirby`, refined fields at fp+234C/fp+2350 to floats, fp+2354 to bool, and wrapped fp+2358 bitfields in a union exposing both raw `x18` and named bits.",
+    "Refined several Kirby special-N prototypes in `ftKb_Init.h`, including typed signatures for `ftKb_SpecialN_800EEEC4`, `ftKb_SpecialN_800F190C`, `ftKb_SpecialN_800F5874`, `ftKb_SpecialN_800F58D8`, `ftKb_SpecialN_800F5A70`, `ftKb_SpecialN_800F5A98`, `ftKb_SpecialN_800F5AB0`, and `ftKb_SpecialN_800F5AC0`.",
+    "Renamed `struct ftKirby_FighterVars` to `struct ftKb_FighterVars` and updated the `Fighter` union member type for Kirby state.",
+    "Moved `ftCo_800BE7C0` out of `ft_08A4.h` and added declarations for the new thrown Kirby/copy-star header files."
+  ],
+  "smart_moves": [
+    "Kept a partial-match strategy instead of forcing full C: the new file uses ordinary C where it matches and preserves hard sections as `ASM void` blocks, allowing the assembly file to shrink without blocking progress on imperfect functions.",
+    "Factored common setup for ThrownKirbyStar and ThrownCopyStar into `inlineB2`, parameterized by motion state, Kirby velocity function, and float getter. This mirrors duplicated assembly while still giving the compiler a chance to produce the required instruction shape.",
+    "Introduced typed function-pointer aliases `KirbyVelocityFunc` and `GetFloatFunc`, making the shared setup helper readable while documenting that the two variants differ by callback-like Kirby helper functions.",
+    "Updated struct field types only where needed by the decomp: floats for scale/timing values, bool for the state flag at fp+2354, and a union for fp+2358 to support both byte-level and bitfield access patterns.",
+    "Recorded uncertainty directly in code comments such as `@todo Which mv is this?`, `@todo Possibly another callback in #inlineB2`, `@todo Unused stack`, and notes about shared code between star collision functions, rather than pretending the reverse engineering was complete.",
+    "Added explicit literal constants for 0, -1, +1, 0.5, 3, and S32_TO_F32 in the new C file, preserving the small-data/literal behavior visible in the removed assembly."
+  ],
+  "decomp_lessons": [
+    "For large common-action files with repeated variants, decompile all related variants together when their control flow shares setup/phys/coll code; here `ThrownKirby`, `ThrownKirbyStar`, and `ThrownCopyStar` were easier to express in one translation unit.",
+    "Partial C with embedded ASM can be a productive intermediate if it removes large contiguous assembly chunks and exposes data layout/header needs for later work.",
+    "When assembly reveals the same byte being accessed as individual bits and as a whole flag byte, model it with a union of raw `u8` plus bitfield struct instead of choosing only one representation.",
+    "Prototype tightening in dependent character headers is often necessary before matching common fighter code; unknown `UNK_RET`/`UNK_PARAMS` signatures can prevent realistic C from expressing helper calls.",
+    "Motion-var names should follow the broader common-action concept, not just the first matched file; renaming `thrownkirbystar` to `thrownkirby` made the storage reusable for copy-star and plain thrown-Kirby callbacks.",
+    "Leave searchable TODOs for suspected inlines, callbacks, and stack artifacts so future matching passes know where the remaining score loss likely lives."
+  ],
+  "naming_conventions": [
+    "Used common-action prefix `ftCo_` for common fighter thrown-Kirby routines.",
+    "Used callback suffixes `Anim`, `IASA`, `Phys`, and `Coll` for action-state handlers such as `ftCo_ThrownCopyStar_Phys` and `ftCo_ThrownKirbyStar_Coll`.",
+    "Renamed common motion vars to `mv.co.thrownkirby` to describe the shared action family instead of the narrower previous `thrownkirbystar` name.",
+    "Aligned Kirby fighter-vars struct naming with the `ftKb` module prefix by changing `ftKirby_FighterVars` to `ftKb_FighterVars`.",
+    "Kept address-based names such as `ftCo_800BE000` and `ftCo_800BE494` where semantic names were not yet established."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed matched functions from `asm/melee/ft/ft_08A4.s` while keeping remaining assembly in the same object list, reducing the assembly island incrementally.",
+    "Used `ASM void` functions in the C file for partially translated routines that still needed exact assembly fragments.",
+    "Used static inline helpers (`inlineA0`, `inlineB0`, `inlineB1`, `inlineB2`, `inlineC0`) to control duplicated code generation and instruction ordering.",
+    "Represented vector speed limiting with `sqrtf(SQ(fp->self_vel.x) + SQ(fp->self_vel.y))`, matching the velocity-magnitude logic visible in the removed assembly.",
+    "Mirrored collision response logic with `lbVector_Mirror`, normal-vector checks, and sign conversion through `normal.x < 0 ? -1 : +1` for the x8 direction field.",
+    "Preserved callback assignments such as `fp->x21F0 = ftCo_800BE7C0`, `fp->take_dmg_cb = ftCo_800BE7C0`, and `fp->accessory4_cb = ftCo_800BE6AC` in the C implementation.",
+    "The report confirms a mixed result: several routines reached 100%, while larger functions like `ftCo_800BE000`, `ftCo_800BDB58`, and `ftCo_800BE6AC` remained partial."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice."
+  ],
+  "searchable_terms": [
+    "pr-987",
+    "ribbanya",
+    "Partially match ftCo_ThrownKirby",
+    "ftCo_ThrownKirby.c",
+    "ftCo_ThrownKirbyStar.c",
+    "ft_08A4.s",
+    "ftCo_800BD9E0",
+    "ftCo_800BDA50",
+    "ftCo_800BDA74",
+    "ftCo_800BDB58",
+    "ftCo_800BE000",
+    "ftCo_800BE494",
+    "ftCo_800BE6AC",
+    "ftCo_800BE7C0",
+    "ftCo_ThrownCopyStar_Anim",
+    "ftCo_ThrownCopyStar_IASA",
+    "ftCo_ThrownCopyStar_Phys",
+    "ftCo_ThrownCopyStar_Coll",
+    "ftCo_ThrownKirbyStar_Anim",
+    "ftCo_ThrownKirbyStar_IASA",
+    "ftCo_ThrownKirbyStar_Phys",
+    "ftCo_ThrownKirbyStar_Coll",
+    "ftCo_ThrownKirby_Anim",
+    "ftCo_ThrownKirby_IASA",
+    "ftCo_ThrownKirby_Phys",
+    "ftCo_ThrownKirby_Coll",
+    "mv.co.thrownkirby",
+    "thrownkirbystar",
+    "ftKb_FighterVars",
+    "ftKb_SpecialN_800F58D8",
+    "ftKb_SpecialN_800F5AB0",
+    "ftKb_SpecialN_800F5AC0",
+    "Fighter_ChangeMotionState",
+    "Fighter_UpdateModelScale",
+    "lbVector_Mirror",
+    "HSD_JObjSetScale",
+    "ftCollisionBox"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match `ftCo_800BE000`, `ftCo_800BDB58`, or `ftCo_800BE6AC` after this partial C landing.",
+    "Search for cleanup of the TODOs in `ftCo_ThrownKirby.c` mentioning possible callbacks, unused stack, and shared collision code.",
+    "Check later struct-layout PRs that rename fields in `mv.co.thrownkirby` from x4/x8/xC/x10/x14/x18 bits to semantic names.",
+    "Look for subsequent PRs that replace embedded `ASM void` blocks in `ftCo_ThrownKirby.c` with fully matching C."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

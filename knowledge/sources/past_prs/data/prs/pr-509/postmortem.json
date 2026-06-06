@@ -1,0 +1,111 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-509",
+  "pr": {
+    "number": 509,
+    "title": "Create `rename_symbols.py`",
+    "url": "https://github.com/doldecomp/melee/pull/509",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2022-08-28T03:17:49Z",
+    "merged_at": "2022-08-28T03:19:48Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added a new tooling script, `tools/rename_symbols.py`, that reads non-local symbols from `expected/build/ssbm.us.1.2/main.elf` and rewrites matching placeholder labels/functions in asm and source files. The script targets `.s`, `.c`, and `.h` files under `asm/` and `src/`, replacing names like `lbl_80000000` or `func_80000000` with symbol names from the ELF `.symtab` when available.",
+  "change_classification": {
+    "primary_type": "tooling",
+    "categories": [
+      "tooling",
+      "naming",
+      "symbol-renaming",
+      "automation"
+    ],
+    "systems": [
+      "tooling",
+      "asm",
+      "src"
+    ]
+  },
+  "key_files": [
+    "tools/rename_symbols.py"
+  ],
+  "what_changed": [
+    "Created `tools/rename_symbols.py` as a new 55-line Python utility.",
+    "The script opens `expected/build/ssbm.us.1.2/main.elf` with `pyelftools` and reads the `.symtab` section.",
+    "It filters out local symbols by excluding symbols whose bind is `STB_LOCAL`.",
+    "It also excludes a small hard-coded set of illegal or unwanted names: `_ctors`, `_dtors`, `_eti_init_info`, and `_SDA_BASE_`.",
+    "It builds an address-to-symbol-name dictionary using each symbol's `st_value` formatted as an 8-digit uppercase hexadecimal string.",
+    "It scans assembly and source targets from `asm/**/*.s`, `src/**/*.c`, and `src/**/*.h`.",
+    "It avoids generated-looking suffix combinations listed as `.s.s`, `.s.c`, and `.c.s` via a suffix filter, though the evidence only shows the exact code and not a review discussion of why.",
+    "It replaces word-boundary matches of `lbl_XXXXXXXX` or `func_XXXXXXXX` with the corresponding ELF symbol name when the address exists in the symbol table.",
+    "It prints each performed replacement in the form `old_name -> new_name` and writes files only when text changes."
+  ],
+  "smart_moves": [
+    "Used the debug ELF as the source of truth instead of hand-maintaining large batches of renames.",
+    "Keyed symbols by address, which matches the existing decomp placeholder naming convention `lbl_XXXXXXXX` and `func_XXXXXXXX`.",
+    "Restricted replacements to placeholder names matching `lbl_` or `func_` plus exactly eight uppercase hex digits, reducing the risk of accidental broader text edits.",
+    "Skipped `STB_LOCAL` symbols, avoiding replacement with local/internal symbol names that may be less useful or potentially conflicting.",
+    "Maintained an explicit denylist for known special symbols that should not become ordinary source/asm names.",
+    "Resolved target file paths before processing and only rewrote files whose contents actually changed."
+  ],
+  "decomp_lessons": [
+    "A small project-local symbol-renaming script can accelerate cleanup after debug symbols or expected ELF symbols become available.",
+    "For decomp projects that encode unknown functions and labels as address-based names, an address-to-symbol map from `.symtab` is a straightforward bridge from placeholders to real names.",
+    "When bulk-renaming identifiers, filter the symbol source and the replacement pattern narrowly; this PR only replaces `lbl_XXXXXXXX` and `func_XXXXXXXX` tokens and excludes local/special symbols.",
+    "Printing each rename gives a lightweight audit trail for bulk automated edits.",
+    "When automation touches both asm and C/header files, prefer a deterministic script in `tools/` so future contributors can rerun or inspect the same transformation."
+  ],
+  "naming_conventions": [
+    "Unknown labels follow the placeholder form `lbl_XXXXXXXX`, where `XXXXXXXX` is an uppercase 8-digit address.",
+    "Unknown functions follow the placeholder form `func_XXXXXXXX`, where `XXXXXXXX` is an uppercase 8-digit address.",
+    "Replacement names are taken directly from ELF symbol names when a non-local, non-denylisted symbol has a matching `st_value` address.",
+    "Special ELF names `_ctors`, `_dtors`, `_eti_init_info`, and `_SDA_BASE_` are treated as illegal replacement names by this script."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `ELFFile` from `pyelftools` to inspect `expected/build/ssbm.us.1.2/main.elf`.",
+    "Read symbols from the ELF `.symtab` section via `get_section_by_name(\".symtab\")` and `iter_symbols()`.",
+    "Filtered symbols with `symbol.entry.st_info.bind != \"STB_LOCAL\"`.",
+    "Computed lookup keys with `f'{symbol.entry.st_value:08X}'` so symbol addresses match the hexadecimal suffix in placeholder names.",
+    "Used the regex `\\b(?:lbl|func)_(?P<addr>[\\dA-F]{8})\\b` to find only address-style placeholder identifiers.",
+    "Applied `re.sub` with a callback so each match could be looked up by address and logged when changed."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "rename_symbols.py",
+    "tools/rename_symbols.py",
+    "pyelftools",
+    "ELFFile",
+    ".symtab",
+    "iter_symbols",
+    "STB_LOCAL",
+    "symbol renaming",
+    "bulk rename",
+    "lbl_XXXXXXXX",
+    "func_XXXXXXXX",
+    "expected/build/ssbm.us.1.2/main.elf",
+    "_ctors",
+    "_dtors",
+    "_eti_init_info",
+    "_SDA_BASE_",
+    "asm glob",
+    "src glob",
+    "address-based placeholder",
+    "ribbanya",
+    "PR 509"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify or replace `tools/rename_symbols.py`.",
+    "Search for use of `rename_symbols.py` in contributor workflows or documentation.",
+    "Check whether later tooling generalizes symbol extraction from `main.elf` or handles lowercase hex placeholders.",
+    "Look for later review feedback around bulk renaming, illegal symbol denylists, or generated file exclusions."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

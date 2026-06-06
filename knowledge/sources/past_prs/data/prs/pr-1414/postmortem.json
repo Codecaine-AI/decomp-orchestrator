@@ -1,0 +1,129 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1414",
+  "pr": {
+    "number": 1414,
+    "title": "Match 65.13% of `ftCo_09F7` (2.32 KB)",
+    "url": "https://github.com/doldecomp/melee/pull/1414",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-08-05T14:33:39Z",
+    "merged_at": "2024-08-05T14:44:09Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Partially decompiled the fighter common file `ftCo_09F7.c`, replacing `NOT_IMPLEMENTED` stubs for `ftCo_8009F834` and `ftCo_800A0098` with C that reached a reported 65.13% file match. The main work reconstructs a large effect-spawning dispatcher keyed by anim/effect IDs, using fighter part joints, random position offsets, floor-normal angles, facing direction, and calls into `efAsync_Spawn`. The PR also tightened nearby prototypes in `ftCo_09F7.h`, `ftCo_0A01`, and `ftCo_0B3E`, exposing `ftCo_800B46B8` and replacing placeholder/unknown signatures with concrete `int`, `Fighter_Part`, and `void` types where needed.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "prototype-cleanup",
+      "effect-dispatch"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "effects"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_09F7.c",
+    "src/melee/ft/chara/ftCommon/ftCo_09F7.h",
+    "src/melee/ft/chara/ftCommon/ftCo_0B3E.c",
+    "src/melee/ft/chara/ftCommon/ftCo_0B3E.h",
+    "src/melee/ft/chara/ftCommon/ftCo_0A01.c",
+    "src/melee/ft/chara/ftCommon/ftCo_0A01.h"
+  ],
+  "what_changed": [
+    "`ftCo_8009F834` was changed from a `NOT_IMPLEMENTED` stub into a large partially matched implementation that dispatches many `arg1` effect/animlist IDs through explicit branch blocks and calls `efAsync_Spawn` with varying effect kinds and argument layouts.",
+    "`ftCo_800A0098` was implemented as a short command sequence calling `ftCo_800B46B8` with IDs `0x80`, `0x81`, `0x8E`, `0x91`, then ending with `ftCo_800B463C(arg0, 0x7F)`.",
+    "`ftCo_8009F834` signature was refined from generic `ftCo_GObj*, int, int, int, int, Vec3*, Vec3*, float` to use `Fighter_GObj*` in the C file and `Fighter_Part` for the part argument in the header.",
+    "`ftCo_09F7.c` gained real dependencies needed by the implementation: `ftCo_0B3E.h`, `ef/efasync.h`, `ft/fighter.h`, `ft/ftparts.h`, `ft/inlines.h`, `ft/types.h`, `<trigf.h>`, and `<baselib/gobj.h>`.",
+    "`ftCo_0B3E.h` changed `ftCo_800B463C` from `void ftCo_800B463C(UNK_T, int)` to `void ftCo_800B463C(int, int)` and added an external prototype for `void ftCo_800B46B8(int, int, int)`.",
+    "`ftCo_0B3E.c` removed local placeholder implementations for `ftCo_800B463C` and `ftCo_800B46B8`, replacing them with decomp placeholder markers `/// #ftCo_800B463C` and `/// #ftCo_800B46B8`.",
+    "`ftCo_800A0C8C` in `ftCo_0A01.c/.h` was tightened from an unknown argument/return style to `void ftCo_800A0C8C(int arg0)`, matching its simple call to `ftCo_800B463C(arg0, 127)`."
+  ],
+  "smart_moves": [
+    "The implementation keeps the m2c-style control flow with `goto block_N` labels rather than prematurely restructuring a large dispatcher, which is a practical tactic for improving match percentage while preserving compiler-shaped branch structure.",
+    "The PR introduced only the concrete headers needed for the newly referenced systems, allowing the C to use real fighter, part, effect, random, and trig APIs instead of relying entirely on placeholder declarations.",
+    "Prototype cleanup was done across caller and callee headers at the same time as the new implementation, reducing mismatch pressure from `UNK_T`, `UNK_PARAMS`, and hidden static placeholder declarations.",
+    "The effect spawn cases reuse existing fighter access patterns such as `gobj->user_data`, `GET_FIGHTER(gobj)->x60C`, `temp_r30->parts[var_r27].joint`, `facing_dir`, and floor collision normals, tying the decomp to known struct fields rather than opaque offsets where possible.",
+    "The code preserves stack temporary ordering and explicit local `spXX` variables, which is often useful for matching functions that pass addresses of stack floats to variadic or vararg-like effect spawning routines."
+  ],
+  "decomp_lessons": [
+    "For large dispatcher functions, an m2c-derived branch skeleton can be a useful intermediate state: even if readability is low, it captures switch/range-test behavior and call-site argument ordering needed for matching.",
+    "When implementing a function that calls previously placeholder-only helpers, update the helper prototypes and headers immediately so future files can reuse the same concrete signatures.",
+    "Effect-spawning code may require preserving stack locals whose addresses are passed to `efAsync_Spawn`; converting them too aggressively into expressions can harm matching or lifetime behavior.",
+    "Floor-aligned visual effects can be recognized through `atan2f(-coll_data.floor.normal.x, coll_data.floor.normal.y)` guarded by `ground_or_air == GA_Ground`.",
+    "Randomized effect positions in this area use the pattern `base += 2.0f * range * (HSD_Randf() - 0.5f)` for each axis before passing the resulting `Vec3` stack address to `efAsync_Spawn`.",
+    "Special sentinel fighter parts are present: the implementation treats `0x8D` via a cycling `x2220_flag` path and `0x8E` via `temp_r30->ft_data->x8->x10`; these should be revisited when those fields/enums are better named.",
+    "The presence of `M2C_ERROR` and `M2C_BITWISE` shows this was not a fully understood/manual cleanup; future work should target these artifacts to improve both match and semantic clarity."
+  ],
+  "naming_conventions": [
+    "Fighter common source files retain address-based names such as `ftCo_09F7.c`, `ftCo_0A01.c`, and `ftCo_0B3E.c`.",
+    "Function names remain address-derived, e.g. `ftCo_8009F834`, `ftCo_800A0098`, `ftCo_800B463C`, and `ftCo_800B46B8`.",
+    "Concrete typedefs/enums are preferred over placeholders when known: `Fighter_GObj`, `ftCo_GObj`, `Fighter_Part`, `Fighter*`, `Vec3*`, `f32`, and `int` replace some `UNK_T`, `UNK_PARAMS`, and raw `int` part usage.",
+    "m2c temporary and block names such as `temp_r30`, `var_r27`, `spA8`, and `block_61` were retained in the partially matched function, indicating this PR prioritized matching over final readability.",
+    "Header comments continue to record function addresses with comments like `/* 09F834 */` and `/* 0B46B8 */`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used an explicit stack-shape helper struct `_m2c_stack_ftCo_8009F834` documenting inferred float slots from `0x7C` through `0xB0`, likely to reason about stack layout even though the function declares separate locals.",
+    "Retained m2c-style `goto` labels and range-test ordering for `arg1` rather than replacing the dispatcher with a semantic switch.",
+    "Preserved suspicious artifacts such as `M2C_ERROR`, `M2C_FIELD`, and `M2C_BITWISE` instead of inventing field names or casts without evidence.",
+    "Matched vararg-like `efAsync_Spawn` call shapes by passing stack addresses such as `&sp84`, `&sp90`, `&sp7C`, `&sp98`, and fighter field addresses such as `&temp_r30->facing_dir`.",
+    "Used constants directly where they appeared in the recovered control flow and calls, including effect IDs/ranges like `0x3E8`, `0x438`, `0x49D`, `0x513`, `0x515`, part sentinels `0x8D`/`0x8E`, and floats `256.0f`, `2.0f`, `0.5f`, `0.017453292f`.",
+    "Kept `#pragma force_active on` and existing constants `ftCo_804D87CC`, `ftCo_804D87D0`, and `ftDynamics_803C57B0`, with `OSReport(\"no effect from animlist %d\\n\", ...)` used as the default/fallback path."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "There is no explicit reviewer rationale available; conclusions are based on the title, report table, changed files, and diff excerpt."
+  ],
+  "searchable_terms": [
+    "pr-1414",
+    "ribbanya",
+    "ftCo_09F7",
+    "ftCo_8009F834",
+    "ftCo_800A0098",
+    "ftCo_0B3E",
+    "ftCo_800B463C",
+    "ftCo_800B46B8",
+    "ftCo_0A01",
+    "ftCo_800A0C8C",
+    "efAsync_Spawn",
+    "HSD_Randf",
+    "atan2f",
+    "GET_FIGHTER",
+    "Fighter_GObj",
+    "Fighter_Part",
+    "ftParts_8007500C",
+    "x2220_flag",
+    "x2219",
+    "x60C",
+    "facing_dir",
+    "ground_or_air",
+    "GA_Ground",
+    "coll_data.floor.normal",
+    "m2c_stack_ftCo_8009F834",
+    "M2C_ERROR",
+    "M2C_BITWISE",
+    "no effect from animlist",
+    "decomp-matching",
+    "fighter effects"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that remove `M2C_ERROR` or `M2C_BITWISE` from `ftCo_8009F834`.",
+    "Find later PRs that name the `0x8D` and `0x8E` `Fighter_Part` sentinel values used by `ftCo_8009F834`.",
+    "Search for later cleanup of the `arg1` effect ID dispatcher in `ftCo_09F7.c`.",
+    "Search for PRs that decompile or type `ftCo_800B463C` and `ftCo_800B46B8` after this header exposure.",
+    "Search for uses of `efAsync_Spawn` with fighter `x60C` to compare argument conventions and effect kind IDs."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

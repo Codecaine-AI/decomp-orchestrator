@@ -1,0 +1,116 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-189",
+  "pr": {
+    "number": 189,
+    "title": "Match wchar_io",
+    "url": "https://github.com/doldecomp/melee/pull/189",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-14T04:33:01Z",
+    "merged_at": "2021-12-14T04:33:07Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the MSL wchar_io translation unit by replacing asm/MSL/wchar_io.s with src/MSL/wchar_io.c and adding a companion src/MSL/wchar_io.h. The matched function is fwide, implemented against a reconstructed FILE layout and __file_modes bitfield so the previous assembly logic for file kind and stream orientation could compile from C. obj_files.mk was updated to build src/MSL/wchar_io.o instead of asm/MSL/wchar_io.o.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "asm-to-c",
+      "library-runtime"
+    ],
+    "systems": [
+      "MSL",
+      "wchar_io",
+      "stdio FILE layout",
+      "build object list"
+    ]
+  },
+  "key_files": [
+    "src/MSL/wchar_io.c",
+    "src/MSL/wchar_io.h",
+    "asm/MSL/wchar_io.s",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted asm/MSL/wchar_io.s, which contained the hand-written assembly for fwide at address range 80326098-80326114.",
+    "Added src/MSL/wchar_io.c with a C implementation of int fwide(FILE* stream, int mode).",
+    "Added src/MSL/wchar_io.h defining enum __file_kinds, enum __file_orientation, typedef struct _FILE FILE, typedef unsigned short wchar_t, __file_modes bitfields, and the _FILE struct layout needed by fwide.",
+    "Changed obj_files.mk so TEXT_O_FILES uses $(BUILD_DIR)/src/MSL/wchar_io.o instead of $(BUILD_DIR)/asm/MSL/wchar_io.o.",
+    "The C fwide logic returns 0 for __closed_file, reads stream->mode.file_orientation, sets orientation from __unoriented based on positive or negative mode, returns mode for unoriented streams, returns 1 for __wide_oriented, and returns -1 for __char_oriented."
+  ],
+  "smart_moves": [
+    "Reconstructed the FILE mode field as named bitfields, allowing assembly operations on offsets 4 and 5 to become readable C field accesses such as stream->mode.file_kind and stream->mode.file_orientation.",
+    "Introduced explicit enum names for file kinds and orientations instead of preserving raw constants, making the fwide switch match the library semantics while remaining compact.",
+    "Kept the matched C implementation minimal: fwide only depends on the subset of FILE and mode metadata needed for the observed assembly behavior.",
+    "Moved the object from asm to src in obj_files.mk in the same change, completing the asm-to-C replacement cleanly."
+  ],
+  "decomp_lessons": [
+    "For MSL library code, matching small functions can require reconstructing shared runtime structs first; here fwide depended on FILE and its packed mode bitfields.",
+    "Bitfield order and enum values matter for matching. The assembly used bit extraction and insertion around the FILE mode bytes, so the __file_modes layout had to expose file_kind and file_orientation at the correct positions.",
+    "When a function only inspects a few logical fields, a header can still need a broader struct layout to preserve offsets for those fields.",
+    "Replacing an asm object with a src object requires updating obj_files.mk so the build system stops assembling the old file and compiles the new translation unit."
+  ],
+  "naming_conventions": [
+    "MSL internal enum constants use double-underscore names such as __closed_file, __disk_file, __console_file, __unavailable_file, __unoriented, __char_oriented, and __wide_oriented.",
+    "The FILE type is declared via typedef struct _FILE FILE, with the backing struct named struct _FILE.",
+    "The file mode bitfield type is named __file_modes and contains snake_case field names such as open_mode, io_mode, buffer_mode, file_kind, file_orientation, and binary_io.",
+    "The header uses an all-caps include guard _WCHAR_IO_H_."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted the initial lhz/rlwinm check on stream offset 4 into stream->mode.file_kind == __closed_file.",
+    "Converted the lbz/rlwinm extraction from offset 5 into stream->mode.file_orientation.",
+    "Converted the rlwimi writes that set orientation bits into assignments to stream->mode.file_orientation.",
+    "Used a switch over __file_orientation to reproduce the assembly branch table-like compare flow for unoriented, wide-oriented, and char-oriented cases.",
+    "Preserved fwide return behavior from the assembly: 0 for closed file, mode for previously unoriented streams, 1 for wide-oriented, and -1 for char-oriented."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-189",
+    "Match wchar_io",
+    "PsiLupan",
+    "MSL",
+    "wchar_io",
+    "fwide",
+    "FILE",
+    "_FILE",
+    "__file_modes",
+    "__file_kinds",
+    "__file_orientation",
+    "__closed_file",
+    "__disk_file",
+    "__console_file",
+    "__unavailable_file",
+    "__unoriented",
+    "__char_oriented",
+    "__wide_oriented",
+    "wchar_t",
+    "asm/MSL/wchar_io.s",
+    "src/MSL/wchar_io.c",
+    "src/MSL/wchar_io.h",
+    "obj_files.mk",
+    "TEXT_O_FILES",
+    "asm-to-c",
+    "bitfield",
+    "file_kind",
+    "file_orientation",
+    "rlwinm",
+    "rlwimi"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that reuse or modify src/MSL/wchar_io.h or the FILE struct layout.",
+    "Check whether __file_modes bitfield ordering was later shared with other MSL stdio headers.",
+    "Search for additional MSL functions depending on file_orientation or fwide semantics.",
+    "Look for later cleanup replacing local wchar_t or FILE definitions with common MSL headers."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

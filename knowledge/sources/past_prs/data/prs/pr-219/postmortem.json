@@ -1,0 +1,134 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-219",
+  "pr": {
+    "number": 219,
+    "title": "Split up part of GX",
+    "url": "https://github.com/doldecomp/melee/pull/219",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-22T21:02:46Z",
+    "merged_at": "2021-12-22T21:02:51Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "PR 219 reorganized a large portion of Dolphin GX assembly by splitting code out of asm/dolphin/gx/GXFifo.s into new GX-related assembly files and wiring those new objects into the build. It also replaced many address-based func_8033xxxx names with known GX SDK-style symbol names in GXFifo, GXInit, include/functions.h, and downstream call sites. There was no PR body or review discussion in the slice, so the rationale is inferred from the title and diff structure: make the GX module less monolithic and improve symbol naming for future decompilation.",
+  "change_classification": {
+    "primary_type": "asm_split_and_symbol_renaming",
+    "categories": [
+      "asm_reorganization",
+      "symbol_renaming",
+      "build_object_list",
+      "header_prototype_update"
+    ],
+    "systems": [
+      "dolphin/gx",
+      "asm",
+      "include",
+      "build"
+    ]
+  },
+  "key_files": [
+    "asm/dolphin/gx/GXFifo.s",
+    "asm/dolphin/gx/GX.s",
+    "asm/dolphin/gx/GXAttr.s",
+    "asm/dolphin/gx/GXMisc.s",
+    "asm/dolphin/gx/GXInit.s",
+    "include/functions.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Added asm/dolphin/gx/GX.s with 6473 lines of GX assembly, including __GXSetDirtyState and many following GX routines still partly using func_8033xxxx labels.",
+    "Added asm/dolphin/gx/GXAttr.s with 1194 lines, separating vertex attribute-related GX code from the previous layout.",
+    "Added asm/dolphin/gx/GXMisc.s with 365 lines, separating miscellaneous GX/PE-style routines such as GXSetMisc, GXSetDrawDone, GXWaitDrawDone, GXPoke* names, and __GXPEInit as reflected in include/functions.h.",
+    "Reduced asm/dolphin/gx/GXFifo.s by roughly 8054 deleted lines while keeping FIFO-specific code there.",
+    "Added GXAttr.o, GXMisc.o, and GX.o to TEXT_O_FILES in obj_files.mk immediately after GXInit.o and GXFifo.o.",
+    "Renamed FIFO functions from anonymous address labels to known GX names, including GXInitFifoBase, GXInitFifoPtrs, GXInitFifoLimits, GXSetCPUFifo, GXSetGPFifo, __GXFifoInit, __GXFifoReadEnable, __GXFifoReadDisable, __GXFifoLink, __GXWriteFifoIntEnable, and __GXWriteFifoIntReset.",
+    "Updated GXInit.s call sites from func_8033BC34, func_8033B8C4, and func_8033B9AC to __GXFifoInit, GXInitFifoBase, and GXSetCPUFifo.",
+    "Updated include/functions.h comments/prototypes to use the newly identified GX symbol names instead of func_8033xxxx placeholders.",
+    "Touched many melee and sysdolphin assembly files with small one-for-one edits, likely to update branch/call symbol references after the GX split and renaming."
+  ],
+  "smart_moves": [
+    "The split preserved a build-visible object order by adding GXAttr.o, GXMisc.o, and GX.o directly after existing GXInit.o and GXFifo.o entries in obj_files.mk, which is important for address/order-sensitive decompilation.",
+    "Renaming was propagated through both the assembly call sites and include/functions.h, avoiding a mismatch where headers know a symbol but assembly still calls the old func_ address name.",
+    "The PR separated module organization from full C decompilation: large assembly blocks were moved into more semantically named files first, making later function-by-function matching easier.",
+    "Known SDK-style names were applied where there was strong evidence from Dolphin GX naming patterns, while many unresolved routines in GX.s remained as func_8033xxxx rather than being overnamed."
+  ],
+  "decomp_lessons": [
+    "For large Dolphin library modules, splitting assembly into SDK-like source files can be useful before C conversion; it improves locality and makes future matching work easier to search.",
+    "When splitting an address-sensitive assembly object, update obj_files.mk in the intended link order at the same time as moving code.",
+    "Symbol renames should be global: update the defining .global label, all bl references, and include/functions.h together.",
+    "It is acceptable to leave uncertain routines as func_8033xxxx after a split; only promote names where the SDK/library identity is clear.",
+    "Small one-line changes in unrelated assembly files after a library rename are often call-target/comment-label propagation, not behavioral edits."
+  ],
+  "naming_conventions": [
+    "Public GX API names use the GX prefix, e.g. GXInitFifoBase, GXInitFifoPtrs, GXInitFifoLimits, GXSetCPUFifo, GXSetGPFifo, GXSetVtxDesc, GXSetVtxAttrFmt, GXSetArray, GXSetMisc, GXSetDrawDone, GXWaitDrawDone.",
+    "Internal GX helper names use a double-underscore prefix, e.g. __GXFifoInit, __GXFifoReadEnable, __GXFifoReadDisable, __GXFifoLink, __GXWriteFifoIntEnable, __GXWriteFifoIntReset, __GXXfVtxSpecs, __GXSetVCD, __GXSetVAT, __GXSetDirtyState, __GXPEInit.",
+    "Pixel engine poke routines follow the GXPoke* pattern, including GXPokeAlphaMode, GXPokeAlphaRead, GXPokeAlphaUpdate, GXPokeBlendMode, GXPokeColorUpdate, GXPokeDstAlpha, GXPokeDither, and GXPokeZMode.",
+    "Unidentified local routines retained address-derived names such as func_8033D0DC and lbl_8033D070, preserving uncertainty rather than inventing names."
+  ],
+  "assembly_or_matching_tactics": [
+    "Large code movement was done as assembly-file splitting, not source rewriting; this keeps instruction bytes stable while improving module boundaries.",
+    "The new files keep the standard assembly structure with .include \"macros.inc\" and .section .text, consistent with existing asm organization.",
+    "Call instructions were updated to named targets, e.g. bl __GXFifoInit, bl GXInitFifoBase, bl GXSetCPUFifo, bl GXInitFifoLimits, bl GXInitFifoPtrs, and bl __GXFifoLink.",
+    "The diff shows GX hardware FIFO/register writes using 0xCC008000 and dirty-state handling through lbl_804D5BA8; future C matching of these routines should preserve volatile/MMIO behavior carefully.",
+    "The object split likely depends on obj_files.mk ordering to keep the final link layout stable."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review records were present in the PR slice.",
+    "No explicit reviewer rationale or requested changes are available; conclusions are based on the title, changed files, and diff."
+  ],
+  "searchable_terms": [
+    "PR219",
+    "Split up part of GX",
+    "PsiLupan",
+    "dolphin gx split",
+    "asm/dolphin/gx/GXFifo.s",
+    "asm/dolphin/gx/GX.s",
+    "asm/dolphin/gx/GXAttr.s",
+    "asm/dolphin/gx/GXMisc.s",
+    "GXInitFifoBase",
+    "GXInitFifoPtrs",
+    "GXInitFifoLimits",
+    "GXSetCPUFifo",
+    "GXSetGPFifo",
+    "__GXFifoInit",
+    "__GXFifoReadEnable",
+    "__GXFifoReadDisable",
+    "__GXFifoLink",
+    "__GXWriteFifoIntEnable",
+    "__GXWriteFifoIntReset",
+    "__GXXfVtxSpecs",
+    "__GXSetVCD",
+    "__GXSetVAT",
+    "GXClearVtxDesc",
+    "GXSetArray",
+    "GXInvalidateVtxCache",
+    "GXSetTexCoordGen2",
+    "GXSetNumTexGens",
+    "GXSetMisc",
+    "GXSetDrawDone",
+    "GXWaitDrawDone",
+    "GXPixModeSync",
+    "GXPokeAlphaMode",
+    "GXPokeBlendMode",
+    "__GXPEInit",
+    "__GXSetDirtyState",
+    "obj_files.mk TEXT_O_FILES"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that convert asm/dolphin/gx/GXAttr.s or GXMisc.s to C.",
+    "Find PRs that replace remaining func_8033Dxxx labels in asm/dolphin/gx/GX.s with SDK names.",
+    "Search for follow-up changes to GX struct definitions around lbl_804D5BA8 and FIFO state fields.",
+    "Check later build-system PRs for additional Dolphin GX object ordering changes.",
+    "Compare this split with known Dolphin SDK GX source-file boundaries."
+  ],
+  "confidence": 0.84,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

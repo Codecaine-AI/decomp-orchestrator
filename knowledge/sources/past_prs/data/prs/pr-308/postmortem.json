@@ -1,0 +1,152 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-308",
+  "pr": {
+    "number": 308,
+    "title": "Match all of HSD_WObj",
+    "url": "https://github.com/doldecomp/melee/pull/308",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2022-02-23T00:44:13Z",
+    "merged_at": "2022-02-23T00:44:20Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the remaining sysdolphin baselib HSD_WObj implementation by moving wobj.s out of the object list, adding a full C implementation in src/sysdolphin/baselib/wobj.c, expanding WObj/JObj/RObj/Object headers, and propagating newly identified WObj-related symbol names through existing assembly references. The PR also documented two matching-specific tactics: force-inlining JObj matrix helpers with #pragma always_inline because normal inline depth did not produce the required SetPosition codegen, and using an asm inline fallback for HSD_WObjAlloc because the generated/nonmatching C path did not match.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-renaming",
+      "baselib-class-system",
+      "animation",
+      "inline-assembly"
+    ],
+    "systems": [
+      "sysdolphin/baselib",
+      "HSD_WObj",
+      "HSD_JObj",
+      "HSD_RObj",
+      "HSD_CObj",
+      "asm",
+      "include",
+      "build"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/wobj.c",
+    "src/sysdolphin/baselib/wobj.h",
+    "src/sysdolphin/baselib/jobj.h",
+    "src/sysdolphin/baselib/robj.h",
+    "src/sysdolphin/baselib/object.h",
+    "asm/sysdolphin/baselib/wobj.s",
+    "asm/sysdolphin/baselib/cobj.s",
+    "asm/sysdolphin/baselib/lobj.s",
+    "asm/sysdolphin/baselib/jobj.s",
+    "asm/sysdolphin/baselib/class.s",
+    "include/functions.h",
+    "include/variables.h",
+    "Makefile",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Removed asm/sysdolphin/baselib/wobj.s from obj_files.mk and replaced it with a C implementation in src/sysdolphin/baselib/wobj.c.",
+    "Added HSD_WObj class data and default-class handling: hsdWObj, default_class, WObjInfoInit, WObjRelease, WObjAmnesia, HSD_WObjSetDefaultClass, HSD_WObjAlloc, and class-info setup against hsdObj.",
+    "Implemented WObj animation and descriptor paths including HSD_WObjAddAnim, WObjUpdateFunc, HSD_WObjInterpretAnim, WObjLoad, HSD_WObjInit, and HSD_WObjLoadDesc.",
+    "Implemented WObj position APIs: HSD_WObjSetPosition, HSD_WObjSetPositionX, HSD_WObjSetPositionY, HSD_WObjSetPositionZ, and HSD_WObjGetPosition.",
+    "Added WObj header declarations and macros: extern HSD_WObjInfo hsdWObj, HSD_WOBJ_INFO, HSD_WOBJ_METHOD, and prototypes for the newly matched WObj APIs.",
+    "Added always_inline JObj helpers HSD_JObjMtxIsDirty and HSD_JObjSetupMatrix in jobj.h so WObj position functions could match when updating transformed positions.",
+    "Added supporting declarations in robj.h for HSD_RObjRemoveAll, HSD_RObjResolveRefsAll, and HSD_RObjLoadDesc, plus extern HSD_ClassInfo hsdObj in object.h.",
+    "Renamed many existing assembly call targets from anonymous func_* labels to recovered names such as HSD_WObjGetPosition, HSD_WObjSetPosition, HSD_WObjAddAnim, HSD_WObjInterpretAnim, HSD_WObjInit, HSD_WObjAlloc, splArcLengthPoint, and hsdIsDescendantOf.",
+    "Added a Makefile rule forcing src/sysdolphin/baselib/wobj.c.o to use CC_EPI := $(CC), consistent with other matched baselib C objects needing the main compiler path."
+  ],
+  "smart_moves": [
+    "Used #pragma always_inline around small JObj matrix helpers because the PR author observed normal inlining respected depth limits and broke matching for SetPosition functions.",
+    "Kept a NON_MATCHING C version of HSD_WObjAlloc for readability while providing an asm implementation in the matching path, preserving both documentation of intended logic and exact codegen.",
+    "Propagated symbol names into unrelated remaining-asm files after matching WObj, improving searchability and future decomp context for CObj, LObj, JObj, stage code, and generic text assembly.",
+    "Centralized WObj class behavior through HSD_WOBJ_METHOD/HSD_WOBJ_INFO and class init hooks instead of treating descriptor loading/allocation as standalone helpers.",
+    "Handled animation callback type cases explicitly: type 4 clamps spline progress to 0.0-1.0, samples splArcLengthPoint through a JObj spline, and types 5-7 drive X/Y/Z position setters."
+  ],
+  "decomp_lessons": [
+    "For small helper functions that must appear inside a caller, ordinary inline may be insufficient under this compiler; #pragma always_inline can be necessary to overcome inline-depth behavior.",
+    "When a function will not match cleanly in C, an asm inline guarded by NON_MATCHING can be a pragmatic bridge: retain the readable C intent while keeping the build matched.",
+    "Matching one baselib object often requires exposing adjacent subsystem declarations in headers; here WObj needed JObj matrix helpers, RObj load/resolve/remove declarations, and hsdObj class info.",
+    "Recovered names should be applied to existing assembly callsites immediately, because it documents call relationships and helps future PRs identify dependencies.",
+    "Position getters/setters may include lazy transform resolution: WObj checks flag bit 1, optionally calls HSD_JObjSetupMatrix, transforms with PSMTXMUltiVec, clears the flag, then updates or returns pos.",
+    "Animation update callbacks may need exact assert strings and line numbers for matching; this PR preserved wobj.c assert file strings and evidence of line-number sensitivity."
+  ],
+  "naming_conventions": [
+    "Public WObj APIs use HSD_WObj* CamelCase names, e.g. HSD_WObjAddAnim, HSD_WObjInterpretAnim, HSD_WObjInit, HSD_WObjLoadDesc, HSD_WObjSetPosition, and HSD_WObjGetPosition.",
+    "Static WObj internals use WObj* names without the HSD_ prefix, e.g. WObjUpdateFunc, WObjLoad, WObjRelease, WObjAmnesia, and WObjInfoInit.",
+    "Class macros follow baselib style: HSD_WOBJ_INFO(i) casts to HSD_WObjInfo*, and HSD_WOBJ_METHOD(o) accesses HSD_OBJECT_METHOD(o) as WObj info.",
+    "Recovered non-WObj baselib names include hsdIsDescendantOf and splArcLengthPoint, replacing generic func_80382538 and func_803792C8 labels at callsites.",
+    "The default WObj class static is named default_class and was reflected in include/variables.h as a recovered variable name rather than a lbl_ symbol."
+  ],
+  "assembly_or_matching_tactics": [
+    "Added $(EPILOGUE_DIR)/src/sysdolphin/baselib/wobj.c.o: CC_EPI := $(CC) in Makefile, suggesting this object needed the primary compiler assignment used by other matched files.",
+    "Removed $(BUILD_DIR)/asm/sysdolphin/baselib/wobj.s.o from TEXT_O_FILES once wobj.c supplied the matched implementation.",
+    "Wrapped HSD_JObjMtxIsDirty and HSD_JObjSetupMatrix with #pragma push, #pragma always_inline on, and #pragma pop to force exact inlining into WObj position functions.",
+    "Used #ifdef NON_MATCHING for the readable C HSD_WObjAlloc and an asm HSD_WObjAlloc in the matching path with nofralloc and exact instruction sequence.",
+    "Used #pragma peephole on around HSD_WObjAlloc's NON_MATCHING C section and around WObjRelease/WObjAmnesia/WObjInfoInit, indicating peephole behavior mattered for local codegen.",
+    "Renamed branch targets in remaining assembly without changing instructions, e.g. func_8037D720 to HSD_WObjGetPosition and func_8037D45C to HSD_WObjSetPosition, preserving assembly while improving symbol knowledge."
+  ],
+  "review_feedback": [
+    "No review comments or formal reviews were present in the provided PR slice.",
+    "The PR body itself notes two author-discovered matching constraints: JObj.h inlines needed always_inline, and one function was asm-inlined because the normal tooling/C output did not match."
+  ],
+  "searchable_terms": [
+    "PR308",
+    "HSD_WObj",
+    "wobj.c",
+    "wobj.s",
+    "HSD_WObjAddAnim",
+    "HSD_WObjInterpretAnim",
+    "HSD_WObjInit",
+    "HSD_WObjLoadDesc",
+    "HSD_WObjSetPosition",
+    "HSD_WObjSetPositionX",
+    "HSD_WObjSetPositionY",
+    "HSD_WObjSetPositionZ",
+    "HSD_WObjGetPosition",
+    "HSD_WObjAlloc",
+    "HSD_WObjSetDefaultClass",
+    "WObjUpdateFunc",
+    "WObjLoad",
+    "WObjRelease",
+    "WObjAmnesia",
+    "WObjInfoInit",
+    "HSD_JObjMtxIsDirty",
+    "HSD_JObjSetupMatrix",
+    "always_inline",
+    "NON_MATCHING",
+    "asm inline",
+    "frank.py",
+    "splArcLengthPoint",
+    "hsdIsDescendantOf",
+    "HSD_RObjLoadDesc",
+    "HSD_RObjResolveRefsAll",
+    "HSD_RObjRemoveAll",
+    "PSSMTXMUltiVec",
+    "PSMTXMUltiVec",
+    "default_class",
+    "hsdWObj",
+    "hsdObj",
+    "CC_EPI"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that remove the asm inline for HSD_WObjAlloc or convert the NON_MATCHING path to matching C.",
+    "Search for subsequent cleanup of WObj assert line numbers and string labels such as lbl_804D5EF8 and lbl_804D5F04.",
+    "Look for later PRs that decompile CObj/LObj callsites now that HSD_WObjGetPosition, HSD_WObjSetPosition, and HSD_WObjInterpretAnim were named.",
+    "Check whether HSD_JObjMtxIsDirty and HSD_JObjSetupMatrix remain forced always_inline or are later moved/refactored.",
+    "Search for PSMTXMUltiVec typo/casing usage around WObj position transforms in later code, since this PR's diff shows that exact symbol in WObj setters/getter."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,189 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1876",
+  "pr": {
+    "number": 1876,
+    "title": "Partially match `ftaction`",
+    "url": "https://github.com/doldecomp/melee/pull/1876",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2025-08-29T04:39:56Z",
+    "merged_at": "2025-08-29T04:44:40Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Partially matched the fighter action command interpreter by replacing raw script-pointer arithmetic and ad hoc bit extraction with a shared `FtCmdState` command union, `NEXT_CMD`/`SKIP_CMD` helpers, and several typed command layouts. The PR moved `FtCmdState` out of `ft/types.h` into `gm/types.h`, added `gm/inlines.h`, updated `ftaction.c` and `it_2725.c` to consume the shared command representation, adjusted several prototypes, and marked related ftaction data/jump-table symbols local. decomp.dev reported +1596 matched bytes overall and 17 new full matches in `main/melee/ft/ftaction`, but also documented regressions in some unmatched `ftaction` and `it_2725` functions, including one broken `it_802799E4` match.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-layout",
+      "bitfields",
+      "script-command-decoding",
+      "symbol-scope-cleanup"
+    ],
+    "systems": [
+      "fighter",
+      "game-mode",
+      "item",
+      "config",
+      "library"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/ftaction.c",
+      "role": "Main target; many fighter action command handlers were rewritten to use `cmd->u` typed command fields, `NEXT_CMD`, `SKIP_CMD`, `GET_FIGHTER`, and `PAD_STACK`."
+    },
+    {
+      "path": "src/melee/gm/types.h",
+      "role": "New home for `struct FtCmdState`; added a large union of typed 32-bit script-command bitfield views such as `set_hitbox_damage`, `set_hitbox_scale`, `set_cmd_var`, `set_hurt_state`, and numbered `unk` variants linked to specific handlers."
+    },
+    {
+      "path": "src/melee/gm/inlines.h",
+      "role": "New helper header defining `SKIP_CMD(cmd, n)` and `NEXT_CMD(cmd)` as typed `++cmd->u` command advancement helpers."
+    },
+    {
+      "path": "src/melee/ft/types.h",
+      "role": "Removed the old local `FtCmdState` definition from fighter types after moving it into game-mode types."
+    },
+    {
+      "path": "src/melee/it/it_2725.c",
+      "role": "Item command code was adjusted to include `gm/types.h` and `gm/inlines.h` and to use the shared command-state representation; bot output shows this carried matching regressions in several item functions."
+    },
+    {
+      "path": "config/GALE01/symbols.txt",
+      "role": "Changed `ftAction_803C07AC`, `ftAction_803C0870`, and related jump-table symbols from global to local scope and corrected `ftAction_803C0870` size from `0x34` to `0x31`."
+    },
+    {
+      "path": "src/melee/ft/ft_0C88.c",
+      "role": "Changed `ftCo_800C8B60` parameters from `int, s8` to `u8, u8`, matching the bit-sized fields assigned inside the function."
+    },
+    {
+      "path": "src/melee/ft/ftcommon.h",
+      "role": "Updated the visible prototype for `ftCommon_8007F5CC` from `(Fighter_GObj*, s32)` to `(Item_GObj*, bool)`."
+    }
+  ],
+  "what_changed": [
+    "Added `gm/inlines.h` with `SKIP_CMD(cmd, n)` and `NEXT_CMD(cmd)`, replacing repeated `cmd->x8 += 4` sequences in many handlers with command-aware `++cmd->u` advancement.",
+    "Moved `struct FtCmdState` from `src/melee/ft/types.h` to `src/melee/gm/types.h`, making the script command state available to both fighter and item code.",
+    "Expanded `FtCmdState` with a pointer union: raw `char* x8` still exists, but a typed `u` pointer exposes many command bitfield layouts, including `set_hitbox_damage`, `set_hitbox_scale`, `unk22`, `set_cmd_var`, `set_hurt_state`, `unk26_0`, `unk26_1`, `unk26_2`, and other handler-specific `unk` structs.",
+    "Rewrote many `ftaction.c` handlers to access named command fields such as `cmd->u->set_hitbox_damage.idx`, `cmd->u->set_hitbox_damage.value`, `cmd->u->set_hitbox_scale.idx`, `cmd->u->set_cmd_var.value`, and `cmd->u->set_hurt_state.state` instead of manual casts, masks, and shifts.",
+    "Converted dummy local stack arrays such as `u8 _[4] = { 0 };`, `u8 _[8] = { 0 };`, and `u8 _[16] = { 0 };` into explicit `PAD_STACK(4)`, `PAD_STACK(8)`, and `PAD_STACK(16)` calls.",
+    "Updated `ftaction.c` includes: added `ft/ftdynamics.h`, `gm/inlines.h`, and `gm/types.h`; removed `ftCommon/forward.h` from this file.",
+    "Changed several function prototypes and declarations, including `ftCo_800C8B60(Fighter*, u8, u8)` and `ftCommon_8007F5CC(Item_GObj*, bool)`.",
+    "Updated `it_2725.c` includes to use the shared game-mode command types and inlines, while removing some older includes from that file.",
+    "Adjusted `config/GALE01/symbols.txt` so ftaction-related data objects and jump tables are local rather than global and fixed the recorded size of `ftAction_803C0870`.",
+    "decomp.dev reported 17 new full matches in `main/melee/ft/ftaction`, including `ftAction_800726F4`, `ftAction_800729D4`, `ftAction_80072B94`, `ftAction_8007169C`, `ftAction_80071708`, `ftAction_80071D40`, `ftAction_80071A9C`, and `ftAction_80071E04`."
+  ],
+  "smart_moves": [
+    "Centralizing `FtCmdState` in `gm/types.h` was a useful cross-system cleanup because both fighter and item script-command code were using the same command-state concept.",
+    "Using a typed command union let matched handlers express bit extraction as field access, reducing noisy `M2C_FIELD`, cast, mask, and shift patterns while making individual command formats searchable.",
+    "`NEXT_CMD` and `SKIP_CMD` make the script-command cursor advancement pattern consistent and easier to permute or audit than repeated raw `cmd->x8 += 4` statements.",
+    "Replacing artificial stack arrays with `PAD_STACK` preserved stack-shaping intent without misleading readers into thinking those arrays were semantic data.",
+    "Keeping `char* x8` in the `FtCmdState` union alongside the typed `u` pointer allowed partial migration: unmatched or fragile handlers could still use raw pointer access while matched handlers used typed command fields.",
+    "Changing ftaction data and jump-table symbols to local scope in `symbols.txt` reflected that these objects are internal to the unit, improving symbol hygiene.",
+    "Adding `@todo` comments such as the note that `Fighter::cmd_vars` may not truly be an array preserved decomp uncertainty rather than over-claiming the recovered structure."
+  ],
+  "decomp_lessons": [
+    "For script-command interpreters, it can be better to model the command stream as a union of many 32-bit bitfield layouts than to repeatedly open-code masks and shifts in every handler.",
+    "A shared command-state type should live at the lowest common subsystem level that actually uses it; here, fighter-local placement was too narrow once item command code also depended on `FtCmdState`.",
+    "Command advancement affects matching. Replacing byte-pointer increments with typed pointer increments can improve many handlers, but the bot report shows it can also destabilize nearby unmatched functions.",
+    "Do not treat net matched-byte gain as uniformly safe: this PR improved ftaction significantly but regressed several `it_2725` functions and one previously matched item function.",
+    "`PAD_STACK` is preferable to fake initialized stack arrays when the only purpose is stack layout or register-allocation matching.",
+    "When bitfield names are not known, neutral names with handler comments, such as `unk26_0 ///< #ftAction_80071E04 command 0`, are better than invented semantic names.",
+    "Symbol scope and object size metadata in `symbols.txt` should be kept in sync with decomp progress; local data/jump tables should not remain global only because they were initially unidentified."
+  ],
+  "naming_conventions": [
+    "New command-field names use semantic names when evidence is strong, e.g. `set_hitbox_damage`, `set_hitbox_scale`, `set_cmd_var`, and `set_hurt_state`.",
+    "Unknown command layouts are named sequentially as `unk0`, `unk1`, `unk22`, `unk26_0`, etc., often with comments tying them to a specific function address.",
+    "Bitfield members use generic `code`, `idx`, `value`, `disabled`, `bone_idx`, `state`, or `unkN` names depending on confidence.",
+    "Handler comments use short imperative descriptions where understood, such as `Adjust Hitbox Damage`, `Set one of #Fighter::cmd_vars`, `Allow interrupt`, and `Set hurt capsule state`.",
+    "The helper macros are named by command-stream action: `NEXT_CMD` for one command and `SKIP_CMD` for multiple commands.",
+    "The PR preserves address-style function names such as `ftAction_8007162C` where no final symbol name is known."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used typed pointer increment `++cmd->u` to advance four-byte commands while keeping the raw `cmd->x8` view available for fragile areas.",
+    "Replaced repeated raw skips with a loop macro `SKIP_CMD(cmd, n)`, likely to produce a preferred control-flow or codegen pattern while reducing source duplication.",
+    "Introduced `PAD_STACK(n)` at exact former dummy-array sizes to maintain stack layout without fake locals.",
+    "Converted manual packed-field extraction like `*(u16*) cmd->x8 >> 7 & 7` and `*(u32*) cmd->x8 & 0x7FFFFF` into named bitfield accesses from `FtCmdState`.",
+    "Used `GET_FIGHTER(gobj)` in several handlers instead of direct `gobj->user_data` or older helper patterns where that improved matching/readability.",
+    "Left some raw `M2C_FIELD` accesses and commented-out bitfield assignments in `ftAction_8007121C`, showing that the conversion was partial and some command bits were still unresolved.",
+    "Adjusted prototypes to narrower or more exact types, such as `u8` arguments for `ftCo_800C8B60`, which can affect sign/zero-extension and therefore matching."
+  ],
+  "review_feedback": [
+    {
+      "source": "decomp.dev bot",
+      "feedback": "Reported overall matched code increase to 40.41%, a +0.04% change and +1596 bytes."
+    },
+    {
+      "source": "decomp.dev bot",
+      "feedback": "Reported 17 new full matches in `main/melee/ft/ftaction`, with the largest listed gains in `ftAction_800726F4`, `ftAction_800729D4`, and `ftAction_80072B94`."
+    },
+    {
+      "source": "decomp.dev bot",
+      "feedback": "Reported one broken match: `main/melee/it/it_2725` function `it_802799E4` fell from 100.00% to 44.18%."
+    },
+    {
+      "source": "decomp.dev bot",
+      "feedback": "Reported regressions in several unmatched functions, especially `it_802790C0`, `it_80278F2C`, `it_8027978C`, and `ftAction_8007121C`."
+    },
+    {
+      "source": "human review",
+      "feedback": "No human review comments were present in the provided PR slice."
+    }
+  ],
+  "searchable_terms": [
+    "PR1876",
+    "Partially match ftaction",
+    "ftaction",
+    "ftAction_8007162C",
+    "ftAction_8007169C",
+    "ftAction_80071708",
+    "ftAction_80071A9C",
+    "ftAction_80071D40",
+    "ftAction_80071E04",
+    "ftAction_800726F4",
+    "ftAction_800729D4",
+    "ftAction_80072B94",
+    "FtCmdState",
+    "gm/types.h",
+    "gm/inlines.h",
+    "NEXT_CMD",
+    "SKIP_CMD",
+    "PAD_STACK",
+    "set_hitbox_damage",
+    "set_hitbox_scale",
+    "set_cmd_var",
+    "set_hurt_state",
+    "cmd->u",
+    "cmd->x8",
+    "typed command union",
+    "script command bitfields",
+    "it_2725",
+    "it_802799E4 broken match",
+    "ftCo_800C8B60 u8 u8",
+    "ftCommon_8007F5CC",
+    "symbols.txt local scope",
+    "jtbl_803C08A4",
+    "jtbl_803C08C0",
+    "jtbl_803C08DC"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that finish matching `ftAction_8007121C` after this partial `FtCmdState` conversion.",
+    "Search for later renames of `FtCmdState` union fields `unk22`, `unk26_0`, `unk26_1`, `unk26_2`, and `unk33`.",
+    "Check whether later PRs recover the real structure of `Fighter::cmd_vars` hinted by the `@todo` in `ftAction_80071820`.",
+    "Look for follow-up fixes to the `it_2725` regressions and the broken `it_802799E4` match caused or exposed by this shared command-state refactor.",
+    "Search for uses of `NEXT_CMD` and `SKIP_CMD` in later fighter/item script-command decomp work.",
+    "Verify whether the `ftCommon_8007F5CC(Item_GObj*, bool)` prototype survived later cleanup or was refined again."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

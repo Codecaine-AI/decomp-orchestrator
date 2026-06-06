@@ -1,0 +1,178 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-554",
+  "pr": {
+    "number": 554,
+    "title": "Migrate `gx` to C",
+    "url": "https://github.com/doldecomp/melee/pull/554",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2022-09-05T17:58:39Z",
+    "merged_at": "2022-09-13T00:21:28Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Migrated a large portion of Dolphin GX from standalone assembly objects into C source files, mostly by renaming asm files under asm/dolphin/gx to src/dolphin/gx/*.c and wrapping remaining assembly in CodeWarrior-style inline asm functions. The build was updated to compile GXInit, GXAttr, GXFrameBuf, GXTexture, GXBump, GXPixel, GXTransform, GXPerf, and GXStubs from C instead of asm. The PR also introduced helper typedefs/macros for jump tables and inline assembly, added GX-private headers, adjusted GX types/headers, and removed the old GXStubs.s. Review discussion captured useful matching tactics for sdata2 constants in inline asm and warned against a GXProject prototype change that would alter C array/pointer semantics.",
+  "change_classification": {
+    "primary_type": "asm-to-c migration",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "tooling",
+      "build-system",
+      "inline-asm"
+    ],
+    "systems": [
+      "dolphin/gx",
+      "include/dolphin",
+      "obj_files.mk",
+      "tools/calcprogress",
+      "editor-config"
+    ]
+  },
+  "key_files": [
+    "obj_files.mk",
+    "include/dolphin/types.h",
+    "src/dolphin/gx/GXInit.c",
+    "src/dolphin/gx/GXAttr.c",
+    "src/dolphin/gx/GXFrameBuf.c",
+    "src/dolphin/gx/GXTexture.c",
+    "src/dolphin/gx/GXBump.c",
+    "src/dolphin/gx/GXPixel.c",
+    "src/dolphin/gx/GXTransform.c",
+    "src/dolphin/gx/GXPerf.c",
+    "src/dolphin/gx/GXStubs.c",
+    "asm/dolphin/gx/GXStubs.s",
+    "src/dolphin/gx/__types.h",
+    "src/dolphin/gx/types.h",
+    "src/dolphin/gx/GXTransform.h",
+    "src/dolphin/gx/__GXFrameBuf.h",
+    "src/dolphin/gx/__GXMisc.h",
+    "src/dolphin/gx/__GXTexture.h",
+    "src/dolphin/gx/__GXBump.h",
+    "src/dolphin/gx/__GX_unknown_001.h",
+    "src/dolphin/gx/GX_unknown_001.h"
+  ],
+  "what_changed": [
+    "Changed obj_files.mk so GXInit, GXAttr, GXFrameBuf, GXTexture, GXBump, GXPixel, GXStubs, GXTransform, and GXPerf build from src/dolphin/gx/*.c.o instead of asm/dolphin/gx/*.s.o.",
+    "Deleted asm/dolphin/gx/GXStubs.s, whose only shown function was __GXSetRange as a single blr stub, and added src/dolphin/gx/GXStubs.c.",
+    "Converted renamed GX assembly files into C translation units with includes, static data declarations, jump-table declarations, and inline asm bodies using #pragma push/pop, asm unk_t functions, nofralloc, and clang-format off/on guards.",
+    "Added include/dolphin/types.h typedefs for jmp_t and jtbl_t, plus UNK_FUNC and qr0 through qr7 macros under a macros.inc region to support migrated inline asm C files.",
+    "In GXAttr.c, represented branch-table data as static jtbl_t arrays whose entries reference local lbl_8033xxxx labels, and converted labels used as jump targets to inline asm entry labels.",
+    "Adjusted several GX-private headers such as __GXFrameBuf.h, __GXMisc.h, __GXTexture.h, __GXBump.h, __GX_unknown_001.h, and GX_unknown_001.h as part of making the GX code compile from C.",
+    "Touched tooling/editor configuration, including .vscode file associations for .c, .h, and .s, and minor newline-only changes in .idea files and scripts."
+  ],
+  "smart_moves": [
+    "Kept partially decompiled GX functions progressing by embedding exact assembly inside C wrappers rather than requiring full C matches immediately.",
+    "Moved jump tables into typed C data with jmp_t/jtbl_t, making table ownership and references visible to the C compiler while preserving branch-target layout needs.",
+    "Used inline asm entry labels for switch/jump-table destinations, allowing large dispatcher-style functions such as GXSetVtxDesc to remain structurally close to the original assembly.",
+    "Centralized common migration helpers in include/dolphin/types.h instead of repeatedly hand-declaring jump-table and unknown-function boilerplate in each migrated GX file.",
+    "Retained decomp.me scratch links and match percentages in comments, preserving provenance and making future full-C matching work easier to resume.",
+    "Reviewers used dadosod dumps to compare emitted assembly against the original when resolving inline asm symbol syntax and constant-placement issues."
+  ],
+  "decomp_lessons": [
+    "For large library migrations, moving asm files into C translation units can unlock C-side data declarations, headers, and build integration even before functions are fully decompiled.",
+    "When an asm function contains internal jump-table targets, declare the target labels as functions or entries and model the table explicitly as an array of code pointers.",
+    "Be careful changing public prototypes during cleanup: replacing an f32 mtx[3][4] parameter with a pointer typedef such as MtxPtr was flagged as a functional difference.",
+    "C typedefs for matrix array types need review because array parameters decay in specific ways; the review suggested Mtx could be acceptable where MtxPtr was not.",
+    "Const data intended for sdata2 can interact badly with inline asm operands: a scalar s32 const may be folded by the compiler into an immediate/offset rather than treated as an addressable symbol.",
+    "For sdata2 loads in inline asm, changing a constant declaration from s32 const lbl = 0x404040FF to s8 const lbl[4] = {64, 64, 64, -1} allowed use of lwz r4, lbl_804DE200(r2) in the reviewed example.",
+    "Prefer symbolic r2/r13-relative loads such as lbl_804DE200(r2) or __GXContexts(r13) when declarations make that possible, instead of hard-coded negative offsets, because symbolic loads are more maintainable and reviewable."
+  ],
+  "naming_conventions": [
+    "Migrated GX source files use Dolphin/GX capitalization such as GXInit.c, GXAttr.c, GXFrameBuf.c, GXTexture.c, GXBump.c, GXPixel.c, GXTransform.c, and GXPerf.c.",
+    "Private GX headers use double-underscore prefixes, for example __GXFrameBuf.h, __GXMisc.h, __GXTexture.h, __GXBump.h, and __GX_unknown_001.h.",
+    "Unknown or not-yet-decompiled symbols retain address-based names such as lbl_804D5BB0, lbl_804DE200, lbl_8033BF20, and jtbl_80401048.",
+    "Jump-table typedef names introduced in common types are jmp_t for a void(void) function pointer and jtbl_t for an array of those pointers.",
+    "The PR preserved decomp.me scratch URLs in comments above functions, typically noting the scratch id and current match score."
+  ],
+  "assembly_or_matching_tactics": [
+    "Wrap migrated assembly in C as asm unk_t function_name() with nofralloc, surrounded by #pragma push/#pragma pop and clang-format off/on comments.",
+    "Use entry lbl_xxxxxxxx inside inline asm for labels that must be referenced by C-declared jump tables or branch-table entries.",
+    "Replace macros.inc-style @sda21 operands with CodeWarrior inline-asm-compatible forms such as __GXContexts(r13) where supported.",
+    "Use typed static jtbl_t arrays initialized with &lbl_... entries to reproduce jump tables in C-owned data sections.",
+    "Add qr0 through qr7 macros in common headers so paired-single quantization register names used by assembly can survive in C preprocessing contexts.",
+    "For r2-relative sdata2 constants, test emitted code with disassembly comparison tools; declaration shape can affect whether inline asm sees a symbol or a literal offset.",
+    "A reviewed workaround for lbl_804DE200 was to declare it as an s8 const[4] byte array instead of an s32 const, enabling symbolic lwz r4, lbl_804DE200(r2)."
+  ],
+  "review_feedback": [
+    {
+      "file": "src/dolphin/gx/GXInit.c",
+      "feedback": "Author asked how to make inline asm treat an s32 as a variable instead of a literal when loading sdata2 constants."
+    },
+    {
+      "file": "src/dolphin/gx/GXInit.c",
+      "feedback": "r-burns suggested using lwz r4, lbl_804DE200(r2) if lbl_804DE200 was declared properly."
+    },
+    {
+      "file": "src/dolphin/gx/GXInit.c",
+      "feedback": "The discussion identified that declaring lbl_804DE200 as s32 const put it in sdata2 but also caused const-ness to inline into the asm as an offset."
+    },
+    {
+      "file": "src/dolphin/gx/GXInit.c",
+      "feedback": "r-burns provided a concrete fix: declare lbl_804DE200 as s8 const lbl_804DE200[4] = {64, 64, 64, -1}; then use lwz r4, lbl_804DE200(r2). The author responded, 'Huh, interesting. Nice work.'"
+    },
+    {
+      "file": "src/dolphin/gx/GXTransform.h",
+      "feedback": "PsiLupan objected to changing GXProject's matrix parameter from f32 mtx[3][4] to MtxPtr, saying it was a functional difference."
+    },
+    {
+      "file": "src/dolphin/gx/GXTransform.h",
+      "feedback": "After the author asked whether Mtx could be used because Mtx is literally f32[3][4], PsiLupan replied that Mtx could be used."
+    }
+  ],
+  "searchable_terms": [
+    "pr-554",
+    "Migrate gx to C",
+    "ribbanya",
+    "dolphin gx",
+    "asm to C migration",
+    "inline asm",
+    "nofralloc",
+    "GXInit.c",
+    "GXAttr.c",
+    "GXFrameBuf.c",
+    "GXTexture.c",
+    "GXBump.c",
+    "GXPixel.c",
+    "GXTransform.c",
+    "GXPerf.c",
+    "GXStubs.c",
+    "GXStubs.s deleted",
+    "obj_files.mk",
+    "jmp_t",
+    "jtbl_t",
+    "jump table",
+    "entry lbl",
+    "lbl_804DE200",
+    "sdata2",
+    "r2 relative",
+    "r13 relative",
+    "__GXContexts",
+    "lwz r4 lbl_804DE200(r2)",
+    "s32 const inline asm",
+    "s8 const array workaround",
+    "GXProject",
+    "Mtx",
+    "MtxPtr",
+    "functional difference",
+    "dadosod",
+    "decomp.me"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully decompile GXInit.c functions migrated as inline asm in PR 554.",
+    "Search for uses of jmp_t and jtbl_t after PR 554 to see whether this jump-table pattern became standard.",
+    "Check whether GXProject ultimately used f32[3][4], Mtx, or MtxPtr in the merged header.",
+    "Find other PRs discussing sdata2 constants, const folding, or r2-relative inline asm symbol operands.",
+    "Search for remaining hard-coded r2 offsets such as -0x17E0(r2) in migrated GX code."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

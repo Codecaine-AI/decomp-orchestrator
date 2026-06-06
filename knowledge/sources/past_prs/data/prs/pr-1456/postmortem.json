@@ -1,0 +1,165 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1456",
+  "pr": {
+    "number": 1456,
+    "title": "Partially match `lgunbeam`",
+    "url": "https://github.com/doldecomp/melee/pull/1456",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-09-22T22:56:28Z",
+    "merged_at": "2024-09-22T22:59:03Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Partially matched the light gun beam item implementation by rewriting `itlgunbeam.c` from m2c-style code into structured C, improving item variable names/types, and moving ad hoc declarations into item headers. The PR had no body or review comments in the slice, so intent beyond the title and diff is inferred only from code changes.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "item-logic-cleanup",
+      "struct-field-refinement"
+    ],
+    "systems": [
+      "item",
+      "itcommonitems",
+      "lgunbeam"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/it/items/itlgunbeam.c",
+      "role": "Primary partial matching rewrite for light gun beam behavior, spawn setup, movement, collision, callbacks, and effect spawning."
+    },
+    {
+      "path": "src/melee/it/itCommonItems.h",
+      "role": "Refined `ItLGunBeamVars` field names/types: `position2` became `velocity`, and `xE04` changed from `f32` to `int`."
+    },
+    {
+      "path": "src/melee/it/it_266F.h",
+      "role": "Corrected `it_80273130` return type from `bool` to `enum_t`."
+    },
+    {
+      "path": "src/melee/it/it_2725.h",
+      "role": "Added the `it_80272940(Item_GObj*)` prototype, removed a duplicate `it_80277040` declaration, and reordered `it_8027B730` by address."
+    }
+  ],
+  "what_changed": [
+    "`itlgunbeam.c` shrank from a heavily commented/generated form to a structured partial match, replacing many raw literals, gotos, casts, temporary locals, and commented stack guesses with cleaner C.",
+    "Added includes for `it/forward.h`, `it/inlines.h`, `it/it_2725.h`, and `<placeholder.h>`, allowing use of shared declarations/macros instead of local extern stubs.",
+    "Replaced local `UNK_RET it_80272940(Item_GObj*)` declaration with a real header prototype in `it_2725.h`.",
+    "Converted static callback declarations and several callback definitions from `int` return style to `bool`, including functions such as `it_8029999C`, `it_80299A68`, `it_80299B6C`, `it_80299B74`, `it_80299C08`, `it_80299C10`, `it_80299C18`, and `it_80299C20`.",
+    "Renamed `ItLGunBeamVars.position2` to `velocity`, matching its use as the normalized velocity/vector derived from `angle0` and `angle1`.",
+    "Changed `ItLGunBeamVars.xE04` from `f32` to `int`; the diff still assigns `0.0f` at one site, but the header type was corrected to integer.",
+    "Replaced numeric item kind `0x27` with `It_Kind_L_Gun_Beam` in the spawn setup.",
+    "Normalized angles with `while` loops around `-M_PI` and `+M_PI` instead of m2c-style goto loops and literal double constants.",
+    "Replaced raw `user_data`/`hsd_obj` access with `GET_ITEM(gobj)` and `GET_JOBJ(gobj)`.",
+    "Refactored collision normal accumulation in `it_802993E0` to use flag bit tests, `lbVector_Normalize`, and direct `Vec3` assignment to `position1`.",
+    "Refactored beam steering in `it_80299528` using `atan2f`, `lbVector_Angle`, `ABS`, `M_PI`, and `M_PI_2`, with the renamed `velocity` field.",
+    "Refactored spawn initialization in `it_802996D0`, including chained zeroing of itcmd vars, random angle range initialization from `ItLGunBeamAttr`, facing-direction angle sign handling, lifetime setup via `it_80275158`, and initial effect setup through `it_802998A0`.",
+    "Refactored `it_802998A0` to preserve and restore item position around collision/effect setup, spawn an effect with `efSync_Spawn`, and call `db_80225DD8` with the fighter gobj.",
+    "Refactored `it_802999E4` to compute x/y velocity from `angle1 * sinf(angle0)` and `angle1 * cosf(angle0)`, mirror that into `x40_vel`, zero z velocity, and normalize the stored velocity vector.",
+    "Refactored `it_80299A68` to set item collision radii to `3.0f`, call `it_8026D9A0`, translate `env_flags` masks into bounce flags, then call `it_802993E0` and `it_80299528` when a collision is detected.",
+    "Corrected `it_80273130` declaration to return `enum_t`, consistent with code comparing its result to `1` rather than treating it as just a boolean predicate."
+  ],
+  "smart_moves": [
+    "Promoting `it_80272940` into `it_2725.h` removed a local extern and made the dependency reusable for future item files.",
+    "Renaming `position2` to `velocity` is a high-value struct-field improvement because the same field is populated from velocity components, normalized, and used in angle comparisons.",
+    "Using `It_Kind_L_Gun_Beam` instead of `0x27` makes spawn code searchable by item kind and reduces future magic-number ambiguity.",
+    "Using `GET_ITEM` and `GET_JOBJ` aligned the file with common item decomp idioms while reducing cast noise.",
+    "Replacing literal approximations of pi with `M_PI` and `M_PI_2` made repeated angle wrapping clearer without losing the matching-oriented structure.",
+    "Keeping explicit nested scopes and `PAD_STACK` calls suggests the rewrite balanced readability against stack/register layout constraints needed for matching.",
+    "Changing `ItemStateTable it_803F6630[1]` to an unsized array avoids redundant size encoding while preserving the single entry.",
+    "Fixing the `it_80273130` return type to `enum_t` in the shared header avoids forcing collision/status results into `bool`, which can affect callsite matching and semantic accuracy."
+  ],
+  "decomp_lessons": [
+    "For item projectile files, first identify item-var fields by how they are used over several functions; here a field initially named like a position vector was better understood as normalized velocity.",
+    "When m2c emits repeated angle-normalization goto loops, structured `while` loops against `-M_PI` and `+M_PI` can be both readable and match-friendly.",
+    "Move local externs into the appropriate shared header once the signature is known; this improves type checking and reduces duplicated declarations across item files.",
+    "Header signature corrections can be part of a matching PR when they unblock cleaner callsites or avoid incorrect bool/int codegen assumptions.",
+    "Replacing magic item kind constants with enum names is useful even in partially matched code because it documents spawn identity without relying on PR comments.",
+    "Partial matches can still be valuable when they remove large amounts of m2c scaffolding, commented guesses, and raw stack temporaries while retaining tactical `PAD_STACK` where required.",
+    "Collision response logic often benefits from naming a flags parameter and mapping environment flag masks into explicit bit positions before applying normal accumulation/reflection math.",
+    "Use field assignment for complete `Vec3` values where possible; direct `item->...position1 = pos` is clearer than per-component stores when codegen permits it."
+  ],
+  "naming_conventions": [
+    "`item_gobj` parameters were generally shortened to `gobj` in rewritten local functions.",
+    "`Item*` locals use short item-style names such as `item` or `ip`; `ip` appears in several rewritten routines after `GET_ITEM(gobj)`.",
+    "A collision bitmask parameter was renamed from `arg1` to `flags` in `it_802993E0` where its purpose became clear.",
+    "The spawn direction parameter in `it_802996D0` was renamed from `dir` to `facing_dir`.",
+    "`ItLGunBeamVars.position2` was renamed to `velocity` based on its actual role.",
+    "Item kind magic number `0x27` was replaced by `It_Kind_L_Gun_Beam`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `PAD_STACK(4)`, `PAD_STACK(8)`, and `PAD_STACK(4 * 4)` in rewritten functions to preserve stack layout where normal cleanup would otherwise perturb matching.",
+    "Kept nested local scopes around temporaries in functions such as `it_80299528`, `it_802996D0`, and `it_802998A0`, likely to influence lifetime/register allocation.",
+    "Replaced m2c goto labels with `while` loops for angle wrapping while preserving repeated add/subtract behavior around `2 * M_PI`.",
+    "Used chained assignments for zero initialization, such as setting all `spawn.vel` components to `0.0f` and all itcmd vars to `0`.",
+    "Preserved explicit `+1` and unary plus style in comparisons/assignments such as `item->facing_dir == +1` and `angle = +...`, which can help document or preserve generated expression shape.",
+    "Removed static file-scope pi and scalar constants (`it_804DCC20` through `it_804DCC5C`) and used standard math constants/literals instead.",
+    "Restored `ip->pos = pos` after temporary collision/effect setup in `it_802998A0`, indicating position preservation was important for behavior and/or matching.",
+    "Used `ABS(angle2)` instead of open-coded sign checks in the steering calculation while keeping branch structure around the `M_PI_2` threshold."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice."
+  ],
+  "searchable_terms": [
+    "pr-1456",
+    "Partially match lgunbeam",
+    "ribbanya",
+    "itlgunbeam.c",
+    "ItLGunBeamVars",
+    "ItLGunBeamAttr",
+    "position2 velocity",
+    "xE04 int",
+    "It_Kind_L_Gun_Beam",
+    "it_802993E0",
+    "it_80299528",
+    "it_802996D0",
+    "it_802998A0",
+    "it_8029999C",
+    "it_802999E4",
+    "it_80299A68",
+    "it_80299B6C",
+    "it_80299B74",
+    "it_80299C08",
+    "it_80299C10",
+    "it_80299C18",
+    "it_80299C20",
+    "it_80299C28",
+    "it_80272940",
+    "it_80273130 enum_t",
+    "ItemStateTable it_803F6630",
+    "GET_ITEM",
+    "GET_JOBJ",
+    "PAD_STACK",
+    "lbVector_Normalize",
+    "lbVector_Angle",
+    "efSync_Spawn",
+    "efLib_DestroyAll",
+    "db_80225DD8",
+    "M_PI",
+    "M_PI_2",
+    "HSD_Randf",
+    "HSD_Randi",
+    "env_flags",
+    "light gun beam",
+    "item projectile collision"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching `src/melee/it/items/itlgunbeam.c` to see whether this partial match became a full match.",
+    "Search for other uses of `ItLGunBeamVars.xE04` to verify the integer type correction and whether remaining `0.0f` assignments were later cleaned up.",
+    "Search for `it_80273130` callsites after this PR to confirm `enum_t` propagated correctly across item collision logic.",
+    "Compare other item projectile rewrites using `PAD_STACK` and angle normalization loops for reusable matching patterns.",
+    "Inspect later header cleanup around `it_2725.h` to see if `it_80272940` received a meaningful name."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,137 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1612",
+  "pr": {
+    "number": 1612,
+    "title": "Clean up grstory",
+    "url": "https://github.com/doldecomp/melee/pull/1612",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-20T02:00:01Z",
+    "merged_at": "2025-06-20T02:18:22Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Cleaned up the Yoshi's Story ground/stage implementation by replacing anonymous local user-data structs and raw gv/offset fields with typed Ground union members for Randall and Shy Guys, renaming the Shy Guy parameter block symbol, tightening grstory function prototypes to Ground_GObj where appropriate, modernizing include paths/header guard style, and adding comments/doxygen for the nontrivial Randall and Shy Guy timer/spawn behavior. The PR appears to be a readability/type-clarity cleanup rather than a behavioral change.",
+  "change_classification": {
+    "primary_type": "stage cleanup and type/naming refinement",
+    "categories": [
+      "headers",
+      "naming",
+      "types-structs",
+      "documentation",
+      "stage-callback-signatures"
+    ],
+    "systems": [
+      "stage",
+      "ground",
+      "config",
+      "symbols"
+    ]
+  },
+  "key_files": [
+    "src/melee/gr/grstory.c",
+    "src/melee/gr/grstory.h",
+    "src/melee/gr/types.h",
+    "config/GALE01/symbols.txt"
+  ],
+  "what_changed": [
+    "Renamed the local sbss symbol grSt_804D69B8 to shyguy_vars in config/GALE01/symbols.txt and in grstory.c.",
+    "Replaced the anonymous Shy Guy parameter struct fields unk0, unk4, unk8, and vars[7] with named fields timer_min, timer_rand, spawnmany_rarity, and vpos[6].",
+    "Changed grstory callbacks and declarations from generic HSD_GObj* to Ground_GObj* in grstory.c and grstory.h where the objects are ground objects.",
+    "Replaced direct gobj->user_data access with GET_GROUND(gobj) in the cleaned-up grstory functions.",
+    "Removed temporary local UnkUserData and UnkUserData2 structs from grstory.c and added shared Ground union members struct Randall and struct ShyGuys in src/melee/gr/types.h.",
+    "Added Ground.u.randall with timer and jobj fields for Randall's puff-effect logic.",
+    "Added Ground.u.shyguys with count, pattern, and timer fields for Shy Guy spawn-state logic.",
+    "Extracted repeated Shy Guy timer reset code into reset_shyguy_timer and repeated spawn-count selection into set_shyguy_spawn_count.",
+    "Annotated StageCallbacks.callback0 as an initialization callback and StageData callback2/callback3 as on-load and on-GO callbacks.",
+    "Added comments labeling StageCallbacks entries for Randall and Shy Guys.",
+    "Added doxygen-style comments explaining Shy Guy initialization, Shy Guy frame callback, Randall initialization, Randall puff timer callback, and the rarity parameter for multi-Shy-Guy spawning.",
+    "Modernized grstory.h guard from GALE01_1E302C to MELEE_GR_STORY_H and added melee/gr/forward.h for Ground_GObj.",
+    "Updated includes in grstory.c to use the local grstory.h first and angle-bracket project include paths such as <melee/gr/...> and <sysdolphin/baselib/...>.",
+    "Used ARRAY_SIZE(shyguy_vars->vpos) instead of hardcoding 6 for Shy Guy spawn-pattern selection.",
+    "Renamed local variables for clarity, including joint to jobj and several arg0 parameters to gobj."
+  ],
+  "smart_moves": [
+    "Moved Randall and Shy Guy per-ground state into the central Ground union instead of maintaining file-local fake user-data structs; this makes offsets reusable and less error-prone for future stage work.",
+    "Preserved suspicious overwrite behavior in both the Shy Guy timer reset and spawn-count selection while documenting that the values are overwritten and may be leftover debug behavior, avoiding accidental behavior changes during cleanup.",
+    "Factored repeated logic into static inline helpers while keeping the original behavior visible and local to grstory.c.",
+    "Used Ground_GObj and GET_GROUND to communicate object ownership/type intent without changing the underlying callback table type in StageCallbacks.",
+    "Replaced magic spawn-pattern bound 6 with ARRAY_SIZE on the named vpos array, tying loop/random bounds to the data layout.",
+    "Improved symbol naming at the config level, making the sbss object searchable as shyguy_vars rather than an address-derived grSt name."
+  ],
+  "decomp_lessons": [
+    "When a stage file uses hand-rolled local structs to describe gobj->user_data offsets, prefer promoting confirmed fields into the shared Ground union with domain names and offset comments.",
+    "Cleanups should preserve known oddities such as overwritten assignments if they are present in the original code; document them rather than simplifying them away.",
+    "Ground-specific callbacks can often be made clearer by using Ground_GObj* in stage headers and implementation while retaining compatibility with generic callback storage as needed.",
+    "For decompiled stage parameter blocks loaded from data, rename fields based on observed behavior such as timer_min, timer_rand, spawnmany_rarity, and vertical position arrays.",
+    "Use helper functions for repeated matching-sensitive logic only when the generated code remains equivalent; in this PR the helper names encode behavior and reduce duplicate offset manipulation.",
+    "Callback arrays benefit from inline comments naming object slots such as Randall and Shy Guys, especially when indices are still numeric gobj IDs."
+  ],
+  "naming_conventions": [
+    "Use MELEE_GR_STORY_H style header guards instead of address-derived guards like GALE01_1E302C.",
+    "Use Ground_GObj* for functions that operate on ground object gobj values.",
+    "Use GET_GROUND(gobj) rather than open-coding gobj->user_data when retrieving Ground data.",
+    "Prefer domain-specific union member names such as u.randall and u.shyguys over generic gv.unk or local UnkUserData structs.",
+    "Name per-feature fields by gameplay behavior: Randall.timer, Randall.jobj, ShyGuys.count, ShyGuys.pattern, ShyGuys.timer.",
+    "Name stage parameter globals by feature, e.g. shyguy_vars, rather than address-based symbols like grSt_804D69B8.",
+    "Use jobj for HSD_JObj* locals/parameters rather than vague names like joint when the value is a JObj pointer."
+  ],
+  "assembly_or_matching_tactics": [
+    "Kept explicit overwritten assignments in reset_shyguy_timer and set_shyguy_spawn_count call sites to preserve original game code behavior and likely matching.",
+    "Used PAD_STACK(4) in Randall initialization after replacing the local anonymous user-data struct, indicating stack layout still needed matching care.",
+    "Reduced temporary padding in grStory_801E31C0 from u8 _[8] to u8 _[4], suggesting stack-size adjustment after typed cleanup.",
+    "Changed float literals to uppercase suffix style, e.g. 0.0F, 1.0F, 25.0F, while preserving numeric values.",
+    "Introduced inline wrappers/helpers such as randi, reset_shyguy_timer, set_shyguy_spawn_count, and frand_amp1 without removing the original control-flow semantics shown in the diff.",
+    "Replaced the hardcoded Shy Guy pattern count with ARRAY_SIZE(shyguy_vars->vpos), which is safer while still expressing the same six-entry bound."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "The PR body explicitly states the intended cleanup goals: add Randall/ShyGuys members to the Ground union, give variables and struct members better names, and add doxygen comments for nontrivial functions."
+  ],
+  "searchable_terms": [
+    "pr-1612",
+    "Clean up grstory",
+    "grstory",
+    "Yoshi's Story",
+    "Randall",
+    "Shy Guys",
+    "shyguy_vars",
+    "grSt_804D69B8",
+    "Ground union",
+    "Ground_GObj",
+    "GET_GROUND",
+    "struct Randall",
+    "struct ShyGuys",
+    "timer_min",
+    "timer_rand",
+    "spawnmany_rarity",
+    "vpos",
+    "reset_shyguy_timer",
+    "set_shyguy_spawn_count",
+    "grStory_801E3234",
+    "grStory_801E3418",
+    "grStory_801E366C",
+    "grStory_801E3370",
+    "StageCallbacks",
+    "StageData",
+    "MELEE_GR_STORY_H",
+    "ARRAY_SIZE",
+    "PAD_STACK"
+  ],
+  "follow_up_queries": [
+    "Find other stage files with local UnkUserData structs that should become Ground union members.",
+    "Search for remaining gobj->user_data casts in src/melee/gr that can use GET_GROUND and typed Ground_GObj signatures.",
+    "Search for address-derived header guards in stage headers that should be converted to MELEE_GR_*_H names.",
+    "Look for other sbss grXX_804D symbols that represent stage parameter blocks and can be renamed based on behavior.",
+    "Audit other stage callback arrays for unlabeled object indices that could be commented with object names."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

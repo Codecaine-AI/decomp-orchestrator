@@ -1,0 +1,157 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2045",
+  "pr": {
+    "number": 2045,
+    "title": "cm: Match 10 camera functions",
+    "url": "https://github.com/doldecomp/melee/pull/2045",
+    "state": "MERGED",
+    "author": "itsgrimetime",
+    "created_at": "2025-12-30T17:19:55Z",
+    "merged_at": "2026-01-05T00:30:45Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched and improved a cluster of camera-system functions in src/melee/cm, primarily by replacing placeholder stubs with C implementations for target-interest and target-position camera setters and by refining Camera struct layout around offsets 0x344 and 0x35C. The PR also improved Camera_8002FC7C matching and added Camera_8002F9E4 initialization logic for mode 5 camera state. Review focused heavily on avoiding raw pointer arithmetic, moving discovered overlay fields into struct/union definitions, and keeping argument names generic until behavior is confirmed in-game or by stronger evidence.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "types-structs",
+      "headers",
+      "naming",
+      "cleanup",
+      "fix"
+    ],
+    "systems": [
+      "camera",
+      "melee-core"
+    ]
+  },
+  "key_files": [
+    "src/melee/cm/camera.c",
+    "src/melee/cm/camera.h",
+    "src/melee/cm/types.h"
+  ],
+  "what_changed": [
+    "Implemented previously stubbed camera functions: Camera_8002E6FC, Camera_8002E818, Camera_8002E948, Camera_8002EB5C, Camera_8002EC7C, Camera_8002ED9C, Camera_8002F274, and Camera_8002F9E4, with the PR summary also noting Camera_8002B0E0 matched 100% and Camera_8002FC7C improved from 71.8% to 98.2%.",
+    "Camera_8002E6FC, Camera_8002E818, and Camera_8002E948 now set camera target_interest through a mode field x341_b1_b2 and the new x344 union, supporting player/entity lookup, direct Vec3, or callback-supplied Vec3 paths.",
+    "Camera_8002EB5C, Camera_8002EC7C, Camera_8002ED9C, and Camera_8002F274 now manipulate target_position through x341_b3_b4 and the x35C union, including bitfields that track which target-position components or auxiliary values have been supplied.",
+    "Added Camera struct fields in types.h at 0x344 and 0x35C: x344 as a union of s32, Vec3, and callback pointer for target_interest behavior; x35C as a union of Vec3, callback pointer, and a small bitfield struct containing b0, b1, b2, pad, and s16 x2.",
+    "Camera_8002F9E4 now initializes mode 5 camera state, stage camera bounds and angle offsets, min/max distance scaling, pause-eye vectors, pause-eye distance special casing for x304 == 10, and target_interest/target_position derived from x308, x314, and pause_eye_offset.",
+    "Camera_8002FC7C was adjusted with temporaries/pointers for matching, including a CameraTransformState* local and an x304_check local used for the x304 == 0xA branch.",
+    "Camera_8002B0E0 changed Player_GetPlayerId masking from 0xFFFFu to 0xFFu and removed an empty redundant conditional.",
+    "camera.h prototypes were updated for several known void functions previously declared as UNK_RET/UNK_PARAMS, and argument names for newly matched functions were kept generic as arg0/arg1 where semantics were uncertain."
+  ],
+  "smart_moves": [
+    "Converted discovered memory overlays into Camera struct unions instead of leaving raw casts such as *(s32*)&pad_342[2] or pointer arithmetic off cm_80452C68. This made the decomp cleaner and encoded layout knowledge for future functions.",
+    "Separated two conceptually similar camera targets: x344 for target_interest and x35C for target_position. Review explicitly noted this distinction as making sense and preferable to reusing anonymous padding.",
+    "Used unions for fields that can be interpreted as a scalar/player slot, Vec3, or callback depending on x341 mode bits, preserving matching flexibility while documenting the runtime state machine.",
+    "Kept uncertain parameter names generic after review challenged names like fov, frames, and mode. This avoided locking in misleading semantics before in-game verification.",
+    "Reused common switch patterns for applying target_interest/target_position from direct vectors or callback output, matching observed mode-bit behavior across related functions."
+  ],
+  "decomp_lessons": [
+    "When a function accesses a known global struct offset repeatedly, prefer adding a named struct/union field over pointer arithmetic or casts into padding, especially when review identifies a stable semantic grouping.",
+    "Do not give semantic parameter names such as fov, frames, or mode from offset guesses alone. If the same storage participates in a Vec3 or is later passed to Player_GetEntity, keep arg0/arg1 until behavior is tested or corroborated.",
+    "Bitfield-backed state around camera target selection can represent submodes rather than independent booleans; preserve exact offsets and widths while using generic names if semantics are not fully known.",
+    "Union fields are useful for decompiling camera state machines where the active interpretation is selected by nearby bitfields, such as player/entity id versus vector versus callback.",
+    "Small matching-oriented locals, pointer temporaries, and forced loads may be necessary for codegen, but they should still be expressed through struct fields where possible rather than raw address math.",
+    "Reviewers prefer avoiding unnecessary pointer arithmetic in melee camera code when equivalent struct accesses can be introduced safely."
+  ],
+  "naming_conventions": [
+    "Use Camera_800xxxxx symbol names until real semantic names are known.",
+    "Use arg0/arg1 for function parameters whose meaning is not confirmed; this PR specifically moved away from speculative names like fov, frames, and mode.",
+    "Offset-derived struct names such as x344, x35C, x341_b1_b2, and x341_b3_b4 are acceptable when semantics remain incomplete but layout is known.",
+    "Padding renamed from pad_342 to x342_pad when surrounding offsets were split into real fields.",
+    "Header prototypes may include arg0/arg1 names for clarity without asserting semantics."
+  ],
+  "assembly_or_matching_tactics": [
+    "Introduced Camera struct unions at exact offsets to replace raw casts and preserve matching while improving readability.",
+    "Used mode-bit switches on x341_b1_b2 and x341_b3_b4 to select entity lookup, direct vector copy, callback invocation, or no-op behavior.",
+    "Used local pointer temporaries such as x304_ptr, x32C_ptr, x314_ptr, pause_eye_ptr, and transform in Camera_8002F9E4/Camera_8002FC7C to shape generated code toward the target assembly.",
+    "Used a forced cm_803BCCA0 load comment in Camera_8002F9E4 as a matching tactic.",
+    "For Camera_8002FC7C, read x304 through a local pointer into x304_check before comparing against 0xA to improve match percentage.",
+    "Preserved explicit vector component zeroing and constants for pause camera setup: pause_eye_offset = {0.0, 85.0, 730.0}, pause_up = {0.0, 1.0, 0.0}."
+  ],
+  "review_feedback": [
+    "sadkellz: The temporary X35C_Bits typedef and macro should probably be added to the Camera struct instead of living in camera.c.",
+    "sadkellz: pad_342[2] should be replaced with a real field similar to x35C; review suggested it corresponds to target_interest, while x35C corresponds to target_position.",
+    "sadkellz: Avoid pointer arithmetic when it is not necessary; use struct fields instead.",
+    "sadkellz: The argument named fov in Camera_8002EB5C was not convincing because cm_80452C68 + 0x360 is cm_80452C68.x35C + 0x4 and appears to be the Y component of a target vector in one switch case.",
+    "sadkellz: The analogous fov name in Camera_8002EC7C might actually be the Z position of the target.",
+    "sadkellz: The frames name in Camera_8002ED9C might be plausible, possibly related to mode 6 boss intro timing, but the reviewer recommended leaving all such names unnamed until confirmed.",
+    "sadkellz: The mode name in Camera_8002F9E4 was questioned because Camera_8002BA00 eventually uses it for Player_GetEntity, which takes a port/slot-like argument.",
+    "itsgrimetime acknowledged the requested cleanups and agreed to keep uncertain arguments generic.",
+    "sadkellz noted the x344/x35C union definitions seemed a little weird but was unsure of the preferred representation, suggesting more input might be useful."
+  ],
+  "searchable_terms": [
+    "pr-2045",
+    "cm: Match 10 camera functions",
+    "Camera_8002B0E0",
+    "Camera_8002E6FC",
+    "Camera_8002E818",
+    "Camera_8002E948",
+    "Camera_8002EB5C",
+    "Camera_8002EC7C",
+    "Camera_8002ED9C",
+    "Camera_8002F274",
+    "Camera_8002F9E4",
+    "Camera_8002FC7C",
+    "Camera_8002FE38",
+    "Camera_8002BA00",
+    "Camera_8002BAA8",
+    "Camera_8002BD88",
+    "Camera_8002C010",
+    "fn_8002F908",
+    "fn_8002FBA0",
+    "cm_80452C68",
+    "cm_803BCCA0",
+    "Camera struct",
+    "x344",
+    "x35C",
+    "x341_b1_b2",
+    "x341_b3_b4",
+    "target_interest",
+    "target_position",
+    "pause_eye_offset",
+    "pause_eye_distance",
+    "pause_up",
+    "min_distance",
+    "max_distance",
+    "Stage_GetCamBoundsLeftOffset",
+    "Stage_GetCamBoundsRightOffset",
+    "Stage_GetCamBoundsTopOffset",
+    "Stage_GetCamBoundsBottomOffset",
+    "Stage_GetCamAngleRadiansUp",
+    "Stage_GetCamAngleRadiansDown",
+    "Stage_GetCamAngleRadiansRight",
+    "Stage_GetCamAngleRadiansLeft",
+    "Player_GetEntity",
+    "Player_GetPlayerId",
+    "ftLib_80086B74",
+    "CmSubject",
+    "HSD_GObj",
+    "HSD_RectF32",
+    "HSD_PadCopyStatus",
+    "nml_subStickY",
+    "pointer arithmetic",
+    "union struct field",
+    "bitfield",
+    "arg0 arg1 generic naming"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename x344, x35C, x341_b1_b2, or x341_b3_b4 to semantic camera target-interest/target-position names.",
+    "Search for subsequent review or commits involving Camera_8002EB5C, Camera_8002EC7C, and Camera_8002ED9C to confirm whether their arguments are target Y/Z/frames or something else.",
+    "Investigate mode 6 camera behavior for Master Hand/Crazy Hand intro to confirm the meaning of x35C.bits.x2 and related target-position bitfields.",
+    "Check later camera struct layout refinements around offsets 0x342-0x368 for preferred union/bitfield representation.",
+    "Search for uses of Camera_8002F9E4 and Camera_8002FC7C to clarify whether their s8 arguments represent player port, slot, camera mode, or another selector."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,136 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1648",
+  "pr": {
+    "number": 1648,
+    "title": "lbcardgame matches",
+    "url": "https://github.com/doldecomp/melee/pull/1648",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-27T19:40:32Z",
+    "merged_at": "2025-06-27T19:45:54Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched several early lbcardgame functions by replacing placeholders with concrete implementations, tightening public prototypes, and correcting the static model for lb_804329F0 from an array-like placeholder into a structured singleton containing two timer/flag elements, timing fields, an active-alarm flag, and an OSAlarm. The work also added needed declarations for lb_80019628 and HSD_PadRenewCopyStatus so the new code could call existing library/controller functionality directly.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "static-data-layout",
+      "prototype-cleanup"
+    ],
+    "systems": [
+      "melee/lb",
+      "sysdolphin/baselib/controller",
+      "dolphin/os"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/lbcardgame.c",
+    "src/melee/lb/lbcardgame.static.h",
+    "src/melee/lb/lbcardgame.h",
+    "src/melee/lb/lb_0192.h",
+    "src/sysdolphin/baselib/controller.h"
+  ],
+  "what_changed": [
+    "Implemented lb_80019894, lb_800198E0, lb_80019900, lb_80019A48, and lb_80019AAC, replacing placeholder comments in lbcardgame.c.",
+    "Changed lb_80019880 to write lb_804329F0.x38 instead of indexing a guessed lb_804329F0 array field.",
+    "Implemented lb_80019894 as an interrupt-protected raw queue count read: OSDisableInterrupts, HSD_PadGetRawQueueCount, lb_80019628, OSRestoreInterrupts, then return the count.",
+    "Implemented lb_800198E0 as a direct wrapper around HSD_PadRenewMasterStatus.",
+    "Implemented lb_80019900 as a two-element timer accumulator loop that sets per-element x10 flags and conditionally renews game/copy pad status.",
+    "Changed lb_80019A30 from returning s32 to returning bool for lb_804329F0.x0[index].x10.",
+    "Implemented lb_80019A48 to cancel lb_804329F0.alarm under disabled interrupts when lb_804329F0.x48 is set.",
+    "Implemented lb_80019AAC to invoke an Event callback, initialize two timer elements using 1.0F/60 * OS_TIMER_CLOCK, reset several lb_804329F0 fields, and call lb_80019628.",
+    "Updated lbcardgame.h prototypes from UNK_RET/UNK_PARAMS to concrete signatures for several functions, including void returns, bool lb_80019A30(int index), and int lb_80019BB8(int).",
+    "Added lb_80019628(void) to lb_0192.h.",
+    "Added HSD_PadRenewCopyStatus(void) to sysdolphin/baselib/controller.h.",
+    "Expanded lbcardgame.static.h to include dolphin/os/OSAlarm.h and to model lb_804329F0 as a single struct rather than static struct lb_804329F0_t lb_804329F0[5]."
+  ],
+  "smart_moves": [
+    "The match appears to depend on recognizing lb_804329F0 as one aggregate object with embedded repeated timer elements, not as an array of five small structs; this allowed natural field references such as x38, x40, x48, and alarm.",
+    "Interrupt-sensitive routines were modeled with explicit OSDisableInterrupts/OSRestoreInterrupts pairs around raw queue/alarm state operations, matching expected low-level controller timing behavior.",
+    "Public headers were updated in tandem with implementation work, replacing unknown prototypes with typed function signatures and adding missing external declarations rather than relying on implicit or placeholder declarations.",
+    "The implementation reused existing HSD pad APIs for master/game/copy status renewal instead of inlining controller behavior.",
+    "The static header included OSAlarm.h only once the lb_804329F0 layout needed a real OSAlarm member, tying the include to concrete struct evidence."
+  ],
+  "decomp_lessons": [
+    "For static globals near controller/timing code, an apparent array access pattern may actually be a mis-modeled singleton struct with repeated subelements plus trailing control fields.",
+    "Matching small wrapper functions can reveal missing prototypes in adjacent headers; add the declaration at the true owner header, such as controller.h for HSD_PadRenewCopyStatus.",
+    "Replace UNK_RET/UNK_PARAMS as soon as a function body proves the signature, especially for void wrappers and boolean accessors.",
+    "When matching interrupt-protected code, preserve the exact disable/restore pattern and store the old interrupt state in a local passed back to OSRestoreInterrupts.",
+    "Timer initialization using OS_TIMER_CLOCK and fractional constants can be a key clue for field widths and signedness; this PR used s64/u64-like fields for accumulated clock values.",
+    "If a field is used as a boolean flag but stored as int in the struct, the public accessor can still return bool when the call pattern supports it.",
+    "Comments such as the inline 'huh? overwritten?' indicate uncertainty about an observed store sequence; preserve evidence-grounded behavior even when the initialization order looks redundant."
+  ],
+  "naming_conventions": [
+    "Still-used unknown field names followed offset-style xN notation: x0, x4, x8, x10, x38, x40, x48.",
+    "The repeated inner struct was named generically as struct UnkArrElem because its semantic role was not fully known.",
+    "Static global structs kept address-derived names such as lb_804329F0_t, lb_80432A68_t, and lb_80433318_t.",
+    "Function declarations kept the address-comment convention, for example /* 019894 */ u8 lb_80019894(void).",
+    "Known library names retained their subsystem prefixes: OSDisableInterrupts, OSRestoreInterrupts, OSCancelAlarm, HSD_PadRenewMasterStatus, HSD_PadRenewGameStatus, HSD_PadRenewCopyStatus."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use a singleton static struct with an embedded two-element array to match offsets that previously looked like lb_804329F0[2].unk_8.",
+    "Model volatile/global timing state with 64-bit integer fields where assignments use OS_TIMER_CLOCK-derived values.",
+    "Implement simple leaf wrappers directly around library calls when the function address body suggests no extra logic.",
+    "Use for-loops with int indices for the two repeated timer elements in lb_80019900 and lb_80019AAC.",
+    "Call lb_80019628 inside the interrupt-protected queue-count path and after initialization, as shown by the matched bodies.",
+    "Preserve alarm cancellation ordering: disable interrupts, check active flag, call OSCancelAlarm on the embedded alarm, clear flag, restore interrupts."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "The PR had one issue comment recorded, but the provided human_text_excerpt is empty, so there is no evidence-grounded reviewer feedback to summarize."
+  ],
+  "searchable_terms": [
+    "pr-1648",
+    "lbcardgame matches",
+    "r-burns",
+    "lbcardgame.c",
+    "lbcardgame.h",
+    "lbcardgame.static.h",
+    "lb_0192.h",
+    "controller.h",
+    "lb_80019880",
+    "lb_80019894",
+    "lb_800198E0",
+    "lb_80019900",
+    "lb_80019A30",
+    "lb_80019A48",
+    "lb_80019AAC",
+    "lb_80019BB8",
+    "lb_80019628",
+    "lb_804329F0",
+    "lb_804329F0_t",
+    "UnkArrElem",
+    "OSDisableInterrupts",
+    "OSRestoreInterrupts",
+    "OSCancelAlarm",
+    "OSAlarm",
+    "OS_TIMER_CLOCK",
+    "HSD_PadGetRawQueueCount",
+    "HSD_PadRenewMasterStatus",
+    "HSD_PadRenewGameStatus",
+    "HSD_PadRenewCopyStatus",
+    "Event",
+    "static singleton global",
+    "controller timing",
+    "interrupt protected",
+    "raw queue count"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename lb_804329F0_t fields x0/x38/x40/x48 or struct UnkArrElem after more lbcardgame functions were matched.",
+    "Search for lb_80019BB8 follow-up work, since this PR only updated its prototype in the excerpt while later functions remained placeholder/unknown.",
+    "Search for HSD_PadRenewCopyStatus implementation or additional callers to validate its signature and controller subsystem behavior.",
+    "Investigate whether the lb_80019AAC store lb_804329F0.x0[0].x0 = 0 after timer initialization was later explained or renamed."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

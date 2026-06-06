@@ -1,0 +1,145 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1099",
+  "pr": {
+    "number": 1099,
+    "title": "Unlink non-matching files in `configure.py`",
+    "url": "https://github.com/doldecomp/melee/pull/1099",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-01-24T09:57:30Z",
+    "merged_at": "2024-01-24T10:11:15Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Build-configuration PR that changed the project away from a `--non-matching` switch toward an explicit `--must-match` mode, then marked many formerly `Matching` objects as `NonMatching` in `configure.py` so non-matching C can exist without being linked as matching output. It also added `BUGFIX` to compile flags, adjusted several source guards so bug-fixed/non-matching builds can compile different code from strict matching builds, gave runtime libraries their own cflags path, removed `-gccinc` from runtime cflags, and changed GALE01 section alignment from 8 to 32.",
+  "change_classification": {
+    "primary_type": "build_config_nonmatching_unlink",
+    "categories": [
+      "decomp-matching",
+      "build-system",
+      "nonmatching-management",
+      "compile-flags",
+      "headers",
+      "source-guards"
+    ],
+    "systems": [
+      "configure.py",
+      "config/GALE01",
+      "compile_flags",
+      "dolphin/os",
+      "melee/lb",
+      "sysdolphin/baselib",
+      "fighters"
+    ]
+  },
+  "key_files": [
+    "configure.py",
+    "compile_flags.txt",
+    "config/GALE01/splits.txt",
+    "src/dolphin/os/OSAlloc.c",
+    "src/melee/lb/lb_00B0.c",
+    "src/sysdolphin/baselib/cobj.c",
+    "src/sysdolphin/baselib/debug.h",
+    "src/sysdolphin/baselib/mobj.c",
+    "src/sysdolphin/baselib/tev.c"
+  ],
+  "what_changed": [
+    "Renamed the configure option from `--non-matching` to `--must-match` and changed the behavior from `if not args.non_matching: -DMUST_MATCH` to `if args.must_match: -DMUST_MATCH`.",
+    "Updated the option help text to say `define MUST_MATCH for make compatibility`, clarifying that `MUST_MATCH` is now an explicit compatibility/matching mode rather than the default opposite of non-matching.",
+    "Extended `Lib(...)` to accept a `cflags` argument defaulting to `cflags_base`, and changed `RuntimeLib(...)` to pass `cflags=cflags_runtime`.",
+    "Removed `-gccinc` from the runtime cflags list shown in the diff excerpt.",
+    "Changed many `Object(Matching, ...)` entries in `configure.py` to `Object(NonMatching, ...)`, especially across `melee/lb`, `melee/pl/player.c`, many `melee/ft` files, common fighter-state files, and character special files.",
+    "Added `-DBUGFIX` to `compile_flags.txt`.",
+    "Changed all top-level GALE01 section alignments in `config/GALE01/splits.txt` from `align:8` to `align:32` for `.init`, `extab`, `extabindex`, `.text`, `.ctors`, `.dtors`, `.rodata`, `.data`, `.bss`, `.sdata`, `.sbss`, and `.sdata2`.",
+    "Changed several source guards from plain `#ifdef MUST_MATCH` to `#if defined(MUST_MATCH) || !defined(BUGFIX)` for unused/force-active data and assert behavior in `OSAlloc.c`, `cobj.c`, `debug.h`, and `mobj.c`.",
+    "Changed `lb_00B0.c` from `#ifndef MUST_MATCH` to `#ifdef BUGFIX` around a `return NULL;` path.",
+    "Changed `tev.c` so the inline asm `HSD_SetupChannel` block is guarded by `#if defined(MUST_MATCH) && !defined(WIP)` instead of `#ifdef MWERKS_GEKKO`.",
+    "Replaced direct `__assert(__FILE__, line, \"0\")` calls in several `tev.c` default cases with `HSD_ASSERT(line, 0)` and changed some allocator-size literals from hexadecimal to decimal."
+  ],
+  "smart_moves": [
+    "Made strict matching opt-in with `--must-match`, which reduces ambiguity around whether the build is intended to reproduce the original binary or compile convenient non-matching/development code.",
+    "Used existing `Object(Matching, ...)` versus `Object(NonMatching, ...)` metadata as the central place to unlink files from the matching build, instead of scattering per-file build exceptions elsewhere.",
+    "Introduced a separate cflags parameter for libraries, letting `RuntimeLib` use `cflags_runtime` without forcing all libraries through the same flag set.",
+    "Separated matching-only artifacts from bug-fixed development builds with `MUST_MATCH` and `BUGFIX` guards, preserving old binary-sensitive unused data/assert paths when necessary while permitting cleaner behavior in normal development builds.",
+    "Kept `compile_flags.txt` in sync by adding `-DBUGFIX`, so editor tooling and compile-database consumers see the same macro assumptions as the intended non-matching build."
+  ],
+  "decomp_lessons": [
+    "Do not mark a translation unit as `Matching` in `configure.py` just because it compiles; only use `Matching` when it should participate in strict linked matching output.",
+    "Prefer a positive `--must-match` switch over a negative/non-default `--non-matching` switch when the build system needs to distinguish strict reproduction from working decompiled code.",
+    "When non-matching code intentionally fixes undefined behavior or missing returns, gate those fixes with a dedicated macro such as `BUGFIX` rather than overloading `MUST_MATCH` for every development-build difference.",
+    "Runtime libraries may need cflags that differ from game libraries; make the library constructor accept explicit cflags rather than relying on one global list.",
+    "Inline asm fallbacks or matching-only asm blocks should be guarded narrowly, as in `defined(MUST_MATCH) && !defined(WIP)`, so WIP/non-matching C paths can still build.",
+    "Section alignment settings in splits files are part of reproducibility; this PR changed GALE01 section alignment to 32, so future split edits should preserve the intended alignment unless there is matching evidence to change it."
+  ],
+  "naming_conventions": [
+    "`MUST_MATCH` is treated as the macro for strict/make-compatible matching behavior.",
+    "`BUGFIX` is treated as the macro for development/non-matching builds that allow corrected behavior such as returning `NULL` or omitting original unused artifacts.",
+    "`Object(Matching, \"path.c\")` and `Object(NonMatching, \"path.c\")` are the build-system convention for whether an object is linked into matching output.",
+    "`HSD_ASSERT(line, cond)` is preferred over open-coded `__assert(__FILE__, line, \"0\")` in the touched `sysdolphin/baselib/tev.c` code.",
+    "The configure option name `--must-match` communicates positive intent more clearly than the removed `--non-matching` option."
+  ],
+  "assembly_or_matching_tactics": [
+    "Moved `HSD_SetupChannel` inline asm in `src/sysdolphin/baselib/tev.c` behind `#if defined(MUST_MATCH) && !defined(WIP)`, keeping asm for strict matching while allowing WIP/non-matching alternatives.",
+    "Kept force-active unused strings/floats in files such as `OSAlloc.c`, `cobj.c`, and `mobj.c` when `MUST_MATCH` is set or when `BUGFIX` is not defined, preserving binary-sensitive artifacts outside bug-fixed builds.",
+    "Changed many object statuses from `Matching` to `NonMatching` rather than editing their source to force a match, indicating the intended tactic was unlinking imperfect C from the matching target.",
+    "Adjusted GALE01 section alignment from 8 to 32, a linker/split-level matching tactic rather than a source-level code change."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1099",
+    "ribbanya",
+    "Unlink non-matching files in configure.py",
+    "configure.py",
+    "--must-match",
+    "--non-matching",
+    "MUST_MATCH",
+    "BUGFIX",
+    "-DBUGFIX",
+    "Object(Matching)",
+    "Object(NonMatching)",
+    "NonMatching",
+    "Matching",
+    "cflags_runtime",
+    "cflags_base",
+    "RuntimeLib",
+    "Lib cflags",
+    "compile_flags.txt",
+    "config/GALE01/splits.txt",
+    "align:32",
+    "align:8",
+    "OSAlloc.c",
+    "lb_00B0.c",
+    "cobj.c",
+    "debug.h",
+    "mobj.c",
+    "tev.c",
+    "HSD_ASSERT",
+    "HSD_SetupChannel",
+    "MWERKS_GEKKO",
+    "WIP",
+    "force_active",
+    "melee/ft",
+    "ftCommon",
+    "player.c",
+    "lbvector.c",
+    "lbfile.c"
+  ],
+  "follow_up_queries": [
+    "configure.py --must-match MUST_MATCH BUGFIX",
+    "Object(Matching Object(NonMatching configure.py",
+    "cflags_runtime RuntimeLib cflags_base",
+    "HSD_SetupChannel defined(MUST_MATCH) !defined(WIP)",
+    "GALE01 splits align:32",
+    "compile_flags.txt -DBUGFIX",
+    "HSD_ASSERT __assert tev.c"
+  ],
+  "confidence": 0.84,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

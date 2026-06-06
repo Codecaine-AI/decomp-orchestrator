@@ -1,0 +1,140 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2027",
+  "pr": {
+    "number": 2027,
+    "title": "gr: some Icicle Mountain functions",
+    "url": "https://github.com/doldecomp/melee/pull/2027",
+    "state": "MERGED",
+    "author": "itsgrimetime",
+    "created_at": "2025-12-30T01:27:22Z",
+    "merged_at": "2026-01-05T20:51:25Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Focused Icicle Mountain stage decomp PR split from #2024. It matched and typed several gricemt functions, especially initialization and row/platform/material handling, replacing placeholder/pointer-arithmetic-heavy code with loops, row-data structs, explicit s16 indices, HSD_GObj arrays, and more accurate function prototypes. The author used Dolphin debugger tracing to investigate grIceMt_GroundVars storage, especially the xF4/xF8 area, but explicitly noted some uncertainty remained around whether there are two GroundVars-like interpretations and around row data naming/usage.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "stage logic",
+      "headers",
+      "types-structs",
+      "prototype cleanup",
+      "debugger-informed reverse engineering"
+    ],
+    "systems": [
+      "stage",
+      "ground",
+      "Icicle Mountain",
+      "gricemt",
+      "material items"
+    ]
+  },
+  "key_files": [
+    "src/melee/gr/gricemt.c",
+    "src/melee/gr/gricemt.h",
+    "src/melee/gr/types.h",
+    "src/melee/gr/forward.h"
+  ],
+  "what_changed": [
+    "Added a forward declaration for IceMountainParams in src/melee/gr/forward.h.",
+    "Changed IceMountainParams from an anonymous typedef form to a named struct and updated xAC from HSD_GObj* to s16*, reflecting its use as an array of row indices in gricemt code.",
+    "Introduced IceMtRowData in gricemt.c for grIm_803E4068, replacing HSD_GObj* grIm_803E4068[6] with a 12-byte row-data struct containing an id field and two unknown u32 fields.",
+    "Added constants grIm_804DB5B0, grIm_804DB5B4, and grIm_804DB5B8 alongside the existing 0.0F constant, used in material setup.",
+    "Reworked grIceMt_801F686C into structured initialization logic for Icicle Mountain: gets IceMountainParams, sets stage flags, initializes ground entities, handles adventure mode Stage_80225194() == 76, searches six row ids with ICEMT_FIELD_MAX, asserts on failure, computes Y positions with Ground_801C0498 and grIceMt_801F993C, spawns/positions several topi/platform ground objects, and falls back to melee-mode initialization otherwise.",
+    "Matched or partially typed additional gricemt functions including grIceMt_801F75FC, grIceMt_801F785C, grIceMt_801F85C4, grIceMt_801F87FC, grIceMt_801F8CDC, fn_801F91A8, and grIceMt_801F98A8.",
+    "Changed grIceMt_GroundVars layout: xC4 and xC6 became s16 instead of HSD_GObj*, the old void* xF4[6] was split into xE8/xEC/xF0 padding/unknown fields, s16 xF4[2], and HSD_GObj* xF8[5].",
+    "Updated gricemt.h prototypes from UNK_RET/UNK_PARAMS toward concrete types for several functions, including grIceMt_801F8CDC, grIceMt_801F929C, fn_801F9338/fn_801F9448/fn_801F9558, grIceMt_801F993C, grIceMt_801F9ACC, grIceMt_801FA6D8, grIceMt_801FA7F0, and grIceMt_801FA854.",
+    "Implemented grIceMt_801F8CDC as a material-item creation helper: loads a JObj desc from grDatFiles_801C6324 archive data, validates count <= 20, gets parent JObjs by joint indices, loads child joints, attaches them, creates grMaterial items, configures material parameters, and stores created item pointers in an output array.",
+    "Implemented grIceMt_801F87FC as a destroy callback that iterates five HSD_GObj pointers in icemt.xF8 and calls grMaterial_801C8CDC on non-null entries.",
+    "Implemented grIceMt_801F98A8 as cleanup gated by bit 0x40 in the first byte of icemt2.xC4, clearing the flag and removing up to four stored JObjs via Ground_801C2D0C."
+  ],
+  "smart_moves": [
+    "The PR was intentionally scoped as a smaller split from #2024, limiting review size while preserving progress on Icicle Mountain matches.",
+    "The author used Dolphin debugger breakpoints and memory tracing to inform struct and field interpretation instead of relying only on m2c output.",
+    "Pointer arithmetic from the original draft was cleaned up into named fields, loops, constants, and typed arrays, making the decomp easier to review and continue.",
+    "The six-row search logic in grIceMt_801F686C was expressed as explicit loops with ICEMT_FIELD_MAX and source-line-like assert values, which is clearer than nested comparisons and preserves matching-oriented control flow evidence.",
+    "The xF4/xF8 area was split after review toward a more plausible layout: short row/index data separated from HSD_GObj* storage, reducing the mixed-pointer-array ambiguity noted in review.",
+    "Function prototypes in the header were tightened where enough evidence existed, reducing future reliance on UNK_RET/UNK_PARAMS.",
+    "The material creation routine was documented with parameter comments describing Ground_GObj, joint_indices, count, and output_array, making future callers easier to reason about."
+  ],
+  "decomp_lessons": [
+    "For stage parameter fields, verify whether a field is an index array rather than a pointer array; IceMountainParams.xAC became s16* because code indexed rows through grIm_804D69F4->xAC.",
+    "When one storage region appears to be used as both small integers and pointers, consider whether the struct layout is wrong before accepting a mixed void* array. Reviewer feedback suggested IceMountainParams* xF4 plus HSD_GObj* xF8[0-4], and the final diff moved toward s16 xF4[2] plus HSD_GObj* xF8[5].",
+    "Adventure-mode-only stage logic can expose row/order initialization not present in normal melee mode; grIceMt_801F686C branches on Stage_80225194() == 76 and computes several platform Y positions from row ids.",
+    "Debugger tracing is valuable for stage GroundVars work, but uncertain findings should be marked with @todo/@note rather than over-named as final semantics.",
+    "Preserve assert strings and line constants when reconstructing loops; they can validate loop bounds and source structure, as with '<ICEMT_FIELD_MAX>' and bg_gobj/jobj asserts.",
+    "Use typed helper structs for static data tables when size/field access is known, even if later field names remain unknown; IceMtRowData captures the 12-byte row table with a known id field.",
+    "Bitfield overlays may be needed for matching when stage structs pack flags into integer/short fields; grIceMt_801F785C uses UnkFlagStruct casts on xD8 and grIceMt_801F98A8 checks byte flag 0x40 in icemt2.xC4."
+  ],
+  "naming_conventions": [
+    "Stage file and functions retain grIceMt_/grIm_ prefixes for Icicle Mountain symbols.",
+    "New local table type was named IceMtRowData, with fields id, x4, and x8; only id had behavioral evidence.",
+    "The PR introduced ICEMT_FIELD_MAX for the six-row bound used in row-selection loops.",
+    "Uncertain semantic comments used @todo and @note, for example noting callback3 destroy behavior and mixed interpretation of xF4/xF8 memory.",
+    "Header prototypes used descriptive parameter names where helpful, e.g. s16* joint_indices and HSD_GObj** output_array for grIceMt_801F8CDC."
+  ],
+  "assembly_or_matching_tactics": [
+    "Included <m2c_macros.h>, indicating some output was still close to m2c-style matching work.",
+    "Replaced decompiler-style nested/pointer logic with loops while preserving asserts and bounds to maintain codegen plausibility.",
+    "Used explicit casts where matching still required them, such as casting &gp->gv.icemt.xC4 to int for grIceMt_801FA0BC and casting integer row ids through HSD_GObj* in fn_801F91A8.",
+    "Used float constants with F suffix and named const floats to reproduce float literal usage in material setup and initialization.",
+    "For cleanup over adjacent pointer fields, grIceMt_801F98A8 uses HSD_JObj** ptrs = &gp->gv.icemt2.xC8 and indexed access, likely matching contiguous struct layout.",
+    "The author noted remaining 'goofy-feeling casts', signaling these were matching/struct-layout compromises rather than final semantic confidence."
+  ],
+  "review_feedback": [
+    "An unintended tools/decomp.py change adding --valid-syntax to m2c arguments was called out by the author as accidental and to be removed; that file is not listed among final changed files in the context.",
+    "Reviewer r-burns questioned the mixed void* xF4[6] model and suggested a more likely layout of IceMountainParams* xF4 plus HSD_GObj* xF8[0-4].",
+    "Reviewer r-burns noted that with the GroundVars layout changed accordingly, grIceMt_801F87FC could simplify to gp->gv.icemt.xF4[i] without expected codegen changes; final excerpt instead shows xF8[i] for stored HSD_GObj pointers.",
+    "The author commented on IceMtRowData interpretation: 'i dont think this is right, still iterating on it', so row-data field names beyond id should be treated as provisional.",
+    "The PR body explicitly says the author was not 100% sure what grIceMt_GroundVars.xF8[5] represents, though it seemed related to tracking platforms or breakable ice blocks that spawn within an Icicle Mountain row."
+  ],
+  "searchable_terms": [
+    "pr-2027",
+    "Icicle Mountain",
+    "gricemt",
+    "grIceMt_801F686C",
+    "grIceMt_801F75FC",
+    "grIceMt_801F785C",
+    "grIceMt_801F85C4",
+    "grIceMt_801F87FC",
+    "grIceMt_801F8CDC",
+    "fn_801F91A8",
+    "grIceMt_801F98A8",
+    "grIceMt_GroundVars",
+    "IceMountainParams",
+    "IceMtRowData",
+    "grIm_803E4068",
+    "grIm_804D69F4",
+    "xAC",
+    "xF4",
+    "xF8",
+    "ICEMT_FIELD_MAX",
+    "Stage_80225194",
+    "Ground_801C0498",
+    "grIceMt_801F993C",
+    "HSD_JObjSetTranslateY",
+    "grMaterial_801C8CFC",
+    "grMaterial_801C8CDC",
+    "grDatFiles_801C6324",
+    "UnkFlagStruct",
+    "m2c_macros",
+    "Dolphin debugger"
+  ],
+  "follow_up_queries": [
+    "Check later Icicle Mountain PRs by itsgrimetime that validate whether grIceMt_GroundVars has one or two semantic layouts.",
+    "Search for subsequent renames or refinements of IceMtRowData and grIm_803E4068 fields.",
+    "Search for later changes to IceMountainParams.xAC and grIceMt_GroundVars.xF4/xF8 to confirm final struct layout.",
+    "Compare later grIceMt_801F87FC and grIceMt_801F8CDC implementations for improved names around material items, platforms, or breakable ice blocks.",
+    "Review PR #2024 for the larger original Icicle Mountain work this was split from."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

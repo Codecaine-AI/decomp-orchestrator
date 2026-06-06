@@ -1,0 +1,148 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-724",
+  "pr": {
+    "number": 724,
+    "title": "Match `lbcollision`, pass 2",
+    "url": "https://github.com/doldecomp/melee/pull/724",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-26T10:22:15Z",
+    "merged_at": "2023-02-01T19:53:12Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Second matching pass for `src/melee/lb/lbcollision.c`, adding a large amount of C coverage for collision math and hit/hurt capsule routines, renaming many callsites from generic `func_8000....`/`HSD_JObjUnkMtxPtr` symbols to `lbColl_*`, and tightening collision-related headers/types used by fighter, item, and baselib code. The PR also added `tools/report_score.py` to generate asm-differ score tables for object functions; the author noted the max score was broken in the posted report.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "symbol-renaming",
+      "headers",
+      "struct-recovery",
+      "tooling"
+    ],
+    "systems": [
+      "lb collision",
+      "fighter collision",
+      "item collision",
+      "sysdolphin baselib",
+      "asm callsites",
+      "tools"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/lbcollision.c",
+    "src/melee/lb/lbcollision.h",
+    "src/melee/ft/ftcoll.c",
+    "src/melee/ft/ftdrawcommon.c",
+    "src/melee/ft/ftcoll.h",
+    "src/melee/ft/types.h",
+    "src/melee/it/types.h",
+    "src/melee/lb/forward.h",
+    "src/sysdolphin/baselib/jobj.h",
+    "src/sysdolphin/baselib/baselib_shared_data_003.h",
+    "tools/report_score.py"
+  ],
+  "what_changed": [
+    "Added roughly 2k lines to `src/melee/lb/lbcollision.c`, including C or guarded-asm implementations/prototypes for many `lbColl_*` routines such as `lbColl_80005C44`, `lbColl_80005EBC`, `lbColl_80005FC0`, `lbColl_80006094`, `lbColl_800067F8`, `lbColl_80006E58`, `lbColl_800077A0`, `lbColl_80007AFC`, `lbColl_80007BCC`, `lbColl_JObjSetupMatrix`, `lbColl_80007ECC`, `lbColl_8000805C`, `lbColl_80008248`, `lbColl_800083C4`, `lbColl_80008428`, `lbColl_80008434`, `lbColl_80008440`, `lbColl_CopyHitCapsule`, `lbColl_80008688`, `lbColl_8000A244`, `lbColl_8000A95C`, and `lbColl_8000ACFC`.",
+    "Reworked `lbcollision.h` from loose `func_8000....` declarations and older `Hitbox`/`Hurtbox` naming into more specific collision types: `HitResult`, `HitVictim`, `HitCapsule`, and `HurtCapsule`, with fields like `a_offset`, `b_offset`, `scl`, `bone`, `a_pos`, `b_pos`, `bone_idx`, `kind`, and `is_grabbable`.",
+    "Renamed the old `HSD_JObjUnkMtxPtr` call target to `lbColl_JObjSetupMatrix` at many assembly and C callsites, including eflib, fighter animation/collision code, lb background flash, and sysdolphin baselib `robj.s` callsites.",
+    "Updated many assembly callsites across fighter and item code from raw `func_8000....` names to `lbColl_*` names, for example `func_800084FC` to `lbColl_CopyHitCapsule`, `func_80007ECC` to `lbColl_80007ECC`, `func_8000ACFC` to `lbColl_8000ACFC`, and `func_80008D30` to `lbColl_80008D30`.",
+    "Adjusted fighter and item source/header files to use `HitCapsule`, `HurtCapsule`, and `lbColl_*` APIs instead of older or generic names.",
+    "Added `tools/report_score.py`, which iterates text symbols from an object file with `nm`, runs `tools/asm-differ/diff.py --format json` for each symbol, filters perfect matches, sorts by percent, and prints a markdown score table."
+  ],
+  "smart_moves": [
+    "The PR paired matching work with systematic symbol propagation: once lbcollision functions were identified, dependent asm/source callsites were renamed in the same change, making future cross-references searchable by `lbColl_*` instead of anonymous `func_8000....` names.",
+    "The collision structs were made more semantically useful without over-claiming every field: known capsule endpoints and positions gained names like `a_offset`, `b_offset`, `a_pos`, `b_pos`, while uncertain bytes remained as `unk_*`/bitfield placeholders.",
+    "Using `HitCapsule` and `HurtCapsule` terminology clarifies that these structures model capsule collision volumes, not generic hitboxes/hurtboxes, which helps later matching in fighter and item collision code.",
+    "The PR retained guarded `asm` versions for difficult routines while adding C equivalents or partial equivalents, allowing incremental matching without blocking progress on unresolved functions.",
+    "The score-report script made it easier to prioritize remaining nonmatching functions by showing function-level asm-differ scores, even though the posted PR text says the max score calculation/report was broken."
+  ],
+  "decomp_lessons": [
+    "When a library module starts matching, rename callsites immediately across asm and C. This PR shows that even unchanged machine code becomes more useful once calls like `func_800084FC` become `lbColl_CopyHitCapsule` and `HSD_JObjUnkMtxPtr` becomes `lbColl_JObjSetupMatrix`.",
+    "Collision data recovery benefits from endpoint-based field names. For capsule-like structs, prefer explicit pairs such as `a_offset`/`b_offset` and `a_pos`/`b_pos` over vague numbered vectors once usage supports it.",
+    "Do not force full semantic names for unknown fields. This PR mixes strong names for confirmed fields with `unk_34`, `unk_41`, and bitfield placeholders where evidence is weaker.",
+    "Incremental matching can combine C implementations, inline helpers, and `#ifdef MWERKS_GEKKO asm` stubs in one file as long as prototypes and types are made consistent for dependent code.",
+    "Function-level score reports are useful for PR review and follow-up planning, but generated metrics should be treated cautiously when the author flags a known reporting issue."
+  ],
+  "naming_conventions": [
+    "Collision library symbols use the `lbColl_` prefix, keeping address-suffixed names where behavior is not fully understood, e.g. `lbColl_8000805C`, `lbColl_80008248`, and `lbColl_8000ACFC`.",
+    "A known behavior can replace an address suffix when evidence is strong, as with `lbColl_CopyHitCapsule`.",
+    "`HSD_JObjUnkMtxPtr` was renamed to `lbColl_JObjSetupMatrix`, indicating this matrix setup helper belongs with lb collision usage rather than being left as an unknown baselib JObj helper.",
+    "Struct names moved from broad `Hitbox`/`Hurtbox` terminology toward `HitCapsule`/`HurtCapsule` for capsule collision volumes.",
+    "Recovered vector fields use endpoint and role names such as `a_offset`, `b_offset`, `a_pos`, `b_pos`, `scl`, `bone`, `bone_idx`, `kind`, and `is_grabbable`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Widespread asm-only callsite relabeling was used to keep disassembly synchronized with newly identified lbcollision symbols without changing instructions.",
+    "Several hard functions were kept as `asm` declarations guarded for MWERKS/GEKKO while C versions and prototypes were introduced nearby, supporting staged matching.",
+    "The lbcollision math routines use explicit temporary vector/dot-product style C, which is a common tactic for matching PowerPC floating-point code where expression ordering matters.",
+    "Inline helpers such as `approximatelyZero`, `testPlusX`, `testPlus`, and `testMinusX` were introduced in the lbcollision area, likely to control repeated comparison logic and improve matchability.",
+    "`tools/report_score.py` automated asm-differ JSON scoring over all text symbols in an object to identify remaining mismatches and rank them by percent."
+  ],
+  "review_feedback": [
+    "No inline review comments were present in the dump.",
+    "One review from `r-burns` approved the PR with an empty body on 2023-02-01.",
+    "The only substantive human note in the PR body was from the author: \"Ok the max score is broken I don't feel like fixing it right now,\" referring to the posted score report."
+  ],
+  "searchable_terms": [
+    "pr-724",
+    "lbcollision pass 2",
+    "lbColl",
+    "lbColl_JObjSetupMatrix",
+    "HSD_JObjUnkMtxPtr",
+    "lbColl_CopyHitCapsule",
+    "HitCapsule",
+    "HurtCapsule",
+    "HitResult",
+    "HitVictim",
+    "HitCapsuleState",
+    "HitCapsule_Disabled",
+    "HitCapsule_Enabled",
+    "a_offset",
+    "b_offset",
+    "a_pos",
+    "b_pos",
+    "skip_update_pos",
+    "lbColl_80005C44",
+    "lbColl_80005EBC",
+    "lbColl_80005FC0",
+    "lbColl_80006094",
+    "lbColl_800067F8",
+    "lbColl_80006E58",
+    "lbColl_800077A0",
+    "lbColl_80007AFC",
+    "lbColl_80007B78",
+    "lbColl_80007BCC",
+    "lbColl_80007DD8",
+    "lbColl_80007ECC",
+    "lbColl_8000805C",
+    "lbColl_80008248",
+    "lbColl_80008428",
+    "lbColl_80008434",
+    "lbColl_80008440",
+    "lbColl_80008688",
+    "lbColl_80008D30",
+    "lbColl_80009DD4",
+    "lbColl_8000ACFC",
+    "ftcoll",
+    "ftdrawcommon",
+    "item collision",
+    "report_score.py",
+    "asm-differ score report"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that finish matching remaining `lbColl_80008D30`, `lbColl_80009DD4`, `lbColl_8000A584`, or other `UNK_RET lbColl_*` routines introduced here.",
+    "Search later history for additional renames of `HitCapsule` and `HurtCapsule` fields, especially remaining `unk_*` and bitfields in `lbcollision.h`.",
+    "Check whether `tools/report_score.py` was later fixed or replaced due to the max-score issue mentioned in the PR body.",
+    "Find later PRs that remove the guarded `asm` stubs from `src/melee/lb/lbcollision.c`."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

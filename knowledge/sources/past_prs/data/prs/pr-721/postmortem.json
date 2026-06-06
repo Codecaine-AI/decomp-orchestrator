@@ -1,0 +1,143 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-721",
+  "pr": {
+    "number": 721,
+    "title": "Improve m2c compatibility",
+    "url": "https://github.com/doldecomp/melee/pull/721",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-25T23:12:35Z",
+    "merged_at": "2023-01-26T04:57:50Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added compatibility scaffolding for m2c valid-syntax output and adjusted unknown function prototypes so headers can serve both normal project compilation and m2c context generation. The PR introduced src/m2c_macros.h with M2C_UNK types and placeholder macros for m2c-emitted constructs, added UNK_T/UNK_RET/UNK_PARAMS abstractions in placeholder.h, switched a group of fighter header prototypes from concrete void(void) placeholders to unknown return/parameter macros, and made small platform/header changes for ATTRIBUTE_RESTRICT, ARRAY_SIZE, memcpy/m2c support, and __frsqrte declaration placement. The stated goal was to avoid the old unk_t/any_t split and move toward UNK_T plus void*, while still allowing m2c to infer types effectively under M2CTX.",
+  "change_classification": {
+    "primary_type": "m2c-compatibility-headers",
+    "categories": [
+      "headers",
+      "types-structs",
+      "tooling-compatibility",
+      "unknown-type-abstractions",
+      "prototype-cleanup"
+    ],
+    "systems": [
+      "m2c",
+      "runtime",
+      "platform",
+      "fighter",
+      "math",
+      "string"
+    ]
+  },
+  "key_files": [
+    "src/m2c_macros.h",
+    "src/placeholder.h",
+    "src/melee/ft/code_80081B38.h",
+    "src/Runtime/platform.h",
+    "src/string.h",
+    "src/math.h"
+  ],
+  "what_changed": [
+    "Created src/m2c_macros.h for macros emitted by m2c in --valid-syntax mode, including M2C_UNK, M2C_UNK8, M2C_UNK16, M2C_UNK32, M2C_UNK64, M2C_FIELD, M2C_BITWISE, unaligned-read placeholders, unhandled-instruction placeholders, M2C_CARRY, and memcpy pattern aliases.",
+    "Updated src/placeholder.h to include m2c_macros.h and define UNK_T, UNK_RET, and UNK_PARAMS differently depending on M2CTX: m2c context generation sees M2C_UNK and empty parameters, while normal compilation sees void* or void/void prototypes.",
+    "Changed many unknown prototypes in src/melee/ft/code_80081B38.h from void func(void) to UNK_RET func(UNK_PARAMS), preserving normal build behavior while exposing less misleading unknown signatures to m2c.",
+    "Added ATTRIBUTE_RESTRICT to src/Runtime/platform.h so __restrict is used only for MWERKS outside M2CTX, and expands away otherwise.",
+    "Added ARRAY_SIZE(arr) to src/Runtime/platform.h.",
+    "Changed string.h prototypes for strncpy and strcpy to use ATTRIBUTE_RESTRICT instead of raw __restrict, making the header friendlier to non-MWERKS and m2c contexts.",
+    "Changed math.h to include MetroTRK/intrinsics.h and removed the local extern double __frsqrte(double) declaration, implying the intrinsic declaration should come from the MetroTRK header."
+  ],
+  "smart_moves": [
+    "Used preprocessor gates around M2CTX rather than weakening normal project prototypes globally. This lets normal compilation keep void foo(void) semantics while m2c gets empty parameter lists for inference.",
+    "Centralized m2c valid-syntax support in a dedicated m2c_macros.h instead of scattering ad hoc definitions across source files.",
+    "Defined unknown-size aliases such as M2C_UNK8, M2C_UNK16, M2C_UNK32, and M2C_UNK64 so m2c output can compile while still recording the inferred storage width.",
+    "Introduced ATTRIBUTE_RESTRICT as a portability shim, avoiding raw __restrict in contexts where clang or m2c context generation may not accept or benefit from it.",
+    "Made the unknown prototype convention explicit with UNK_RET and UNK_PARAMS, documenting the distinction between real known void functions and functions whose return/arguments are not yet understood."
+  ],
+  "decomp_lessons": [
+    "Do not mark unknown functions as void func(void) just because the current decompilation lacks a signature; that can suppress useful m2c inference and misrepresent unknown parameters or return values.",
+    "For m2c context generation, unknown types should prefer M2C_UNK, or at least a long-like scalar, because m2c can infer better from unknown scalar placeholders than from void* or overly concrete C signatures.",
+    "When a header must satisfy both the real build and m2c context generation, use conditional macros keyed on M2CTX to present different but compatible signatures.",
+    "m2c --valid-syntax output may emit macro placeholders for unknown fields, reinterpret casts, unaligned accesses, unhandled instructions, carry bits, and memcpy patterns; keeping these macros available makes generated code compilable without immediate hand-editing.",
+    "Restrict qualifiers and compiler-specific keywords should be hidden behind platform macros when headers are consumed by multiple compilers/tools.",
+    "Prefer central header abstractions for unknowns, e.g. UNK_T, UNK_RET, and UNK_PARAMS, over maintaining parallel unk_t/any_t conventions."
+  ],
+  "naming_conventions": [
+    "Use uppercase UNK_T for project-level unknown data types, with normal compilation mapping to void* and M2CTX mapping to M2C_UNK.",
+    "Use UNK_RET for an unknown return type; this maps to void for normal compilation and M2C_UNK for m2c context generation.",
+    "Use UNK_PARAMS for unknown parameter lists; this maps to void for normal compilation and an empty parameter list under M2CTX.",
+    "Use M2C_UNK, M2C_UNK8, M2C_UNK16, M2C_UNK32, and M2C_UNK64 for m2c-facing unknown scalar widths.",
+    "Use M2C_* prefix for macros that directly correspond to m2c valid-syntax emitted constructs.",
+    "Use ATTRIBUTE_RESTRICT instead of spelling __restrict directly in shared headers."
+  ],
+  "assembly_or_matching_tactics": [
+    "Support m2c type inference by exposing unknown prototypes as UNK_RET func(UNK_PARAMS) under M2CTX instead of locking them to void func(void).",
+    "Use m2c --valid-syntax mode together with m2c_macros.h so generated code remains compilable even when it contains unresolved fields, bitwise casts, unaligned loads, unhandled instructions, or carry-bit placeholders.",
+    "Keep normal build semantics intact while generating more permissive m2c contexts by making UNK_PARAMS expand to empty only for M2CTX.",
+    "Use M2C_FIELD(expr, type_ptr, offset) for m2c-emitted unknown field accesses of the form pointer-plus-offset cast/dereference."
+  ],
+  "review_feedback": [
+    {
+      "type": "review-summary",
+      "evidence": "The PR had one review and no review comments in the provided context.",
+      "feedback": "No specific reviewer feedback was available in the slice."
+    }
+  ],
+  "searchable_terms": [
+    "m2c compatibility",
+    "m2c valid syntax",
+    "--valid-syntax",
+    "M2CTX",
+    "M2C_UNK",
+    "M2C_UNK8",
+    "M2C_UNK16",
+    "M2C_UNK32",
+    "M2C_UNK64",
+    "M2C_FIELD",
+    "M2C_BITWISE",
+    "M2C_LWL",
+    "M2C_FIRST3BYTES",
+    "M2C_UNALIGNED32",
+    "M2C_ERROR",
+    "M2C_TRAP_IF",
+    "M2C_BREAK",
+    "M2C_SYNC",
+    "M2C_CARRY",
+    "M2C_MEMCPY_ALIGNED",
+    "M2C_MEMCPY_UNALIGNED",
+    "UNK_T",
+    "UNK_RET",
+    "UNK_PARAMS",
+    "ATTRIBUTE_RESTRICT",
+    "ARRAY_SIZE",
+    "unk_t any_t dichotomy",
+    "void* unknown types",
+    "requireprotos",
+    "clang compatibility",
+    "src/m2c_macros.h",
+    "src/placeholder.h",
+    "src/melee/ft/code_80081B38.h",
+    "func_80082978",
+    "func_80082D40",
+    "func_80084CB0",
+    "func_80084E1C",
+    "__frsqrte",
+    "MetroTRK intrinsics"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that replace unk_t or any_t with UNK_T or void*.",
+    "Find later uses of UNK_RET and UNK_PARAMS in fighter headers.",
+    "Find PRs that modify src/m2c_macros.h after PR 721.",
+    "Find m2c context generation fixes involving M2CTX, -requireprotos, or --valid-syntax.",
+    "Find headers that still use raw __restrict instead of ATTRIBUTE_RESTRICT."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

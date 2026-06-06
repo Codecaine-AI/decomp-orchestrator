@@ -1,0 +1,161 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-752",
+  "pr": {
+    "number": 752,
+    "title": "Publish packages for building Melee and generating documentation",
+    "url": "https://github.com/doldecomp/melee/pull/752",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-03-05T20:50:09Z",
+    "merged_at": "2023-03-06T13:59:08Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Replaced ad-hoc CI setup for building Melee and publishing docs with reusable GitHub Container Registry packages. The PR added Docker/entrypoint/setup files for Linux builds, Windows build smoke tests, and documentation generation; split workflows into build-melee, publish-packages, and publish-pages; removed the old build.yml and publish.yml workflows; and made small Makefile adjustments for Windows detection, assembler selection, and Python invocation. The stated PR body is sparse and points to PR #751 for details, but the diff clearly shows the goal: prebuild and publish containers that encapsulate devkitPPC, WiBo, MWCC compilers, Python requirements, Doxygen, and documentation tooling so CI and PRs can build/test using those packages.",
+  "change_classification": {
+    "primary_type": "tooling-ci-containerization",
+    "categories": [
+      "tooling",
+      "ci",
+      "containerization",
+      "build-system",
+      "documentation-publishing",
+      "decomp-support"
+    ],
+    "systems": [
+      ".github/workflows",
+      ".github/packages",
+      "Makefile",
+      "tools/calcprogress",
+      "GitHub Actions",
+      "GitHub Container Registry",
+      "GitHub Pages"
+    ]
+  },
+  "key_files": [
+    ".github/workflows/publish-packages.yml",
+    ".github/workflows/build-melee.yml",
+    ".github/workflows/publish-pages.yml",
+    ".github/workflows/build.yml",
+    ".github/workflows/publish.yml",
+    ".github/packages/build-linux/Dockerfile",
+    ".github/packages/build-linux/setup.sh",
+    ".github/packages/build-linux/entrypoint.sh",
+    ".github/packages/build-windows/Dockerfile",
+    ".github/packages/build-windows/setup.ps1",
+    ".github/packages/build-windows/entrypoint.ps1",
+    ".github/packages/gen-pages/Dockerfile",
+    ".github/packages/gen-pages/setup.sh",
+    ".github/packages/gen-pages/entrypoint.sh",
+    ".dockerignore",
+    "Makefile",
+    "tools/calcprogress/requirements.txt",
+    "tools/calcprogress/src/requirements.txt"
+  ],
+  "what_changed": [
+    "Added a new publish-packages GitHub Actions workflow that builds container images for build-linux, build-windows, and gen-pages, tests them, tags them with docker/metadata-action, and pushes them to ghcr.io on push events.",
+    "Added a new build-melee workflow that pulls the published build-linux and build-windows images from GHCR and runs Melee builds for both GENERATE_MAP=1 and NON_MATCHING=1.",
+    "Added a new publish-pages workflow that pulls a gen-pages image, generates documentation into an output volume, uploads the generated pages artifact, and deploys to GitHub Pages on main/master.",
+    "Deleted the previous .github/workflows/build.yml, which directly installed tools, downloaded WiBo and compilers, built on Ubuntu and Windows runners, and calculated progress inline.",
+    "Deleted the previous .github/workflows/publish.yml, which directly installed Doxygen/Python dependencies and deployed pages without a reusable generator image.",
+    "Added Linux build container files that copy WiBo from ghcr.io/decompals/wibo, copy powerpc-eabi-as from devkitpro/devkitppc, download the MELEE_COMPILERS.zip bundle, expose /input and /output volumes, run make with MAKE_FLAGS, generate PROGRESS.md when GALE01.map exists, and copy build outputs.",
+    "Added Windows build container files based on mcr.microsoft.com/windows/servercore:ltsc2022. The setup uses Scoop to install git, python, and mingw, creates a Python venv, installs requirements, downloads MELEE_COMPILERS.zip, and stores compilers under LocalAppData/Melee.",
+    "Added a Windows entrypoint that clones the mounted input, activates the venv, refreshes Python requirements, copies mwcc_compiler into tools/mwcc_compiler, invokes make through MinGW bash because the Makefile does not support cmd or PowerShell, and copies build output.",
+    "Added docs generator container files that install git, doxygen, Python, a venv, requirements.txt dependencies, and doxygen-awesome-css; the entrypoint runs doxygen, creates .nojekyll, runs tools/m2ctx/m2ctx.py -pqr, and copies generated HTML to /output.",
+    "Added .dockerignore entries for .git, __pycache__, venv, and .idea to keep Docker build contexts cleaner.",
+    "Updated the Makefile to use OS=Windows_NT for Windows detection instead of checking uname for MINGW/MSYS, to select tools/mwcc_compiler/powerpc-eabi-as.exe on Windows, and to use python instead of python3.",
+    "Added empty requirements.txt placeholder files under tools/calcprogress and tools/calcprogress/src."
+  ],
+  "smart_moves": [
+    "Moved expensive, fragile setup steps out of every CI build and into reusable container images, reducing repeated downloads and making build environments easier to reproduce.",
+    "Separated package publication from normal Melee building and documentation publishing, so package changes can be tested and pushed independently from build consumers.",
+    "Smoke-tested packages before publishing by running GENERATE_MAP=1, NON_MATCHING=1, and docs generation against the just-built images.",
+    "Used matrix builds for GENERATE_MAP=1 and NON_MATCHING=1 to keep matching and non-matching build modes covered.",
+    "Generated PROGRESS.md inside the Linux build package when GALE01.map exists, then surfaced it through the GitHub step summary in the build workflow.",
+    "Handled fork/PR image naming by choosing the image repository from github.repository for pushes and github.event.repository.full_name for pull_request events.",
+    "Accounted for Windows container quirks explicitly: PowerShell StrictMode/ErrorActionPreference, manual $LASTEXITCODE checks for native commands, unprivileged user setup, ACL adjustments for mounted output directories, and using MinGW bash to call make.",
+    "Used volumes /input and /output for packages, making the containers behave like reusable build/documentation tools rather than workflows tied to one checkout path.",
+    "Kept GitHub Pages deployment as a separate deploy job gated to main/master, while allowing docs generation itself to run on PRs."
+  ],
+  "decomp_lessons": [
+    "For decomp projects with proprietary compiler bundles and platform-sensitive toolchains, reusable container packages can stabilize CI and developer-environment testing better than re-downloading tools in each workflow.",
+    "Keep both matching and non-matching build modes in CI matrices; changes to build scripts or toolchain paths can break one mode but not the other.",
+    "When generating maps for progress tracking, make the map-producing path also run the progress calculator and preserve the output as a CI summary/artifact.",
+    "Windows support should be tested through the same Makefile entrypoints developers use, but wrappers may be needed because Makefile shell assumptions may not hold under cmd or PowerShell.",
+    "If a container is intended as a developer-experience smoke test, document what it does and does not cover; this PR explicitly notes the Windows package is slow, installs venv/requirements without using all of them directly, and does not generate docs or PROGRESS.md.",
+    "Using a blank or minimal requirements.txt placeholder can satisfy tooling paths that expect per-tool requirements files, but future maintainers should verify whether placeholders are still needed."
+  ],
+  "naming_conventions": [
+    "Workflow names were made purpose-specific and kebab-cased: build-melee, publish-packages, publish-pages.",
+    "Container package directories and image suffixes use target names matching the matrix target values: build-linux, build-windows, gen-pages.",
+    "Environment variables are uppercase and explicit: REGISTRY, IMAGE_NAME, CONTAINERFILE, MAKE_FLAGS, MELEE_COMPILERS_URL, WIBO_PATH, DEVKITPRO, DEVKITPPC.",
+    "Build flags are passed through a single MAKE_FLAGS variable containing strings such as GENERATE_MAP=1 and NON_MATCHING=1.",
+    "Mounted container interfaces use simple input/output volume names: /input and /output on Linux, C:/Input and C:/Output on Windows."
+  ],
+  "assembly_or_matching_tactics": [
+    "The Linux build image copies powerpc-eabi-as from devkitpro/devkitppc and exposes DEVKITPRO, DEVKITPPC, and PATH so the assembler toolchain is available consistently.",
+    "The Makefile now selects AS as tools/mwcc_compiler/powerpc-eabi-as.exe on Windows when OS=Windows_NT, while non-Windows keeps DEVKITPPC/bin/powerpc-eabi-as.",
+    "The build workflow continues to exercise GENERATE_MAP=1 and NON_MATCHING=1, preserving CI coverage for matching map generation and non-matching build paths.",
+    "The Linux entrypoint invokes make with WINE set to the copied WiBo path, supporting MWCC execution on Linux without requiring host Wine setup.",
+    "Progress calculation uses tools/calcprogress/calcprogress.py with main.dol, GALE01.map, --asm-obj-ext .s.o, and --old-map true, matching the old workflow behavior but moving it into the build container output path."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided slice.",
+    "The only review record shown was a dismissed review by r-burns with an empty body, so no reviewer rationale or requested changes can be extracted.",
+    "The PR body itself is brief and refers readers to PR #751 for details; conclusions beyond the diff are therefore low-evidence."
+  ],
+  "searchable_terms": [
+    "PR752",
+    "publish packages",
+    "GHCR",
+    "GitHub Container Registry",
+    "build-linux",
+    "build-windows",
+    "gen-pages",
+    "build-melee.yml",
+    "publish-packages.yml",
+    "publish-pages.yml",
+    "Dockerfile",
+    "entrypoint.sh",
+    "setup.sh",
+    "entrypoint.ps1",
+    "setup.ps1",
+    "WiBo",
+    "devkitPPC",
+    "powerpc-eabi-as",
+    "MELEE_COMPILERS.zip",
+    "mwcc_compiler",
+    "MAKE_FLAGS",
+    "GENERATE_MAP=1",
+    "NON_MATCHING=1",
+    "GALE01.map",
+    "PROGRESS.md",
+    "calcprogress.py",
+    "Doxygen",
+    "doxygen-awesome-css",
+    "m2ctx.py",
+    "GitHub Pages",
+    "Windows Server Core ltsc2022",
+    "Scoop",
+    "MinGW",
+    "OS=Windows_NT",
+    ".dockerignore"
+  ],
+  "follow_up_queries": [
+    "PR #751 package publishing context and issue-1610248156",
+    "later changes to publish-packages.yml or GHCR image naming",
+    "Windows Makefile OS=Windows_NT follow-up fixes",
+    "Melee CI build-linux build-windows container regressions",
+    "calcprogress requirements placeholder rationale",
+    "gen-pages Doxygen container follow-up PRs"
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

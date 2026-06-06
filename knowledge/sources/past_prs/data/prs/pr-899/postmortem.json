@@ -1,0 +1,122 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-899",
+  "pr": {
+    "number": 899,
+    "title": "Match `ftCo_CargoLanding`",
+    "url": "https://github.com/doldecomp/melee/pull/899",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-29T11:54:16Z",
+    "merged_at": "2023-05-29T12:01:11Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common fighter CargoLanding code by replacing inline/standalone assembly and NOT_IMPLEMENTED stubs in `ftCo_CargoLanding.c` with C implementations for `ftCo_8009BD4C`, `ftCo_CargoLanding_Anim`, `ftCo_CargoLanding_Phys`, and `ftCo_CargoLanding_Coll`. The PR removed the corresponding assembly for the three CargoLanding callbacks from `asm/melee/ft/ft_08A4.s`, corrected the prototype of `ftCo_800D5AEC`, and updated a Donkey Kong cargo wait call site to use the corrected signature. The report shows the file and all listed functions at 100% match.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "fighter-common",
+      "function-signature-correction"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "ftDonkey",
+      "asm"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_CargoLanding.c",
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/chara/ftDonkey/ftDk_HeavyWait1.c",
+    "src/melee/ft/ft_08A4.h"
+  ],
+  "what_changed": [
+    "Implemented `ftCo_8009BD4C` in C, setting `fp->mv.ca.specialhi.vel.x` from `fp->x2CC->cargo_hold.x28_LANDING_LAG`, changing motion state via `ftCo_800D5AEC`, freezing animation with `ftAnim_SetAnimRate(gobj, 0)`, and notifying the interacted fighter with `ftCo_8009C5A4(fp->x1A58_interactedFighter, 0x10A)`.",
+    "Implemented `ftCo_CargoLanding_Anim` in C: it checks whether `fp->mv.ca.specialhi.vel.x <= 0`, calls `ftCo_8009B518(gobj)` when the landing timer expires, then decrements the timer by `1`.",
+    "Implemented `ftCo_CargoLanding_Phys` as a thin wrapper around `ft_80084F3C(gobj)`.",
+    "Implemented `ftCo_CargoLanding_Coll` as a thin wrapper around `ftCo_CargoWait_Coll(gobj)`.",
+    "Removed the matched assembly implementations for `ftCo_CargoLanding_Anim`, `ftCo_CargoLanding_Phys`, and `ftCo_CargoLanding_Coll` from `asm/melee/ft/ft_08A4.s`.",
+    "Replaced the prior `ASM`/`NOT_IMPLEMENTED` body for `ftCo_8009BD4C` with C and removed local float constants `ftCo_804D8738` and `ftCo_804D873C` from the C file.",
+    "Added includes needed by the C implementation: `ftCo_CargoWait.h` and `ft/ft_081B.h`.",
+    "Changed `ftCo_800D5AEC`'s declaration in `src/melee/ft/ft_08A4.h` from taking a `Fighter*` plus two floats to taking only the final two `f32` arguments after the integer arguments.",
+    "Updated `ftDk_MS_346_800E05E4` in `ftDk_HeavyWait1.c` to call `ftCo_800D5AEC(gobj, donkey_attr->motion_state + 8, 1, 0, 0, 1)` instead of passing `fp` as an extra argument."
+  ],
+  "smart_moves": [
+    "Recognized that `ftCo_CargoLanding_Phys` and `ftCo_CargoLanding_Coll` were simple pass-through callbacks, allowing exact C wrappers to replace assembly cleanly.",
+    "Used an existing cargo wait collision helper, `ftCo_CargoWait_Coll`, for CargoLanding collision behavior rather than duplicating logic.",
+    "Identified `fp->mv.ca.specialhi.vel.x` as the storage location corresponding to the landing-lag countdown at offset `0x2344`, enabling the animation callback to match with meaningful field access instead of raw offsets.",
+    "Corrected the shared `ftCo_800D5AEC` prototype and immediately fixed an affected Donkey Kong call site, avoiding a mismatched header that would mislead future decomp work.",
+    "Preserved a `MUST_MATCH`-guarded unused stack allocation in `ftCo_8009BD4C`, documenting that the stack shape mattered for matching even though the source-level variable is not semantically used."
+  ],
+  "decomp_lessons": [
+    "When an assembly routine loads constants `0.0f` and `1.0f` only to pass them as arguments, the matched C call can often use literal `0` and `1` once the callee prototype is correct.",
+    "A suspicious extra pointer argument in a function prototype may be an artifact of an earlier unmatched call; checking actual call assembly can reveal that the function takes fewer parameters.",
+    "For small fighter action callbacks, match the behavior first through existing engine helpers: animation callbacks may be timer checks, physics callbacks may delegate to a common physics routine, and collision callbacks may delegate to another action state's collision handler.",
+    "Offsets in fighter move state can often be given meaningful union/struct paths once the action context is known; here the cargo landing lag timer was represented as `fp->mv.ca.specialhi.vel.x` rather than a raw `0x2344` access.",
+    "If matching requires stack space that source code does not otherwise need, a `MUST_MATCH`-guarded dummy local can document and isolate that artifact without affecting non-matching builds.",
+    "Signature fixes in central fighter headers should be checked against nearby character-specific call sites, because common fighter helpers are reused by character code."
+  ],
+  "naming_conventions": [
+    "`ftCo_CargoLanding_Anim`, `ftCo_CargoLanding_Phys`, and `ftCo_CargoLanding_Coll` follow the common fighter action callback suffix convention for animation, physics, and collision callbacks.",
+    "The PR kept the unresolved numeric helper name `ftCo_8009BD4C`, indicating there was not enough evidence in this slice to assign a semantic name beyond its address-based identifier.",
+    "Cargo-related Donkey Kong attribute fields use the `cargo_hold.x28_LANDING_LAG` naming pattern, preserving both a semantic field name and the original offset marker.",
+    "The interacted fighter field is accessed as `x1A58_interactedFighter`, retaining the offset-prefixed decomp naming style while adding semantic meaning."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed matched assembly from `asm/melee/ft/ft_08A4.s` only after C replacements produced a 100% report for `ftCo_CargoLanding.c`.",
+    "Matched a comparison sequence equivalent to `if (timer <= 0)` in `ftCo_CargoLanding_Anim`, then decremented the same float field afterward.",
+    "Matched trivial branch-and-return assembly functions by expressing them as direct C wrapper calls.",
+    "Used `#ifdef MUST_MATCH` with `u8 _[20] = { 0 };` to preserve an unused stack allocation required for matching `ftCo_8009BD4C`.",
+    "Adjusted the `ftCo_800D5AEC` prototype so calls use the actual observed argument list, which helped the decompiled call sites align with assembly."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-899",
+    "ribbanya",
+    "Match ftCo_CargoLanding",
+    "ftCo_CargoLanding",
+    "ftCo_CargoLanding.c",
+    "ftCo_8009BD4C",
+    "ftCo_CargoLanding_Anim",
+    "ftCo_CargoLanding_Phys",
+    "ftCo_CargoLanding_Coll",
+    "ftCo_CargoWait_Coll",
+    "ftCo_CargoWait",
+    "ftCo_8009B518",
+    "ftCo_8009C5A4",
+    "ftCo_800D5AEC",
+    "ftAnim_SetAnimRate",
+    "ft_80084F3C",
+    "ft_08A4.s",
+    "ft_08A4.h",
+    "ftDk_HeavyWait1.c",
+    "ftDk_MS_346_800E05E4",
+    "cargo_hold.x28_LANDING_LAG",
+    "x1A58_interactedFighter",
+    "MUST_MATCH",
+    "unused stack",
+    "NOT_IMPLEMENTED",
+    "asm removal",
+    "fighter common",
+    "Donkey Kong cargo"
+  ],
+  "follow_up_queries": [
+    "Find the implementation and other call sites of `ftCo_800D5AEC` to confirm the corrected signature across the project.",
+    "Search for other cargo action states that use `fp->mv.ca.specialhi.vel.x` as a timer or landing-lag field.",
+    "Inspect neighboring `ftCo_CargoWait` and `ftCo_CargoWait2` functions for similar wrapper opportunities or shared callback behavior.",
+    "Look for remaining `ASM` or `NOT_IMPLEMENTED` blocks in `ftCo_CargoLanding.c` or nearby `ftCommon` cargo files after this PR."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

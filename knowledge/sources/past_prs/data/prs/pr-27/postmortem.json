@@ -1,0 +1,154 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-27",
+  "pr": {
+    "number": 27,
+    "title": "setup postprocess.py",
+    "url": "https://github.com/doldecomp/melee/pull/27",
+    "state": "MERGED",
+    "author": "RevoSucks",
+    "created_at": "2020-07-30T20:27:12Z",
+    "merged_at": "2020-07-30T20:27:19Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added a Python ELF postprocessor and wired it into the C object build rule. The tool supports three CodeWarrior-oriented fixes: ctor/dtor section alignment repair, mangled-symbol character substitution reversal, and old-stack prologue/epilogue scheduling fixups. The Makefile now invokes python3 tools/postprocess.py after each C compilation with -fprologue-fixup=old_stack, and adds -nodefaults to CFLAGS.",
+  "change_classification": {
+    "primary_type": "tooling",
+    "categories": [
+      "tooling",
+      "build-system",
+      "compiler-workaround",
+      "postprocessing"
+    ],
+    "systems": [
+      "repo-root",
+      "tooling",
+      "Makefile",
+      "CodeWarrior build"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "tools/postprocess.py",
+      "reason": "New 318-line Python ELF postprocessor implementing ctor realignment, C++ symbol fixup, and old_stack epilogue instruction reordering."
+    },
+    {
+      "path": "Makefile",
+      "reason": "Adds PYTHON and POSTPROC variables, adds -nodefaults to CFLAGS, defines PROCFLAGS, and runs the postprocessor after compiling each .c file to .o."
+    }
+  ],
+  "what_changed": [
+    "Introduced tools/postprocess.py as an executable Python 3 script for in-place ELF object patching.",
+    "Documented the postprocessor as supporting three decompilation-related CodeWarrior patches: -fctor-realign, -fsymbol-fixup, and -fprologue-fixup=old_stack.",
+    "Added symbol substitution helpers mapping irregular mangled-name characters to placeholder sequences: '<' to '?0', '>' to '?1', '@' to '?2', '\\\\' to '?3', ',' to '?4', and '-' to '?5', with decode logic to restore them in ELF string tables.",
+    "Added binary stream helpers for big-endian u8/u16/u32 reads and u32 writes, matching PowerPC/ELF data handling needs.",
+    "Implemented .ctors/.dtors section alignment patch discovery by walking section headers and looking up section names through the section-header string table.",
+    "Implemented ELF string-table symbol fixup by scanning non-section-name string tables and scheduling string replacements padded with zero bytes when decoded names are shorter than their placeholder form.",
+    "Implemented old_stack epilogue fixup for .text by locating mtlr r0 instruction 0x7C0803A6 before blr instruction 0x4E800020, then shifting intervening instructions up and placing mtlr immediately before blr.",
+    "Added assertions around text section alignment, instruction stream assumptions, unmatched mtlr detection, and maximum mtlr-to-blr distance.",
+    "Changed Makefile CFLAGS from '-Cpp_exceptions off -proc gekko -fp hard -O4,p $(INCLUDES)' to include '-nodefaults'.",
+    "Added Makefile variables PYTHON := python3 and POSTPROC := tools/postprocess.py.",
+    "Added PROCFLAGS := -fprologue-fixup=old_stack and invokes '$(PYTHON) $(POSTPROC) $(PROCFLAGS) $@' after each C compile."
+  ],
+  "smart_moves": [
+    "Kept compiler-specific binary corrections outside source files by adding a post-build object-file patching step, avoiding pollution of decompiled C with workaround-only constructs.",
+    "Made the postprocessor flag-driven, with default-disabled features for ctor realignment and symbol fixup and an explicit prologue-fixup mode, making later build configurations easier to tune.",
+    "Used section-header parsing instead of hardcoded offsets for .text, .ctors, .dtors, and string-table handling, which is more reusable across object files.",
+    "Deferred symbol-table string rewriting until after scanning by collecting ToReplace records, then applied changes to a byte array with length checks and zero padding.",
+    "Encoded the old_stack fix as a narrow, conservative epilogue transformation guarded by instruction-pattern checks and assertions about alignment and maximum scheduling distance.",
+    "Integrated the tool into the generic %.o: %.c Makefile rule so every C object receives consistent postprocessing automatically."
+  ],
+  "decomp_lessons": [
+    "For old CodeWarrior matching, byte-for-byte object matching may require post-compilation ELF surgery when the available compiler version schedules epilogues differently from the target compiler.",
+    "When compiler or assembler tools cannot represent certain mangled C++ symbol characters directly, a placeholder naming scheme can be used during assembly/compilation and reversed in the ELF string table afterward.",
+    "Build-system hooks can be used to normalize compiler output without changing every source file; here, the postprocessor is attached to the pattern rule for C compilation.",
+    "ELF section headers and section-name string tables provide enough structure to write targeted object patches without relying entirely on fixed file offsets.",
+    "Binary patch tools should make assumptions explicit. This script asserts .text offset and size alignment, instruction alignment, no lone mtlr, and bounded mtlr/blr separation.",
+    "For ctor/dtor alignment bugs, patching section-header alignment fields can be a practical workaround when the compiler emits incorrect alignment metadata.",
+    "A small, repository-local postprocessing tool can capture project-specific compiler quirks and make those quirks reproducible for all contributors."
+  ],
+  "naming_conventions": [
+    "Makefile variable for the Python interpreter is named PYTHON.",
+    "Makefile variable for the postprocessor path is named POSTPROC.",
+    "Makefile variable for postprocessor flags is named PROCFLAGS.",
+    "Postprocessor feature flags follow compiler-like '-f...' and '-fno-...' forms, including '-fctor-realign', '-fno-ctor-realign', '-fsymbol-fixup', '-fno-symbol-fixup', and '-fprologue-fixup=old_stack'.",
+    "The C++ symbol placeholder convention maps irregular characters to question-mark IDs: '?0' for '<', '?1' for '>', '?2' for '@', '?3' for '\\\\', '?4' for ',', and '?5' for '-'.",
+    "The old CodeWarrior scheduler/prologue mode is named 'old_stack'."
+  ],
+  "assembly_or_matching_tactics": [
+    "Run an ELF postprocessor after mwcceppc.exe emits each object file to correct compiler-version differences before linking.",
+    "Use '-nodefaults' in CFLAGS alongside CodeWarrior options '-Cpp_exceptions off -proc gekko -fp hard -O4,p'.",
+    "For old_stack epilogue matching, identify 'mtlr r0' as machine word 0x7C0803A6 and 'blr' as 0x4E800020, then move mtlr down to immediately precede blr while shifting intervening instructions upward.",
+    "Skip zero instructions as padding during .text scanning.",
+    "Treat .text as 4-byte-aligned instruction-only content and assert offset and size are multiples of 4.",
+    "For symbol fixups, scan ELF string tables, skip the first SHT_STRTAB occurrence as the section-name table, decode placeholder names in later string tables, and patch strings in place with zero padding.",
+    "For ctor/dtor alignment, locate .ctors and .dtors by section name and patch their section header alignment field to 4."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "postprocess.py",
+    "postprocessor",
+    "tools/postprocess.py",
+    "Makefile",
+    "PYTHON",
+    "POSTPROC",
+    "PROCFLAGS",
+    "CodeWarrior",
+    "mwcc",
+    "mwcceppc",
+    "mwldeppc",
+    "MWCC_VERSION",
+    "wine",
+    "ELF",
+    "object postprocess",
+    "old_stack",
+    "prologue-fixup",
+    "-fprologue-fixup=old_stack",
+    "ctor_realign",
+    "ctor realign",
+    "-fctor-realign",
+    "symbol-fixup",
+    "-fsymbol-fixup",
+    "C++ symbols",
+    "mangled names",
+    "substitutions",
+    "?0",
+    "?1",
+    "?2",
+    "?3",
+    "?4",
+    "?5",
+    ".ctors",
+    ".dtors",
+    ".text",
+    "SHT_STRTAB",
+    "SHT_PROGBITS",
+    "section headers",
+    "section-name string table",
+    "mtlr",
+    "blr",
+    "0x7C0803A6",
+    "0x4E800020",
+    "epilogue",
+    "scheduler model",
+    "-nodefaults",
+    "PowerPC",
+    "Gekko"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify tools/postprocess.py or change PROCFLAGS.",
+    "Search for uses of -fctor-realign or -fsymbol-fixup in later Makefile/build-system changes.",
+    "Look for later discussion of old_stack, mtlr/blr epilogue matching, or CodeWarrior scheduler differences.",
+    "Check whether postprocess.py was replaced, split, or ported to another build tool in later project history.",
+    "Search for object matching fixes involving .ctors, .dtors, or C++ mangled symbol placeholder substitution."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

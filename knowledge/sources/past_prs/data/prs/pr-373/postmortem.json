@@ -1,0 +1,139 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-373",
+  "pr": {
+    "number": 373,
+    "title": "[WIP] melee/gm/gmmain_lib.s",
+    "url": "https://github.com/doldecomp/melee/pull/373",
+    "state": "MERGED",
+    "author": "BR-",
+    "created_at": "2022-05-14T17:58:53Z",
+    "merged_at": "2022-07-15T19:50:16Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Converted a large first slice of asm/melee/gm/gmmain_lib.s into src/melee/gm/gmmain_lib.c, added a new gmmain_lib.h describing the global game-mode state at lbl_804D3EE0, wired the C object into obj_files.mk, and updated nearby lb language/time declarations to use the new typed accessors. The PR was explicitly WIP and merged to preserve progress and matching percent rather than let the work get lost or drift into conflicts.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "asm-to-c",
+      "decomp-matching",
+      "headers",
+      "struct-recovery",
+      "build-system"
+    ],
+    "systems": [
+      "game-mode",
+      "gm/gmmain_lib",
+      "lb/lblanguage",
+      "lb/lbtime",
+      "include/functions",
+      "obj_files.mk"
+    ]
+  },
+  "key_files": [
+    "asm/melee/gm/gmmain_lib.s",
+    "src/melee/gm/gmmain_lib.c",
+    "src/melee/gm/gmmain_lib.h",
+    "obj_files.mk",
+    "include/functions.h",
+    "asm/melee/gm/code_801601C4.s",
+    "src/melee/lb/lblanguage.c",
+    "src/melee/lb/lblanguage.h",
+    "src/melee/lb/lbtime.c",
+    "src/melee/lb/lbtime.h"
+  ],
+  "what_changed": [
+    "Removed 1357 lines from asm/melee/gm/gmmain_lib.s and added a 693-line C implementation in src/melee/gm/gmmain_lib.c.",
+    "Added src/melee/gm/gmmain_lib.h with partial struct definitions for lbl_804D3EE0, including gmm_x0, gmm_x1868, gmm_x1CB0, gmm_x1F2C, gmm_x2FF8, and return structs for func_8015ED98, func_8015EDB0, and func_8015EDBC.",
+    "Added the new C object to obj_files.mk immediately before the remaining asm/melee/gm/gmmain_lib.s object, allowing a split C/asm file while preserving undecompiled tail code.",
+    "Changed a function-table reference in asm/melee/gm/code_801601C4.s from lbl_8015CF94 to func_8015CF94 after the symbol became a C function.",
+    "Updated include/functions.h prototypes for newly typed functions including func_8015CE44(s32, s32), func_8015D888(u32), func_8015D8FC(u32), and func_8015D94C(u32).",
+    "Updated lblanguage.c to include melee/gm/gmmain_lib.h and replace byte-pointer indexing of lbl_804D3EE0 and func_8015CC58 with typed field access such as lbl_804D3EE0->language and func_8015CC58()->saved_language.",
+    "Removed stale extern declarations for lbl_804D3EE0 and func_8015CC58 from lblanguage.h because the new gmmain_lib.h owns those declarations.",
+    "Adjusted func_8000AF74 in lbtime.c/lbtime.h from three parameters to two, with a local int c introduced inside the negative branch."
+  ],
+  "smart_moves": [
+    "Kept the remaining asm object in obj_files.mk while inserting the new C object, enabling incremental conversion of gmmain_lib.s rather than requiring the whole file to be finished in one PR.",
+    "Introduced a typed global-state header before continuing dependent library cleanup, letting lblanguage.c use meaningful field names instead of raw pointer arithmetic.",
+    "Modeled repeated global-state regions as arrays and nested structs, such as x1F2C[25], x2FF8[2], and gmm_x2FF8_inner inner[19], which made accessors like arg0 / 19 and arg0 % 19 express the original address math.",
+    "Used explicit padding and offset comments throughout gmmain_lib.h to preserve layout evidence while only naming fields that were understood well enough for the current decomp slice.",
+    "Isolated hard-to-match cases behind NON_MATCHING with inline asm fallbacks, preserving build correctness while documenting what still needed a fix.",
+    "Updated cross-file prototypes and symbol references at the same time as the C conversion, avoiding mismatches such as treating func_8015CF94 as a label in code_801601C4.s."
+  ],
+  "decomp_lessons": [
+    "For large global-state accessor files, first recover enough of the owning struct to turn repeated offset loads into typed field returns; this makes many tiny functions straightforward and improves downstream callers.",
+    "When converting only part of an asm file, add the C object before the remaining asm object and leave the asm file present with the undecompiled section, so unresolved functions can continue linking.",
+    "If a symbol previously emitted as lbl_XXXXXXXX becomes a function, audit data tables and asm references that may still point at the label spelling.",
+    "A new header that owns a global symbol should also be used to remove ad-hoc extern declarations in dependent headers to prevent divergent types.",
+    "Use named padding with offset comments when struct understanding is partial; it keeps layout constraints visible without pretending unknown fields are known.",
+    "When a C signature is inferred from a real call site, update both declaration and definition together; this PR fixed func_8000AF74 to take two arguments and changed the unused third parameter into a local variable."
+  ],
+  "naming_conventions": [
+    "Partial structs used offset-based names such as gmm_x0, gmm_x1868, gmm_x1CB0, gmm_x1F2C, gmm_x2FF8, and fields like x1A68, x1B3C, x2FF8.",
+    "Known semantic fields were given real names when supported by usage, notably lbl_804D3EE0->language and gmm_x1CB0.saved_language.",
+    "Unknown bitfield unions were named generically as UnkFlagStruct and UnkFlagStruct2 with member names b0, b1, b789, b10_to_12, and b13_to_15.",
+    "Function names remained address-based func_8015XXXX because no higher-level semantic names were established in the PR evidence.",
+    "The include guard used the local project style _gmmain_lib_h_."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used inline asm fallbacks under #else for functions marked NON_MATCHING: func_8015D084, func_8015D450, func_8015D984, and func_8015DB2C.",
+    "Comments documented unresolved matching reasons such as 'needs a frank patch', 'register swap', and 'regswap and extra useless addi', with decomp.me scratch links for func_8015D984 and func_8015DB2C.",
+    "Used #pragma peephole on after inline asm fallback blocks.",
+    "Represented original 64-bit bit setting/checking via 1LL << arg0 for func_8015CEB4 and func_8015CEFC, matching prior __shl2i behavior.",
+    "Recovered compiler division/modulo-by-19 address math as base[arg0 / 19].inner[arg0 % 19] for x2FF8-style accessors.",
+    "Kept exact asm for a few small functions where C was close but not yet matching, instead of blocking the entire gmmain_lib.c migration."
+  ],
+  "review_feedback": [
+    "No formal review comments or reviews were present in the provided PR slice.",
+    "The author noted the branch was WIP and initially intended to squash commits later.",
+    "The author later stopped working on the file and explicitly invited someone else to take it over.",
+    "The final merge rationale in the comments was to avoid the work getting lost, losing match status, or developing merge conflicts, and to gain some completion percentage."
+  ],
+  "searchable_terms": [
+    "pr-373",
+    "gmmain_lib.s",
+    "gmmain_lib.c",
+    "gmmain_lib.h",
+    "lbl_804D3EE0",
+    "func_8015CC34",
+    "func_8015CC58",
+    "func_8015CE44",
+    "func_8015CF94",
+    "func_8015D084",
+    "func_8015D450",
+    "func_8015D984",
+    "func_8015DB2C",
+    "func_8015ED98",
+    "func_8015EDB0",
+    "func_8015EDBC",
+    "func_8000AF74",
+    "lblanguage.c",
+    "lbtime.c",
+    "gmm_x0",
+    "gmm_x1868",
+    "gmm_x1CB0",
+    "gmm_x1F2C",
+    "gmm_x2FF8",
+    "saved_language",
+    "language",
+    "NON_MATCHING",
+    "inline asm",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that finish or rename functions in src/melee/gm/gmmain_lib.c.",
+    "Search for later replacements of gmm_x0, gmm_x1868, gmm_x1F2C, and gmm_x2FF8 with semantic struct names.",
+    "Check whether func_8015D084, func_8015D450, func_8015D984, and func_8015DB2C eventually stopped needing inline asm fallbacks.",
+    "Look for future PRs that use gmmain_lib.h to clean up other raw lbl_804D3EE0 accesses.",
+    "Verify whether func_8000AF74's two-argument signature remained stable after this PR."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

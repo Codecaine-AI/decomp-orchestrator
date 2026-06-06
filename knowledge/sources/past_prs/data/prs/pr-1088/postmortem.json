@@ -1,0 +1,134 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1088",
+  "pr": {
+    "number": 1088,
+    "title": "Import symbol names and scopes from `GALE01.map` to `symbols.txt`",
+    "url": "https://github.com/doldecomp/melee/pull/1088",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-01-20T18:02:05Z",
+    "merged_at": "2024-01-20T18:19:07Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Imported symbol names and scope metadata from the CodeWarrior `GALE01.map` data into `config/GALE01/symbols.txt`, replacing many anonymous `fn_`, `lbl_`, and similar placeholders with map-derived names and adding `scope:global` or existing scope data where it was missing. The tooling in `tools/config-dtk` was adjusted so it parses the existing `symbols.txt`, selectively fills unnamed symbols and missing scopes from map tree symbols, serializes symbols back to text, and tolerates zero map addresses/alignments by using plain integer types instead of `NonZero` wrappers. The PR body only says it progresses #1082; there were no review comments in the dump.",
+  "change_classification": {
+    "primary_type": "symbol_metadata_import",
+    "categories": [
+      "naming",
+      "tooling",
+      "configuration",
+      "symbol_scope_metadata"
+    ],
+    "systems": [
+      "config/GALE01",
+      "tools/config-dtk",
+      "symbols.txt",
+      "GALE01.map"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "config/GALE01/symbols.txt",
+      "role": "Mass symbol table update: roughly 19k lines rewritten with map-derived names and explicit scopes while preserving addresses, sections, sizes, and other attributes."
+    },
+    {
+      "path": "tools/config-dtk/src/dtk_config.rs",
+      "role": "Added symbol helpers such as `is_named`, attribute serialization, and `to_txt`; simplified parsing to return a `BTreeMap<u32, Symbol>`."
+    },
+    {
+      "path": "tools/config-dtk/src/main.rs",
+      "role": "Changed config-dtk flow to read existing `symbols.txt`, merge names/scopes from parsed map symbols, and write updated symbol text back."
+    },
+    {
+      "path": "tools/config-dtk/src/cw_map.rs",
+      "role": "Changed table symbol address and alignment fields from `NonZeroU32`/`NonZeroU8` to plain `u32`/`u8`, removing hard errors on zero values."
+    }
+  ],
+  "what_changed": [
+    "Renamed many previously anonymous symbols using names from `GALE01.map`; examples in the diff include `fn_80003268` to `TRK_memset`, `fn_8000CE50` to `expf`, `fn_8000CEE0` to `powf`, and many `fn_800xxxxx` entries to subsystem-prefixed names such as `lbShadow_`, `lbArq_`, `lbMemory_`, `lbHeap_`, `lbArchive_`, and `lbDvd_`.",
+    "Added explicit scope annotations to many symbol lines, especially `scope:global`, while retaining existing cases like `scope:local` for symbols such as `__init_registers`.",
+    "Preserved multiple symbols at the same address where applicable; the excerpt shows `fn_800051CC` and `gTRKInterruptVectorTableEnd` both at `.init:0x800051CC`, with ordering adjusted.",
+    "Added `Symbol::is_named`, treating names beginning with `fn_`, `lbl_`, or `func_` as unnamed placeholders for import purposes.",
+    "Added `Symbol::to_txt` and `write_attr` to serialize parsed config symbols back into the canonical `symbols.txt` line format, including optional `type`, `size`, `scope`, `align`, `data`, and `hidden` attributes.",
+    "Changed the merge behavior so map-derived names are only assigned when an existing symbol is not considered named, and map-derived scopes are only assigned when the existing symbol has no scope.",
+    "Simplified `dtk_config` parsing from a `Parser` struct with a `symbols` field to a `parse_symbols` function returning a `BTreeMap<u32, Symbol>`.",
+    "Changed `cw_map::TableSymbol` address and alignment storage from nonzero wrapper types to plain integer types, removing errors for zero address or zero alignment values."
+  ],
+  "smart_moves": [
+    "The importer did not blindly replace every existing symbol name: it only overwrote placeholder-style names starting with `fn_`, `lbl_`, or `func_`, reducing the risk of clobbering manually curated names.",
+    "Scope import was similarly conservative: it filled `scope` only when the existing config symbol lacked one.",
+    "Serializing through `Symbol::to_txt` kept output formatting centralized instead of duplicating line formatting in `main.rs`.",
+    "Using `BTreeMap<u32, Symbol>` kept output ordered by address, which is important for a searchable symbol table and for minimizing noisy reordering.",
+    "The existing/retained size-filling logic computes missing zero-size map table entries from the next sorted address before use, which makes imported size metadata more useful.",
+    "Relaxing `cw_map` parsing to accept zero address/alignment values made the import tool more tolerant of real map-file edge cases instead of failing the whole import."
+  ],
+  "decomp_lessons": [
+    "When importing external map metadata, treat the map as a source for missing or placeholder information, not necessarily as authority over all existing curated decomp names.",
+    "Define an explicit placeholder-name test such as `fn_`, `lbl_`, and `func_` before bulk renaming; this makes mass symbol imports reproducible and reviewable.",
+    "For large generated config updates, keep serializer logic in a dedicated method so future imports preserve formatting and optional attributes consistently.",
+    "Preserve and enrich existing `symbols.txt` records rather than regenerating from only one source; this avoids losing attributes such as type, size, align, data, hidden flags, or manually assigned scopes.",
+    "Map-file parsers should tolerate odd but parseable metadata such as zero alignments or addresses when the downstream merge can still make progress.",
+    "Bulk symbol-table changes are valuable decomp infrastructure: better names and scopes improve searchability, cross-reference readability, and future matching work even without changing C source."
+  ],
+  "naming_conventions": [
+    "Anonymous function placeholders use address-based names like `fn_8000CE50`; anonymous labels use `lbl_...`; `func_...` is also treated as a placeholder prefix by the tool.",
+    "Map-derived library names may use known runtime names directly, such as `TRK_memset`, `expf`, and `powf`.",
+    "Unidentified functions in known subsystems can be given subsystem prefixes plus address suffixes, as shown by `lbShadow_8000E9F0`, `lbArq_80014ABC`, `lbMemory_80014EEC`, `lbHeap_800158D0`, `lbArchive_80016AF0`, and `lbDvd_800174E8`.",
+    "Existing decomp-style library names such as `lbVector_Normalize`, `lbVector_WorldToScreen`, and `lbArchive_InitializeDAT` coexist with address-suffixed placeholders for still-unknown functions.",
+    "Symbol lines follow `name = .section:0xADDR; // type:<kind> size:0xSIZE scope:<scope>` with optional `align`, `data`, and `hidden` attributes."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use `GALE01.map` as external evidence to rename and scope symbols before or alongside decompilation, improving future assembly comparisons and cross-reference navigation.",
+    "For map symbols with size zero, infer a size from the next symbol address after sorting symbols by address.",
+    "Keep address-based suffixes on subsystem-classified but not fully understood functions, so names communicate both likely module ownership and exact binary location."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review records were present in the provided PR dump slice."
+  ],
+  "searchable_terms": [
+    "PR1088",
+    "GALE01.map",
+    "symbols.txt",
+    "config-dtk",
+    "dtk_config.rs",
+    "cw_map.rs",
+    "parse_symbols",
+    "Symbol::is_named",
+    "Symbol::to_txt",
+    "write_attr",
+    "scope:global",
+    "scope:local",
+    "fn_ placeholder",
+    "lbl_ placeholder",
+    "func_ placeholder",
+    "TRK_memset",
+    "gTRKInterruptVectorTableEnd",
+    "expf",
+    "powf",
+    "lbShadow",
+    "lbArq",
+    "lbMemory",
+    "lbHeap",
+    "lbArchive",
+    "lbDvd",
+    "NonZeroU32",
+    "NonZeroU8"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rely on map-derived symbol names from PR #1088.",
+    "Search for additional config-dtk changes after PR #1088 to see whether `Symbol::is_named` placeholder rules were expanded.",
+    "Inspect issue #1082 for the broader goal behind importing `GALE01.map` names and scopes.",
+    "Search for symbols still named `fn_`, `lbl_`, or `func_` after this import to identify remaining unnamed work.",
+    "Look for later PRs that convert address-suffixed subsystem names such as `lbDvd_80017AB0` into semantic function names."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

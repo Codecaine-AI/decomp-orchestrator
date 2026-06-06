@@ -1,0 +1,160 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-255",
+  "pr": {
+    "number": 255,
+    "title": "Match OSAlloc and OSArena",
+    "url": "https://github.com/doldecomp/melee/pull/255",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2022-02-07T18:16:23Z",
+    "merged_at": "2022-02-07T18:16:29Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Ported Cam's OSAlloc and OSArena work, replacing matched allocator and arena assembly with C while preserving remaining unmatched OSAlloc assembly. The PR added Dolphin OS allocator/arena/time headers, introduced real names for arena allocation and current-heap functions, and adjusted build ordering and asm references so the new C objects fit the existing binary layout.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-naming",
+      "build-integration",
+      "library-port"
+    ],
+    "systems": [
+      "dolphin/os",
+      "OSAlloc",
+      "OSArena",
+      "OSTime",
+      "sysdolphin/baselib",
+      "melee/db",
+      "melee/gm",
+      "obj_files.mk"
+    ]
+  },
+  "key_files": [
+    "src/dolphin/os/OSAlloc.c",
+    "src/dolphin/os/OSArena.c",
+    "include/dolphin/os/OSAlloc.h",
+    "include/dolphin/os/OSArena.h",
+    "include/dolphin/os/OSTime.h",
+    "include/dolphin/os/os.h",
+    "obj_files.mk",
+    "asm/dolphin/os/OSAlloc.s",
+    "asm/dolphin/os/OSArena.s",
+    "asm/sysdolphin/baselib/initialize.s",
+    "asm/melee/db/code_80225374.s",
+    "asm/melee/gm/gmmain.s",
+    "src/melee/lb/lbtime.h"
+  ],
+  "what_changed": [
+    "Removed the matched front portion of asm/dolphin/os/OSAlloc.s: DLInsert, OSAllocFromHeap, OSFreeToHeap, and func_80344068, while leaving OSInitAlloc and later OSAlloc assembly in place.",
+    "Added src/dolphin/os/OSAlloc.c implementing heap list helpers DLAddFront, DLExtract, DLInsert, OSAllocFromHeap, OSFreeToHeap, and OSSetCurrentHeap.",
+    "Deleted asm/dolphin/os/OSArena.s and added src/dolphin/os/OSArena.c implementing __OSArenaHi, __OSArenaLo, OSGetArenaHi, OSGetArenaLo, OSSetArenaHi, OSSetArenaLo, OSAllocFromArenaLo, and OSAllocFromArenaHi.",
+    "Added include/dolphin/os/OSAlloc.h with HeapCell, Heap, OSHeapHandle, allocator prototypes, and OSAlloc/OSFree macros.",
+    "Added include/dolphin/os/OSArena.h with arena getter/setter and arena allocation prototypes; the diff shows OSAllocFromArenaLo declared twice, likely intending one declaration for OSAllocFromArenaHi.",
+    "Added include/dolphin/os/OSTime.h and moved OSCalendarTime plus OSTicksToCalendarTime/OSGetTime declarations out of the umbrella os.h.",
+    "Changed include/dolphin/os/os.h into an umbrella include for OSAlloc.h, OSArena.h, and OSTime.h, and added OSRoundUp32B/OSRoundDown32B macros.",
+    "Updated src/melee/lb/lbtime.h to include dolphin/os/OSTime.h directly and remove duplicate externs.",
+    "Updated obj_files.mk to build src/dolphin/os/OSAlloc.o before the remaining asm/dolphin/os/OSAlloc.o and to replace asm/dolphin/os/OSArena.o with src/dolphin/os/OSArena.o.",
+    "Renamed assembly call targets: func_80344068 to OSSetCurrentHeap, func_803444E8 to OSAllocFromArenaLo, and func_80344514 to OSAllocFromArenaHi.",
+    "Inserted .4byte NULL padding in asm/dolphin/os/OSError.s sdata and asm/dolphin/os/OSInterrupt.s sbss, apparently to preserve small-data layout after moving OSArena globals into C."
+  ],
+  "smart_moves": [
+    "Split OSAlloc conversion instead of forcing the entire file: matched C was added for the allocator subset while the existing OSAlloc assembly still supplies unmatched later functions such as OSInitAlloc.",
+    "Used build order in obj_files.mk to compose one logical Dolphin OS module from both new C and remaining assembly objects, reducing PR scope while advancing matching.",
+    "Introduced canonical Dolphin SDK-style names for previously anonymous functions and propagated those names into asm call comments, making later cross-file decomp work easier.",
+    "Added small helper functions for doubly linked list operations in OSAlloc.c, matching allocator behavior while making free/allocated list manipulation readable.",
+    "Used OSRoundUp32B and explicit ALIGNMENT/MINOBJSIZE constants to express allocator alignment and split-threshold behavior instead of burying magic assembly constants.",
+    "Used inline arena getter/setter wrappers in OSArena.c, likely as a matching tactic for the arena allocation functions while still keeping public non-inline accessors.",
+    "Accounted for data layout side effects by adding NULL words in neighboring asm small-data sections after moving __OSArenaLo/__OSArenaHi definitions from assembly to C."
+  ],
+  "decomp_lessons": [
+    "Partial object replacement is a viable tactic: remove only the matched functions from an asm file and add a source object before the residual asm object in obj_files.mk.",
+    "When C replaces assembly that defined sdata/sbss symbols, verify neighboring small-data layout; padding may be necessary in unrelated asm files to keep labels stable.",
+    "For Dolphin OS code, prefer SDK-style headers per subsystem rather than keeping all declarations in a monolithic os.h.",
+    "Allocator decomp benefits from modeling heap cells as explicit structs with prev/next/size fields, because this makes list extraction, insertion, splitting, and coalescing map directly onto the assembly.",
+    "Arena low/high allocation matching can be expressed with ROUND/TRUNC alignment macros and explicit updates to __OSArenaLo/__OSArenaHi.",
+    "Call-site renames in still-asm files are useful documentation and help future reviewers connect matched source symbols to existing assembly branches.",
+    "Header hygiene matters after matching: lbtime.h switched to OSTime.h and dropped local extern declarations once the Dolphin OS time header existed."
+  ],
+  "naming_conventions": [
+    "func_80344068 was identified as OSSetCurrentHeap.",
+    "func_803444E8 was identified as OSAllocFromArenaLo.",
+    "func_80344514 was identified as OSAllocFromArenaHi.",
+    "Allocator structs use SDK-like names HeapCell and Heap, with OSHeapHandle as an int typedef.",
+    "Arena state globals use Dolphin-style double-underscore names __OSArenaHi and __OSArenaLo.",
+    "Public Dolphin OS headers follow include/dolphin/os/OSAlloc.h, OSArena.h, OSTime.h, with os.h acting as an umbrella header.",
+    "Allocator convenience macros use OSAlloc(size) and OSFree(ptr) wrapping OSAllocFromHeap/OSFreeToHeap with __OSCurrHeap."
+  ],
+  "assembly_or_matching_tactics": [
+    "Kept unmatched OSAlloc assembly in asm/dolphin/os/OSAlloc.s while removing only matched functions from the start of the text section.",
+    "Added src/dolphin/os/OSAlloc.o before asm/dolphin/os/OSAlloc.o in TEXT_O_FILES so new C supplies earlier matched symbols and residual asm still contributes later symbols.",
+    "Replaced the entire OSArena assembly object with src/dolphin/os/OSArena.o after matching all listed arena functions and globals.",
+    "Used an extra unused parameter on DLInsert, noted in the source comment as needed to match OSFreeToHeap.",
+    "In OSFreeToHeap, the source manually inlined the DLExtract logic instead of calling DLExtract; the comment says the call was avoided, implying this was required for matching.",
+    "Used ROUND/TRUNC macros and inline arena accessors in OSArena.c to reproduce the assembly for OSAllocFromArenaLo and OSAllocFromArenaHi.",
+    "Inserted explicit .4byte NULL entries before lbl_804D5C18 and lbl_804D7378 to compensate for data-section movement."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "Evidence is limited to the PR body and diff; no reviewer rationale was available."
+  ],
+  "searchable_terms": [
+    "PR255",
+    "PsiLupan",
+    "Cam",
+    "OSAlloc",
+    "OSArena",
+    "OSAllocFromHeap",
+    "OSFreeToHeap",
+    "OSSetCurrentHeap",
+    "OSInitAlloc",
+    "OSCreateHeap",
+    "OSAllocFromArenaLo",
+    "OSAllocFromArenaHi",
+    "OSGetArenaHi",
+    "OSGetArenaLo",
+    "OSSetArenaHi",
+    "OSSetArenaLo",
+    "HeapCell",
+    "Heap",
+    "OSHeapHandle",
+    "DLInsert",
+    "DLExtract",
+    "DLAddFront",
+    "__OSCurrHeap",
+    "__OSArenaHi",
+    "__OSArenaLo",
+    "OSRoundUp32B",
+    "OSRoundDown32B",
+    "OSTime.h",
+    "OSCalendarTime",
+    "obj_files.mk",
+    "partial asm replacement",
+    "small data padding",
+    "sdata",
+    "sbss",
+    "HSD_OSInit",
+    "lbtime.h",
+    "func_80344068",
+    "func_803444E8",
+    "func_80344514"
+  ],
+  "follow_up_queries": [
+    "Check later PRs for a correction to include/dolphin/os/OSArena.h where OSAllocFromArenaLo is declared twice and OSAllocFromArenaHi may be missing.",
+    "Look for follow-up PRs that match the remaining functions in asm/dolphin/os/OSAlloc.s, especially OSInitAlloc, OSCreateHeap, OSCheckHeap, and OSDestroyHeap if present.",
+    "Search for later cleanup of the commented-out extern volatile OSHeapHandle __OSCurrHeap in OSAlloc.h.",
+    "Search for additional small-data padding changes caused by moving Dolphin OS globals from asm to C.",
+    "Compare later Dolphin SDK header organization to see whether OSAlloc.h, OSArena.h, and OSTime.h prototypes were refined."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,147 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1829",
+  "pr": {
+    "number": 1829,
+    "title": "Update `dtk-template`",
+    "url": "https://github.com/doldecomp/melee/pull/1829",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2025-08-12T14:55:51Z",
+    "merged_at": "2025-08-12T15:03:09Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Updated the repository's dtk-template-derived build tooling in configure.py and tools/project.py. The PR added optional Ninja binary selection, changed warning CLI choices, introduced extab post-processing build rules, added path-case checking for source/asm paths, adjusted objdiff.json generation and dependencies, worked around a dtk-template assembler depfile issue, and removed the old host-compiler source build path. The decomp.dev GALE01 report said there were no binary changes.",
+  "change_classification": {
+    "primary_type": "tooling_update",
+    "categories": [
+      "tooling",
+      "build_system",
+      "configuration",
+      "objdiff"
+    ],
+    "systems": [
+      "repo-root",
+      "configure.py",
+      "tools/project.py",
+      "ninja_build",
+      "dtk-template",
+      "objdiff"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "configure.py",
+      "changes": "Added --ninja BINARY option, stored it as config.ninja_path, and changed --warn choices to all/off/error with explicit dest/type."
+    },
+    {
+      "path": "tools/project.py",
+      "changes": "Updated ProjectConfig/Object build generation: extab_padding option, Ninja path propagation to objdiff custom_make, path-case checks, MWCC extab rules, GNU as dependency workaround, objdiff.json output/dependency wiring, and removal of host build support."
+    }
+  ],
+  "what_changed": [
+    "Added parser argument --ninja with type Path and optional help text, then assigned args.ninja to config.ninja_path.",
+    "Changed configure.py --warn choices from off/on/all to all/off/error while keeping default off.",
+    "Added Object option extab_padding and defaulted it to None during object resolution.",
+    "Removed host-related object state and host build generation: host option default, host_obj_path, host_source_inputs, host_cc/host_cpp rules, and all_source_host phony target were deleted.",
+    "Added ProjectConfig.ninja_path so generated objdiff configuration can use an absolute custom Ninja binary instead of always using literal ninja.",
+    "Added check_path_case(path), backed by a cached os.listdir lookup, to warn when the requested path casing differs from the actual filesystem entry and to exit if a path cannot be resolved or accessed.",
+    "Applied check_path_case to existing source paths and assembly override paths before generating C/C++ or asm build rules.",
+    "Added MWCC extab post-processing rules mwcc_extab and mwcc_sjis_extab using dtk extab clean --padding \"$extab_padding\" $out $out.",
+    "Extended non-Windows transform_dep handling to the new extab MWCC command variants and implicit dependency lists.",
+    "Changed C/C++ build-rule selection from a simple shift_jis ternary to selecting among mwcc, mwcc_sjis, mwcc_extab, and mwcc_sjis_extab based on shift_jis and extab_padding.",
+    "Encoded extab_padding into a lowercase two-digit hex string via ''.join(f'{i:02x}' for i in obj.options['extab_padding']).",
+    "Modified the GNU as rule to stop emitting/using a depfile and instead add build/include/macros.inc as an implicit dependency, citing encounter/dtk-template issue 51.",
+    "Changed assembly override selection so asm_path is only used when not already linking a built source object.",
+    "Made report generation implicitly depend on objdiff.json as well as objdiff and all_source.",
+    "Made the configure Ninja rule output both build.ninja and objdiff.json."
+  ],
+  "smart_moves": [
+    "Kept the dtk-template update non-invasive to game code; the automated GALE01 report showed no changes.",
+    "Handled extab cleanup as dedicated Ninja rule variants rather than embedding conditional shell logic at every build site.",
+    "Preserved Shift JIS support while adding extab post-processing by creating a separate mwcc_sjis_extab path.",
+    "Cached directory listings in check_path_case, avoiding repeated os.listdir calls while still catching case mismatches that can break cross-platform builds.",
+    "Threaded custom Ninja selection into objdiff's custom_make field, which helps users whose Ninja binary is not named or located as plain ninja.",
+    "Explicitly wired objdiff.json into configure outputs and report dependencies, making generated config changes visible to Ninja's dependency graph.",
+    "Documented the GNU as depfile change with a direct dtk-template issue link, making the workaround traceable."
+  ],
+  "decomp_lessons": [
+    "Build-tool template updates can affect reproducibility even when no decompiled C code changes; always check the project report for binary deltas.",
+    "When adding object-level build behavior, prefer an option like extab_padding that defaults to None and only changes rule selection when explicitly configured.",
+    "For cross-platform decomp repositories, path-case validation is valuable because macOS/Windows may hide casing mistakes that fail on case-sensitive filesystems.",
+    "Generated files such as objdiff.json should be declared as Ninja outputs/dependencies when downstream report targets consume them.",
+    "If external template tooling has a known depfile bug, encode the workaround in the build graph with a comment and an issue link rather than silently relying on stale dependencies.",
+    "Removing unused host-compiler helper targets simplifies build graphs, but future consumers should confirm there is no remaining workflow depending on all_source_host."
+  ],
+  "naming_conventions": [
+    "ProjectConfig fields use snake_case path names such as sjiswrap_path, objdiff_path, and the newly added ninja_path.",
+    "Object build options use snake_case keys such as extab_padding, shift_jis, mw_version, and progress_category.",
+    "Ninja command and implicit-dependency variables follow paired names like mwcc_cmd/mwcc_implicit, mwcc_extab_cmd/mwcc_extab_implicit, and mwcc_sjis_extab_cmd/mwcc_sjis_extab_implicit.",
+    "Ninja rule names describe the compiler path and feature combination: mwcc, mwcc_sjis, mwcc_extab, mwcc_sjis_extab.",
+    "Generated phony/report targets retain descriptive names such as all_source and report; the removed host aggregate was all_source_host."
+  ],
+  "assembly_or_matching_tactics": [
+    "Added dtk extab clean post-processing after MWCC for objects with extab_padding, allowing exception table padding cleanup to be represented as a build rule.",
+    "For extab padding, the configured byte list is converted to a concatenated hex string before being passed to dtk extab clean --padding.",
+    "Disabled GNU as depfile/deps emission in the Ninja rule and added macros.inc directly as an implicit dependency as a workaround for encounter/dtk-template issue 51.",
+    "Ran dtk elf fixup after GNU as output generation, preserving the existing assembler output normalization step.",
+    "Only falls back to assembly overrides when the source object is not being linked, reducing unintended replacement of successfully built source objects."
+  ],
+  "review_feedback": [
+    {
+      "source": "decomp-dev[bot]",
+      "url": "https://github.com/doldecomp/melee/pull/1829#issuecomment-3179735030",
+      "feedback": "GALE01 report for 50555ed - 728db7d: No changes."
+    },
+    {
+      "source": "review_comments",
+      "feedback": "No human review comments were present in the provided PR slice."
+    }
+  ],
+  "searchable_terms": [
+    "pr-1829",
+    "Update dtk-template",
+    "dtk-template",
+    "configure.py",
+    "tools/project.py",
+    "ninja_path",
+    "--ninja",
+    "--warn",
+    "extab_padding",
+    "dtk extab clean",
+    "mwcc_extab",
+    "mwcc_sjis_extab",
+    "shift_jis",
+    "sjiswrap",
+    "check_path_case",
+    "_listdir_cache",
+    "Case mismatch",
+    "Cannot resolve",
+    "GNU as",
+    "macros.inc",
+    "dtk-template issue 51",
+    "objdiff.json",
+    "custom_make",
+    "all_source_host",
+    "host build",
+    "transform_dep.py",
+    "GALE01 no changes"
+  ],
+  "follow_up_queries": [
+    "Find object configs using extab_padding after PR 1829",
+    "Search for remaining references to host or all_source_host after host build removal",
+    "Check whether configure.py --warn error is consumed consistently by tools/project.py",
+    "Audit path casing warnings from check_path_case on case-sensitive filesystems",
+    "Review dtk-template issue 51 status to see whether the macros.inc implicit dependency workaround can be removed",
+    "Find PRs that modify objdiff.json generation or custom_make after adding ninja_path"
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

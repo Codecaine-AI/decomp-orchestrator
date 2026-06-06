@@ -1,0 +1,135 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-795",
+  "pr": {
+    "number": 795,
+    "title": "Clean up `ftMars` and `ftEmblem` motion definitions",
+    "url": "https://github.com/doldecomp/melee/pull/795",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-04-22T15:12:58Z",
+    "merged_at": "2023-04-22T15:24:34Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Cleaned up Marth (`ftMars`) and Roy/Emblem (`ftEmblem`) motion-state tables by replacing raw motion flag and move-id hex literals with named `ftMs_MF_*` motion flag enum values and `FtMoveId_* * (1 << 24)` expressions. Added shared Marth motion flag definitions to `ftMars/forward.h`, then reused them from both `ftMs_Init.c` and `ftFe_Init.c`. Also converted a few raw hex literals in Marth SpecialN effect logic to decimal equivalents. No PR body or review discussion was present in the slice.",
+  "change_classification": {
+    "primary_type": "motion_state_table_cleanup",
+    "categories": [
+      "headers",
+      "constants",
+      "readability",
+      "fighter_init_cleanup"
+    ],
+    "systems": [
+      "fighter",
+      "ftMars",
+      "ftEmblem",
+      "MotionState"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/chara/ftMars/forward.h",
+      "role": "Added `ftMars_MotionFlags` enum and included `ft/forward.h` so motion-state flag compositions can use named `FtStateChange_*` constants."
+    },
+    {
+      "path": "src/melee/ft/chara/ftMars/ftMs_Init.c",
+      "role": "Updated Marth `ftMs_Init_MotionStateTable` entries to use named motion flag constants and shifted `FtMoveId_*` values instead of raw hex; added includes for `forward.h` and `ft/forward.h`; converted several SpecialN effect/case literals from hex to decimal."
+    },
+    {
+      "path": "src/melee/ft/chara/ftEmblem/ftFe_Init.c",
+      "role": "Updated Roy/Emblem `ftFe_Init_MotionStateTable` entries to reuse Marth motion flag definitions via `#include \"ftMars/forward.h\"` and replace raw move-id hex constants with `FtMoveId_* * (1 << 24)`."
+    }
+  ],
+  "what_changed": [
+    "Replaced motion flag literals such as `0x00340211`, `0x00340611`, `0x00340212`, `0x00340612`, `0x00340213`, `0x00340613`, `0x00340214`, and `0x00340614` with named `ftMs_MF_*` constants in both Marth and Emblem motion-state tables.",
+    "Replaced packed move-id literals such as `0x12000000`, `0x13000000`, `0x14000000`, and `0x15000000` with expressions like `FtMoveId_SpecialN * (1 << 24)`, `FtMoveId_SpecialS * (1 << 24)`, `FtMoveId_SpecialHi * (1 << 24)`, and `FtMoveId_SpecialLw * (1 << 24)`.",
+    "Added `typedef enum ftMars_MotionFlags` in `ftMars/forward.h`, defining a base `ftMs_MF_Special` flag combination and derived variants for neutral, side, up, down, and aerial specials.",
+    "Made `ftEmblem/ftFe_Init.c` include `ftMars/forward.h`, indicating Roy/Emblem's motion definitions intentionally reuse Marth's special-move flag set.",
+    "In `ftMs_Init.c`, changed SpecialN helper switch cases and `efSync_Spawn` arguments from hex literals to decimal literals, for example `0x12` to `18`, `0x1A` to `26`, `0x4F2` to `1266`, and `0x511` to `1297`."
+  ],
+  "smart_moves": [
+    "Factored repeated raw flag values into composable enum constants instead of duplicating opaque hex throughout two motion-state tables.",
+    "Built derived flag constants from a shared `ftMs_MF_Special` base, making it clear which state-change behaviors are common to all Marth/Roy specials and which are specific to ground or air variants.",
+    "Used existing `FtStateChange_*` and `FtMoveId_*` names to document the meaning of packed table fields without changing the table structure.",
+    "Reused the Marth flag definitions from `ftEmblem`, avoiding a second duplicate enum for a clone fighter whose motion table uses the same special-move flag patterns.",
+    "Kept the motion-state numeric IDs unchanged while improving semantic readability, minimizing risk in an init-table cleanup."
+  ],
+  "decomp_lessons": [
+    "For fighter `MotionState` tables, raw flag fields should be migrated to named bitwise enum compositions when the underlying `FtStateChange_*` meanings are known.",
+    "Packed move-id fields can be made readable with `FtMoveId_* * (1 << 24)` while still representing the same compile-time integer value.",
+    "Clone or semi-clone fighters may legitimately share motion flag definitions when the tables use identical state-change semantics; this PR demonstrates `ftEmblem` including `ftMars/forward.h` for that purpose.",
+    "Forward headers are a practical home for lightweight shared enums used by init tables, but they must include the lower-level forward declarations that define referenced enum bits, here `ft/forward.h` for `FtStateChange_*` and `FtMoveId_*`.",
+    "A cleanup PR can improve later matching and review work by replacing magic numbers before deeper function decompilation, even when no new functions are matched."
+  ],
+  "naming_conventions": [
+    "`ftMs_MF_*` names are used for Marth motion flag presets, with `MF` standing for motion flags.",
+    "The enum type is named `ftMars_MotionFlags`, while individual constants use the shorter Marth file prefix `ftMs_`.",
+    "Ground and aerial special variants are distinguished with names such as `ftMs_MF_SpecialN` versus `ftMs_MF_SpecialAirN`.",
+    "Special move-id expressions use existing common names like `FtMoveId_SpecialN`, `FtMoveId_SpecialS`, `FtMoveId_SpecialHi`, and `FtMoveId_SpecialLw`.",
+    "The shared base flag constant is named `ftMs_MF_Special`, and more specific constants are expressed as ORs against that base."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use named enum constants and bitwise OR compositions that fold to the same integer values as previous raw hex literals, preserving binary output while improving source clarity.",
+    "Represent packed move IDs with `FtMoveId_* * (1 << 24)` instead of hard-coded high-byte hex constants to document the field layout without changing emitted data.",
+    "When cleaning data tables, preserve table order, motion-state IDs, callback function pointers, and only replace literal fields with equivalent constants.",
+    "Hex-to-decimal conversions in the SpecialN effect logic appear to be numeric-preserving cleanups rather than behavioral changes."
+  ],
+  "review_feedback": [
+    {
+      "type": "none_present",
+      "detail": "The slice reports zero issue comments, zero review comments, and zero reviews, so there is no reviewer guidance to extract."
+    }
+  ],
+  "searchable_terms": [
+    "pr-795",
+    "ftMars",
+    "ftEmblem",
+    "ftMs_Init_MotionStateTable",
+    "ftFe_Init_MotionStateTable",
+    "MotionState",
+    "ftMars_MotionFlags",
+    "ftMs_MF_Special",
+    "ftMs_MF_SpecialN",
+    "ftMs_MF_SpecialAirN",
+    "ftMs_MF_SpecialS",
+    "ftMs_MF_SpecialS1",
+    "ftMs_MF_SpecialHi",
+    "ftMs_MF_SpecialAirHi",
+    "ftMs_MF_SpecialLw",
+    "ftMs_MF_SpecialAirLw",
+    "FtStateChange_SkipUpdateModel",
+    "FtStateChange_PreserveSfx",
+    "FtStateChange_SkipUpdateItemVis",
+    "FtStateChange_Unk_UpdatePhys",
+    "FtStateChange_FreezeState",
+    "FtStateChange_PreserveFastFall",
+    "FtStateChange_PreserveGfx",
+    "FtStateChange_PreserveColAnimHitStatus",
+    "FtStateChange_SkipUpdateParasol",
+    "FtMoveId_SpecialN",
+    "FtMoveId_SpecialS",
+    "FtMoveId_SpecialHi",
+    "FtMoveId_SpecialLw",
+    "ftMs_SpecialNChargeStart_Anim",
+    "ftMs_SpecialS1_Anim",
+    "ftMs_SpecialHi_Anim",
+    "ftMs_SpecialLwHit_Anim",
+    "efSync_Spawn"
+  ],
+  "follow_up_queries": [
+    "Find other fighter `MotionState` tables still using raw `0x0034....` motion flag literals.",
+    "Search for packed move-id literals like `0x12000000`, `0x13000000`, `0x14000000`, and `0x15000000` that could be replaced by `FtMoveId_* * (1 << 24)`.",
+    "Check whether other clone fighter pairs share identical motion flag patterns that can be centralized in a forward header.",
+    "Audit remaining `efSync_Spawn` calls with raw effect IDs to see if the project prefers decimal literals, named effect IDs, or another convention."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

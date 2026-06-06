@@ -1,0 +1,139 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-921",
+  "pr": {
+    "number": 921,
+    "title": "Match `ftCo_CaptureDamageKoopa`",
+    "url": "https://github.com/doldecomp/melee/pull/921",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-06-04T04:44:19Z",
+    "merged_at": "2023-06-04T04:55:17Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common-fighter Koopa capture damage states by moving the ground/air CaptureDamageKoopa routines out of `asm/melee/ft/ft_08A4.s` into new C source/header files, wiring the new objects into `obj_files.mk`, and exposing helper labels that other remaining assembly still branches to. The matched file report shows `src/melee/ft/chara/ftCommon/ftCo_CaptureDamageKoopa.c` at 100% with all listed functions scoring 0, while `ftCo_CaptureWaitKoopa.c` was introduced mostly as a companion/stub/ASM holder for adjacent wait-state helper code and constants.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "asm-to-c",
+      "build-wiring",
+      "fighter-state"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "Koopa capture states",
+      "asm/melee/ft/ft_08A4.s",
+      "obj_files.mk"
+    ]
+  },
+  "key_files": [
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/chara/ftCommon/ftCo_CaptureDamageKoopa.c",
+    "src/melee/ft/chara/ftCommon/ftCo_CaptureDamageKoopa.h",
+    "src/melee/ft/chara/ftCommon/ftCo_CaptureWaitKoopa.c",
+    "src/melee/ft/chara/ftCommon/ftCo_CaptureWaitKoopa.h",
+    "src/melee/ft/chara/ftCommon/ftCo_CaptureKoopa.c",
+    "src/melee/ft/chara/ftKoopa/ftKp_Init.c",
+    "src/melee/ft/ft_08A4.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Removed the assembly bodies for `ftCo_800BC9C8`, `ftCo_CaptureDamageKoopa_Anim`, `ftCo_CaptureDamageKoopa_IASA`, `ftCo_CaptureDamageKoopa_Phys`, `ftCo_CaptureDamageKoopa_Coll`, `ftCo_800BCAF4`, `ftCo_CaptureDamageKoopaAir_Anim`, `ftCo_CaptureDamageKoopaAir_IASA`, `ftCo_CaptureDamageKoopaAir_Phys`, and `ftCo_CaptureDamageKoopaAir_Coll` from `asm/melee/ft/ft_08A4.s`.",
+    "Added `src/melee/ft/chara/ftCommon/ftCo_CaptureDamageKoopa.c`, implementing the matched ground and air Koopa capture damage state entry and animation callbacks plus empty IASA/Phys/Coll callbacks.",
+    "Added `src/melee/ft/chara/ftCommon/ftCo_CaptureDamageKoopa.h` with prototypes for the matched functions.",
+    "Added `src/melee/ft/chara/ftCommon/ftCo_CaptureWaitKoopa.c` and `.h`; the excerpt shows `ftCo_800BCC20` retained as an `ASM` function under `MUST_MATCH`, with `NOT_IMPLEMENTED` outside matching/WIP paths, and constants `ftCo_804D8B88 = 0` and `ftCo_804D8B8C = 1` moved into C.",
+    "Added the new CaptureDamageKoopa and CaptureWaitKoopa C objects to `TEXT_O_FILES` in `obj_files.mk` before the remaining `asm/melee/ft/ft_08A4.s.o` object.",
+    "Changed internal assembly labels `.L_800DA698` and `.L_800BCD00` into global symbols `ftCo_800DA698` and `ftCo_800BCD00`, then updated existing assembly branch/call sites to use those global names.",
+    "Moved sdata2 constants used by the extracted code out of the assembly file; the diff removes `ftCo_804D8B80`, `ftCo_804D8B84`, `ftCo_804D8B88`, and `ftCo_804D8B8C` from `ft_08A4.s`, while the C excerpt explicitly shows `ftCo_804D8B88` and `ftCo_804D8B8C` in `ftCo_CaptureWaitKoopa.c`.",
+    "Updated includes in `ftCo_CaptureKoopa.c` to include `ftCo_CaptureDamageKoopa.h`, enabling references to the newly extracted declarations."
+  ],
+  "smart_moves": [
+    "Used a shared `static inline` helper, `inlineA0`, for the nearly identical ground and air `CaptureDamageKoopa*_Anim` logic, parameterizing only the callback to transition to either `ftCo_800BCC20` or `ftCo_800BCD00` when animation frames are exhausted.",
+    "Kept a `MUST_MATCH`-only unused stack workaround in `inlineA0` with an explicit `@todo Unused stack`, documenting a matching-specific artifact instead of hiding it in unclear code.",
+    "Preserved correct motion-state setup details in C: `Fighter_ChangeMotionState` uses `ftCo_MS_CaptureDamageKoopa` or `ftCo_MS_CaptureDamageKoopaAir`, conditionally passes `Ft_MF_FreezeState` based on `fp->x2222_b6`, passes `fp->victim_gobj`, installs `ftCo_800DB464` into `fp->cb.x21B0_callback_Accessory1`, calls `ftCommon_8007E2F4(fp, 0x1FF)`, and restarts/updates animation through `ftAnim_8006EBA4`.",
+    "Converted shared assembly-local labels that were still called by both new C and remaining assembly into named globals (`ftCo_800DA698`, `ftCo_800BCD00`) rather than duplicating behavior or forcing a larger extraction.",
+    "Split the work along a boundary that could fully match `ftCo_CaptureDamageKoopa.c` while leaving adjacent wait-state helper code in an ASM wrapper, allowing incremental decomp without blocking on `ftCo_800BCC20`.",
+    "Placed new source objects before the residual assembly object in `obj_files.mk`, consistent with extracting only a contiguous subset while leaving the rest of `ft_08A4.s` linked afterward."
+  ],
+  "decomp_lessons": [
+    "For adjacent fighter state pairs with nearly identical ground/air logic, an inline helper taking a callback can match duplicated assembly while keeping the C readable.",
+    "If an extracted C function needs to call a helper still living in the assembly file, promote the assembly label to a global `ftCo_...` symbol and update all branch labels consistently.",
+    "Small empty state callbacks should be represented as empty C functions; the report confirms the 4-byte `blr` IASA/Phys/Coll callbacks matched cleanly.",
+    "When matching requires artificial stack shape, guard the workaround under `MUST_MATCH` and annotate it directly so future cleanup can revisit it.",
+    "It can be useful to create companion headers and source files for neighboring states even if one helper remains `ASM`, because it establishes the C module boundary and lets constants/prototypes move out of monolithic assembly.",
+    "Motion-state decomp should preserve callback field writes and flag arguments exactly; here the accessory callback field `x21B0_callback_Accessory1`, `Ft_MF_FreezeState`, and victim object argument were central to the matched state-entry functions.",
+    "The PR evidence shows no reviewer discussion, so conclusions about reviewer intent or preferred style beyond the diff should not be inferred."
+  ],
+  "naming_conventions": [
+    "New common-fighter Koopa capture damage files follow the action-state naming pattern `ftCo_CaptureDamageKoopa.c/.h` and `ftCo_CaptureWaitKoopa.c/.h` under `src/melee/ft/chara/ftCommon/`.",
+    "Callbacks use the established suffixes `_Anim`, `_IASA`, `_Phys`, and `_Coll`, with air variants named by inserting `Air` before the suffix, e.g. `ftCo_CaptureDamageKoopaAir_Anim`.",
+    "Unknown or not-yet-semantic functions retained address-derived names such as `ftCo_800BC9C8`, `ftCo_800BCAF4`, `ftCo_800BCC20`, `ftCo_800BCD00`, and `ftCo_800DA698`.",
+    "Promoted assembly labels were renamed from local `.L_800...` labels to global `ftCo_800...` symbols, preserving address identity while making cross-object calls possible.",
+    "Header include guards in the new header use the address-style project convention, e.g. `GALE01_098E9C`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted matched assembly bodies from `ft_08A4.s` and compiled the replacement C objects before the remaining assembly object.",
+    "Used `#ifdef MUST_MATCH` in `inlineA0` to create an unused 8-byte local stack array only for matching builds.",
+    "Kept `ftCo_800BCC20` as an `ASM` function with `nofralloc` in `ftCo_CaptureWaitKoopa.c` under matching conditions, while providing `NOT_IMPLEMENTED` in non-matching/WIP paths.",
+    "Replaced calls to `.L_800DA698` in remaining assembly with calls to `ftCo_800DA698` after making that label global.",
+    "Made `.L_800BCD00` global as `ftCo_800BCD00` so the extracted air damage animation code could call the still-assembly transition helper.",
+    "Used an inline helper instead of separate hand-written duplicated functions for the common animation loop: check `ftAnim_IsFramesRemaining`, call wait transition callback if finished, otherwise call `ftCo_800BC458`, compare `fp->x1A4C <= 0`, release/update victim through `ftCo_800DA698`, negate `facing_dir`, call `ftCo_800DC750`, else call `ftCo_800BC4A8`.",
+    "The match report in the PR body shows `ftCo_CaptureDamageKoopa.c` reached 100.00% for the file and all listed functions; `ftCo_CaptureWaitKoopa.c` was not matched in the same way, with `ftCo_800BCC20` shown as 0.00% in the excerpt."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-921",
+    "ftCo_CaptureDamageKoopa",
+    "ftCo_CaptureDamageKoopaAir",
+    "ftCo_CaptureDamageKoopa_Anim",
+    "ftCo_CaptureDamageKoopaAir_Anim",
+    "ftCo_800BC9C8",
+    "ftCo_800BCAF4",
+    "ftCo_800BCC20",
+    "ftCo_800BCD00",
+    "ftCo_800DA698",
+    "ftCo_800DB464",
+    "ftCo_800DC750",
+    "ftCo_800BC458",
+    "ftCo_800BC4A8",
+    "ftCo_CaptureWaitKoopa",
+    "ftCo_CaptureKoopa",
+    "ftCo_MS_CaptureDamageKoopa",
+    "ftCo_MS_CaptureDamageKoopaAir",
+    "Fighter_ChangeMotionState",
+    "Ft_MF_FreezeState",
+    "ftCommon_8007E2F4",
+    "ftAnim_8006EBA4",
+    "ftAnim_IsFramesRemaining",
+    "x21B0_callback_Accessory1",
+    "x2222_b6",
+    "victim_gobj",
+    "inlineA0",
+    "MUST_MATCH unused stack",
+    "asm/melee/ft/ft_08A4.s",
+    "obj_files.mk",
+    "ftCo_804D8B80",
+    "ftCo_804D8B84",
+    "ftCo_804D8B88",
+    "ftCo_804D8B8C"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully decompile `ftCo_CaptureWaitKoopa.c` or replace the `ASM` body of `ftCo_800BCC20`.",
+    "Search for later renames or semantic identification of `ftCo_800DA698`, since this PR only promotes it from a local label to an address-derived global symbol.",
+    "Search for other Koopa capture-state PRs that reuse the `inlineA0` animation helper pattern or the `MUST_MATCH` unused-stack workaround.",
+    "Inspect later changes to `ftCo_CaptureDamageKoopa.h` because the excerpted header lists prototypes through `ftCo_CaptureDamageKoopaAir_Phys` and may have been adjusted for the air coll callback or other declarations.",
+    "Compare this PR with neighboring extractions from `ft_08A4.s` to confirm object ordering and cross-object symbol promotion patterns."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

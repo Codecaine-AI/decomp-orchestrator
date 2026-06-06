@@ -1,0 +1,216 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-481",
+  "pr": {
+    "number": 481,
+    "title": "Port `dolphin/os` code from SMB",
+    "url": "https://github.com/doldecomp/melee/pull/481",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2022-08-23T21:54:45Z",
+    "merged_at": "2022-08-27T03:34:58Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Ported a large block of Dolphin OS library code from the SMB decompilation, replacing substantial hand-written assembly for OSAlloc, OSAudioSystem, OSError, OSMemory, OSMutex, OSSync, __start, and __ppc_eabi_init with C or mixed C/inline-asm implementations. The PR also added and repaired Dolphin OS headers, stdarg/stdio support, build object lists, and generation tooling needed for these SDK-library sources. Evidence shows no review comments in this slice, so lessons are inferred from the diff and PR body rather than reviewer discussion.",
+  "change_classification": {
+    "primary_type": "sdk-library-port",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "tooling",
+      "asm-to-c",
+      "runtime-support"
+    ],
+    "systems": [
+      "dolphin/os",
+      "dolphin/init",
+      "asm",
+      "include",
+      "src",
+      "tooling",
+      "build"
+    ]
+  },
+  "key_files": [
+    {
+      "file": "src/dolphin/os/OSAlloc.c",
+      "role": "C replacement for OSAlloc.s, including heap state, heap creation/destruction/checking, and forced string data for OSDumpHeap"
+    },
+    {
+      "file": "src/dolphin/os/OSAudioSystem.c",
+      "role": "C replacement for OSAudioSystem.s using DSP/audio hardware setup, cache flushing, and arena APIs"
+    },
+    {
+      "file": "src/dolphin/os/OSError.c",
+      "role": "C implementation of OSReport, OSPanic, OSSetErrorHandler, error table, and mixed/nonmatching __OSUnhandledException handling"
+    },
+    {
+      "file": "src/dolphin/os/OSSync.c",
+      "role": "System call vector/init port with inline asm and NON_MATCHING fallback around vector copying/cache invalidation"
+    },
+    {
+      "file": "src/dolphin/os/OSMutex.c",
+      "role": "Mutex implementation adjusted around OSThread/OSMutex structures, with remaining inline asm check helpers"
+    },
+    {
+      "file": "src/dolphin/os/init/__start.c",
+      "role": "Startup/runtime init port retaining asm entry points such as __start and __flush_cache"
+    },
+    {
+      "file": "asm/dolphin/os/init/__ppc_eabi_init.s",
+      "role": "Kept __ctors symbol in assembly with comments documenting why it was not migrated cleanly to C"
+    },
+    {
+      "file": "include/dolphin/os/OSThread.h",
+      "role": "Major struct/prototype refresh for OSThread, thread queues, mutex queues, mutex links, states, flags, callbacks, and thread APIs"
+    },
+    {
+      "file": "include/dolphin/os/OSMutex.h",
+      "role": "Public OSMutex declarations and struct layout tied to OSThread and OSMutexLink"
+    },
+    {
+      "file": "include/dolphin/os/OSError.h",
+      "role": "Added OSError/OSErrorHandler types and OS_ERROR_* constants"
+    },
+    {
+      "file": "include/stdarg.h",
+      "role": "Added MWERKS-compatible va_list/va_start/va_arg handling plus non-MWERKS builtin fallbacks"
+    },
+    {
+      "file": "include/stdio.h",
+      "role": "Added FILE-like struct placeholder and printf-family prototypes required by OSReport/OSPanic"
+    },
+    {
+      "file": "gen.sh",
+      "role": "Updated generation tooling to concatenate project headers and m2c macros inside pragma regions"
+    },
+    {
+      "file": "obj_files.mk",
+      "role": "Build list updated to use newly ported C objects instead of deleted assembly objects"
+    }
+  ],
+  "what_changed": [
+    "Deleted full assembly files for asm/dolphin/os/OSAlloc.s, asm/dolphin/os/OSAudioSystem.s, and asm/dolphin/os/OSSync.s, and removed the OSGetPhysicalMemSize body from OSMemory.s after adding C replacements.",
+    "Added src/dolphin/os/OSAlloc.c with heap globals HeapArray, NumHeaps, ArenaStart, ArenaEnd, __OSCurrHeap, allocation alignment/range macros, OSInitAlloc, OSCreateHeap, OSDestroyHeap, OSCheckHeap, and forced OSDumpHeap-related strings.",
+    "Added src/dolphin/os/OSAudioSystem.c with __OSInitAudioSystem and __OSStopAudioSystem replacing the prior low-level DSP/audio assembly file.",
+    "Added src/dolphin/os/OSError.c with OSReport, OSPanic, __OSErrorTable, OSSetErrorHandler, and mixed handling for __OSUnhandledException.",
+    "Kept special assembly/data support for OSError under NON_MATCHING control: asm/dolphin/os/OSError.s now retains data labels such as lbl_80401FF8/jtbl_804022D4 only when needed.",
+    "Added src/dolphin/os/OSMemory.c with OSGetPhysicalMemSize.",
+    "Added src/dolphin/os/OSSync.c with __OSSystemCallVector and __OSInitSystemCall, using inline asm for exact vector code and a NON_MATCHING C version for the system-call init path.",
+    "Updated src/dolphin/os/OSMutex.c and added src/dolphin/os/OSMutex.h while also refreshing the public include/dolphin/os/OSMutex.h.",
+    "Reworked include/dolphin/os/OSThread.h with explicit queue/link structs, thread fields with offsets, state/flag enums, and thread/mutex API prototypes.",
+    "Updated startup headers and source for __start and __ppc_eabi_init, including corrected void prototypes and runtime copy/BSS info structs.",
+    "Added stdarg.h and stdio.h support needed by the OS error/reporting code.",
+    "Updated gen.sh to feed include/ and src/ headers plus tools/m2c/m2c_macros.h into generated m2c context with pragma regions.",
+    "Updated obj_files.mk so the build consumes the new C sources."
+  ],
+  "smart_moves": [
+    "Used SMB decomp as an explicit upstream source and checklist, limiting guesswork for SDK-library code that is shared across GameCube titles.",
+    "Converted large, stable OS SDK assembly blocks to C while preserving exact assembly only where the diff shows matching was still difficult or impossible.",
+    "Isolated unavoidable assembly behind NON_MATCHING or asm functions rather than blocking the whole library port on the hardest routines.",
+    "Documented the __ctors migration failure directly in asm/dolphin/os/init/__ppc_eabi_init.s, including references to CodeWarrior/NXP material and noting that #pragma section attempts did not work.",
+    "Preserved data/string layout details using techniques like .set lbl_80401FF8, report_messages - 0x5C and #pragma force_active for OSAlloc strings.",
+    "Added compiler/runtime headers such as stdarg.h and stdio.h instead of scattering ad-hoc prototypes through OS error code.",
+    "Moved struct knowledge into headers, especially OSThread/OSMutex layouts, so later Dolphin OS ports can share the same ABI assumptions."
+  ],
+  "decomp_lessons": [
+    "Cross-game SDK ports are high leverage for Dolphin libraries, but they still require local adaptation of headers, object lists, labels, data placement, and remaining nonmatching routines.",
+    "For low-level runtime and exception code, a mixed strategy is practical: implement ordinary C helpers first, then keep exact inline asm or external asm for exception vectors, startup entry points, system-call vectors, and ctor table placement.",
+    "Matching OS library code often depends as much on data layout and string placement as on function control flow; preserving report string order and label offsets can be necessary.",
+    "When adding SDK structs, include offset comments and forward declarations to stabilize future matching work across thread/mutex code.",
+    "Tooling that generates m2c context should include both public include headers and local src headers, because decompiled library code may depend on either.",
+    "MWERKS-specific varargs behavior matters for OSReport/OSPanic-style functions; using a compiler-aware stdarg.h avoids brittle local hacks.",
+    "If a C conversion cannot express a special section or symbol such as __ctors, leaving a small documented assembly island is preferable to an unexplained nonmatch."
+  ],
+  "naming_conventions": [
+    "Public Dolphin OS APIs retain SDK-style names with OS prefixes, e.g. OSInitAlloc, OSCreateHeap, OSDestroyHeap, OSCheckHeap, OSReport, OSPanic, OSSetErrorHandler, OSGetTick.",
+    "Internal Dolphin OS routines and globals use double-underscore prefixes, e.g. __OSInitAudioSystem, __OSStopAudioSystem, __OSUnhandledException, __OSErrorTable, __OSCurrHeap, __OSUnlockAllMutex.",
+    "Error constants were introduced as OS_ERROR_* macros, including OS_ERROR_SYSTEM_RESET, OS_ERROR_DSI, OS_ERROR_ALIGNMENT, OS_ERROR_PROGRAM, and OS_ERROR_MAX.",
+    "Headers use include guards following project path names such as DOLPHIN_OS_OSERROR_H, DOLPHIN_OS_OSMUTEX_H, DOLPHIN_OS_INIT___START_H, and DOLPHIN_OS_INIT___PPC_EABI_INIT_H.",
+    "Unknown struct fields are kept with offset-oriented placeholder names such as WORD_0x2D4, WORD_0x2D8, ARR_0x310, and comments like // at 0x2C8.",
+    "Local macros in OSAlloc mirror SDK assertion terminology from strings, e.g. InRange, OFFSET, ALIGNMENT, and MINOBJSIZE."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used NON_MATCHING guards for code paths that have a readable C version but still require exact assembly for matching, notably OSError __OSUnhandledException and OSSync __OSInitSystemCall.",
+    "Kept asm void functions for hard ABI/vector/startup routines such as __OSSystemCallVector, __OSInitSystemCall, __start, and __flush_cache.",
+    "Retained small assembly file support for __ctors because the author noted no discernible way to migrate it to C using #pragma section or placement in __start.c.",
+    "Used .set lbl_80401FF8, report_messages - 0x5C to preserve an expected data label relationship while moving most OSError logic to C.",
+    "Used #pragma push / #pragma force_active on / #pragma pop to keep OSAlloc dump strings emitted even if not referenced by compiled C.",
+    "Preserved hardware-address constants and vector placement in C/asm, e.g. OS_SYS_CALL_HANDLER at 0x80000C00, OS_HANDLER_SLOT_SIZE 0x100, audio/DSP region 0x81000000, and CC005000 audio registers.",
+    "Updated gen.sh to pipe collected headers and m2c macros through pragma regions, supporting more accurate m2c context generation for future matching."
+  ],
+  "review_feedback": [
+    {
+      "type": "none_in_slice",
+      "note": "The provided PR context reports zero issue comments, review comments, and reviews; no human review feedback is available in this slice."
+    }
+  ],
+  "searchable_terms": [
+    "PR481",
+    "ribbanya",
+    "Port dolphin/os code from SMB",
+    "SMB decomp",
+    "dolphin os",
+    "OSAlloc",
+    "OSInitAlloc",
+    "OSCreateHeap",
+    "OSDestroyHeap",
+    "OSCheckHeap",
+    "OSDumpHeap",
+    "HeapArray",
+    "NumHeaps",
+    "ArenaStart",
+    "ArenaEnd",
+    "__OSCurrHeap",
+    "OSAudioSystem",
+    "__OSInitAudioSystem",
+    "__OSStopAudioSystem",
+    "OSError",
+    "OSReport",
+    "OSPanic",
+    "OSSetErrorHandler",
+    "__OSUnhandledException",
+    "__OSErrorTable",
+    "OSMemory",
+    "OSGetPhysicalMemSize",
+    "OSMutex",
+    "__OSUnlockAllMutex",
+    "__OSCheckMutex",
+    "__OSCheckDeadLock",
+    "__OSCheckMutexes",
+    "OSSync",
+    "__OSSystemCallVector",
+    "__OSInitSystemCall",
+    "__start",
+    "__ppc_eabi_init",
+    "__ctors",
+    "OSThread",
+    "OSThreadQueue",
+    "OSMutexQueue",
+    "OSMutexLink",
+    "stdarg.h",
+    "stdio.h",
+    "NON_MATCHING",
+    "asm void",
+    "force_active",
+    "m2c_macros",
+    "gen.sh",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that remove NON_MATCHING from __OSUnhandledException or __OSInitSystemCall.",
+    "Find PRs that further refine OSThread.h field names WORD_0x2D4, WORD_0x2D8, WORD_0x30C, and ARR_0x310.",
+    "Find follow-up work that moves or deletes src/dolphin/os/OSMutex.h versus include/dolphin/os/OSMutex.h duplication.",
+    "Find PRs referencing __ctors, #pragma section, or __ppc_eabi_init matching.",
+    "Find PRs that reuse the SMB decomp source for additional Dolphin SDK libraries."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

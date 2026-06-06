@@ -1,0 +1,133 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1858",
+  "pr": {
+    "number": 1858,
+    "title": "Link `ftCo_AirCatch`",
+    "url": "https://github.com/doldecomp/melee/pull/1858",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2025-08-20T18:15:45Z",
+    "merged_at": "2025-08-20T18:21:20Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Linked `src/melee/ft/chara/ftCommon/ftCo_AirCatch.c` by moving it from NonMatching to Matching and making `ftCo_AirCatch_Anim` reach 100%. The fix removed forced literal definitions, localized generated constants in symbols, introduced a typed `TetherAttributes` struct for article special attributes, tightened Link dat-attr typing, and used scoped stack padding/statement-shape changes to preserve codegen. The decomp.dev report showed +1556 matched bytes and +2744 linked bytes, with `ftCo_AirCatch_Anim` improving from 99.94% to 100.00%.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "linking",
+      "headers",
+      "symbol-map-cleanup",
+      "stack-layout"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "Link",
+      "Samus",
+      "items",
+      "config"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_AirCatch.c",
+    "src/melee/ft/chara/ftCommon/types.h",
+    "src/melee/ft/chara/ftLink/types.h",
+    "configure.py",
+    "config/GALE01/splits.txt",
+    "config/GALE01/symbols.txt"
+  ],
+  "what_changed": [
+    "`configure.py` changed `melee/ft/chara/ftCommon/ftCo_AirCatch.c` from `Object(NonMatching, ...)` to `Object(Matching, ...)`.",
+    "`ftCo_AirCatch.c` removed a `#pragma force_active on` block containing explicit `double`, `float`, `Vec3`, and `SDATA char` literal objects that had previously forced constants such as `ftCo_804D8CF0`, `lbl_803B74C8`, and `ftCo_804D3C48` active.",
+    "`symbols.txt` converted many previously global-looking `ftCo_*` or `lbl_*` constants in the AirCatch range to compiler-style local labels such as `@190`, `@212`, `@340`, and `@363`.",
+    "`splits.txt` adjusted the AirCatch `.rodata` and `.sdata` ends from `0x803B74F0` to `0x803B74EC` and from `0x804D3C58` to `0x804D3C55`, respectively.",
+    "`ftCo_AirCatch_Anim` replaced raw `M2C_FIELD` reads from article data with `tether_ip->xC4_article_data->x4_specialAttributes` cast as `struct TetherAttributes*` and named fields `pos_x_0` and `pos_x_1`.",
+    "`src/melee/ft/chara/ftCommon/types.h` added `struct TetherAttributes` with padding to offset `0x38`, fields at `+0x38`, `+0x3C`, and `+0x40`, and names `pos_x_0`, `x3C`, and `pos_x_1`.",
+    "`src/melee/ft/chara/ftLink/types.h` changed `ftLk_DatAttrs.xAC` from `UNK_T` to `int`, enabling direct comparison to `fp->mv.co.aircatch.x0` without `M2C_FIELD`.",
+    "Manual dummy stack arrays such as `u8 _[16] = { 0 }`, `u8 _[8] = { 0 }`, and local `u8 _[4]` padding were removed or replaced with `PAD_STACK(...)` where needed.",
+    "The Samus branch in `ftCo_AirCatch_Anim` was reshaped with an extra block scope and `PAD_STACK(3 * 4)` around the `Vec3 pos` and `HSD_JObj* jobj` logic."
+  ],
+  "smart_moves": [
+    "Turning anonymous article special-attribute offsets into a small struct made the code more semantic while also removing brittle `M2C_FIELD` access patterns.",
+    "Changing `ftLk_DatAttrs.xAC` to `int` aligned the header with the way the field is used in the AirCatch timing comparison and simplified the matching source.",
+    "Removing `#pragma force_active` literals and allowing constants to be represented as local compiler-generated symbols cleaned up the data section for a linked object.",
+    "Using `PAD_STACK` instead of named dummy byte arrays expresses stack-shape intent without inventing fake locals that obscure the recovered logic.",
+    "The PR updated source, headers, symbols, splits, and build configuration together, which is the complete set of artifacts needed when promoting an object to Matching."
+  ],
+  "decomp_lessons": [
+    "When linking a formerly nonmatching object, check whether forced literal definitions are still necessary; once the function matches, many constants may belong as local `@NNN` symbols rather than exported `ftCo_*` or `lbl_*` names.",
+    "Prefer adding a narrowly scoped struct for repeated special-attribute offsets over keeping `M2C_FIELD` reads, especially when the offsets are stable and used in multiple fighter branches.",
+    "Small type corrections in character dat-attr headers can be enough to remove casts or macro field accesses and unlock exact matching.",
+    "Stack padding should be documented through `PAD_STACK` when it is truly codegen-motivated; dummy arrays are more fragile and less explanatory.",
+    "Promoting an object to Matching requires corresponding split-boundary and symbol-scope updates, not only source changes.",
+    "Statement shape and block scope can matter for matching: this PR preserved stack/register behavior by adding local scopes and padding around Samus tether setup rather than only simplifying the C."
+  ],
+  "naming_conventions": [
+    "Compiler-local constants in `symbols.txt` use `@NNN` names with `scope:local` when no meaningful global symbol is warranted.",
+    "Unknown or partially understood dat-attr fields keep offset-style names such as `xAC`, but the type should still be corrected when usage reveals it.",
+    "New partial structs can use descriptive field names for known offsets, as with `TetherAttributes.pos_x_0` at `0x38` and `TetherAttributes.pos_x_1` at `0x40`, while retaining offset-style names like `x3C` for less-understood fields.",
+    "The common fighter type was named `struct TetherAttributes`, reflecting shared tether article special attributes rather than Link-only or Samus-only ownership."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced fake local arrays with `PAD_STACK(8)` and `PAD_STACK(3 * 4)` to preserve required stack layout.",
+    "Removed explicit `return;` at the end of a `void` function where it was not needed for matching.",
+    "Used typed field access through `x4_specialAttributes` to produce the desired loads from offsets `0x38` and `0x40` instead of raw `M2C_FIELD` expressions.",
+    "Introduced additional block scopes in the Samus branch, likely to influence local variable lifetime/stack allocation for the matching compiler output.",
+    "Converted direct forced literals to local data symbols, matching compiler-emitted constant ownership and section boundaries.",
+    "Adjusted `.rodata` and `.sdata` split ends after removing forced literals so the linked object's data ranges matched the new layout."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided slice.",
+    "The decomp.dev bot reported one new match: `main/melee/ft/chara/ftCommon/ftCo_AirCatch` function `ftCo_AirCatch_Anim` improved from 99.94% to 100.00%, with matched code +1556 bytes and linked code +2744 bytes."
+  ],
+  "searchable_terms": [
+    "ftCo_AirCatch",
+    "ftCo_AirCatch_Anim",
+    "ftCo_AirCatch_Phys",
+    "ftCo_AirCatch_Coll",
+    "ftCo_800C3A14",
+    "ftCo_800C3CC0",
+    "TetherAttributes",
+    "x4_specialAttributes",
+    "pos_x_0",
+    "pos_x_1",
+    "ftLk_DatAttrs",
+    "xAC",
+    "M2C_FIELD",
+    "PAD_STACK",
+    "force_active",
+    "S32_TO_F32",
+    "FtPart_RThumbNb",
+    "FtPart_ThrowN",
+    "FTKIND_LINK",
+    "FTKIND_CLINK",
+    "FTKIND_SAMUS",
+    "it_802A77DC",
+    "it_802BAAE4",
+    "it_802B7C18",
+    "it_802B7B84",
+    "mpLib_800524DC",
+    "HSD_JObjSetupMatrix",
+    "lb_8000B1CC",
+    "symbols.txt",
+    "splits.txt",
+    "MatchingFor"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that expand or rename `struct TetherAttributes` fields beyond `pos_x_0`, `x3C`, and `pos_x_1`.",
+    "Search for other tether or article special-attribute code still using `M2C_FIELD(tether_ip->xC4_article_data, ...)` that could reuse this struct pattern.",
+    "Check whether other `ftCommon` objects still rely on `#pragma force_active` literal blocks that can be removed when linking.",
+    "Look for additional `ftLk_DatAttrs` fields typed as `UNK_T` but compared or used as concrete integers/floats in matching source."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

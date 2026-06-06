@@ -1,0 +1,184 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-927",
+  "pr": {
+    "number": 927,
+    "title": "Match HSD state",
+    "url": "https://github.com/doldecomp/melee/pull/927",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-06-14T06:30:35Z",
+    "merged_at": "2023-06-14T06:40:03Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Replaced the remaining sysdolphin/baselib/state.s assembly object with a matched C implementation of HSD render-state handling. The PR added state.c/state.h definitions for HSD channel defaults, material state, render-mode setup, cached GX state setters, and state invalidation dispatch, then switched obj_files.mk to build state.c. Supporting changes corrected GXPixel prototypes to narrower u8/u32 types, updated mobj.c callers after HSD_SetMaterialColor/HSD_SetMaterialShininess signatures were simplified, and renamed several TEV invalidation asm labels from anonymous HSD_Tev_80362Cxx names to _HSD_StateInvalidate* names.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "function-signatures",
+      "state-cache",
+      "symbol-naming"
+    ],
+    "systems": [
+      "sysdolphin/baselib/state",
+      "sysdolphin/baselib/tev",
+      "sysdolphin/baselib/mobj",
+      "dolphin/gx/GXPixel",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "asm/sysdolphin/baselib/state.s",
+      "role": "Deleted 981-line assembly implementation after matching it in C."
+    },
+    {
+      "path": "src/sysdolphin/baselib/state.c",
+      "role": "New 441-line C implementation for HSD state setup, cached GX state setters, material state, channel defaults, and invalidation dispatch."
+    },
+    {
+      "path": "src/sysdolphin/baselib/state.h",
+      "role": "Expanded state API with HSD_STATE_* mask macros, HSD_Chan struct, and matched function prototypes."
+    },
+    {
+      "path": "src/dolphin/gx/GXPixel.c",
+      "role": "Adjusted GXPixel function signatures to u8/u32 argument types used by state.c and matching codegen."
+    },
+    {
+      "path": "src/dolphin/gx/GXPixel.h",
+      "role": "Updated public prototypes for GXSetDstAlpha, GXSetDither, GXSetZCompLoc, GXSetZMode, GXSetAlphaUpdate, and GXSetColorUpdate."
+    },
+    {
+      "path": "asm/sysdolphin/baselib/tev.s",
+      "role": "Renamed TEV invalidation labels to semantic _HSD_StateInvalidate* names."
+    },
+    {
+      "path": "src/sysdolphin/baselib/tev.h",
+      "role": "Added TEV setup/state prototypes and invalidate-function declarations needed by state.c."
+    },
+    {
+      "path": "src/sysdolphin/baselib/mobj.c",
+      "role": "Updated HSD_SetMaterialColor and HSD_SetMaterialShininess calls to match simplified state.h prototypes."
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "Switched the build from asm/sysdolphin/baselib/state.s.o to src/sysdolphin/baselib/state.c.o."
+    }
+  ],
+  "what_changed": [
+    "Removed asm/sysdolphin/baselib/state.s and added src/sysdolphin/baselib/state.c as the built implementation.",
+    "Implemented HSD_SetupChannelMode in C, including specular-light setup, active light iteration, diffuse/alpha channel selection, and use of HSD_LObjGetLightMaskSpecular/Diffuse/Alpha.",
+    "Implemented HSD_SetupPEMode and render-mode setup paths, including default PE setup when no HSD_PEDesc is supplied and custom-PE support through HSD_SetupRenderModeWithCustomPE.",
+    "Factored repeated final-TEV initialization into static setupTevMode_last(), which creates a default HSD_TevDesc when HSD_StateGetNumTevStages() returns zero.",
+    "Implemented cached wrappers around GX state calls: HSD_StateSetLineWidth, HSD_StateSetCullMode, HSD_StateSetBlendMode, HSD_StateSetZMode, HSD_StateSetPointSize, HSD_StateSetAlphaCompare, HSD_StateSetColorUpdate, HSD_StateSetAlphaUpdate, HSD_StateSetDstAlpha, HSD_StateSetZCompLoc, and HSD_StateSetDither.",
+    "Added static cached state variables such as state_blend_type, state_src_factor, state_z_enable, state_alpha_comp0, state_color_update, state_enable_dst_alpha, state_before_tex, and state_dither to suppress redundant GX calls.",
+    "Converted the old assembly data table HSD_State_80405A38 into multiple HSD_Chan globals: HSD_State_80405A38, HSD_State_80405A38_30, HSD_State_80405A38_60, HSD_State_80405A38_90, HSD_State_80405A38_C0, and HSD_State_80405A38_F0.",
+    "Added HSD_STATE_* mask macros and an invalidate_funcs dispatch table mapping primitive, vertex-attribute, color-channel, TEV-stage, TEV-register, tex-coord-gen, and render-mode invalidation bits to functions.",
+    "Renamed asm TEV helpers HSD_Tev_80362CA0, HSD_Tev_80362CF8, HSD_Tev_80362D04, and HSD_Tev_80362D24 to _HSD_StateInvalidateColorChannel, _HSD_StateInvalidateTevStage, _HSD_StateInvalidateTevRegister, and _HSD_StateInvalidateTexCoordGen.",
+    "Changed GXPixel signatures from broad signed integer types to u8/u32 where the call sites and assembly behavior require byte-sized booleans or unsigned fields.",
+    "Simplified HSD_SetMaterialColor to take ambient/diffuse/specular colors and alpha only, and HSD_SetMaterialShininess to take shininess only; mobj.c call sites were updated accordingly."
+  ],
+  "smart_moves": [
+    "Preserved the state.s data layout by splitting the contiguous HSD_State_80405A38 channel table into named HSD_Chan globals with suffixes matching original offsets, making the C representation searchable without losing address/offset evidence.",
+    "Used explicit GX_TRUE/GX_FALSE normalization before cached GX boolean calls, matching the assembly pattern that converted nonzero inputs to 0 or 1 before comparing/storing state bytes.",
+    "Matched the state cache behavior instead of blindly forwarding every setter to GX; each HSD_StateSet* wrapper compares against cached globals and only calls GX when the value changes.",
+    "Moved formerly anonymous TEV invalidation labels to semantic names so the state invalidation table can call meaningful symbols instead of address-derived HSD_Tev_80362Cxx names.",
+    "Adjusted low-level GXPixel prototypes to u8/u32, which helps callers generate the same byte truncation and unsigned argument behavior seen in the assembly.",
+    "Factored the shared 'ensure at least one TEV stage' logic into setupTevMode_last(), reducing duplication between HSD_SetupRenderMode and HSD_SetupRenderModeWithCustomPE while preserving behavior."
+  ],
+  "decomp_lessons": [
+    "For state-manager code, matching often depends on reproducing both the external GX calls and the internal cached-state guards that skip redundant hardware writes.",
+    "When assembly stores booleans in sbss bytes, model cached globals as u8 and normalize incoming int flags to GX_TRUE/GX_FALSE before comparison.",
+    "Signature accuracy in lower-level library headers can be required for matching unrelated higher-level modules; here GXPixel u8/u32 prototypes support matched state.c calls.",
+    "Large assembly data blobs can often be recovered as typed structs plus multiple globals at known offsets; adding offset suffixes is acceptable when true semantic names are not yet known.",
+    "Invalidation tables become clearer and safer when mask constants are declared in headers and function-pointer targets have semantic names.",
+    "When a matched function signature becomes simpler than old speculative prototypes, update all callers immediately; mobj.c no longer passes HSD_Material* to HSD_SetMaterialColor or HSD_SetMaterialShininess."
+  ],
+  "naming_conventions": [
+    "Use HSD_STATE_* uppercase macros for invalidate mask bits, including HSD_STATE_ALL, HSD_STATE_NONE, HSD_STATE_PRIMITIVE, HSD_STATE_VTX_ATTR, HSD_STATE_COLOR_CHANNEL, HSD_STATE_TEV_STAGE, HSD_STATE_TEV_REGISTER, HSD_STATE_TEX_COORD_GEN, and HSD_STATE_RENDER_MODE.",
+    "Use _HSD_StateInvalidate* for internal invalidation helpers, even when the code lives in or was formerly named from TEV assembly.",
+    "Retain address-derived names like HSD_State_80405A38 when the true semantic name is unknown.",
+    "For recovered pieces of a contiguous data table, suffix the base address-derived symbol with the original offset, as in HSD_State_80405A38_30, _60, _90, _C0, and _F0.",
+    "Use state_* static globals for cached render state fields, such as state_blend_type, state_z_enable, state_alpha_ref0, state_color_update, and state_dither.",
+    "The PR still contains one address-derived cache name, HSD_State_804D75BC, showing evidence was insufficient to name every cached field semantically."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted the state.s object only after switching obj_files.mk to build the C object at the same position in TEXT_O_FILES.",
+    "Matched assembly boolean canonicalization with ternary-style conversion to GX_TRUE/GX_FALSE before passing to GXSetZMode, GXSetColorUpdate, GXSetAlphaUpdate, GXSetDstAlpha, GXSetZCompLoc, and GXSetDither.",
+    "Matched byte-backed cache fields by declaring them as u8, while retaining int for fields compared/stored as words.",
+    "Reproduced the invalidate dispatch table as an array of mask/function pairs terminated by HSD_STATE_NONE, mirroring the assembly loop over invalidate_funcs.",
+    "Recovered material state as a static struct containing ambient, diffuse, specular, alpha, and shininess, matching the old matstate bss block.",
+    "Used HSD_TevDesc stack setup in setupTevMode_last() with explicit fields such as flags, stage, coord, map, color, and u.tevop.tevmode to replace the stack stores in the assembly."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the PR slice, so there is no recorded reviewer feedback to extract."
+  ],
+  "searchable_terms": [
+    "Match HSD state",
+    "HSD_SetupChannelMode",
+    "HSD_SetupPEMode",
+    "HSD_SetupRenderModeWithCustomPE",
+    "HSD_SetupRenderMode",
+    "HSD_SetMaterialColor",
+    "HSD_SetMaterialShininess",
+    "HSD_StateSetLineWidth",
+    "HSD_StateSetCullMode",
+    "HSD_StateSetBlendMode",
+    "HSD_StateSetZMode",
+    "HSD_StateSetPointSize",
+    "HSD_StateSetAlphaCompare",
+    "HSD_StateSetColorUpdate",
+    "HSD_StateSetAlphaUpdate",
+    "HSD_StateSetDstAlpha",
+    "HSD_StateSetZCompLoc",
+    "HSD_StateSetDither",
+    "HSD_StateInvalidate",
+    "_HSD_StateInvalidatePrimitive",
+    "_HSD_StateInvalidateVtxAttr",
+    "_HSD_StateInvalidateRenderMode",
+    "_HSD_StateInvalidateColorChannel",
+    "_HSD_StateInvalidateTevStage",
+    "_HSD_StateInvalidateTevRegister",
+    "_HSD_StateInvalidateTexCoordGen",
+    "HSD_State_80405A38",
+    "HSD_State_80405A38_30",
+    "HSD_State_80405A38_60",
+    "HSD_State_80405A38_90",
+    "HSD_State_80405A38_C0",
+    "HSD_State_80405A38_F0",
+    "invalidate_funcs",
+    "matstate",
+    "dark_matter",
+    "setupTevMode_last",
+    "GXSetColorUpdate u8",
+    "GXSetAlphaUpdate u8",
+    "GXSetZMode u8 u32 u32",
+    "GXSetZCompLoc u8",
+    "GXSetDither u8",
+    "GXSetDstAlpha u8 u8",
+    "obj_files.mk state.c.o",
+    "asm/sysdolphin/baselib/state.s",
+    "src/sysdolphin/baselib/state.c",
+    "src/sysdolphin/baselib/state.h",
+    "src/sysdolphin/baselib/tev.h",
+    "src/dolphin/gx/GXPixel.h"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename HSD_State_80405A38 or HSD_State_804D75BC to semantic names.",
+    "Search later history for C decompilation of asm/sysdolphin/baselib/tev.s invalidation helpers now named _HSD_StateInvalidateColorChannel and related functions.",
+    "Check subsequent GXPixel PRs for full C matches of GXSetColorUpdate, GXSetAlphaUpdate, GXSetZMode, GXSetZCompLoc, GXSetDither, and GXSetDstAlpha after the signature corrections.",
+    "Search for other modules that use HSD_STATE_* invalidation masks to verify consistency of state.h definitions."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,150 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-571",
+  "pr": {
+    "number": 571,
+    "title": "Various GX matching",
+    "url": "https://github.com/doldecomp/melee/pull/571",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-09-18T04:26:58Z",
+    "merged_at": "2022-09-18T05:14:12Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Converted a broad set of Dolphin GX functions from hand-written assembly stubs to C, especially in GXTransform, GXFrameBuf, GXTexture, and GXTev. The PR also renamed the previously unknown no-op func_80340518 to GXSetTevClampMode and propagated that symbol into assembly callsites, added more precise GX context and GXTexObj fields, and updated headers to remove several UNK_FUNC declarations. Review mainly pushed for named GX command constants and the existing set_x2(GX_TRUE/FALSE) helper instead of raw magic values or direct context bit writes.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "cleanup",
+      "decomp-matching",
+      "headers",
+      "symbol-renaming",
+      "struct-refinement"
+    ],
+    "systems": [
+      "dolphin/gx",
+      "GXTransform",
+      "GXFrameBuf",
+      "GXTexture",
+      "GXTev",
+      "asm/melee callsites"
+    ]
+  },
+  "key_files": [
+    "src/dolphin/gx/GXTransform.c",
+    "src/dolphin/gx/GXFrameBuf.c",
+    "src/dolphin/gx/GXTexture.c",
+    "src/dolphin/gx/GXTev.c",
+    "src/dolphin/gx/__types.h",
+    "src/dolphin/gx/GX_unknown_001.h",
+    "src/dolphin/gx/__GX_unknown_001.h",
+    "asm/melee/ft/ft_unknown_006.s",
+    "asm/melee/lb/lbcollision.s",
+    "asm/melee/lb/lbgx.s",
+    "asm/melee/lb/lbunknown_003.s"
+  ],
+  "what_changed": [
+    "Replaced large asm implementations in GXTransform.c with C for GXSetProjection, GXGetProjectionv, GXLoadPosMtxImm, GXLoadNrmMtxImm, GXSetCurrentMtx, GXLoadTexMtxImm, GXSetViewport, GXGetViewportv, GXSetScissor, GXSetClipMode, and __GXSetMatrixIndex.",
+    "Rewrote GXFrameBuf copy-source/destination setup functions in C: GXSetDispCopySrc, GXSetTexCopySrc, and GXSetDispCopyDst, preserving packed BP register bitfield construction against __GXContexts.main state.",
+    "Replaced GXTexture asm with C for GXGetTexObjWidth, GXGetTexObjHeight, and GXInvalidateTexAll.",
+    "Renamed the empty blr function func_80340518 to GXSetTevClampMode(s32, s32), implemented it as an empty C function, updated GX_unknown_001.h, and renamed four assembly callsites to the new symbol.",
+    "Refined GXContext fields in __types.h by replacing anonymous padding/vector placeholders with projection_type, projection_v[6], and viewport_v[6].",
+    "Refined GXTexObj in __types.h by adding a dimensions u32 at offset 0x8, enabling simple C accessors for width and height.",
+    "Changed several extern declarations from UNK_FUNC to typed prototypes for GXSetScissor, GXLoadTexMtxImm, GXLoadNrmMtxImm, GXLoadPosMtxImm, __GXSetMatrixIndex, and GXSetClipMode.",
+    "Kept some low-level matrix writer routines as asm/paired-single code while wrapping their callers in C."
+  ],
+  "smart_moves": [
+    "Used struct field discovery to turn raw context offsets such as 0x420, 0x424, and 0x43C into projection_type, projection_v, and viewport_v, which made GXSetProjection/GXGetProjectionv/GXGetViewportv straightforward C.",
+    "Matched texture object accessors by identifying the packed dimensions field, allowing GXGetTexObjWidth to return `(dimensions & 0x3FF) + 1` and GXGetTexObjHeight to return `((dimensions >> 10) & 0x3FF) + 1`.",
+    "Preserved GX FIFO side effects with explicit WGPIPE writes while moving surrounding logic to C.",
+    "Documented a matching tactic in GXTransform.c: `#pragma peephole off` was needed because previous matrix functions were probably inline asm in the original source and triggered a MWCC peephole-off bug.",
+    "Promoted a known empty function to its real API name, GXSetTevClampMode, instead of keeping func_80340518, improving callsite readability across unrelated assembly files."
+  ],
+  "decomp_lessons": [
+    "When a GX function is mostly register-packing and FIFO emission, matchable C can often be written as explicit masked assignments into __GXContexts.main followed by WGPIPE command writes.",
+    "Named command constants such as GX_LOAD_XF_REG, GX_LOAD_BP_REG, GX_CMD_CALL_DL, and GX_LOAD_INDX_C are preferred over raw command bytes like 0x10, 0x61, 0x40, and 0x30 when evidence supports them.",
+    "Use existing helper abstractions such as set_x2(GX_TRUE) and set_x2(GX_FALSE) for context dirty flags rather than writing `__GXContexts.main->x0.u16[1]` directly.",
+    "Typed prototypes in headers are valuable decomp progress; replacing UNK_FUNC once parameters are known also clarifies downstream callsites.",
+    "A no-op asm `blr` can still be meaningfully decompiled by naming the SDK API and giving it the correct empty C body and parameters.",
+    "For MWCC matching, compiler pragmas may be part of the source model; this PR explicitly used `#pragma peephole off` around matrix-loading C to account for codegen affected by nearby inline asm."
+  ],
+  "naming_conventions": [
+    "Previously unknown GX API symbols should be renamed to SDK-like names when identified, as with `func_80340518` -> `GXSetTevClampMode`.",
+    "GX context fields gained descriptive names matching their semantic role: `projection_type`, `projection_v`, and `viewport_v`.",
+    "GXTexObj packed state was named `dimensions`, supporting `GXGetTexObjWidth` and `GXGetTexObjHeight`.",
+    "Header prototypes should prefer concrete `void`/`s32`/`u32`/`unk_t` signatures over `UNK_FUNC` once argument shapes are known.",
+    "Reviewer feedback favored macro/constant names for FIFO commands: `GX_LOAD_XF_REG`, `GX_LOAD_BP_REG`, `GX_CMD_CALL_DL`, and `GX_LOAD_INDX_C`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `WGPIPE.u8`, `WGPIPE.u32`, and `WGPIPE.f32` to model direct writes to the GX FIFO at 0xCC008000.",
+    "Converted packed register assembly to C masks and shifts, e.g. copy-source registers using `0xFFFFFC00`, `0xFFF003FF`, `0x49000000`, and `0x4A000000`.",
+    "Used C wrappers around paired-single matrix writer asm routines such as WriteMTXPS4x3, WriteMTXPS3x3from3x4, and WriteMTXPS4x2.",
+    "Applied `#pragma peephole off` for GXLoadPosMtxImm/GXLoadNrmMtxImm/GXSetCurrentMtx/GXLoadTexMtxImm region to match MWCC behavior.",
+    "Matched GXInvalidateTexAll by preserving the flush-before/flush-after sequence around two BP register FIFO writes: 0x66001000 and 0x66001100.",
+    "Matched `__GXSetMatrixIndex` by splitting the `arg0 < 5` path into index command writes for `x80` versus `x84` and then marking the context dirty through `set_x2(GX_TRUE)`."
+  ],
+  "review_feedback": [
+    "ribbanya suggested replacing raw `WGPIPE.u8 = 0x10;` with `WGPIPE.u8 = GX_LOAD_XF_REG;` in GXSetProjection and GXSetClipMode.",
+    "ribbanya suggested replacing direct dirty-flag writes like `__GXContexts.main->x0.u16[1] = 1;` with `set_x2(GX_TRUE);`.",
+    "ribbanya suggested replacing raw command byte `0x40` in `__GXSetMatrixIndex` with `GX_CMD_CALL_DL`.",
+    "ribbanya suggested replacing another raw `0x10` in `__GXSetMatrixIndex` with `GX_LOAD_XF_REG`.",
+    "ribbanya suggested using `GX_LOAD_BP_REG` for GXInvalidateTexAll's `WGPIPE.u8 = 0x61` writes.",
+    "ribbanya commented on GX_unknown_001.h, 'Not a fan of this macro, I take it.' in response to UNK_FUNC removals.",
+    "r-burns replied that the macro itself was fine and the change was because the function was no longer unknown."
+  ],
+  "searchable_terms": [
+    "Various GX matching",
+    "GXTransform.c",
+    "GXFrameBuf.c",
+    "GXTexture.c",
+    "GXTev.c",
+    "GXSetProjection",
+    "GXGetProjectionv",
+    "GXLoadPosMtxImm",
+    "GXLoadNrmMtxImm",
+    "GXSetCurrentMtx",
+    "GXLoadTexMtxImm",
+    "GXSetViewport",
+    "GXGetViewportv",
+    "GXSetScissor",
+    "GXSetClipMode",
+    "__GXSetMatrixIndex",
+    "GXSetDispCopySrc",
+    "GXSetTexCopySrc",
+    "GXSetDispCopyDst",
+    "GXSetTevClampMode",
+    "func_80340518",
+    "GXGetTexObjWidth",
+    "GXGetTexObjHeight",
+    "GXInvalidateTexAll",
+    "projection_type",
+    "projection_v",
+    "viewport_v",
+    "GXTexObj dimensions",
+    "WGPIPE",
+    "GX_LOAD_XF_REG",
+    "GX_LOAD_BP_REG",
+    "GX_CMD_CALL_DL",
+    "GX_LOAD_INDX_C",
+    "set_x2",
+    "peephole off",
+    "MWCC peephole",
+    "UNK_FUNC"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that continue replacing raw GX FIFO command bytes with GX_LOAD_* constants.",
+    "Search for remaining direct writes to `__GXContexts.main->x0.u16[1]` that should use `set_x2`.",
+    "Search for remaining `UNK_FUNC` declarations in dolphin/gx headers after PR #571.",
+    "Look for additional GXTexObj packed fields that can be named after the `dimensions` discovery.",
+    "Find remaining asm functions in GXTransform.c adjacent to the peephole-off matrix-loading region."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

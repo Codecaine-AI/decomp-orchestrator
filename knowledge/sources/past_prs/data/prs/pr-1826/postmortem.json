@@ -1,0 +1,153 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1826",
+  "pr": {
+    "number": 1826,
+    "title": "Fix `--require-protos` build",
+    "url": "https://github.com/doldecomp/melee/pull/1826",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2025-08-11T18:26:24Z",
+    "merged_at": "2025-08-11T19:40:19Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Fixed the repository build mode that enforces function prototypes (`--require-protos`). The PR touched 86 files across camera, effects, fighter, item, stage/ground, menu, map, library, and MSL code, mostly by making each translation unit see the correct self-header/prototypes, moving internal-only declarations into source files as `static`, and cleaning up header exposure. The decomp.dev bot reported \"No changes\", indicating the edits preserved the GALE01 binary output.",
+  "change_classification": {
+    "primary_type": "build_validation_fix",
+    "categories": [
+      "fix",
+      "headers",
+      "prototype_hygiene",
+      "include_order",
+      "static_forward_declarations",
+      "no_binary_change"
+    ],
+    "systems": [
+      "MSL",
+      "camera",
+      "effect",
+      "fighter",
+      "item",
+      "stage",
+      "ground",
+      "collision",
+      "menu",
+      "map",
+      "library",
+      "baselib",
+      "video"
+    ]
+  },
+  "key_files": [
+    "src/melee/cm/camera.c",
+    "src/melee/ef/efasync.c",
+    "src/melee/ft/ft_0852.c",
+    "src/melee/gr/grzebes.h",
+    "src/melee/gr/grzebes.c",
+    "src/melee/it/items/itlinkboomerang.c",
+    "src/melee/lb/lbcollision.c",
+    "src/melee/lb/lbbgflash.c",
+    "src/MSL/math.c",
+    "src/melee/it/items/itbombhei.c",
+    "src/melee/it/items/itbox.c",
+    "src/melee/ft/chara/ftCommon/ftCo_0A01.h",
+    "src/melee/gr/grfigureget.h"
+  ],
+  "what_changed": [
+    "Added missing self-header includes in many source files so `--require-protos` can validate definitions against declarations, for example `#include \"math.h\"` in `src/MSL/math.c`, `#include \"grzebes.h\"` in `src/melee/gr/grzebes.c`, and `#include \"itbombhei.h\"` / `#include \"itbox.h\"` in item source files.",
+    "Reworked `src/melee/cm/camera.c` include ordering and added a local static forward declaration for `Camera_80029AAC`, while keeping needed stage headers such as `grcastle.h`, `grcorneria.h`, `grgarden.h`, `grhomerun.h`, `grshrineroute.h`, and `grzebes.h` included.",
+    "Moved many internal prototypes out of public headers or made them local static declarations in their owning `.c` file. The clearest example is `src/melee/gr/grzebes.h`, which dropped a long list of declarations and kept only externally needed entries such as `grZebes_801DA3F4` and `grZebes_801DCCC8`, while `src/melee/gr/grzebes.c` gained local `static` prototypes for internal functions.",
+    "Added numerous address-commented local declarations, e.g. `/* 029AAC */ static void Camera_80029AAC(...)`, `/* 06744C */ static void efAsync_8006744C(...)`, `/* 1D84A0 */ static void grZebes_801D84A0(...)`, and static declarations in fighter and item files.",
+    "Adjusted globals/prototypes where `extern` use was inappropriate for the defining translation unit, for example `src/melee/lb/lbbgflash.c` changes `extern f32 lbl_804D63D8;` to a definition `f32 lbl_804D63D8;` and adds a static prototype for `lbBgFlash_80021A10`.",
+    "Applied formatting/reflow throughout touched files, including line wrapping, brace normalization, and spacing in calls such as `__assert(\"camera.c\", 0x4FA, ...)`; these appear secondary to the prototype/build fix.",
+    "Made at least one return-type consistency fix visible in the diff excerpt: `itZeldadinfireexplode_UnkMotion0_Anim` now returns the result of `it_80273130(gobj)` instead of calling it without returning.",
+    "The PR body states the validation was currently broken and references related work/issues `#1720` and `#1825`."
+  ],
+  "smart_moves": [
+    "Preserved binary output while fixing stricter compile validation; the decomp.dev bot comment reported `No changes` for GALE01.",
+    "Kept internal functions private by using `static` declarations in `.c` files instead of leaving broad public prototypes in headers, reducing accidental cross-translation-unit dependencies.",
+    "Used self-header-first style across many item and stage source files, which is a reliable way to catch declaration/definition mismatches under prototype enforcement.",
+    "Retained address comments on newly introduced declarations, making the prototype cleanup searchable and consistent with decomp project conventions.",
+    "Preferred minimal declaration fixes and formatting over semantic rewrites; the large diff is mostly header/prototype hygiene rather than gameplay logic changes."
+  ],
+  "decomp_lessons": [
+    "`--require-protos` exposes hidden debt: functions that previously compiled due to implicit or out-of-scope declarations need explicit, correctly scoped prototypes.",
+    "A public header should only advertise symbols other translation units legitimately use. Internal stage or item callbacks should be declared `static` in the source file when possible.",
+    "Every source file should include its own module header so the compiler checks that exported function definitions match the public declaration.",
+    "When moving prototypes from headers into source files, check whether the function is actually externally referenced before making it `static`; the `grzebes.h` cleanup is an example of narrowing exported surface area.",
+    "Prototype/build hygiene can be no-op for matching if declarations, includes, and formatting are changed carefully; use decomp.dev or equivalent reports to confirm no binary changes.",
+    "Return-type warnings under strict validation can reveal real source correctness issues, such as a `bool` function path that should return another function's result."
+  ],
+  "naming_conventions": [
+    "Address-commented declarations follow the project style `/* 801ADDR */` or abbreviated address comments before prototypes/globals, e.g. `/* 1D84A0 */ static void grZebes_801D84A0(...)` and `/* 4D6464 */ static HSD_CObj* cm_804D6464;`.",
+    "Internal static helper names keep existing decomp symbol names such as `fn_801D94F0`, `ftCo_800B1DA0`, and `efAsync_8006744C` rather than inventing descriptive names.",
+    "Item source files include same-named module headers like `itbombhei.h`, `itbox.h`, and similar `it*.h` headers.",
+    "Stage symbols retain stage-prefixed names such as `grZebes_`, `grCastle_`, `grGarden_`, `grShrineRoute_`, and `grHomeRun_`.",
+    "Forward declaration headers use subsystem paths such as `ft/forward.h`, `ftCommon/forward.h`, `lb/forward.h`, and `mp/forward.h` where only incomplete types are needed."
+  ],
+  "assembly_or_matching_tactics": [
+    "No assembly-specific matching trick is documented in the PR text, but the bot report says GALE01 had `No changes`, so the prototype/header cleanup was binary-preserving.",
+    "Most edits are declaration-scope and include-order changes, which should not affect generated code when done correctly.",
+    "Formatting reflows in `camera.c`, `math.c`, and other files were kept compatible with matching output.",
+    "Static prototypes were placed before definitions to satisfy strict prototype validation without changing function bodies."
+  ],
+  "review_feedback": [
+    {
+      "source": "PR body",
+      "feedback": "The author states that `--require-protos` validation was broken and points readers to `#1720` and `#1825` for context."
+    },
+    {
+      "source": "decomp.dev bot",
+      "feedback": "Report for GALE01: `No changes`, confirming the build/prototype cleanup did not change the compared binary."
+    },
+    {
+      "source": "human review comments",
+      "feedback": "No human review comments were present in the provided slice."
+    }
+  ],
+  "searchable_terms": [
+    "require-protos",
+    "--require-protos",
+    "prototype validation",
+    "self-header include",
+    "static forward declaration",
+    "header cleanup",
+    "no binary changes",
+    "No changes",
+    "camera.c",
+    "efasync.c",
+    "grzebes.h",
+    "grzebes.c",
+    "lbbgflash.c",
+    "lbcollision.c",
+    "itlinkboomerang.c",
+    "math.c",
+    "itbombhei.h",
+    "itbox.h",
+    "Camera_80029AAC",
+    "efAsync_8006744C",
+    "grZebes_801DCCC8",
+    "lbl_804D63D8",
+    "itZeldadinfireexplode_UnkMotion0_Anim",
+    "ribbanya",
+    "PR 1826",
+    "issue 1720",
+    "issue 1825"
+  ],
+  "follow_up_queries": [
+    "Find other source files that do not include their own module header and may fail under `--require-protos`.",
+    "Audit public headers for internal-only prototypes that should be moved to `static` declarations in `.c` files.",
+    "Search for `extern` declarations inside the translation unit that should define the symbol instead.",
+    "Search for non-void functions that call another function at the end without returning its value.",
+    "Review issues #1720 and #1825 for the full context of `--require-protos` validation failures."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

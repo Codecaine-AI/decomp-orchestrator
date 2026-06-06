@@ -1,0 +1,148 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1566",
+  "pr": {
+    "number": 1566,
+    "title": "Finish matching MetroTRK",
+    "url": "https://github.com/doldecomp/melee/pull/1566",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-04T01:08:12Z",
+    "merged_at": "2025-06-04T01:24:20Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Finished matching MetroTRK by converting the remaining MetroTRK/msghndlr.c and MetroTRK/dolphin_trk.c objects from NonMatching to Matching, with targeted source fixes in message handling, target address translation, and public headers. The PR also added a compiler warning suppression for sometimes-uninitialized diagnostics needed by the matched source shape.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "build-config",
+      "control-flow-correction"
+    ],
+    "systems": [
+      "MetroTRK",
+      "MetroTRK message handler",
+      "MetroTRK target initialization",
+      "repo-root build configuration"
+    ]
+  },
+  "key_files": [
+    "configure.py",
+    "compile_flags.txt",
+    "src/MetroTRK/msghndlr.c",
+    "src/MetroTRK/msghndlr.h",
+    "src/MetroTRK/dolphin_trk.c",
+    "src/MetroTRK/dolphin_trk.h"
+  ],
+  "what_changed": [
+    "Changed configure.py so MetroTRK/msghndlr.c and MetroTRK/dolphin_trk.c are built as Matching instead of NonMatching.",
+    "Added -Wno-sometimes-uninitialized to compile_flags.txt, apparently to tolerate warning-prone matched control/data flow.",
+    "Updated dolphin_trk.c to include its own MetroTRK/dolphin_trk.h header instead of only platform.h.",
+    "Added a special-case path in TRKTargetTranslate: addresses in the MTRK_NubInit_804A50C8 range of size 0x4000 are returned unchanged when gTRKCPUState.Extended1.DBAT3U has the low BAT validity bits set; other addresses still map through BOOTINFO.",
+    "Expanded dolphin_trk.h declarations for __TRK_reset, InitMetroTRK, TRKTargetTranslate, and TRKInitializeTarget, and included MetroTRK/dserror.h for DSError.",
+    "Expanded msghndlr.h declarations for TRKMessageIntoReply, TRKDoUnsupported, TRKDoCPUType, and TRKDoFlushCache.",
+    "In msghndlr.c, added explicit DSError-to-DSReplyError mappings for kInvalidProcessId, kInvalidThreadId, and kOsError in several handlers instead of falling through to generic kDSReplyCWDSError or kDSReplyError.",
+    "Removed early TRKTargetStopped checks from TRKDoReadRegisters, TRKDoWriteRegisters, and TRKDoFlushCache in the shown diff, changing the order of validation/control flow to match target code.",
+    "Moved the TRKTargetStopped check in TRKDoStep later, after step option validation and unsupported-option handling.",
+    "Reworked TRKDoStop from a simple success/error conditional into a switch over TRKTargetStop results, preserving specific reply errors for invalid process ID, invalid thread ID, and OS error."
+  ],
+  "smart_moves": [
+    "Kept the matching transition narrow: only the two remaining MetroTRK objects were flipped to Matching after localized source/header/build changes.",
+    "Matched original error-reply behavior by preserving specific reply codes rather than collapsing target errors to generic debugger errors.",
+    "Adjusted validation order instead of only adding logic, which is often necessary for MetroTRK/message-handler matching because emitted control flow depends heavily on early returns and switch placement.",
+    "Added prototypes to the relevant MetroTRK headers so source files can include their own module headers, improving declaration consistency while supporting matching.",
+    "Used the BAT/DBAT3U guard in TRKTargetTranslate to model an address-translation exception without disturbing the default BOOTINFO-based translation path."
+  ],
+  "decomp_lessons": [
+    "When finishing a subsystem, verify configure.py object status; source can be effectively matched only when the object is switched from NonMatching to Matching.",
+    "For MetroTRK handlers, exact switch cases for DSError-to-DSReplyError conversion matter for matching and should not be simplified to broad defaults.",
+    "The order of protocol validation checks can be as important as the checks themselves; moving TRKTargetStopped later can change codegen/control flow enough to match.",
+    "Headers should expose real cross-file entry points once a module is matched, especially when replacing generic platform includes with the module's own header.",
+    "Address translation code may need hardware-state conditionals such as DBAT validity checks; avoid over-generalizing all addresses through BOOTINFO if the binary has mapped-range exceptions.",
+    "Compiler warning suppressions in compile_flags.txt can be part of preserving source shape for matching, but should be tied to concrete matched code rather than broad refactors."
+  ],
+  "naming_conventions": [
+    "MetroTRK function names use TRK-prefixed CamelCase such as TRKTargetTranslate, TRKInitializeTarget, TRKDoFlushCache, and TRKMessageIntoReply.",
+    "MetroTRK error enums use k-prefixed names such as kNoError, kInvalidProcessId, kInvalidThreadId, kOsError, kDSReplyInvalidProcessId, and kDSReplyNoError.",
+    "Initialization/reset symbols retain original-style names including SECTION_INIT void __TRK_reset(void) and InitMetroTRK.",
+    "The message buffer typedef is named msgbuf_t while many function signatures use MessageBuffer* directly.",
+    "The global CPU state symbol appears as gTRKCPUState, with nested hardware register fields such as Extended1.DBAT3U.",
+    "The special nub/init address symbol appears as MTRK_NubInit_804A50C8, preserving an address-suffixed decomp naming style for unidentified or address-anchored data/code."
+  ],
+  "assembly_or_matching_tactics": [
+    "Convert NonMatching objects to Matching only after resolving remaining source-level control-flow and declaration differences.",
+    "Use explicit switch statements over error enums to reproduce binary branch tables or compare chains rather than relying on compact if/default logic.",
+    "Preserve validation order: for TRKDoStep, unsupported step options are handled before the stopped-target check in the matched source.",
+    "Avoid generic early returns when the target binary performs additional argument validation first; this was reflected by removing early stopped checks from register and cache handlers.",
+    "Add narrow hardware-state guards, such as DBAT3U low-bit checks and fixed address-window comparisons, to match target address-translation behavior.",
+    "Include module headers from their implementation files to force prototype consistency and reduce implicit or mismatched declarations that can perturb compilation."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided excerpt.",
+    "The PR context reports one issue comment but provides no human text excerpt, so no reviewer intent or discussion can be extracted."
+  ],
+  "searchable_terms": [
+    "PR1566",
+    "Finish matching MetroTRK",
+    "MetroTRK",
+    "msghndlr.c",
+    "msghndlr.h",
+    "dolphin_trk.c",
+    "dolphin_trk.h",
+    "configure.py",
+    "compile_flags.txt",
+    "MatchingFor",
+    "Object Matching",
+    "Object NonMatching",
+    "TRKTargetTranslate",
+    "MTRK_NubInit_804A50C8",
+    "gTRKCPUState",
+    "Extended1.DBAT3U",
+    "BOOTINFO",
+    "TRKInitializeTarget",
+    "InitMetroTRK",
+    "__TRK_reset",
+    "EnableMetroTRKInterrupts",
+    "TRKDoReadMemory",
+    "TRKDoWriteMemory",
+    "TRKDoReadRegisters",
+    "TRKDoWriteRegisters",
+    "TRKDoFlushCache",
+    "TRKDoStep",
+    "TRKDoStop",
+    "TRKTargetStopped",
+    "TRKTargetStop",
+    "TRKStandardACK",
+    "TRKMessageIntoReply",
+    "TRKDoUnsupported",
+    "TRKDoCPUType",
+    "kInvalidProcessId",
+    "kInvalidThreadId",
+    "kOsError",
+    "kDSReplyInvalidProcessId",
+    "kDSReplyInvalidThreadId",
+    "kDSReplyOsError",
+    "kDSReplyCWDSError",
+    "kDSReplyNotStopped",
+    "kDSReplyUnsupportedOptionError",
+    "kDSReplyInvalidRegisterRange",
+    "kDSReplyInvalidMemoryRange",
+    "Wno-sometimes-uninitialized"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching MetroTRK/msghndlr.c to see whether these error mappings or stopped-target check ordering were refined.",
+    "Search for MTRK_NubInit_804A50C8 and DBAT3U usage to understand the broader MetroTRK memory translation model.",
+    "Audit compile_flags.txt history for -Wno-sometimes-uninitialized to see whether it was introduced solely for MetroTRK matching or reused by other matched objects.",
+    "Compare other TRKDo* handlers for consistent DSError-to-DSReplyError switch patterns."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

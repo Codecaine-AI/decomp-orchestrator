@@ -1,0 +1,163 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-705",
+  "pr": {
+    "number": 705,
+    "title": "Match `grtfalco`",
+    "url": "https://github.com/doldecomp/melee/pull/705",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-18T11:58:13Z",
+    "merged_at": "2023-01-19T09:34:26Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Target Test Falco stage module `grtfalco` by replacing `asm/melee/gr/grtfalco.s` with C, wiring `src/melee/gr/grtfalco.c.o` into `obj_files.mk`, adding a local header, and tightening a couple of related prototypes to use `enum_t`. The PR resolves #603 and had no substantive review comments beyond approval.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "stage-module",
+      "headers",
+      "prototype-correction"
+    ],
+    "systems": [
+      "stage",
+      "ground",
+      "mpLib",
+      "baselib-gobj",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "asm/melee/gr/grtfalco.s",
+      "role": "Removed 348-line assembly implementation after matching in C."
+    },
+    {
+      "path": "src/melee/gr/grtfalco.c",
+      "role": "New matched C implementation for grtfalco stage callbacks, StageData, object setup, and item/line query helpers."
+    },
+    {
+      "path": "src/melee/gr/grtfalco.h",
+      "role": "New declarations for grtfalco functions and callbacks."
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "Switched object list from asm/melee/gr/grtfalco.s.o to src/melee/gr/grtfalco.c.o."
+    },
+    {
+      "path": "src/melee/gr/types.h",
+      "role": "Changed StageData callback5 parameter type from int to enum_t."
+    },
+    {
+      "path": "src/melee/mp/mplib.h",
+      "role": "Changed func_80056B6C prototype from s32(s32) to enum_t(enum_t)."
+    }
+  ],
+  "what_changed": [
+    "Deleted the hand-written assembly file `asm/melee/gr/grtfalco.s` and added a 195-line C translation in `src/melee/gr/grtfalco.c`.",
+    "Defined the stage callback table `lbl_803E8918` as `StageCallbacks lbl_803E8918[4]`, preserving three populated entries and their flags, including `(1 << 30) | (1 << 31)` for the third callback set.",
+    "Defined `StageData lbl_803E8974` for stage id `45`, callback pointers, asset path `\"/GrTFc.dat\"`, and flags value `1`.",
+    "Added initialization logic in `lbl_802207F4`: stores the result of `func_801C49F8()` in `lbl_804D6AF8`, sets `stage_info.unk8C.b4 = false` and `stage_info.unk8C.b5 = true`, spawns ids 0, 1, and 2 via `func_8022089C`, then calls common stage setup functions `func_801C39C0`, `func_801C3BB4`, `func_801C4210`, and `func_801C42AC`.",
+    "Implemented `func_8022089C(int id)` as the common GObj creation/setup helper: fetches the GObj with `func_801C14D0`, clears `Ground` callbacks at `x8_callback` and `xC_callback`, installs `GObj_SetupGXLink(gobj, func_801C5DB0, 3, 0)`, installs callback3 into `gp->x1C_callback`, invokes callback0, optionally schedules callback2 with `func_8038FD54`, and reports failure with `OSReport`.",
+    "Implemented simple callback stubs that return false, return true, or do nothing where the original assembly only returned constants or `blr`.",
+    "Used existing helpers such as `HSD_GObjGetUserData`, `Ground_JObjInline1`, `func_801C8138`, `func_801C2FE0`, and `func_800115F4` to express repeated ground-stage behavior.",
+    "Implemented `lbl_80220ACC(enum_t arg0)` as a collision/material-style query: reject `-1`, call `func_80056B6C`, require result `0`, call `func_80054C6C`, then select one of four fields from `lbl_804D6AF8` for bit values `1`, `2`, `4`, or `8`.",
+    "Added `grtfalco.h` with prototypes for all exported labels/functions used by the callback table and StageData.",
+    "Updated `StageData.callback5` and `func_80056B6C` prototypes to use `enum_t`, matching the new C usage in `lbl_80220ACC`.",
+    "Updated `obj_files.mk` so the build uses `src/melee/gr/grtfalco.c.o` instead of the deleted assembly object."
+  ],
+  "smart_moves": [
+    "Modeled the assembly data section as typed C data (`StageCallbacks` and `StageData`) instead of raw `.4byte` values, making stage structure reuse clearer for later stage matches.",
+    "Kept unknown symbols with original `lbl_`/`func_` names where no semantic name was proven, avoiding over-naming while still enabling an asm-to-C match.",
+    "Introduced a small local `grTFalco_UnkStruct` with four `s32` fields for the sbss pointer at `lbl_804D6AF8`, enough to type the observed accesses without inventing field meanings.",
+    "Used bit-shift expressions such as `(1 << 30) | (1 << 31)` and `(1 << 0)` through `(1 << 3)` rather than opaque hex constants, improving readability while preserving values.",
+    "Recognized repeated ground callback bodies and expressed them through existing inline/helper abstractions like `Ground_JObjInline1(gobj)`, reducing fragile manual pointer code.",
+    "Adjusted shared prototypes (`StageData.callback5`, `func_80056B6C`) to `enum_t`, making the matched function type-correct rather than forcing casts or mismatched integer types.",
+    "Preserved exact OSReport string content, including the unusual `\"couldn t\"` spelling and source line number `201`, which is important for matching embedded string/data layout."
+  ],
+  "decomp_lessons": [
+    "For stage modules, first translate the callback table and `StageData`; these often explain function signatures and the order of initialization callbacks.",
+    "When assembly shows a data table of four function pointers plus flags repeated per entry, it likely maps to `StageCallbacks`; using the existing struct can replace many raw `.4byte` entries cleanly.",
+    "The `StageData` callback signatures may need small shared header corrections when a matched module reveals that an argument is an `enum_t` rather than a plain `int`.",
+    "Do not rename unknown stage callbacks prematurely; preserving address-derived names is acceptable when semantics are not established and helps keep the match auditable.",
+    "Global sbss pointers can be typed with a minimal local unknown struct when only offsets are known; field names like `unk_0`, `unk_4`, `unk_8`, `unk_C` are evidence-grounded.",
+    "Constant-return and empty assembly callbacks should be translated directly into `return false`, `return true`, or empty C functions rather than over-engineered logic.",
+    "For GObj setup code, matching C often needs the exact order: fetch object, access `gobj->user_data`, clear callbacks, call `GObj_SetupGXLink`, conditionally install callbacks, then schedule callback processing.",
+    "String literals in assembly data, such as asset path `\"/GrTFc.dat\"`, error messages, and source filename strings, should be preserved exactly in C initializers or calls."
+  ],
+  "naming_conventions": [
+    "New header guard used the project style `MELEE_GR_GRTFALCO_H`.",
+    "File naming follows existing stage target convention: `src/melee/gr/grtfalco.c` and `src/melee/gr/grtfalco.h`.",
+    "Unknown callbacks and globals remained address-based (`lbl_802207F4`, `lbl_803E8918`, `lbl_804D6AF8`) where no better name was evidenced.",
+    "Temporary or local typed unknown data used `grTFalco_UnkStruct` with fields `unk_0`, `unk_4`, `unk_8`, `unk_C`.",
+    "Callback arguments are generic when semantics are unknown (`arg0`, `arg1`, `arg2`), while obvious objects use `gobj`, `gp`, `cb`, and `id`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted the assembly callback array at `lbl_803E8918` into `StageCallbacks` initializers, including NULL-equivalent `FLAGS_ZERO` entries and the high-bit flag value for the third entry.",
+    "Converted raw data bytes for `\"/GrTFc.dat\"`, `\"grtfalco.c\"`, and the OSReport format string into C string literals, preserving data dependencies.",
+    "Used struct bitfields for `stage_info.unk8C.b4` and `stage_info.unk8C.b5` to match the original `rlwimi` byte-bit manipulation.",
+    "Matched simple `blr` functions as empty functions and `li r3, 0/1; blr` as boolean false/true returns.",
+    "Matched the GObj null check with an `if (gobj != NULL) ... else OSReport(...)` shape, reflecting the original branch structure.",
+    "Expressed comparisons against `1`, `2`, `4`, and `8` as `(1 << 0)` through `(1 << 3)`, which preserves value while communicating bitmask intent.",
+    "Used `enum_t` for the parameter and intermediate variable in `lbl_80220ACC`, consistent with `func_80056B6C` and `func_80054C6C` style APIs."
+  ],
+  "review_feedback": [
+    "No inline review comments were present in the slice.",
+    "One review by r-burns approved the PR with an empty body.",
+    "PR body states `Resolves #603` and includes `Co-authored-by: jeffm <jeffmao99@berkeley.edu>`."
+  ],
+  "searchable_terms": [
+    "pr-705",
+    "grtfalco",
+    "Match grtfalco",
+    "Target Test Falco",
+    "GrTFc.dat",
+    "src/melee/gr/grtfalco.c",
+    "asm/melee/gr/grtfalco.s",
+    "src/melee/gr/grtfalco.h",
+    "StageCallbacks",
+    "StageData",
+    "lbl_803E8918",
+    "lbl_803E8974",
+    "lbl_804D6AF8",
+    "func_802207F0",
+    "lbl_802207F4",
+    "func_8022089C",
+    "lbl_80220ACC",
+    "lbl_80220B78",
+    "stage_info.unk8C.b4",
+    "stage_info.unk8C.b5",
+    "GObj_SetupGXLink",
+    "Ground_JObjInline1",
+    "HSD_GObjGetUserData",
+    "func_801C49F8",
+    "func_801C14D0",
+    "func_801C8138",
+    "func_801C2FE0",
+    "func_80056B6C",
+    "func_80054C6C",
+    "enum_t",
+    "mpLib",
+    "obj_files.mk",
+    "FLAGS_ZERO",
+    "OSReport",
+    "couldn t get gobj"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or further type `grtfalco` callbacks and `lbl_804D6AF8`.",
+    "Compare `grtfalco.c` with other target-test stage modules such as `grtfox`, `grtdonkey`, or `grticeclimber` for shared callback/table patterns.",
+    "Search for uses of `StageData.callback5` after its parameter type changed to `enum_t` to see whether other modules required similar fixes.",
+    "Look for subsequent cleanup of `grTFalco_UnkStruct` fields once the data returned by `func_801C49F8` was understood."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

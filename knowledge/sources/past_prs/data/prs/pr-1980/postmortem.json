@@ -1,0 +1,136 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1980",
+  "pr": {
+    "number": 1980,
+    "title": "various permuter improvements/matches",
+    "url": "https://github.com/doldecomp/melee/pull/1980",
+    "state": "MERGED",
+    "author": "sadkellz",
+    "created_at": "2025-11-13T02:45:23Z",
+    "merged_at": "2025-11-13T03:27:52Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Merged a small batch of decompilation matching/permuter-driven cleanups across camera, game-mode, lb library, and sysdolphin baselib files. Most changes are expression splitting, local variable ordering/type tweaks, temporary variable introduction, and one camera struct refinement to expose the 0x380 byte region used by memzero. No substantive PR body or review discussion was available in the slice, so intent is inferred mainly from the title and diff.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "permuter-cleanup",
+      "headers",
+      "local-variable-tuning",
+      "struct-layout"
+    ],
+    "systems": [
+      "camera",
+      "game-mode",
+      "melee-core-library",
+      "sysdolphin-baselib"
+    ]
+  },
+  "key_files": [
+    "src/melee/cm/camera.c",
+    "src/melee/cm/types.h",
+    "src/melee/gm/gm_1601.c",
+    "src/melee/gm/gmregcommon.c",
+    "src/melee/gm/gmtitle.c",
+    "src/melee/gm/gmtou.c",
+    "src/melee/lb/lb_00CE.c",
+    "src/melee/lb/lbdvd.c",
+    "src/melee/lb/lbmemory.c",
+    "src/sysdolphin/baselib/gobjinit.c",
+    "src/sysdolphin/baselib/sislib.c"
+  ],
+  "what_changed": [
+    "In camera initialization, changed the memzero target from pointer arithmetic on the whole Camera object to the explicit field cm_80452C68.x380, after splitting the padding in Camera from a single pad_37C region into _37C plus u8 x380[0x18].",
+    "Adjusted camera bitfield zeroing around offsets 0x398-0x39A, replacing writes to x398_b6_b7 and x39A_b5/x39A_b6/x39A_b7 with writes to x399_b7, x39A_b0, x39A_b1, and x39A_b2 as represented in the updated struct layout.",
+    "Reworked Camera_80029AAC with separated float declarations, a new temporary new_var for unk->x38, explicit two-step division for delta, and parenthesized multiplication order for lerp_factor/follow_speed interpolation.",
+    "Renamed powi parameters from arg0/arg1 to base/exponent and restructured locals and control flow, including an explicit negative-exponent return_zero path and renamed loop state such as powers_done, remaining, and result.",
+    "Tweaked local declaration order in expf, powf, lbDvd_CachePreloadedFile, lbMemory_80014FC8, HSD_GObj_80391304, and HSD_SisLib_803A5798, consistent with permuter-driven register/stack matching attempts.",
+    "Introduced small temporaries to improve codegen shape: gm_80164840 stores lbl_803B78A4[ckind] in var before fn_801605EC, gmTitle_801A165C stores HSD_GObj_804D7849 in a u8 kind, gobjinit stores sizeof(GObjFunc) * nfuncs in var_r8 before HSD_MemAlloc, and sislib computes temp_r27 through staged assignments.",
+    "Changed gmRegSetupEnemyColorTable comparison against CHKIND_NONE to mask ckinds[k] with 0xFF before comparing, likely to match unsigned-byte comparison/codegen while ckinds is s8*.",
+    "Changed fn_8019C570 local idx from u32 to u64."
+  ],
+  "smart_moves": [
+    "Turning an anonymous padding range into an explicitly addressable x380[0x18] field made the memzero call structurally meaningful and avoided brittle object-level pointer arithmetic.",
+    "Introducing one-use locals such as kind, var, entry, new_var, and var_r8 is a common and effective matching tactic for forcing load size, register lifetime, and expression evaluation order without changing high-level behavior.",
+    "Separating combined declarations like f32 offset_x, offset_y and u32 aligned_size, leftover, available_space, least_leftover gives the permuter/compiler more faithful local ordering and can affect register allocation in MWCC-sensitive functions.",
+    "The gmRegSetupEnemyColorTable mask documents a signedness/codegen concern: even if the source array is s8*, matching may require an explicit low-byte comparison against sentinel constants.",
+    "Staging arithmetic in sislib and camera, such as assigning temp_r27 = size before subtracting and computing delta as 1.0f then dividing, preserves evaluation order that can matter for matching floating-point and integer instruction sequences."
+  ],
+  "decomp_lessons": [
+    "When a function zeros a known interior byte range, prefer adding a named or offset-based struct member for that range over using pointer arithmetic against the containing struct.",
+    "For MWCC matching, local declaration order and whether declarations are combined or split can be significant; apparently cosmetic reshuffles may be deliberate register allocation fixes.",
+    "Do not collapse staged arithmetic too aggressively during cleanup. Multi-step assignments can be required to reproduce exact instruction order.",
+    "Signedness mismatches around s8 arrays and enum/sentinel constants may need explicit casts or masks such as & 0xFF to match the original comparison.",
+    "Temporary variables that look redundant in idiomatic C may be important for matching loads from globals or table lookups, especially before function calls.",
+    "Bitfield names must track the true struct layout closely; changing nearby padding or byte arrays can require revisiting which bitfield aliases are being assigned."
+  ],
+  "naming_conventions": [
+    "Offset-based unknown camera fields use xNNN naming, e.g. x380, x398_b0, x399_b7, x39A_b2.",
+    "Anonymous/unknown padding can be named with an offset-style underscore such as _37C when it is not a semantic field.",
+    "Temporary locals still use decomp-generated names where necessary, e.g. temp_r31, var_r0, temp_r27, var_r8, but small semantic names were introduced where safe, e.g. base, exponent, result, powers_done, remaining, kind, entry.",
+    "Game and library functions retain project symbol prefixes such as gmRegSetupEnemyColorTable, gmTitle_801A165C, lbDvd_CachePreloadedFile, HSD_GObj_80391304, and HSD_SisLib_803A5798."
+  ],
+  "assembly_or_matching_tactics": [
+    "Split combined local variable declarations to influence local ordering and register assignment.",
+    "Introduce temporaries for global/table values before function calls to alter load timing and register lifetimes.",
+    "Stage arithmetic expressions across multiple assignments instead of single compound expressions to match instruction sequencing.",
+    "Use explicit casts/masks like (ckinds[k] & 0xFF) to force unsigned-byte comparison behavior.",
+    "Refactor struct padding into concrete byte-array fields so calls like memzero can reference the exact offset range directly.",
+    "Adjust integer width of locals, e.g. u32 to u64 for idx in fn_8019C570, when the original codegen likely used wider operations."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided slice.",
+    "The PR had one issue comment according to counts, but no comment body was included in the excerpt, so no reviewer intent can be extracted."
+  ],
+  "searchable_terms": [
+    "pr-1980",
+    "various permuter improvements/matches",
+    "sadkellz",
+    "permuter",
+    "matching",
+    "camera.c",
+    "cm/types.h",
+    "Camera_80028B9C",
+    "Camera_80029AAC",
+    "cm_80452C68.x380",
+    "memzero",
+    "x398_b0",
+    "x399_b7",
+    "x39A_b2",
+    "CameraBounds",
+    "CameraTransformState",
+    "powi",
+    "expf",
+    "powf",
+    "lb_00CE.c",
+    "lbDvd_CachePreloadedFile",
+    "lbMemory_80014FC8",
+    "gm_80164840",
+    "gmRegSetupEnemyColorTable",
+    "CHKIND_NONE",
+    "gmtitle",
+    "fn_8019C570",
+    "HSD_GObj_80391304",
+    "HSD_SisLib_803A5798",
+    "signedness mask",
+    "local variable ordering",
+    "staged arithmetic"
+  ],
+  "follow_up_queries": [
+    "Check whether powi in src/melee/lb/lb_00CE.c remained behaviorally correct after the matching rewrite, especially the remaining exponent handling shown in the diff excerpt.",
+    "Search later PRs touching Camera struct offsets around 0x37C-0x39A to see whether x380[0x18] or the bitfield names were refined further.",
+    "Search for additional gmRegSetupEnemyColorTable signedness fixes or CHKIND_NONE comparisons using & 0xFF.",
+    "Look for follow-up comments or commits from PR #1980 if the missing issue comment contained matching validation details."
+  ],
+  "confidence": 0.78,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

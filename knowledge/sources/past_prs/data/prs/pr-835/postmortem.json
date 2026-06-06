@@ -1,0 +1,150 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-835",
+  "pr": {
+    "number": 835,
+    "title": "Match `ftPe_SpecialHi`",
+    "url": "https://github.com/doldecomp/melee/pull/835",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-06T22:11:30Z",
+    "merged_at": "2023-05-06T22:30:44Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched Peach's up-special implementation by moving a large block of `ftPe_Init.s` assembly into a new C file, `src/melee/ft/chara/ftPeach/ftPe_SpecialHi.c`, and wiring that object into `obj_files.mk`. The new C covers Peach Parasol entry/start/end anim/IASA/physics/collision paths plus item/parasol accessory callbacks. Supporting changes typed Peach fighter/dat/motion variables, added item prototypes, and performed broad mechanical naming cleanup for fighter input/co_attrs/math constants needed by the match. There were no PR comments or reviews in the slice, so reviewer rationale is unavailable.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "fighter-special-move",
+      "asm-to-c",
+      "headers",
+      "struct-typing",
+      "mechanical-renaming",
+      "build-system"
+    ],
+    "systems": [
+      "fighter",
+      "ftPeach",
+      "item",
+      "asm",
+      "math",
+      "repo-root",
+      "tooling"
+    ]
+  },
+  "key_files": [
+    "asm/melee/ft/chara/ftPe_Init.s",
+    "src/melee/ft/chara/ftPeach/ftPe_SpecialHi.c",
+    "src/melee/ft/chara/ftPeach/ftPe_SpecialHi.h",
+    "src/melee/ft/chara/ftPeach/types.h",
+    "obj_files.mk",
+    "src/melee/it/it_27CF.h",
+    "src/math.h",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/types.h"
+  ],
+  "what_changed": [
+    "Removed roughly 1000 lines of Peach SpecialHi-related assembly from `asm/melee/ft/chara/ftPe_Init.s` while leaving the remaining assembly object in the build.",
+    "Added `src/melee/ft/chara/ftPeach/ftPe_SpecialHi.c` with 395 lines implementing Peach Parasol/up-special behavior, including `ftPe_SpecialHi_Enter`, `ftPe_SpecialAirHi_Enter`, start/end Anim/IASA/Phys/Coll callbacks, and helper callbacks around the spawned parasol item.",
+    "Added `ftPe_SpecialHi.c.o` to `obj_files.mk` before the remaining `ftPe_Init.s.o`, so the newly matched C participates in the text object list.",
+    "Extended `ftPe_SpecialHi.h` with declarations for `ftPe_8011D518`, `ftPe_8011D598`, and `ftPe_SpecialHi_NotActive`.",
+    "Retyped Peach fighter variables at `fp+2238`/`fp+223C` as `HSD_GObj* unk_item_gobj` and `HSD_GObj* parasol_gobj` instead of raw `u32`, and added a `mv.pe.specialhi.kind` `ItemKind` motion-var view at `fp+2340`.",
+    "Expanded `ftPe_DatAttrs` fields around offsets `0x70` through `0x90` from an opaque byte array into named float/int fields used by SpecialHi physics, steering, and transitions.",
+    "Added or adjusted item-facing includes/prototypes such as `src/melee/it/it_27CF.h` to support calls like `it_802BDA64`, `it_802BDB94`, `it_802BDBF8`, `it_802BDC18`, and `it_802BDC38`.",
+    "Changed `src/math.h` degree/radian macros into `static float const deg_to_rad` and `rad_to_deg`, then mechanically updated many fighters to use `deg_to_rad` instead of `DEG_TO_RAD`.",
+    "Performed broad mechanical field-name cleanup in fighter code and many character files, e.g. input stick fields became `fp->input.lstick.x/y`, `held_inputs`, and common attributes became `fp->co_attrs`/`terminal_vel` in touched call sites."
+  ],
+  "smart_moves": [
+    "Factored repeated parasol item null checks into `ensureUnkItem(gobj, cb)`, reducing duplicated callback wrappers for enter/exit hitlag behavior.",
+    "Separated common entry setup into `doEnter`, shared by grounded and aerial SpecialHi enter paths after their differing motion/velocity setup.",
+    "Separated collision logic into `doColl(gobj, cb)`, shared by start/end and ground/air variants while allowing different landing callbacks.",
+    "Used a `notUsingParasol` helper to make `ftPe_SpecialHi_NotActive` readable despite multiple motion-state ranges for Peach parasol, common item parasol, fall special, and landing fall special.",
+    "Preserved matching-only stack padding behind `#ifdef MUST_MATCH` with explicit `@todo Unused stack` notes instead of hiding matching artifacts in normal logic.",
+    "Improved struct semantics by naming Peach parasol item pointers and the SpecialHi item-kind motion variable, replacing raw offsets/integers with typed fields that match behavior.",
+    "Kept item ownership transitions explicit: existing held item can be stored as `parasol_gobj`, detached/reattached through item callbacks, and restored by `ftPe_8011D518`."
+  ],
+  "decomp_lessons": [
+    "When matching fighter specials, first type the fighter vars and motion vars at the offsets the assembly uses; readable fields such as `fv.pe.unk_item_gobj`, `fv.pe.parasol_gobj`, and `mv.pe.specialhi.kind` make the C expression order much easier to control.",
+    "Shared ground/air variants often differ only in entry velocity or small physics details; extracting common `doEnter`, animation, IASA, and collision helpers can preserve matching while avoiding copied logic.",
+    "Accessory callbacks (`x21BC`) and hitlag callbacks (`x21D4`/`x21D8`) are central to item-backed moves; model them explicitly rather than treating them as anonymous function-pointer stores.",
+    "For item-backed specials, check item kind through `itGetKind` and store `ItemKind` in motion vars instead of raw constants where headers allow it.",
+    "Mechanical renames across fighter input/common attributes can be prerequisites for a match because new code needs stable semantic field names already used elsewhere.",
+    "Replacing expression macros with `static const` float values can help match CodeWarrior codegen in angle calculations; this PR switched `DEG_TO_RAD` uses to `deg_to_rad`.",
+    "Use `MUST_MATCH`-guarded unused stack arrays sparingly and document them as matching artifacts so future cleanup can revisit them without changing normal builds."
+  ],
+  "naming_conventions": [
+    "New Peach SpecialHi C symbols follow the module prefix `ftPe_SpecialHi_` for static helpers/callbacks and exported callbacks such as `ftPe_SpecialHiStart_Anim`.",
+    "Grounded/aerial variants use paired names: `ftPe_SpecialHi_Enter` vs `ftPe_SpecialAirHi_Enter`, `Start` vs `End`, and suffixes `_Anim`, `_IASA`, `_Phys`, `_Coll`.",
+    "Unknown but behaviorally identified Peach fields were named `unk_item_gobj` and `parasol_gobj`, preserving uncertainty for one pointer while capturing item-object semantics.",
+    "Peach dat-attrs kept offset-style placeholder names (`x70`, `x74`, `x78`, etc.) when exact gameplay names were not established, but changed types from opaque bytes to floats/ints.",
+    "Motion variables use a nested union path `fp->mv.pe.specialhi.kind`, with `kind` typed as `ItemKind`.",
+    "Math constants were normalized to lowercase `deg_to_rad`/`rad_to_deg` static const names instead of all-caps macros."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted the assembly at `ftPe_Init.s` addresses around `8011D424` onward into C functions in `ftPe_SpecialHi.c`, shrinking the assembly file substantially while keeping the assembly object for remaining unmatched code.",
+    "Used `#ifdef MUST_MATCH` local byte arrays to reproduce unused stack space in several SpecialHi functions.",
+    "Used `fabs_inline`, `deg_to_rad`, and `M_PI_2` in steering/angle logic to match floating-point codegen while improving readability.",
+    "Maintained exact callback and item-call sequencing for parasol item setup/restoration: create with `it_802BDA64`, manage hitlag with `it_802BDBF8`/`it_802BDC18`, destroy/cleanup with `it_802BDB94`, and restore existing items with `it_8026BB20`/`it_8026B73C`.",
+    "Introduced helper functions but kept them static where the original labels were local, while exporting only functions declared in `ftPe_SpecialHi.h`.",
+    "Updated `obj_files.mk` rather than replacing the whole Peach init assembly object, allowing a partial asm-to-C split without forcing all of `ftPe_Init.s` to match at once."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice; no human review feedback can be extracted."
+  ],
+  "searchable_terms": [
+    "pr-835",
+    "ribbanya",
+    "Match ftPe_SpecialHi",
+    "Peach SpecialHi",
+    "Peach Parasol",
+    "ftPe_SpecialHi.c",
+    "ftPe_Init.s",
+    "ftPe_SpecialHi_Enter",
+    "ftPe_SpecialAirHi_Enter",
+    "ftPe_SpecialHi_NotActive",
+    "ftPe_8011D518",
+    "ftPe_8011D598",
+    "ftPe_SpecialHiStart_Anim",
+    "ftPe_SpecialHiStart_IASA",
+    "ftPe_SpecialHiStart_Phys",
+    "ftPe_SpecialHiStart_Coll",
+    "ftPe_SpecialHiEnd_Anim",
+    "ftPe_SpecialHiEnd_Phys",
+    "ftPe_SpecialHiEnd_Coll",
+    "unk_item_gobj",
+    "parasol_gobj",
+    "mv.pe.specialhi.kind",
+    "ItemKind",
+    "It_Kind_Parasol",
+    "It_Kind_Peach_Parasol",
+    "It_Kind_Capsule",
+    "it_802BDA64",
+    "it_802BDB94",
+    "it_802BDBF8",
+    "it_802BDC18",
+    "it_802BDC38",
+    "deg_to_rad",
+    "MUST_MATCH",
+    "obj_files.mk",
+    "lstick_angle",
+    "input.lstick",
+    "co_attrs"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename Peach `ftPe_DatAttrs` fields `x70` through `x90` to gameplay-specific names.",
+    "Search for subsequent cleanup of `ftPe_SpecialHi_8011D424`, `ftPe_SpecialHi_8011DD8C`, and `ftPe_SpecialHi_8011E064` numeric suffixes.",
+    "Check later item PRs for real names of `it_802BDA64`, `it_802BDB94`, `it_802BDBF8`, `it_802BDC18`, and `it_802BDC38`.",
+    "Find PRs that remove `MUST_MATCH` unused stack arrays from Peach SpecialHi or normalize `#ifdef MUST_MATCH` style.",
+    "Search for later field naming around `fv.pe.unk_item_gobj` to determine whether it specifically represents the spawned Peach parasol item."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,199 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-690",
+  "pr": {
+    "number": 690,
+    "title": "Fix `clang` errors",
+    "url": "https://github.com/doldecomp/melee/pull/690",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-16T15:46:32Z",
+    "merged_at": "2023-01-16T21:19:54Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large portability/build-cleanup PR that fixed all clang errors, not warnings, across Runtime, Dolphin OS/GX/base/AI, sysdolphin baselib, fighter, item, stage, and map collision code. The dominant tactic was to isolate CodeWarrior/MWCC-only inline assembly and matching-specific constructs behind `MWERKS_GEKKO`, `__MWERKS__`, or `MUST_MATCH`, then provide clang-parseable `NOT_IMPLEMENTED` fallbacks with corrected prototypes and headers. It also cleaned up several C type/prototype issues, flag macro naming, pointer-assignment expressions, and a baselib circular include via a small forward declaration header.",
+  "change_classification": {
+    "primary_type": "build-portability-fix",
+    "categories": [
+      "fix",
+      "clang-compatibility",
+      "headers",
+      "decomp-matching",
+      "inline-assembly-guarding",
+      "prototype-cleanup"
+    ],
+    "systems": [
+      "Runtime",
+      "dolphin",
+      "dolphin-gx",
+      "dolphin-os",
+      "dolphin-base",
+      "dolphin-ai",
+      "fighter",
+      "item",
+      "stage",
+      "mp",
+      "sysdolphin-baselib"
+    ]
+  },
+  "key_files": [
+    "src/Runtime/Gecko_setjmp.c",
+    "src/Runtime/__mem.c",
+    "src/Runtime/__va_arg.c",
+    "src/Runtime/platform.h",
+    "src/dolphin/base/PPCArch.c",
+    "src/dolphin/ai/ai.c",
+    "src/dolphin/gx/GXAttr.c",
+    "src/dolphin/gx/GXBump.c",
+    "src/dolphin/gx/GXFrameBuf.c",
+    "src/dolphin/gx/GXInit.c",
+    "src/dolphin/gx/GXPixel.c",
+    "src/dolphin/gx/GXTexture.c",
+    "src/dolphin/gx/GXTev.c",
+    "src/dolphin/gx/GXTransform.c",
+    "src/dolphin/os/OSInit.c",
+    "src/dolphin/os/OSSerial.c",
+    "src/dolphin/os/OSThread.c",
+    "src/melee/ft/code_80081B38.c",
+    "src/melee/ft/ftparts.c",
+    "src/melee/ft/ftdrawcommon.c",
+    "src/sysdolphin/baselib/forward.h",
+    "src/sysdolphin/baselib/object.h",
+    "src/sysdolphin/baselib/class.h"
+  ],
+  "what_changed": [
+    "Wrapped many MWCC/CodeWarrior inline assembly functions in `#ifdef MWERKS_GEKKO` blocks and added clang-safe non-asm fallback definitions that call `NOT_IMPLEMENTED`.",
+    "Added `<placeholder.h>` includes in files that need `unk_t` or `NOT_IMPLEMENTED` for clang fallback stubs.",
+    "In `Runtime/Gecko_setjmp.c`, guarded `__setjmp` and `longjmp` assembly implementations and added fallback C signatures using `unk_t env` plus `NOT_IMPLEMENTED`.",
+    "In `Runtime/__va_arg.c`, restricted the real `__va_arg` implementation to `__MWERKS__` and added a clang fallback stub.",
+    "In `Runtime/__mem.c`, replaced invalid casts used as assignment targets, such as assigning directly to `((unsigned char*) dst)`, with assignments to `dst` itself and introduced an `INCREMENT_ASSIGN` macro with separate MWERKS and non-MWERKS forms.",
+    "Renamed and expanded flag helper macros in `Runtime/platform.h`: `FLAGS_NONE` constant became `FLAGS_ZERO`, `HAS_FLAG` became `FLAGS_ANY`, `NOT_FLAG` became `FLAGS_NONE(value, flag)`, and `FLAGS_ALL(value, flag)` was added.",
+    "Converted numerous assembly declarations from vague or invalid forms such as `asm unk_t func()` to more explicit prototypes such as `asm void func(void)` where shown in the diff excerpt.",
+    "Added explicit `(void)` parameter lists for some no-argument functions, for example `GXInvalidateVtxCache(void)` and `GXClearBoundingBox(void)`.",
+    "In GX files such as `GXAttr.c`, `GXBump.c`, `GXFrameBuf.c`, and `GXInit.c`, assembly-heavy functions were guarded and fallback stubs were supplied so clang can parse the translation units.",
+    "In `GXInit.c`, `__GXDefaultTlutRegionCallback` changed from returning `void*` to `unk_t`, and matching-specific `#pragma peephole off` was gated behind `MUST_MATCH`.",
+    "In `src/sysdolphin/baselib/forward.h`, introduced a new guard-protected forward declaration header containing `typedef struct _HSD_Obj HSD_Obj;` to break an `object.h` to `class.h` circular dependency.",
+    "Touched many fighter, item, stage, OS, and baselib files to resolve clang errors, though the provided excerpt gives strongest evidence for the Runtime, Dolphin GX/base/AI, and baselib-header patterns."
+  ],
+  "smart_moves": [
+    "Separated matching compiler behavior from host-tooling parsing: MWERKS keeps the real inline assembly while clang receives lightweight stubs, preserving decomp/matching work without requiring clang to understand CodeWarrior asm syntax.",
+    "Used targeted preprocessor guards (`MWERKS_GEKKO`, `__MWERKS__`, `MUST_MATCH`) instead of deleting or rewriting assembly, making the change low-risk for DOL matching.",
+    "Kept the original `__fill_mem` behavior where needed for matching and only changed the expression form enough for clang to accept it.",
+    "Validated the `__mem.c` macro approach against the DOL according to the PR comment: the substituted implementation matched, and the author noted the same macro could not be used in the lower loop, so original code was retained there.",
+    "Added a minimal forward declaration header rather than performing a broad include-graph refactor inside a clang-error fix PR.",
+    "Improved flag macro names to be more semantic and less ambiguous: `FLAGS_ZERO`, `FLAGS_ANY`, `FLAGS_NONE(value, flag)`, and `FLAGS_ALL(value, flag)` distinguish zero, any-bit, no-bit, and all-bit checks.",
+    "Normalized no-argument function prototypes to `void`, which helps clang enforce C prototypes and reduces old-style declaration ambiguity."
+  ],
+  "decomp_lessons": [
+    "When adding inline asm during decomp, guard MWCC-only syntax from clang immediately and provide a parseable fallback if the repository expects clang tooling to run.",
+    "Use `NOT_IMPLEMENTED` fallbacks for non-target compilers when the goal is host compilation or static checking rather than executable correctness.",
+    "Avoid assigning to cast expressions; MWCC may tolerate or generate desired code from patterns that clang rejects. Assign to the original pointer variable after casting instead.",
+    "Matching-sensitive runtime routines may need compiler-specific macros. Test candidate rewrites against the DOL before replacing repeated hand-written sequences.",
+    "Do not let circular includes accumulate in baselib headers; a small forward declaration header can unblock builds while deferring a fuller forward-declaration sweep.",
+    "Pragmas such as `#pragma peephole off` should be scoped to matching/compiler contexts, e.g. behind `MUST_MATCH`, so non-MWCC tools do not error.",
+    "Assembly function declarations should still have correct C-level prototypes; prefer explicit return types and `(void)` for empty parameter lists.",
+    "Broad clang compatibility PRs can span unrelated game systems because errors often come from shared header/prototype/asm patterns rather than one gameplay subsystem."
+  ],
+  "naming_conventions": [
+    "Use `MWERKS_GEKKO` to gate Gekko/CodeWarrior inline assembly blocks.",
+    "Use `__MWERKS__` for compiler-specific C expression behavior, as in the `INCREMENT_ASSIGN` macro in `__mem.c`.",
+    "Use `MUST_MATCH` to gate matching-only pragmas such as `#pragma peephole off`.",
+    "Use `FLAGS_ZERO` for a zero flag value instead of overloading `FLAGS_NONE` as both a value and predicate.",
+    "Use `FLAGS_ANY(value, flag)` for any-bit-set checks.",
+    "Use `FLAGS_NONE(value, flag)` for no-bit-set checks.",
+    "Use `FLAGS_ALL(value, flag)` for all-bits-set checks.",
+    "Temporary macro internals used a double-underscore-style name `__INCREMENT_ASSIGN_tmp`; this is evidence from the diff, not necessarily a recommended long-term convention.",
+    "Forward declaration header added as `src/sysdolphin/baselib/forward.h` with include guard `SYSDOLPHIN_BASELIB_FORWARD_H`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Pattern: wrap each MWCC asm implementation with `#ifdef MWERKS_GEKKO`, keep `#pragma push`/`#pragma pop` around the asm body, then add an `#else` C fallback that calls `NOT_IMPLEMENTED`.",
+    "For runtime asm in `Gecko_setjmp.c`, fallback signatures used `unk_t` for opaque register/environment types so clang can type-check without fully modeling the ABI.",
+    "For low-level PPC register accessors in `PPCArch.c`, each asm function such as `PPCMfmsr`, `PPCMtmsr`, `PPCMfhid0`, and related helpers got a `void` fallback stub.",
+    "For GX assembly functions, many `asm unk_t` declarations were changed to explicit `asm void` where the excerpt shows no meaningful return value, avoiding clang/prototype trouble.",
+    "For `__fill_mem`, MWERKS retained a compact pre-increment assignment macro `(*++((type*) (ptr)) = (value))`; non-MWERKS used a do-while macro that advances `ptr`, stores a typed temporary pointer, and assigns through it.",
+    "In `GXSetNumIndStages`, added parentheses around bitwise/or and shift expressions, likely improving clang readability/precedence safety: `(__GXContexts.main->x204 & 0xFFF8FFFF) | (arg0 << 0x10 & 0xFF0000)`.",
+    "The PR preserved decomp.me scratch comments and assembly bodies rather than converting them wholesale, indicating the goal was clang-error elimination, not completing those matches."
+  ],
+  "review_feedback": [
+    {
+      "file": "src/Runtime/__mem.c",
+      "author": "ribbanya",
+      "comment": "The implementation was tested by substituting it on line 36 and the DOL matched. The same macro did not work in the loop below, so keeping the original code there was necessary. Author invited a more elegant solution."
+    },
+    {
+      "file": "src/Runtime/platform.h",
+      "author": "ribbanya",
+      "comment": "The new flag macros are used by `__start.c`."
+    },
+    {
+      "file": "src/melee/ft/ftparts.c",
+      "author": "ribbanya",
+      "comment": "Author noted uncertainty about an odd-looking `ftparts.c` assembly/fallback area: `I really don't know, I think it's trying to express itself.`"
+    },
+    {
+      "file": "src/sysdolphin/baselib/forward.h",
+      "author": "ribbanya",
+      "comment": "The new forward header was described as a quick fix to eliminate an `object.h` to `class.h` circular dependency, with a fuller forward declaration sweep planned later."
+    }
+  ],
+  "searchable_terms": [
+    "clang errors",
+    "clang compatibility",
+    "MWERKS_GEKKO",
+    "__MWERKS__",
+    "MUST_MATCH",
+    "NOT_IMPLEMENTED fallback",
+    "inline assembly guard",
+    "CodeWarrior asm",
+    "Gekko asm",
+    "placeholder.h",
+    "unk_t",
+    "Runtime __mem.c",
+    "INCREMENT_ASSIGN",
+    "__INCREMENT_ASSIGN_tmp",
+    "__fill_mem",
+    "Gecko_setjmp",
+    "__setjmp",
+    "longjmp",
+    "__va_arg",
+    "platform.h flag macros",
+    "FLAGS_ZERO",
+    "FLAGS_ANY",
+    "FLAGS_NONE",
+    "FLAGS_ALL",
+    "PPCArch.c",
+    "GXAttr.c",
+    "GXBump.c",
+    "GXFrameBuf.c",
+    "GXInit.c",
+    "GXPixel.c",
+    "GXTexture.c",
+    "GXTev.c",
+    "GXTransform.c",
+    "OSInit.c",
+    "OSSerial.c",
+    "OSThread.c",
+    "ftparts.c",
+    "code_80081B38.c",
+    "baselib forward.h",
+    "object.h class.h circular dependency",
+    "HSD_Obj forward declaration"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that completed the planned sysdolphin baselib forward declaration sweep after `forward.h` was introduced.",
+    "Search for later replacements of `NOT_IMPLEMENTED` clang fallback stubs with portable C implementations.",
+    "Audit remaining `asm unk_t` declarations and old-style empty parameter lists for clang compatibility.",
+    "Search for uses of old macros `HAS_FLAG`, `NOT_FLAG`, or value-style `FLAGS_NONE` after this PR to ensure all call sites migrated to `FLAGS_ANY`, `FLAGS_NONE(value, flag)`, `FLAGS_ALL`, or `FLAGS_ZERO`.",
+    "Review later changes to `Runtime/__mem.c` to see whether a cleaner matching-safe replacement for `INCREMENT_ASSIGN` was found.",
+    "Check whether `MWERKS_GEKKO` and `__MWERKS__` guard usage became standardized in contribution guidance."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

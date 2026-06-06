@@ -1,0 +1,156 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1124",
+  "pr": {
+    "number": 1124,
+    "title": "Itspycloak",
+    "url": "https://github.com/doldecomp/melee/pull/1124",
+    "state": "MERGED",
+    "author": "wyatt-avilla",
+    "created_at": "2024-01-26T01:09:37Z",
+    "merged_at": "2024-01-26T05:11:46Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Decompiled the Spy Cloak item source by replacing asm/melee/it/items/itspycloak.s with src/melee/it/items/itspycloak.c, marking the object Matching, routing obj_files.mk to build the C object, localizing most internal symbols, and cleaning the header/prototypes. The final version resolved the initial nonmatching concern around the zero float by using a literal 0 assignment instead of an extern sdata2 float, and fixed the ItemStateTable length by reading the original assembly table rather than trusting objdiff's unresolved unlinked .o view.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "symbol-scope-cleanup",
+      "build-config"
+    ],
+    "systems": [
+      "item",
+      "itspycloak",
+      "asm",
+      "config",
+      "build"
+    ]
+  },
+  "key_files": [
+    "asm/melee/it/items/itspycloak.s",
+    "src/melee/it/items/itspycloak.c",
+    "src/melee/it/items/itspycloak.h",
+    "src/melee/it/it_2725.h",
+    "config/GALE01/symbols.txt",
+    "configure.py",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted the old 258-line assembly implementation at asm/melee/it/items/itspycloak.s.",
+    "Added src/melee/it/items/itspycloak.c implementing the Spy Cloak item functions it_80295C48 through it_80295EB4 and the ItemStateTable it_803F6370.",
+    "Changed configure.py from Object(NonMatching, \"melee/it/items/itspycloak.c\") to Object(Matching, \"melee/it/items/itspycloak.c\").",
+    "Changed obj_files.mk so the build uses $(BUILD_DIR)/src/melee/it/items/itspycloak.c.o instead of the old asm/melee/it/items/itspycloak.s.o.",
+    "Updated config/GALE01/symbols.txt to mark many helper functions in the it_80295C68..it_80295E80 range as local instead of global.",
+    "Changed the zero float symbol at .sdata2:0x804DCB70 from global it_804DCB70 to local @170, matching the final C source's use of literal 0 instead of an extern const float.",
+    "Added a declaration for it_80276CB8(Item_GObj* gobj) to src/melee/it/it_2725.h.",
+    "Simplified src/melee/it/items/itspycloak.h by using it/types.h, adding address comments to public prototypes, and keeping only exported functions plus extern ItemStateTable it_803F6370."
+  ],
+  "smart_moves": [
+    "Converted internal item callbacks to static functions in the C file and reflected that in symbols.txt as local scope, avoiding unnecessary global exports.",
+    "Used the existing item helper APIs and common item patterns: GET_ITEM, Item_80268E5C, it_8026B390, it_8026D62C, it_80272860, it_8026E15C, it_8026DA08, it_8026E8C4, and it_8026B894.",
+    "Reconstructed it_803F6370 as five ItemStateTable entries matching the assembly table layout instead of padding a guessed single-entry table with zeros.",
+    "Removed unnecessary casts from Item_GObj* to HSD_GObj* in Item_80268E5C calls once review clarified they were only an m2c quirk.",
+    "Avoided the initial .sdata2 alignment issue for it_804DCB70 by emitting velocity zeroing as literal 0 assignments, allowing the local float symbol to remain local and eliminating the explicit extern."
+  ],
+  "decomp_lessons": [
+    "Do not blindly trust objdiff's apparent table size or unresolved function pointers when comparing an unlinked .o; inspect the original assembly data table directly when reconstructing ItemStateTable arrays.",
+    "For item state tables, a flat .4byte sequence in assembly can correspond to multiple ItemStateTable struct initializers, commonly groups of four fields such as { flags_or_zero, anim_cb, phys_cb, coll_cb }.",
+    "m2c may introduce casts that are not semantically required in the hand-written C; reviewer feedback confirmed Item_GObj* casts to HSD_GObj* were unnecessary here.",
+    "If a local float constant creates alignment or symbol-scope friction, check whether the source can use a literal constant that emits the desired local sdata2 entry instead of declaring a global extern.",
+    "When a function is only referenced inside the translated file or its state table, prefer static C definitions and local symbol scope.",
+    "After moving an asm item to C, update both configure.py and obj_files.mk so the build system stops compiling the asm object and classifies the C object correctly."
+  ],
+  "naming_conventions": [
+    "Kept address-based symbol names such as it_80295C48, it_80295D90, and it_803F6370 because no semantic names were available in the evidence.",
+    "Used Item_GObj* gobj as the consistent parameter spelling in the final C implementation.",
+    "Header prototypes include address comments in the style /* 295C48 */ void it_80295C48(Item_GObj*); and /* 3F6370 */ extern ItemStateTable it_803F6370[].",
+    "Local anonymous sdata2 float was represented in symbols.txt as @170 rather than exported as it_804DCB70."
+  ],
+  "assembly_or_matching_tactics": [
+    "Matched the assembly's zeroing of x40_vel.x/y/z by assigning item->x40_vel.x = item->x40_vel.y = item->x40_vel.z = 0.",
+    "Mapped simple return stubs from assembly into bool callbacks returning false and empty void callbacks.",
+    "Matched repeated fall-physics code by loading ItemAttr from item->xCC_item_attr and passing attr->x10_fall_speed and attr->x14_fall_speed_max to it_80272860.",
+    "Matched state-change callbacks by passing function pointers such as it_80295D04 and it_80295C68 into item helpers it_8026D62C, it_8026E15C, and it_8026E8C4.",
+    "Rebuilt the .data state table from the original .4byte list as five ItemStateTable entries: {0,it_80295CB8,it_80295CC0,it_80295CC4}, {0,it_80295D2C,it_80295D34,it_80295D64}, {0,it_80295DB8,NULL,NULL}, {0,it_80295D2C,it_80295DE8,it_80295E18}, and {0,it_80295E74,it_80295E7C,it_80295E80}."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "file": "src/melee/it/items/itspycloak.c",
+      "feedback": "The casts from Item_GObj* to HSD_GObj* were described as an m2c setup quirk and not necessary."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/melee/it/items/itspycloak.c",
+      "feedback": "Suggested trimming the initial source/split issue in splits.txt."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/melee/it/items/itspycloak.c",
+      "feedback": "Pointed out that asm/melee/it/items/itspycloak.s showed it_803F6370 was longer than the initial guessed table; objdiff likely did not resolve function pointers because the .o was unlinked."
+    },
+    {
+      "author": "ribbanya",
+      "file": "general",
+      "feedback": "Referenced follow-up changes in commit 74b584c1b2e68c1f47d842059f35391b6d12b518 for the contributor to study."
+    }
+  ],
+  "searchable_terms": [
+    "Itspycloak",
+    "itspycloak.c",
+    "itspycloak.s",
+    "Spy Cloak",
+    "it_80295C48",
+    "it_80295C68",
+    "it_80295CB8",
+    "it_80295CC0",
+    "it_80295CC4",
+    "it_80295D04",
+    "it_80295D2C",
+    "it_80295D34",
+    "it_80295D64",
+    "it_80295D90",
+    "it_80295DB8",
+    "it_80295DC0",
+    "it_80295DE8",
+    "it_80295E18",
+    "it_80295E4C",
+    "it_80295E74",
+    "it_80295E7C",
+    "it_80295E80",
+    "it_80295EB4",
+    "it_803F6370",
+    "it_804DCB70",
+    "@170",
+    "ItemStateTable",
+    "Item_80268E5C",
+    "GET_ITEM",
+    "it_80276CB8",
+    "it_80272860",
+    "it_8026E8C4",
+    "ITEM_ANIM_UPDATE",
+    "m2c casts",
+    "objdiff unlinked .o",
+    "sdata2 alignment",
+    "Matching",
+    "NonMatching"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename itspycloak functions from address-based names to semantic Spy Cloak names.",
+    "Search for other item PRs where ItemStateTable reconstruction required reading the original .s data instead of relying on objdiff.",
+    "Search for other fixes involving local sdata2 float symbols such as @170 and alignment differences.",
+    "Check commit 74b584c1b2e68c1f47d842059f35391b6d12b518 for the exact post-review changes referenced by ribbanya."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

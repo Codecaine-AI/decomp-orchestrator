@@ -12,6 +12,7 @@ import {
   nextUnhandledEvent,
   openState,
   prioritizeQueuedTargets,
+  queueStatsSnapshot,
 } from "../../state/index.js";
 import { numberArg, stringArg, type GlobalArgs } from "../args.js";
 import { assertSchedulableRun } from "./shared.js";
@@ -46,10 +47,17 @@ export async function runDirectorTick(globals: GlobalArgs, args: Map<string, str
     const event = nextUnhandledEvent(store, runId);
     if (!event) return { runId, status: "no_unhandled_events" };
 
-    const candidateLimit = numberArg(args, "--candidate-limit", 50);
-    const snapshot = loadBoardSnapshot(globals.repoRoot, candidateLimit);
+    const candidateLimit = Math.max(0, Math.floor(numberArg(args, "--candidate-limit", 50)));
+    const queueTargetSize = Math.max(0, Math.floor(numberArg(args, "--queue-target-size", candidateLimit)));
+    const candidateWindow = Math.max(
+      candidateLimit,
+      queueTargetSize,
+      Math.max(0, Math.floor(numberArg(args, "--candidate-window", Math.max(candidateLimit, queueTargetSize * 4)))),
+    );
+    const snapshot = loadBoardSnapshot(globals.repoRoot, candidateWindow);
     const outputDir = resolve(globals.stateDir, "runs", runId, "director_cycles");
     const activeWorkers = activeWorkerCount(store, runId);
+    const queueStats = queueStatsSnapshot(store, runId);
     const initialBoardPath = resolve(globals.stateDir, "runs", runId, "snapshots", "initial_board.json");
     const result = await runPiAgent({
       role: "director",
@@ -62,6 +70,16 @@ export async function runDirectorTick(globals: GlobalArgs, args: Map<string, str
         repoRoot: globals.repoRoot,
         stateDir: globals.stateDir,
         initialBoardPath,
+        queuePressure: {
+          candidate_limit: candidateLimit,
+          candidate_window: candidateWindow,
+          queue_target_size: queueTargetSize,
+          queued_targets: queueStats.queuedTargets,
+          schedulable_targets: queueStats.schedulableTargets,
+          blocked_queued_targets: queueStats.blockedQueuedTargets,
+          active_workers: queueStats.activeWorkers,
+          unhandled_events: queueStats.unhandledEvents,
+        },
       }),
       outputDir,
       dryRun: globals.dryRunAgents,

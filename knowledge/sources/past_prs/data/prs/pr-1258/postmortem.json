@@ -1,0 +1,147 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1258",
+  "pr": {
+    "number": 1258,
+    "title": "Bring progress site back from the dead",
+    "url": "https://github.com/doldecomp/melee/pull/1258",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-02-20T04:03:53Z",
+    "merged_at": "2024-02-20T04:11:32Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Restored the project progress website by adding a new SvelteKit-based static site under tools/progress-site and wiring the GitHub Pages generation container to build and publish it at /progress. The PR also split Docker setup responsibilities so the build-linux image keeps only build dependencies while the gen-pages target installs Doxygen, Python tooling, Node 20, progress-site node_modules, external assets, fonts, and the mwcc compiler needed for ctx.c checking. Evidence is mostly from the diff; there was no PR body, issue discussion, review, or review comments in the slice.",
+  "change_classification": {
+    "primary_type": "tooling_ci_website",
+    "categories": [
+      "tooling",
+      "ci",
+      "github-pages",
+      "frontend",
+      "progress-reporting",
+      "documentation"
+    ],
+    "systems": [
+      ".github/packages/build-linux",
+      ".github/packages/gen-pages",
+      ".github/workflows/publish-pages.yml",
+      "tools/progress-site",
+      "GitHub Pages",
+      "progress.decomp.club"
+    ]
+  },
+  "key_files": [
+    ".github/packages/build-linux/Dockerfile",
+    ".github/packages/build-linux/setup.sh",
+    ".github/packages/gen-pages/setup.sh",
+    ".github/packages/gen-pages/entrypoint.sh",
+    ".github/workflows/publish-pages.yml",
+    "tools/progress-site/package.json",
+    "tools/progress-site/package-lock.json",
+    "tools/progress-site/svelte.config.js",
+    "tools/progress-site/src/App.svelte",
+    "tools/progress-site/src/components/ProgressPanel.svelte",
+    "tools/progress-site/src/Progress.ts",
+    "tools/progress-site/src/global.css",
+    "tools/progress-site/src/routes/+layout.js",
+    "tools/progress-site/static/extern/.gitkeep",
+    "tools/progress-site/src/lib/extern/.gitkeep"
+  ],
+  "what_changed": [
+    "Added a complete tools/progress-site SvelteKit project with package.json, package-lock.json, TypeScript config, Vite config, Svelte config, ESLint/Prettier config, README, AGPL license, and placeholder extern directories.",
+    "Implemented a static progress UI with App.svelte, Button/ButtonContainer components, a ProgressPanel component, global styling, and a Svelte store for the selected tab.",
+    "ProgressPanel.svelte imports progress JSON from $lib/extern/progress.json, interprets code and data measures from the GALE01 progress dataset, and renders a Highcharts line chart for code and data completion over recorded commits.",
+    "ProgressPanel tooltips link each point back to the doldecomp/melee commit hash and display derived trophy/event counts based on code/data percentages.",
+    "Configured SvelteKit static prerendering via src/routes/+layout.js and @sveltejs/adapter-static so the site can be emitted as static files for GitHub Pages.",
+    "Extended .github/packages/gen-pages/entrypoint.sh to build the old generated documentation outputs, run m2ctx/ctx.c checking, then build the progress site and move its build output to /output/progress.",
+    "Added .github/packages/gen-pages/setup.sh to install Node 20, Doxygen, Git, Python, external melee assets, an external Folk Pro font, node_modules for the progress site, the Python venv requirements, and the melee compiler used for ctx.c validation.",
+    "Changed the Dockerfile so setup.sh is no longer run in the shared linux-base stage; build-linux and gen-pages now copy and run their own setup scripts in separate targets.",
+    "Reduced build-linux/setup.sh to the packages needed for build-linux and removed its Python venv/pip installation, which moved to gen-pages/setup.sh.",
+    "Moved the GitHub Pages configure-pages action in publish-pages.yml to after the Docker generation step and before upload-pages-artifact.",
+    "Added a visible note in gen-pages/entrypoint.sh that fetching progress from https://progress.decomp.club/data/melee/GALE01?format=json&mode=all has a known race condition between build-melee and gen-pages."
+  ],
+  "smart_moves": [
+    "Separated Docker target setup for build-linux versus gen-pages instead of bloating the shared base image with Node, Doxygen, Python venv, assets, and page-generation-only dependencies.",
+    "Preinstalled progress-site node_modules in the gen-pages setup stage, copied them into the checked-out repo, and used npm install --prefer-offline during page generation to make the runtime build faster and more reproducible.",
+    "Kept generated or external files out of the repository by using extern directories with .gitkeep plus .gitignore rules for **/extern/* while allowing CI to populate those assets at build time.",
+    "Used sparse checkout against doldecomp/assets to fetch only the melee asset subset needed by the progress site.",
+    "Kept the progress website static by configuring SvelteKit adapter-static and prerendering, which matches GitHub Pages deployment constraints.",
+    "Preserved existing pages generation duties, including Doxygen output and ctx.html generation, while adding /progress as a new output subtree rather than replacing the old output.",
+    "Added strict shell flags including -x in gen-pages scripts, improving CI log visibility for this relatively complex page-generation path."
+  ],
+  "decomp_lessons": [
+    "Repository progress reporting can be treated as first-class decomp tooling: keep the site source in tools/ and build it in the same Pages generation pipeline that publishes Doxygen and ctx artifacts.",
+    "When CI images serve multiple roles, split target-specific setup into separate Docker stages to avoid unrelated dependency coupling and cache invalidation.",
+    "Do not commit downloaded assets or progress JSON; commit stable placeholders and have CI acquire assets/data during generation.",
+    "For static pages fed by decomp progress data, define a small typed interface for the dataset shape before using it in UI code; here Progress.ts records project/version/dol commits and code/data measure fields.",
+    "If a pipeline consumes an external progress service, document known freshness/race issues in the script where the fetch happens so future maintainers understand inconsistent output.",
+    "A Pages job can publish multiple decomp artifacts together: generated docs, ctx HTML, and progress visualization can all be placed under the same /output artifact root."
+  ],
+  "naming_conventions": [
+    "The restored website lives under tools/progress-site, matching the repository pattern that project-specific tooling belongs under tools/.",
+    "Generated/external website assets are staged under static/extern and src/lib/extern, with .gitkeep placeholders and ignore rules for actual external contents.",
+    "The Pages Docker target is named gen-pages and has separate .github/packages/gen-pages/setup.sh and entrypoint.sh scripts.",
+    "The progress dataset type uses measure keys matching the external JSON schema, including code, code/total, data, and data/total.",
+    "Svelte components use PascalCase filenames such as ProgressPanel.svelte, Button.svelte, and ButtonContainer.svelte.",
+    "The selected tab store is named selectedOption and lives in src/store.js."
+  ],
+  "assembly_or_matching_tactics": [
+    "No assembly matching or C decompilation tactics were introduced in this PR.",
+    "The gen-pages pipeline continues to run python tools/m2ctx/m2ctx.py -pqr and compile build/ctx.c with melee-mwcc to produce ctx.html, so the page-generation container must still include the mwcc compiler even though the primary change is website tooling.",
+    "The progress chart derives code and data completion from progress-service measures rather than from local map parsing in this diff."
+  ],
+  "review_feedback": [
+    "No review comments, reviews, or issue comments were present in the provided PR slice.",
+    "No PR body was present; intent is inferred from the title and diff only."
+  ],
+  "searchable_terms": [
+    "pr-1258",
+    "Bring progress site back from the dead",
+    "ribbanya",
+    "progress site",
+    "tools/progress-site",
+    "SvelteKit",
+    "Svelte",
+    "Highcharts",
+    "GitHub Pages",
+    "publish-pages.yml",
+    "gen-pages",
+    "build-linux Dockerfile",
+    "adapter-static",
+    "prerender",
+    "progress.decomp.club",
+    "GALE01",
+    "progress.json",
+    "ctx.html",
+    "m2ctx",
+    "melee-mwcc",
+    "doxygen",
+    "Node 20",
+    "node_modules",
+    "external assets",
+    "doldecomp/assets",
+    "sparse-checkout",
+    "A-OTF Folk Pro",
+    "favicon.png",
+    "code percentage completed",
+    "data percentage completed",
+    "race condition between build-melee and gen-pages"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify tools/progress-site or ProgressPanel.svelte to fix chart behavior, tests, or styling.",
+    "Find later PRs addressing the noted race condition between build-melee and gen-pages when fetching progress.decomp.club data.",
+    "Find CI failures or fixes related to .github/packages/gen-pages/setup.sh, NodeSource setup_20.x, external fonts, or doldecomp/assets sparse checkout.",
+    "Find later changes to publish-pages.yml ordering or GitHub Pages artifact layout.",
+    "Find PRs that replace the default create-svelte README or placeholder Playwright test expecting 'Welcome to SvelteKit'."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

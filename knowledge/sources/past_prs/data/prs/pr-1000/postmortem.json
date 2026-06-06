@@ -1,0 +1,115 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1000",
+  "pr": {
+    "number": 1000,
+    "title": "Dump asm to a separate branch",
+    "url": "https://github.com/doldecomp/melee/pull/1000",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-11-03T05:52:42Z",
+    "merged_at": "2023-11-03T06:11:16Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added a dedicated CI/container path for generating assembly dumps and publishing them to a separate dump branch, instead of bundling dump generation into the documentation/pages generation flow. The PR introduced a dump-asm Docker target, a dump-asm GitHub Actions workflow, package publishing support for the new image target, and root-anchored ignore rules for generated dump-related paths.",
+  "change_classification": {
+    "primary_type": "ci-infrastructure",
+    "categories": [
+      "decomp-matching",
+      "automation",
+      "github-actions",
+      "container-packaging",
+      "assembly-dump-generation"
+    ],
+    "systems": [
+      ".github",
+      ".github/workflows",
+      ".github/packages",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    ".github/workflows/dump-asm.yml",
+    ".github/packages/dump-asm/entrypoint.sh",
+    ".github/packages/build-linux/Dockerfile",
+    ".github/workflows/publish-packages.yml",
+    ".github/packages/gen-pages/entrypoint.sh",
+    ".gitignore"
+  ],
+  "what_changed": [
+    "Created `.github/workflows/dump-asm.yml`, a new workflow that runs on push and pull_request, pulls a `dump-asm` container image, runs it with the repository mounted at `/input` and `/tmp/output` mounted at `/output`, then uploads the generated dump as a GitHub Actions artifact.",
+    "Added a second workflow job, `push-dump`, that only runs on master/main refs, downloads the dump artifact, checks out the `dump` branch, replaces its contents with the generated output via `rsync --delete`, commits as `github-actions[bot]`, and pushes.",
+    "Added `.github/packages/dump-asm/entrypoint.sh`, which clones `/input`, links `/opt/mwcc_compiler` into `tools/`, installs Python requirements, builds with `GENERATE_MAP=1 MAX_ERRORS=1`, copies `GALE01.map` to `/output`, runs `tools/parse_map.py`, and uses `dadosod dol` with `build/map.csv` to emit the dump into `/output`.",
+    "Extended `.github/packages/build-linux/Dockerfile` with a new `dump-asm` stage based on `linux-base`, declaring `/input` and `/output` volumes and installing the new dump entrypoint.",
+    "Updated `.github/workflows/publish-packages.yml` so the package build matrix includes `dump-asm`, and added a test run for that image target using the same `/input` and `/output` volume convention.",
+    "Removed assembly dump generation from `.github/packages/gen-pages/entrypoint.sh`; gen-pages now remains focused on Doxygen/context output and no longer runs the full map/dadosod dump pipeline.",
+    "Changed `.gitignore` entries for `src/m2ctx.py`, `expected/`, and `dump/` to root-anchored forms: `/src/m2ctx.py`, `/expected/`, and `/dump/`."
+  ],
+  "smart_moves": [
+    "Separated assembly dump generation from pages generation, reducing coupling between documentation publishing and decomp artifact production.",
+    "Used a dedicated container stage and package target for `dump-asm`, making the dump job reproducible and testable through the same package publishing workflow as other CI images.",
+    "Mounted the repository read-only at `/input` and wrote generated artifacts to `/output`, which keeps the workflow output boundary clear and avoids mutating the checked-out working tree during dump generation.",
+    "Copied the generated dump to a separate `dump` branch only on mainline pushes, while still allowing pull requests to produce downloadable dump artifacts for inspection.",
+    "Used `rsync --delete` when updating the dump branch so stale files are removed and the branch reflects the current generated dump output.",
+    "Kept the dump branch update serialized with a `concurrency` group named `dump`, reducing the chance of concurrent CI runs racing to push generated output."
+  ],
+  "decomp_lessons": [
+    "For large generated decompilation artifacts such as disassembly dumps, prefer a separate generated branch or artifact workflow rather than committing outputs into the source branch.",
+    "Keep documentation generation and assembly dump generation as separate CI responsibilities; both may require a build context, but their outputs and failure modes are different.",
+    "A dump pipeline can be automated from a normal build by enabling map generation, parsing the map, and feeding the DOL plus map CSV into the dump tool.",
+    "When CI needs the CodeWarrior compiler in a containerized build, this PR used `ln -s /opt/mwcc_compiler tools/` before invoking `make`.",
+    "Root-anchor `.gitignore` rules for generated top-level directories when the intent is only to ignore repository-root outputs, not similarly named paths elsewhere."
+  ],
+  "naming_conventions": [
+    "The new workflow and package target consistently use the name `dump-asm`.",
+    "The generated assembly output branch is named `dump`.",
+    "The workflow artifact containing generated output is named `dump`.",
+    "The container entrypoint uses `/input` for the source repository and `/output` for generated dump files.",
+    "The commit message for generated dump branch updates follows `Dump of ${{ github.sha }}`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Builds with `GENERATE_MAP=1` to produce `build/ssbm.us.1.2/GALE01.map`.",
+    "Uses `MAX_ERRORS=1` during the dump build, likely to stop quickly on compilation errors while still exercising map generation; the diff does not include rationale beyond the command itself.",
+    "Runs `python tools/parse_map.py` to generate `build/map.csv` from the build map.",
+    "Runs `dadosod dol build/ssbm.us.1.2/main.dol -m build/map.csv -o /output` to produce the assembly dump.",
+    "Publishes the raw `GALE01.map` alongside the dump output by copying it into `/output`."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "dump-asm",
+    "assembly dump",
+    "dump branch",
+    "dadosod",
+    "GALE01.map",
+    "parse_map.py",
+    "build/map.csv",
+    "GENERATE_MAP",
+    "MAX_ERRORS",
+    "mwcc_compiler",
+    "GitHub Actions",
+    "publish-packages",
+    "Dockerfile",
+    "linux-base",
+    "gen-pages",
+    "rsync --delete",
+    "upload-artifact",
+    "download-artifact",
+    ".gitignore root anchored",
+    "ribbanya"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify `.github/workflows/dump-asm.yml` for fixes to branch checkout, permissions, or artifact handling.",
+    "Search for changes to `dadosod` invocation or dump output layout after PR 1000.",
+    "Look for review or issue discussion explaining why dump generation was removed from `gen-pages` and moved to a separate branch.",
+    "Check whether the `dump` branch workflow required additional GitHub token permissions in subsequent PRs."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

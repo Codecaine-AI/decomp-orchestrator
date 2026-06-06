@@ -1,0 +1,115 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-271",
+  "pr": {
+    "number": 271,
+    "title": "Match a function for Fox and Ness thanks to altwo",
+    "url": "https://github.com/doldecomp/melee/pull/271",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2022-02-14T23:03:07Z",
+    "merged_at": "2022-02-14T23:03:11Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched two fighter attribute-copy routines for Fox and Ness by replacing hand-written/standalone assembly with C struct assignment copies. Fox's func_800E576C was removed from asm/melee/ft/chara/ftfox.s and implemented in src/melee/ft/chara/ftfox.c, while Ness's inline asm func_80114B2C in src/melee/ft/chara/ftness.c was converted to C. The PR also added or refined ftFoxAttributes and ftNessAttributes struct layouts enough for the compiler to emit the same bulk-copy behavior.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "fighter-attributes",
+      "struct-sizing"
+    ],
+    "systems": [
+      "fighter",
+      "ftfox",
+      "ftness",
+      "asm"
+    ]
+  },
+  "key_files": [
+    "asm/melee/ft/chara/ftfox.s",
+    "src/melee/ft/chara/ftfox.c",
+    "src/melee/ft/chara/ftfox.h",
+    "src/melee/ft/chara/ftness.c",
+    "src/melee/ft/chara/ftness.h"
+  ],
+  "what_changed": [
+    "Removed the assembly implementation of func_800E576C from asm/melee/ft/chara/ftfox.s.",
+    "Added a C implementation of func_800E576C(Fighter* ft) in ftfox.c that copies ft->x10C_ftData->ext_attr into ft->x2D8_specialAttributes2 and then assigns ft->x2D4_specialAttributes to that copied attribute block.",
+    "Added ftFoxAttributes to ftfox.h with explicit f32 fields at offsets x0, x4, x8, xC and filler through 0xD1, enabling struct assignment to reproduce the original copy loop.",
+    "Replaced Ness inline asm func_80114B2C(HSD_GObj* gobj) with C that gets Fighter* from gobj->user_data and copies ft->x10C_ftData->ext_attr into ft->x2D4_specialAttributes.",
+    "Refined ftNessAttributes in ftness.h from a mostly opaque 0x94-byte blob plus unk94 into a larger layout with named initial f32 fields, unk94, and trailing filler through 0xD9.",
+    "Removed local pragma push/pop/peephole scaffolding around the former Ness inline asm."
+  ],
+  "smart_moves": [
+    "Recognized the assembly loops as fixed-size struct copies from fighter data ext_attr into per-instance special attributes, allowing the code to collapse to simple C assignment: *sA2 = *ext_attr.",
+    "Used typed fighter-specific attribute structs to make the compiler generate bulk-copy code instead of manually reproducing the loop.",
+    "For Fox, preserved the semantic difference that the destination is x2D8_specialAttributes2 but x2D4_specialAttributes is then pointed at that same copied block.",
+    "For Ness, preserved the existing destination as x2D4_specialAttributes and correctly obtained the Fighter from HSD_GObj user_data before copying.",
+    "Adjusted struct sizes/fillers rather than naming unknown fields prematurely, which is appropriate when only offsets and copy size are evidenced."
+  ],
+  "decomp_lessons": [
+    "When PowerPC assembly is a counted loop loading/storing paired words from ext_attr into a fighter special-attribute buffer, try modeling it as a whole-struct assignment between fighter-specific attribute structs.",
+    "Matching a struct-copy routine depends on the destination and source pointer fields as much as the loop body; Fox uses x2D8_specialAttributes2 as the copy target and then updates x2D4_specialAttributes, while Ness copies directly into x2D4_specialAttributes.",
+    "Opaque filler arrays are useful for forcing the known struct size needed by compiler-generated copy loops while leaving unknown attributes unnamed.",
+    "Header struct layout changes can be the key to eliminating assembly: the C code is short, but the struct's total size and alignment drive whether the emitted copy matches.",
+    "Avoid inventing semantic names for unknown attribute fields; this PR kept generic names such as x0, x4, x8, xC, unk94, data, and data2."
+  ],
+  "naming_conventions": [
+    "Fighter-specific attribute structs use the pattern ftFoxAttributes and ftNessAttributes.",
+    "Unknown fields are named by offset when scalar, such as x0, x4, x8, xC, and unk94.",
+    "Unknown filler arrays use generic names such as data, data2, or data_filler_10 with size expressions based on known offsets.",
+    "Matched functions retained their existing placeholder symbol names: func_800E576C and func_80114B2C."
+  ],
+  "assembly_or_matching_tactics": [
+    "The removed Fox assembly used ctr = 0x1A plus a trailing word copy, effectively copying the ftFoxAttributes block from ext_attr to x2D8_specialAttributes2 before storing that pointer into x2D4_specialAttributes.",
+    "The removed Ness inline asm used ctr = 0x1B plus a trailing word copy, copying from ft->x10C_ftData->ext_attr into ft->x2D4_specialAttributes.",
+    "C struct assignment was sufficient to replace repeated lwzu/stwu word-pair copy loops.",
+    "Struct filler lengths were tuned to match the expected copied byte count and thereby reproduce the original loop shape.",
+    "Removing inline asm also allowed removal of surrounding pragma peephole scaffolding in ftness.c."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-271",
+    "PsiLupan",
+    "altwo",
+    "Fox",
+    "Ness",
+    "ftfox",
+    "ftness",
+    "func_800E576C",
+    "func_80114B2C",
+    "ftFoxAttributes",
+    "ftNessAttributes",
+    "x2D8_specialAttributes2",
+    "x2D4_specialAttributes",
+    "x10C_ftData",
+    "ext_attr",
+    "HSD_GObj",
+    "gobj->user_data",
+    "struct assignment",
+    "attribute copy",
+    "bulk copy loop",
+    "asm removal",
+    "inline asm",
+    "peephole pragma",
+    "fighter attributes"
+  ],
+  "follow_up_queries": [
+    "Find other fighter OnLoad or attribute-copy routines that copy x10C_ftData->ext_attr into x2D4_specialAttributes or x2D8_specialAttributes2.",
+    "Search for remaining PowerPC counted copy loops using mtctr with lwzu/stwu pairs in fighter character asm files.",
+    "Compare ftFoxAttributes and ftNessAttributes sizes against later recovered attribute structs to replace filler fields with real names when evidence exists.",
+    "Look for other PRs crediting altwo for struct-copy matching tactics."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

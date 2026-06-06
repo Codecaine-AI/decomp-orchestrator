@@ -1,0 +1,159 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-867",
+  "pr": {
+    "number": 867,
+    "title": "Match `ftCo_Lift`",
+    "url": "https://github.com/doldecomp/melee/pull/867",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-25T23:58:20Z",
+    "merged_at": "2023-05-26T00:08:19Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common fighter Lift action code by adding a new C translation unit for `ftCo_Lift`, moving most of the 0x80096D9C-0x8009750C range out of `asm/melee/ft/ft_08A4.s`, and wiring the new file into the build. The PR report shows `src/melee/ft/chara/ftCommon/ftCo_Lift.c` at 100.00% with all listed Lift Wait/Walk/Turn animation, IASA, physics, collision, and helper functions matched. It also matched nearby FallSpecial and ItemThrow functions and refined headers/types needed by this Lift decompilation.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-typing",
+      "build-system",
+      "asm-data-shims"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "ftCo_Lift",
+      "ftCo_FallSpecial",
+      "ftCo_ItemThrow",
+      "asm",
+      "melee-core"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_Lift.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Lift.h",
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/chara/ftCommon/types.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c",
+    "src/melee/ft/chara/ftCommon/ftCo_ItemThrow.c",
+    "obj_files.mk",
+    "asm/melee/ft/ftCo_DamageIce.s",
+    "asm/melee/ft/ftCo_Guard.s",
+    "asm/melee/ft/ft_4D3A.s",
+    "src/melee/mp/mplib.h",
+    "src/melee/ft/ft_081B.h",
+    "src/melee/ft/ftdynamics.h"
+  ],
+  "what_changed": [
+    "Added `src/melee/ft/chara/ftCommon/ftCo_Lift.c` with 229 lines implementing the Lift state family: `ftCo_LiftWait_*`, `ftCo_LiftWalk_*`, `ftCo_LiftTurn_*`, `ftCo_80096D9C`, `ftCo_80096E68`, `ftCo_80096EF8`, `ftCo_80096F48`, `ftCo_800970E0`, `ftCo_80097130`, `ftCo_800974C4`, and `ft_8009750C`.",
+    "Deleted 713 lines from `asm/melee/ft/ft_08A4.s`, replacing most of the Lift assembly range with matched C. The PR report lists `ftCo_Lift.c` as `0/50100`, 100.00%.",
+    "Added `src/melee/ft/chara/ftCommon/ftCo_Lift.h` with prototypes and M2C stack-context structs for `ftCo_800974C4` and `ft_8009750C`.",
+    "Added `ftCommon_MotionVars.lift` fields at fighter offsets `fp+2340`, `fp+2344`, and `fp+2348`, and changed `fallspecial.x10` from `int` to `bool`.",
+    "Exposed `ftCommonData` fields used by Lift and FallSpecial, replacing padding at `+228` and `+25C` with floats including `x228`, `x22C`, `x230`, and `x25C`.",
+    "Moved `ft_80096CC8` and `ftCo_80096D28` into `ftCo_FallSpecial.c`; the PR report shows both matched at 100.00%.",
+    "Adjusted `ftCo_ItemThrow.c` so `ftCo_80096250` matched, including refactoring the shared inline helper from `inlineB0` to `inlineA0` and computing `msid_offset` before `Fighter_ChangeMotionState`.",
+    "Updated function prototypes for stronger typing: `mpLib_80054CEC(enum_t)` returns `u32`, `ft_800D0EC8(ftCo_Fighter*)` returns `float`, and `ft_80083090`/`ft_800831CC` predicate signatures take `bool (*)(HSD_GObj*, enum_t)`.",
+    "Added small assembly `.sdata` object files for duplicated or section-sensitive string/data symbols such as `ftCo_804D3AE8`, `ftCo_804D3AF0`, `ftCo_804D3AF8`, `ftCo_804D3B00`, `ftCo_804D3B18`, and `ftCo_804D3B20` containing `\"jobj.h\"` and `\"jobj\"`.",
+    "Updated `obj_files.mk` to build the new C object and the new asm data objects."
+  ],
+  "smart_moves": [
+    "Kept section-sensitive string/data symbols in small asm files instead of forcing unrelated C files to own awkward `.sdata` layout; this preserved matching while allowing the Lift text to move to C.",
+    "Introduced a dedicated `ftCo_Lift.h` and included it from ItemGet/ItemThrow rather than leaving Lift prototypes scattered in unrelated headers.",
+    "Modeled per-action motion variables through `union ftCommon_MotionVars.lift`, making the raw offsets used by Lift (`0x2340`, `0x2344`, `0x2348`) explicit and reusable.",
+    "Used precise common-data typing for movement thresholds and turn timing (`p_ftCommonData->x228`, `x22C`, `x230`, `x25C`) instead of continuing to index opaque padding.",
+    "Used `#ifdef MUST_MATCH` unused-stack byte arrays and M2C stack structs only where needed to preserve stack layout evidence for difficult matches.",
+    "Refactored ItemThrow's inline helper in a way that preserved matching for `ftCo_80096250`, showing that small variable-order and temporary-expression changes can matter for CodeWarrior output."
+  ],
+  "decomp_lessons": [
+    "When a common action file spans several state callbacks, matching is helped by first identifying the state-machine pattern: `Anim`, `IASA`, `Phys`, and `Coll` callbacks plus transition helpers.",
+    "Callbacks that reset carried item position on damage/collision can require explicit zero `Vec3` stack objects and, in this PR, unused-stack padding guarded by `MUST_MATCH`.",
+    "Motion-state transitions should preserve exact flags and callback restoration. Lift repeatedly calls `Fighter_ChangeMotionState` and then resets `fp->cb.x21DC_callback_OnTakeDamage = ftCo_800974C4`.",
+    "For turn animations, matching may require modeling both gameplay fields and JObj side effects: Lift turn decrements `mv.co.lift.x4`, flips `facing_dir`, updates part rotations via `ftParts_80075AF0`, calls `HSD_JObjSetRotationY`, and negates `gr_vel` at the halfway point.",
+    "Promoting unknown padding to named float fields in shared structs can unlock multiple functions at once; here the same `ftCommonData` field typing supports Lift movement thresholds and FallSpecial ledge/ground checks.",
+    "Header cleanup can be part of matching: moving declarations from broad headers like `ft_0877.h` or `ftCo_ItemThrow.h` into feature-specific headers reduces stale or incorrectly typed prototypes.",
+    "If C matching exposes duplicated assert strings or literal placement problems, small asm data shims can be a pragmatic intermediate step."
+  ],
+  "naming_conventions": [
+    "`ftCo_LiftWait_Anim`, `ftCo_LiftWait_IASA`, `ftCo_LiftWait_Phys`, and `ftCo_LiftWait_Coll` follow the common fighter state callback suffix convention.",
+    "`ftCo_LiftWalk_*` and `ftCo_LiftTurn_*` use the same state callback suffix pattern for Walk and Turn variants.",
+    "Unidentified helpers remain address-named with the `ftCo_8009XXXX` convention, e.g. `ftCo_80096D9C`, `ftCo_80096E68`, `ftCo_80096EF8`, `ftCo_80096F48`, `ftCo_800970E0`, `ftCo_80097130`, and `ftCo_800974C4`.",
+    "Motion-variable structs in `ftCommon_MotionVars` use action names such as `fallspecial` and `lift`, while individual fields remain offset-like (`x0`, `x4`, `x8`) when semantics are not yet proven.",
+    "The new header guard `GALE01_0968E0` follows an address-based guard style for this feature header.",
+    "Asm data symbols use address-derived names like `ftCo_804D3AE8` and `ftCo_804D3B20` when the original semantic name is not established."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed matched text from `asm/melee/ft/ft_08A4.s` while keeping unmatched or data-sensitive remnants in assembly.",
+    "Added `.sdata` asm stubs with explicit `.balign` directives for `\"jobj.h\"` and `\"jobj\"` strings in `ftCo_DamageIce.s`, `ftCo_Guard.s`, and `ft_4D3A.s`.",
+    "Used `#ifdef MUST_MATCH` unused stack buffers in `ftCo_80096E68`, `ftCo_LiftWalk_Anim`, `ftCo_LiftTurn_Anim`, `ftCo_800974C4`, `ft_8009750C`, and `ft_80096CC8` to preserve stack shapes without affecting non-matching builds.",
+    "Used `RETURN_IF(...)` macros in simple IASA callbacks to reproduce short-circuiting control flow.",
+    "Kept constants and math close to the original codegen: `180 / p_ftCommonData->x230 * deg_to_rad`, `0.5f * p_ftCommonData->x230`, and `M_PI_2 * fp->facing_dir` appear directly in Lift turn logic.",
+    "Changed ItemThrow helper local ordering (`msid_offset = msid + offset`) and removed an unused stack block to match `ftCo_80096250`."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice, so there is no direct reviewer feedback to extract."
+  ],
+  "searchable_terms": [
+    "pr-867",
+    "Match ftCo_Lift",
+    "ribbanya",
+    "ftCo_Lift.c",
+    "ftCo_Lift.h",
+    "ftCo_LiftWait_Anim",
+    "ftCo_LiftWait_IASA",
+    "ftCo_LiftWait_Phys",
+    "ftCo_LiftWait_Coll",
+    "ftCo_LiftWalk_Anim",
+    "ftCo_LiftWalk_IASA",
+    "ftCo_LiftWalk_Phys",
+    "ftCo_LiftWalk_Coll",
+    "ftCo_LiftTurn_Anim",
+    "ftCo_LiftTurn_IASA",
+    "ftCo_LiftTurn_Phys",
+    "ftCo_LiftTurn_Coll",
+    "ftCo_80096D9C",
+    "ftCo_80096E68",
+    "ftCo_80096EF8",
+    "ftCo_80096F48",
+    "ftCo_800970E0",
+    "ftCo_80097130",
+    "ftCo_800974C4",
+    "ft_8009750C",
+    "ft_80096CC8",
+    "ftCo_80096D28",
+    "ftCo_80096250",
+    "ftCommon_MotionVars.lift",
+    "p_ftCommonData->x228",
+    "p_ftCommonData->x22C",
+    "p_ftCommonData->x230",
+    "p_ftCommonData->x25C",
+    "MUST_MATCH unused stack",
+    "Item_8026ABD8",
+    "HSD_JObjSetRotationY",
+    "Fighter_ChangeMotionState",
+    "ftCo_MS_LiftWait",
+    "ftCo_MS_LiftWalk1",
+    "ftCo_MS_LiftWalk2",
+    "ftCo_MS_LiftTurn",
+    "asm sdata jobj.h jobj",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or document `ftCo_80096EF8`, `ftCo_80096F48`, `ftCo_800970E0`, `ftCo_80097130`, or `ftCo_800974C4`.",
+    "Search for future cleanup of the asm `.sdata` shims containing `ftCo_804D3AE8`, `ftCo_804D3AF0`, `ftCo_804D3AF8`, `ftCo_804D3B00`, `ftCo_804D3B18`, and `ftCo_804D3B20`.",
+    "Look for PRs that give semantic names to `ftCommonData->x228`, `x22C`, `x230`, or `x25C`.",
+    "Search for later refactors of `ftCommon_MotionVars.lift` fields `x0`, `x4`, and `x8`.",
+    "Find other matches using `#ifdef MUST_MATCH` unused stack arrays around `Vec3` item-position reset code."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

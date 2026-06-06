@@ -1,0 +1,163 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-631",
+  "pr": {
+    "number": 631,
+    "title": "Label misc dolphin SDK symbols missed in previous passes",
+    "url": "https://github.com/doldecomp/melee/pull/631",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-12-28T06:36:34Z",
+    "merged_at": "2022-12-29T01:50:23Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Labeled a broad set of previously anonymous Dolphin SDK assembly symbols across OdemuExi2/DebuggerDriver, HIO, MCC, VI, and related call sites. The PR mostly replaced address-based func_/lbl_ names with SDK-style function and data names, propagated those names through branch/call references, and adjusted a few data declarations and alignment boundaries so newly named symbols describe the intended storage units. There was no PR body or review discussion; the only recorded review was an approval.",
+  "change_classification": {
+    "primary_type": "assembly symbol labeling and data layout cleanup",
+    "categories": [
+      "naming",
+      "asm",
+      "symbol recovery",
+      "data labels",
+      "alignment cleanup",
+      "SDK label pass"
+    ],
+    "systems": [
+      "dolphin",
+      "OdemuExi2",
+      "DebuggerDriver",
+      "AX DSPCode",
+      "HIO",
+      "MCC",
+      "FIO",
+      "VI",
+      "sysdolphin baselib",
+      "melee text_2"
+    ]
+  },
+  "key_files": [
+    "asm/dolphin/vi/vi.s",
+    "asm/dolphin/mcc/mcc.s",
+    "asm/dolphin/OdemuExi2/DebuggerDriver.s",
+    "asm/dolphin/hio/hio.s",
+    "asm/dolphin/ax/DSPCode.s",
+    "asm/sysdolphin/baselib/baselib_unknown_002.s",
+    "asm/dolphin/mcc/fio.s",
+    "asm/melee/text_2.s"
+  ],
+  "what_changed": [
+    "Renamed DebuggerDriver function and callback labels such as func_8032B4E0 to DBGReadStatus, lbl_8032B58C to MWCallback, and lbl_8032B5C8 to DBGHandler.",
+    "Renamed DebuggerDriver small-data globals from lbl_ addresses to semantic names including MTRCallback, DBGCallback, SendMailData, RecvDataLeng, pEXIInputFlag, EXIInputFlag, and SendCount.",
+    "Renamed HIO state and callback globals such as Dev, TxCallback, and RxCallback, and labeled async entry points HIOReadAsync and HIOWriteAsync.",
+    "Renamed MCC functions func_8032D88C, func_8032D954, and func_8032D9AC to MCCExit, MCCEnumDevices, and MCCGetFreeBlocks, and updated callers in MCC and sysdolphin baselib.",
+    "Renamed the large MCC bss block lbl_804A50E0 to gChannelInfo and split its contents into named trailing regions gStreamWork, m_szAdapterMode, m_szInitCode, and channelInfo.",
+    "Renamed VI function func_803503A8 to VIGetDTVStatus and updated a melee/text_2.s call site to use VIGetDTVStatus.",
+    "Named VI data and bss/sbss objects including timing, taps, shdwRegs, HorVer, flushFlag, retraceQueue, encoderType, displayOffsetH, displayOffsetV, changeMode, changed, shdwChangeMode, shdwChanged, CurrTiming, CurrTvMode, and message.",
+    "Converted a block of VI debug PAL warning bytes from raw .4byte constants into readable .asciz strings with .balign 4 between strings.",
+    "Replaced NULL entries in axDspSlave DSP code data with literal .4byte 0x00000000.",
+    "Adjusted data declarations and padding in several places, including SendCount as a byte, FIO gSizeOfBlocks using .balign 4 after a byte, FIO gLastErr as a one-byte skip followed by alignment, and removing anonymous padding words after named globals."
+  ],
+  "smart_moves": [
+    "Propagated each recovered label through all assembly references instead of only changing the defining label, preserving searchable call/data relationships across files.",
+    "Split anonymous aggregate storage only where the diff showed stable offsets and sizes, making later C struct or array recovery easier without changing addresses.",
+    "Used explicit alignment directives after byte-sized objects and strings, which keeps symbol boundaries readable while preserving the following labels' expected alignment.",
+    "Turned raw ASCII encoded as .4byte values into .asciz strings in VI, making embedded SDK diagnostic text searchable and easier to compare against known Dolphin SDK sources.",
+    "Updated external call sites in asm/melee/text_2.s and asm/sysdolphin/baselib/baselib_unknown_002.s when SDK functions were renamed, avoiding stale func_ references outside the renamed module."
+  ],
+  "decomp_lessons": [
+    "SDK symbol recovery is useful even before C conversion: replacing func_/lbl_ names in assembly makes cross-module behavior and future matching work substantially easier to search.",
+    "When naming a small-data or bss symbol, verify the actual storage width; byte-sized flags/counters should not remain as broad anonymous .4byte regions if that obscures subsequent labels.",
+    "For contiguous SDK data tables, introduce interior labels such as taps or channelInfo only when the offsets remain compatible with existing references and alignment.",
+    "Readable .asciz declarations can replace equivalent raw word dumps for string data, but they must preserve padding/alignment to keep following jump tables or globals at the same addresses.",
+    "Call-site cleanup matters: once a recovered SDK function has a name, dependent asm files should be updated in the same pass so future grep results are consistent."
+  ],
+  "naming_conventions": [
+    "Dolphin SDK-style exported functions use subsystem prefixes and Pascal/camel casing, e.g. DBGReadStatus, DBInitComm, HIOReadAsync, HIOWriteAsync, MCCExit, MCCEnumDevices, MCCGetFreeBlocks, and VIGetDTVStatus.",
+    "Callback names use descriptive Callback suffixes: MWCallback, MTRCallback, DBGCallback, ExiCallback, TxCallback, and RxCallback.",
+    "Global MCC objects use g-prefixed names where applicable, such as gChannelInfo, gStreamWork, gIsChannelinfoDirty, gSizeOfBlocks, gProcDone, gLastErr, and gMccInitialized.",
+    "VI global state names in this pass preserve SDK-like capitalization and abbreviations: shdwRegs, HorVer, CurrTiming, CurrTvMode, FBSet, PreCB, and PostCB.",
+    "Recovered names sometimes preserve apparent SDK spelling exactly, including RecvDataLeng rather than normalizing it to RecvDataLength."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replace address-derived labels with recovered SDK names at both definition sites and all lis/addi/lwz/stw/bl reference sites.",
+    "Use .balign after byte or string declarations to preserve later symbol addresses while exposing the true logical data size.",
+    "For known string payloads, prefer .asciz plus alignment over raw .4byte hexadecimal ASCII when the emitted bytes are equivalent.",
+    "For DSP data words that are zero values, this PR used explicit .4byte 0x00000000 instead of NULL; the diff provides the change but not an explicit rationale.",
+    "Split large anonymous .skip regions into named subregions with exact byte counts, such as gChannelInfo plus gStreamWork/m_szAdapterMode/m_szInitCode/channelInfo, to prepare for struct recovery."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "ribbanya",
+      "state": "APPROVED",
+      "submitted_at": "2022-12-28T15:46:35Z",
+      "body": "",
+      "notes": "No review comments or rationale were present in the slice."
+    }
+  ],
+  "searchable_terms": [
+    "pr-631",
+    "label-stragglers",
+    "Dolphin SDK symbols",
+    "OdemuExi2",
+    "DebuggerDriver",
+    "DBGReadStatus",
+    "MWCallback",
+    "DBGHandler",
+    "MTRCallback",
+    "DBGCallback",
+    "SendMailData",
+    "RecvDataLeng",
+    "pEXIInputFlag",
+    "EXIInputFlag",
+    "SendCount",
+    "HIOReadAsync",
+    "HIOWriteAsync",
+    "Dev",
+    "TxCallback",
+    "RxCallback",
+    "MCCExit",
+    "MCCEnumDevices",
+    "MCCGetFreeBlocks",
+    "gChannelInfo",
+    "gStreamWork",
+    "m_szAdapterMode",
+    "m_szInitCode",
+    "channelInfo",
+    "VIGetDTVStatus",
+    "timing",
+    "taps",
+    "shdwRegs",
+    "HorVer",
+    "flushFlag",
+    "retraceQueue",
+    "encoderType",
+    "displayOffsetH",
+    "displayOffsetV",
+    "changeMode",
+    "changed",
+    "shdwChangeMode",
+    "shdwChanged",
+    "CurrTiming",
+    "CurrTvMode",
+    "message",
+    "axDspSlave",
+    "DSPCode NULL 0x00000000",
+    "DEBUG_PAL asciz"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that convert asm/dolphin/vi/vi.s to C using timing, taps, VIGetDTVStatus, shdwRegs, or HorVer.",
+    "Find later PRs that define structs for gChannelInfo, gStreamWork, m_szAdapterMode, m_szInitCode, or channelInfo in MCC.",
+    "Search for RecvDataLeng and EXIInputFlag to see whether DebuggerDriver data names were later moved into headers.",
+    "Search for HIOReadAsync and HIOWriteAsync to track HIO C conversion or prototype recovery.",
+    "Search for axDspSlave and 0x00000000 to understand why NULL was avoided in DSP code data."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

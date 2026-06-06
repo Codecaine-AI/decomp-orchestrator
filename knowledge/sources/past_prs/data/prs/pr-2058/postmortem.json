@@ -1,0 +1,146 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2058",
+  "pr": {
+    "number": 2058,
+    "title": "gr: Match 4 functions + fix grheal context bugs",
+    "url": "https://github.com/doldecomp/melee/pull/2058",
+    "state": "CLOSED",
+    "author": "itsgrimetime",
+    "created_at": "2025-12-31T10:03:37Z",
+    "merged_at": null
+  },
+  "agent_status": "agent_completed",
+  "summary": "Closed, unmerged PR that matched four stage/ground functions and fixed several grheal/grzebes header/context issues. The matched functions were grCastle_801CD960, grMaterial_801C9604, grZebes_801D9F30, and grCorneria_801DDD4C, each claimed as 100% in the PR body. It also added a missing grZebes prototype, corrected an anonymous struct declaration in grheal.static.h into a named struct yaku, added an extern for grHeal_804D49D8, and included gm/gm_1832.h from grheal.c. The diff also changed GitHub Actions build container references from doldecomp to the author's image, which appears CI-related but is not explained by the PR text.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "fix",
+      "headers",
+      "types-structs",
+      "ci-workflow"
+    ],
+    "systems": [
+      "stage",
+      "ground",
+      "grcastle",
+      "grcorneria",
+      "grmaterial",
+      "grzebes",
+      "grheal",
+      ".github/workflows"
+    ]
+  },
+  "key_files": [
+    "src/melee/gr/grcastle.c",
+    "src/melee/gr/grcorneria.c",
+    "src/melee/gr/grcorneria.h",
+    "src/melee/gr/grmaterial.c",
+    "src/melee/gr/grzebes.c",
+    "src/melee/gr/grzebes.h",
+    "src/melee/gr/grheal.c",
+    "src/melee/gr/grheal.h",
+    "src/melee/gr/grheal.static.h",
+    ".github/workflows/build.yml"
+  ],
+  "what_changed": [
+    "Implemented grCastle_801CD960 as a loop over 12 castle data entries, calling grLib_801C9B6C on byte offsets from gobj->user_data: base + i * 0x14 + 0xE0.",
+    "Implemented grCorneria_801DDD4C(Vec3* pos), fetching Ground_801C2BA4(3), reading corneria base/offset fields from Ground user_data, and assigning pos x/y/z with z from extern f32 grCn_804DB170.",
+    "Updated grcorneria.h prototype for grCorneria_801DDD4C from UNK_RET/UNK_PARAMS to void grCorneria_801DDD4C(Vec3* pos).",
+    "Implemented grMaterial_801C9604(HSD_GObj* gobj, int arg1, int arg2), introducing a local grMaterialData struct with padding and bitfields to access offsets 0x10, 0x40-0x4C, and 0xBC, resetting state fields and then calling grMaterial_801C9698(gobj).",
+    "Implemented grZebes_801D9F30(Ground_GObj* gobj), calling grAnime_801C8138(gobj, gp->map_id, 0), clearing a field at Ground offset 0xC4 through M2C_FIELD, and setting gp->x11_flags.b012 = 1.",
+    "Added grZebes_801D9F30 prototype to grzebes.h and included gr/forward.h so Ground_GObj is available.",
+    "Changed grheal.static.h from an anonymous struct-with-pointer declaration `struct { ... }* yaku;` to a named `struct yaku { int x0; int x4; };`, fixing the context/type bug described in the PR body.",
+    "Added `extern s16 grHeal_804D49D8[4];` to grheal.h.",
+    "Added `#include \"gm/gm_1832.h\"` to grheal.c to provide missing context needed by that source file.",
+    "Modified .github/workflows/build.yml to use `ghcr.io/itsgrimetime/build-melee:main`, add container credentials, force bash for the Ninja build step, and remove repository-only conditions. The purpose is not documented beyond the diff."
+  ],
+  "smart_moves": [
+    "Used narrow, exact prototypes where known instead of leaving matched functions as UNK_RET/UNK_PARAMS, notably grCorneria_801DDD4C(Vec3* pos) and grZebes_801D9F30(Ground_GObj* gobj).",
+    "For grMaterial_801C9604, introduced a minimal local layout with explicit padding and bitfields to match observed accesses without overclaiming a full global structure name or layout.",
+    "Preserved known offsets in comments and padding sizes in grMaterialData, making the matching tactic auditable for future cleanup into shared types.",
+    "Fixed header context alongside function matching, reducing dependency on accidental include order for grzebes and grheal.",
+    "Converted the broken anonymous grheal.static.h declaration into a named struct type, avoiding a likely accidental global pointer declaration named yaku.",
+    "Kept grCastle_801CD960 simple and data-driven: user_data cast, fixed loop bound, and offset arithmetic matching the repeated grLib call pattern."
+  ],
+  "decomp_lessons": [
+    "When matching small ground callbacks, update the corresponding header prototype at the same time; stale UNK_RET/UNK_PARAMS declarations hide useful type information and can block later matches.",
+    "For stage-specific Ground user_data, evidence-backed field accesses such as `gp->gv.corneria.base_x`, `offset_x`, and `offset_y.val` are preferable to raw offsets when the union layout is known.",
+    "For partially understood object data, a small local struct with padding and named bitfields can be an effective bridge to match codegen while avoiding premature broad type commitments.",
+    "Anonymous struct declarations in static headers can accidentally declare variables rather than reusable types; use a named struct when the intent is type context.",
+    "Missing externs and missing includes are decomp blockers: declare known data symbols such as grHeal_804D49D8 in public headers when other contexts need them, and include the specific subsystem header that defines referenced game-manager types/data.",
+    "M2C_FIELD remains useful for isolated unknown fields, as shown by clearing the Ground field at offset 0xC4 in grZebes_801D9F30 while still using typed fields for known members."
+  ],
+  "naming_conventions": [
+    "Stage/ground functions retain address-based names such as grCastle_801CD960, grMaterial_801C9604, grZebes_801D9F30, and grCorneria_801DDD4C.",
+    "Ground object parameters are named `gobj` when typed as Ground_GObj* or HSD_GObj*.",
+    "Ground user_data locals are commonly named `gp`; castle-specific user_data was named `castle`.",
+    "Temporary vector output parameter in grCorneria_801DDD4C is named `pos`.",
+    "The local material layout was named `grMaterialData`, with unknown/padded fields named by offset and bit position, e.g. `_pad0`, `x10_b3`, `xBC_b7`, `xBC_b6`, `xBC_rest`.",
+    "The corrected grheal static struct was named `struct yaku`, preserving the contextual name from the prior broken declaration."
+  ],
+  "assembly_or_matching_tactics": [
+    "Matched repeated structure traversal in grCastle_801CD960 using `(u8*)castle + i * 0x14 + 0xE0` and a fixed loop count of 12.",
+    "Matched grCorneria_801DDD4C by reconstructing a Vec3 output from Ground corneria base/offset fields and a global z value `grCn_804DB170`.",
+    "Used bitfield declarations in grMaterialData to control byte/bit accesses at offsets 0x10 and 0xBC, including chained zero assignment through a u8 temporary: `val = gp->xBC_b6 = 0; gp->xBC_b7 = val;`.",
+    "Used explicit padding arrays to force grMaterialData fields to offsets 0x40, 0x44, 0x48, 0x4C, and 0xBC.",
+    "Used `M2C_FIELD(gp, s16*, 0xC4) = 0` in grZebes_801D9F30 for an as-yet-untyped Ground field while still matching surrounding typed operations.",
+    "Added extern `f32 grCn_804DB170` locally in grcorneria.c rather than moving it into a header; evidence does not show whether this was intended as temporary or preferred style."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-2058",
+    "itsgrimetime",
+    "gr: Match 4 functions + fix grheal context bugs",
+    "grCastle_801CD960",
+    "grMaterial_801C9604",
+    "grZebes_801D9F30",
+    "grCorneria_801DDD4C",
+    "grHeal_804D49D8",
+    "grHeal_803E83B8",
+    "grheal.static.h",
+    "struct yaku",
+    "grzebes.h missing prototype",
+    "gm/gm_1832.h",
+    "grCn_804DB170",
+    "Ground_801C2BA4",
+    "grLib_801C9B6C",
+    "grAnime_801C8138",
+    "grMaterial_801C9698",
+    "M2C_FIELD",
+    "Ground_GObj",
+    "HSD_GObj",
+    "Vec3",
+    "bitfields",
+    "x10_b3",
+    "xBC_b7",
+    "xBC_b6",
+    "user_data",
+    "stage ground matching",
+    "Corneria",
+    "Castle",
+    "Zebes",
+    "Material",
+    "Heal",
+    "build.yml",
+    "ghcr.io/itsgrimetime/build-melee"
+  ],
+  "follow_up_queries": [
+    "Check whether PR #2058 was superseded by another PR that merged these four function matches without the workflow changes.",
+    "Search for later cleanup of local `grMaterialData` into a shared grmaterial type or gr/types.h structure.",
+    "Search for later replacement of `M2C_FIELD(gp, s16*, 0xC4)` in grZebes_801D9F30 with a named Ground field.",
+    "Verify whether `extern f32 grCn_804DB170` was later moved to a header or renamed with a more descriptive symbol.",
+    "Look for follow-up fixes around `struct yaku` in grheal.static.h to determine the final intended type and whether instances/pointers were declared elsewhere.",
+    "Check whether the .github/workflows/build.yml changes were accidental fork-CI changes and intentionally omitted from any merged successor."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

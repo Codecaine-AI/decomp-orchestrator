@@ -1,0 +1,139 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-210",
+  "pr": {
+    "number": 210,
+    "title": "Split and label Dolphin_SDK1",
+    "url": "https://github.com/doldecomp/melee/pull/210",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-20T02:32:27Z",
+    "merged_at": "2021-12-20T02:32:31Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Split the monolithic asm/dolphin/dolphin_sdk_1.s blob into named Dolphin OS assembly files and replaced many address-based func_/lbl_ symbols with SDK-style names. The change primarily organized OS thread, time, UART/EXI, and system-call assembly into asm/dolphin/os/{OSThread,OSTime,OSUartExi,OSSync}.s, updated obj_files.mk, and propagated new OS/DB symbol names through callers in CARD, DVD, GX, OSAlarm, OSError, OSInterrupt, OSMutex, OSReset, VI, and sysdolphin baselib assembly. There were no PR body comments or review comments in the slice, so intent is inferred from the title and diff.",
+  "change_classification": {
+    "primary_type": "assembly organization and SDK symbol labeling",
+    "categories": [
+      "asm split",
+      "symbol labeling",
+      "headers",
+      "build object list",
+      "Dolphin SDK cleanup"
+    ],
+    "systems": [
+      "asm/dolphin/os",
+      "asm/dolphin/db",
+      "asm/dolphin/card",
+      "asm/dolphin/dvd",
+      "asm/dolphin/gx",
+      "asm/dolphin/vi",
+      "asm/sysdolphin/baselib",
+      "include",
+      "obj_files.mk"
+    ]
+  },
+  "key_files": [
+    "asm/dolphin/dolphin_sdk_1.s",
+    "asm/dolphin/os/OSThread.s",
+    "asm/dolphin/os/OSTime.s",
+    "asm/dolphin/os/OSUartExi.s",
+    "asm/dolphin/os/OSSync.s",
+    "asm/dolphin/db/db.s",
+    "include/functions.h",
+    "include/variables.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Renamed/split asm/dolphin/dolphin_sdk_1.s into asm/dolphin/os/OSThread.s and moved non-thread regions into new OS-specific files.",
+    "Added asm/dolphin/os/OSSync.s containing SystemCallVector and __OSInitSystemCall.",
+    "Added asm/dolphin/os/OSTime.s containing OSGetTime, OSGetTick, __OSGetSystemTime, __OSTimeToSystemTime, GetDates, and OSTicksToCalendarTime.",
+    "Added asm/dolphin/os/OSUartExi.s containing InitializeUART, ReadUARTN, WriteUARTN, and related UART assembly/data.",
+    "Updated obj_files.mk to remove asm/dolphin/dolphin_sdk_1.o and build OSSync.o, OSThread.o, OSTime.o, and OSUartExi.o in its place.",
+    "Labeled DB symbols in asm/dolphin/db/db.s: func_80335EE8 became DBIsDebuggerPresent, lbl_804D7208 became __DBInterface, and lbl_804D720C became DBVerbose.",
+    "Labeled many OSThread functions: OSInitThreadQueue, OSGetCurrentThread, UnsetRun, __OSGetEffectivePriority, SetEffectivePriority, SelectThread, __OSReschedule, OSCreateThread, OSCancelThread, OSResumeThread, OSSuspendThread, OSSleepThread, OSWakeupThread, CheckThreadQueue, and OSCheckActiveThreads.",
+    "Propagated new thread/time labels into caller assembly, replacing calls such as func_8034BB00 with OSWakeupThread, func_8034BA14 with OSSleepThread, func_8034AD2C with OSInitThreadQueue, func_8034B22C with __OSReschedule, func_8034B61C with OSResumeThread, func_8034B8A4 with OSSuspendThread, func_8034B460 with OSCancelThread, and func_8034C474 with __OSTimeToSystemTime.",
+    "Updated commented declarations in include/functions.h and include/variables.h to reflect the new named SDK symbols."
+  ],
+  "smart_moves": [
+    "Kept the assembly instruction bytes and address comments stable while changing only labels and file boundaries, making this a low-risk organizational/labeling PR.",
+    "Updated every visible caller of newly labeled thread primitives across Dolphin subsystems, avoiding mixed old func_ names and new SDK names.",
+    "Split the former SDK blob along plausible Nintendo SDK module boundaries: OSSync for system-call setup, OSThread for scheduler/thread queues, OSTime for time/calendar conversion, and OSUartExi for UART EXI routines.",
+    "Updated obj_files.mk at the same time as the file split, preserving build coverage for the separated assembly objects.",
+    "Labeled small-data DB variables alongside the functions that use them, improving readability of DBInit, DBIsDebuggerPresent, and __DBIsExceptionMarked."
+  ],
+  "decomp_lessons": [
+    "When splitting a monolithic assembly blob, preserve object ordering in obj_files.mk and replace the old object with the new module objects in the same location.",
+    "Cross-reference cleanup matters: after labeling an SDK function, update call sites in unrelated modules so future decompilation sees semantic names instead of address-derived func_ identifiers.",
+    "SDK module boundaries can often be recovered from known symbol families and local call patterns: thread queue/scheduler functions belong in OSThread, time/tick/calendar functions in OSTime, UART functions in OSUartExi, and system-call vector setup in OSSync.",
+    "Renaming sbss/data labels to SDK variable names is useful even before full C decompilation because it clarifies global state and reduces duplicate rediscovery.",
+    "Header declaration comments should be updated with symbol labels as assembly names improve; however, future work should verify header names against assembly labels because this diff shows a possible mismatch where functions.h lists OSGetCurrentContext while the assembly global is OSGetCurrentThread."
+  ],
+  "naming_conventions": [
+    "Use official Dolphin SDK-style public OS names with OS prefix, e.g. OSInitThreadQueue, OSGetCurrentThread, OSCreateThread, OSCancelThread, OSResumeThread, OSSuspendThread, OSSleepThread, OSWakeupThread, OSGetTime, OSGetTick.",
+    "Use double-underscore prefixes for internal Dolphin SDK routines and globals, e.g. __OSInitSystemCall, __OSGetSystemTime, __OSTimeToSystemTime, __OSGetEffectivePriority, __OSReschedule, __DBInterface.",
+    "Keep internal helper names descriptive but not necessarily public SDK-exported, e.g. UnsetRun, SetEffectivePriority, SelectThread, CheckThreadQueue, GetDates.",
+    "Replace address-derived labels such as func_8034AD2C and lbl_804D7208 once a confident SDK name is known.",
+    "Use module filenames that mirror Dolphin SDK source/module names: OSThread.s, OSTime.s, OSUartExi.s, OSSync.s."
+  ],
+  "assembly_or_matching_tactics": [
+    "File-split assembly without changing emitted instructions by preserving labels, address comments, and instruction encodings.",
+    "Use global symbol renames in assembly and then update all branch-and-link call sites to the new label name while keeping the original branch displacement bytes unchanged.",
+    "Use object-list ordering to maintain link layout after splitting one assembly source into multiple object files.",
+    "Move contiguous function ranges from the old blob into separate files rather than interleaving unrelated SDK modules.",
+    "Rename .sbss globals at their definitions and at all sda21 references together to avoid unresolved or stale label references."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-210",
+    "Split and label Dolphin_SDK1",
+    "dolphin_sdk_1.s",
+    "OSThread.s",
+    "OSTime.s",
+    "OSUartExi.s",
+    "OSSync.s",
+    "SystemCallVector",
+    "__OSInitSystemCall",
+    "OSInitThreadQueue",
+    "OSGetCurrentThread",
+    "__OSGetEffectivePriority",
+    "SetEffectivePriority",
+    "SelectThread",
+    "__OSReschedule",
+    "OSCreateThread",
+    "OSCancelThread",
+    "OSResumeThread",
+    "OSSuspendThread",
+    "OSSleepThread",
+    "OSWakeupThread",
+    "CheckThreadQueue",
+    "OSCheckActiveThreads",
+    "OSGetTime",
+    "OSGetTick",
+    "__OSGetSystemTime",
+    "__OSTimeToSystemTime",
+    "OSTicksToCalendarTime",
+    "InitializeUART",
+    "ReadUARTN",
+    "WriteUARTN",
+    "DBIsDebuggerPresent",
+    "__DBInterface",
+    "DBVerbose",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Verify whether include/functions.h should say OSGetCurrentThread instead of OSGetCurrentContext for the symbol at 8034AD3C.",
+    "Search later PRs for C decompilation of OSThread, OSTime, OSUartExi, or OSSync using these labels.",
+    "Check whether remaining func_ labels near OSDisableScheduler or func_8034AD88 in OSThread were later identified.",
+    "Compare these labels against official Dolphin SDK headers/source to confirm helper names such as UnsetRun, SelectThread, CheckThreadQueue, and GetDates."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

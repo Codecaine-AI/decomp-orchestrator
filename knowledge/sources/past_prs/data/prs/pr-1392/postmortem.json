@@ -1,0 +1,101 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1392",
+  "pr": {
+    "number": 1392,
+    "title": "Match `itcoin`",
+    "url": "https://github.com/doldecomp/melee/pull/1392",
+    "state": "MERGED",
+    "author": "thefoxcam",
+    "created_at": "2024-07-02T12:03:47Z",
+    "merged_at": "2024-07-03T21:33:40Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the coin item implementation in `src/melee/it/items/itcoin.c` with a small set of code-shaping changes: extracted repeated JObj rotation clearing into an inline helper, adjusted stack padding, and introduced a local `f32 zero` in velocity/position comparisons and assignments to influence codegen.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "codegen-shaping",
+      "item-behavior"
+    ],
+    "systems": [
+      "item",
+      "itcoin",
+      "JObj rotation",
+      "item physics"
+    ]
+  },
+  "key_files": [
+    "src/melee/it/items/itcoin.c"
+  ],
+  "what_changed": [
+    "Added inline helper `itCoin_ResetRotation(Item_GObj* gobj)` that gets the item's `HSD_JObj` via `GET_JOBJ(gobj)` and sets X/Y/Z rotation to `0.0F`.",
+    "Replaced duplicated direct `HSD_JObjSetRotationX/Y/Z` sequences in `it_802F1630` and `it_802F1CE0` with calls to `itCoin_ResetRotation(gobj)`.",
+    "Removed the local `HSD_JObj* jobj` from `it_802F1630` because the reset helper now handles JObj lookup there.",
+    "Changed `it_802F1630` stack padding to remain at `PAD_STACK(16)` after the helper extraction.",
+    "In `it_802F1910`, introduced `f32 zero = 0.0F` and used it for comparisons against `ip->x40_vel.x`, `ip->x40_vel.y`, `ip->pos.x`, and for assigning `ip->x40_vel.z`.",
+    "Changed `it_802F1CE0` stack padding from `PAD_STACK(24)` to `PAD_STACK(16)` while calling the shared rotation reset helper."
+  ],
+  "smart_moves": [
+    "Factoring the three rotation-zeroing calls into an inline helper let two call sites share the same source shape while still allowing the compiler to inline it for matching.",
+    "Using a local `f32 zero` instead of repeated `0.0F` literals in `it_802F1910` is a deliberate codegen tactic for floating-point comparison/assignment matching.",
+    "Stack padding was tuned alongside the source refactor, showing that helper extraction and local variable choices were made with emitted stack layout in mind rather than just readability.",
+    "The helper name `itCoin_ResetRotation` documents the behavior without changing the surrounding unresolved function names such as `it_802F1630` and `it_802F1CE0`."
+  ],
+  "decomp_lessons": [
+    "For item object rotation resets, an `inline` helper that performs `GET_JOBJ` and three `HSD_JObjSetRotation*` calls can be useful when the original code appears to reuse a common pattern.",
+    "When matching PowerPC floating-point code, replacing repeated float literals with a local `f32 zero` can affect register/local handling enough to close a mismatch.",
+    "Small stack differences may require coordinated changes to `PAD_STACK` values after extracting helpers or introducing/removing locals.",
+    "Do not assume readability-only refactors are harmless in matched files; even repeated `0.0F` literals versus a local variable may matter for output."
+  ],
+  "naming_conventions": [
+    "New helper uses item-specific CamelCase-style prefix: `itCoin_ResetRotation`.",
+    "Existing unresolved functions retained address-style names such as `it_802F1604`, `it_802F1630`, `it_802F1910`, `it_802F1CB4`, and `it_802F1CE0`.",
+    "Existing engine/API names retain project conventions: `Item_GObj`, `HSD_JObj`, `GET_JOBJ`, `HSD_JObjSetRotationX`, `HSD_JObjSetRotationY`, `HSD_JObjSetRotationZ`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Introduce `void inline` helper to preserve an inlined shared code pattern while changing C source structure.",
+    "Use a local `f32 zero = 0.0F` for multiple float comparisons and assignments in one function.",
+    "Tune `PAD_STACK` manually after local/helper changes, specifically `PAD_STACK(24)` to `PAD_STACK(16)` in `it_802F1CE0`.",
+    "Move JObj lookup into the inline helper for `it_802F1630`; `it_802F1CE0` still shows a local `HSD_JObj* jobj = GET_JOBJ(gobj)` in the diff context even after switching the rotation reset to the helper, suggesting a source-shape/codegen consideration, though the PR context does not explain it."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1392",
+    "Match itcoin",
+    "thefoxcam",
+    "src/melee/it/items/itcoin.c",
+    "itcoin",
+    "itCoin_ResetRotation",
+    "Item_GObj",
+    "HSD_JObj",
+    "GET_JOBJ",
+    "HSD_JObjSetRotationX",
+    "HSD_JObjSetRotationY",
+    "HSD_JObjSetRotationZ",
+    "it_802F1630",
+    "it_802F1910",
+    "it_802F1CE0",
+    "PAD_STACK",
+    "f32 zero",
+    "x40_vel",
+    "xCCC_incDamageDirection",
+    "lbVector_Normalize",
+    "Item_80268E5C"
+  ],
+  "follow_up_queries": [
+    "Find other item files that clear JObj rotation with three `HSD_JObjSetRotation*` calls and may benefit from an inline reset helper for matching.",
+    "Search for functions comparing multiple floats to `0.0F` where introducing a local `f32 zero` may improve codegen.",
+    "Inspect remaining `itcoin.c` unmatched functions around `it_802F1910` for similar stack-padding and local-variable matching tactics."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

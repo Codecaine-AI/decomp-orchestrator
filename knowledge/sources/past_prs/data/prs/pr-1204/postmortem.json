@@ -1,0 +1,176 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1204",
+  "pr": {
+    "number": 1204,
+    "title": "Match 30.70% of `lbdvd` (7.54 KB)",
+    "url": "https://github.com/doldecomp/melee/pull/1204",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-02-12T17:41:24Z",
+    "merged_at": "2024-02-12T17:42:27Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added a first C implementation for `src/melee/lb/lbdvd.c`, raising the file report to 30.70% matched over 7.54 KB. The PR reconstructed the preload/cache machinery around `PreloadCache`, `PreloadEntry`, archive/raw-data allocation, async file completion, and preloaded archive lookup, while renaming several symbols to semantic names such as `preloadCache`, `lbDvd_CachePreloadedFile`, and `lbDvd_GetPreloadedArchive`. It also updated dependent headers, symbols, scratch statuses, and assembly callsite labels across game, stage, and lb assembly files.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-renaming",
+      "scratch-integration",
+      "preload-cache-reconstruction"
+    ],
+    "systems": [
+      "library",
+      "lb",
+      "dvd",
+      "archive",
+      "heap",
+      "effect",
+      "stage",
+      "config",
+      "asm"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/lb/lbdvd.c",
+      "role": "New 418-line C implementation for part of lbdvd preload/cache logic."
+    },
+    {
+      "path": "asm/melee/lb/lbdvd.s",
+      "role": "Assembly labels updated to match semantic symbol names and local BSS rename."
+    },
+    {
+      "path": "src/melee/lb/lbdvd.h",
+      "role": "Expanded lbdvd declarations, callback typedef, and address-commented prototypes."
+    },
+    {
+      "path": "src/melee/lb/lbfile.h",
+      "role": "Reordered and address-annotated lbfile declarations used by lbdvd."
+    },
+    {
+      "path": "src/melee/lb/lbheap.h",
+      "role": "Added heap helper prototypes and corrected `lbHeap_80015CA8` argument type to `u32*`."
+    },
+    {
+      "path": "src/melee/ef/efasync.h",
+      "role": "Added `efAsync_8006730C` prototype for effect archive preload initialization."
+    },
+    {
+      "path": "src/melee/gr/grdatfiles.h",
+      "role": "Address-annotated stage DAT prototypes used by lbdvd archive initialization."
+    },
+    {
+      "path": "src/melee/lb/lbarchive.c",
+      "role": "Adjusted heap-free casts from `u8*` to `u32*` to match updated heap API."
+    },
+    {
+      "path": "config/GALE01/symbols.txt",
+      "role": "Renamed lbdvd symbols and adjusted sizes/scopes/data annotations."
+    },
+    {
+      "path": "config/GALE01/scratches.txt",
+      "role": "Converted relevant scratch entries from percentage labels to `OK`."
+    }
+  ],
+  "what_changed": [
+    "Created `src/melee/lb/lbdvd.c` with local structs for `HSD_AllocEntry`, `PreloadCacheSceneEntry`, `PreloadEntry`, `PreloadCacheScene`, and `PreloadCache`.",
+    "Implemented or partially implemented lbdvd routines including `lbDvd_800174BC`, `lbDvd_800174E8`, `lbDvd_80017598`, `lbDvd_80017740`, `lbDvd_CachePreloadedFile`, `lbDvd_80017CC4`, `lbDvd_80017E64`, `lbDvd_GetPreloadedArchive`, `lbDvd_8001819C`, and `lbDvd_80018C6C`.",
+    "Renamed the BSS object `lbDvd_80432078` to local `preloadCache` at `0x80432078` with size `0x978`.",
+    "Renamed `lbDvd_80017AB0` to `lbDvd_CachePreloadedFile` and `lbDvd_80017EBC` to `lbDvd_GetPreloadedArchive`; assembly callsites in `gm_1A36.s`, `grstadium.s`, `lb_00F9.s`, and `lbdvd.s` were updated accordingly.",
+    "Added archive-type dispatch in `lbDvd_GetPreloadedArchive`: type 2 calls `lbArchive_InitializeDAT`, type 3 calls `efAsync_8006730C`, type 4 calls `grDatFiles_801C5FC0`, and the default path asserts.",
+    "Modeled preload-cache operations with `OSDisableInterrupts`/`OSRestoreInterrupts`, load-score updates, heap allocation/freeing, file reads through `lbFile_800164A4`, and debug assertions/reports.",
+    "Updated `symbols.txt` metadata, including splitting `lbDvd_80018F68` size from `0x2C8` to `0x198` and adding `lbDvd_80019100` at `0x80019100` size `0x130`.",
+    "Changed several scratch records for the imported lbdvd and nearby library functions from percentage status to `OK`."
+  ],
+  "smart_moves": [
+    "The PR gave high-value semantic names to the cache singleton and key public operations (`preloadCache`, `lbDvd_CachePreloadedFile`, `lbDvd_GetPreloadedArchive`), which made downstream assembly callsites immediately more readable without changing codegen.",
+    "Reconstructing the cache as explicit C structs converted many hard-coded offsets in assembly into field accesses such as `entries`, `persistent_heap`, and `preloaded`, giving future work a concrete layout to refine.",
+    "Keeping `preloadCache` local in `symbols.txt` while updating all assembly references avoided preserving a misleading global address-style name once the C file owned the storage.",
+    "The lbdvd implementation pulled in exact subsystem dependencies through headers (`lbarchive`, `lbfile`, `lbheap`, `efasync`, `grdatfiles`, DVD/OSInterrupt/debug), making archive preload behavior visible across library, effect, and stage systems.",
+    "Address-commented prototypes in headers helped preserve decomp navigation and symbol/address correspondence during a large scratch-to-source import."
+  ],
+  "decomp_lessons": [
+    "For large library files, first reconstruct the central state object; here, naming and typing `preloadCache` unlocked many functions that only differ by offsets into the same BSS block.",
+    "Semantic renames should be propagated into assembly stubs and config symbols immediately, so partially decompiled callers still document the discovered behavior.",
+    "When a cache API returns multiple data representations, model the discriminator early; `lbDvd_GetPreloadedArchive` uses a type switch to initialize normal DAT archives, effect archives, or stage DAT files.",
+    "Interrupt guards are part of the matching story for shared preload state; `OSDisableInterrupts`/`OSRestoreInterrupts` placement should be retained when reconstructing cache scans and mutations.",
+    "Header cleanup can be necessary matching infrastructure, not just style: adding missing prototypes and correcting pointer types allowed the new lbdvd code and nearby users to compile consistently.",
+    "Scratch imports should be normalized in `scratches.txt` after landing; this PR marked several previously percentage-scored snippets as `OK`."
+  ],
+  "naming_conventions": [
+    "Use semantic names when behavior is clear: `lbDvd_GetPreloadedArchive` for the old `lbDvd_80017EBC` and `lbDvd_CachePreloadedFile` for the old `lbDvd_80017AB0`.",
+    "Keep unresolved functions on the `lbDvd_800xxxxx` address-name convention until behavior is sufficiently understood.",
+    "Use lowerCamelCase for local/static state objects such as `preloadCache`, even when the old symbol was an address-based global (`lbDvd_80432078`).",
+    "Header guards in touched headers were converted to address-style guards such as `GALE01_0174BC`, `GALE01_01615C`, and `GALE01_063930`.",
+    "Function declarations were annotated with address comments, for example `/* 017598 */ bool lbDvd_80017598(bool cached);`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Renamed only labels/references in remaining assembly where the C name had become known, preserving addresses and instruction bytes.",
+    "Used a concrete `PreloadEntry` size of `0x1C` and `PreloadCache` BSS size of `0x978`, matching assembly patterns with `mulli ... 0x1c` and indexed access into 80 entries.",
+    "Preserved scratch-derived imperfect C where needed; the report shows a mixed file result with several 100% functions and several low/partial scores rather than a fully polished module.",
+    "Converted raw address symbol use (`lbDvd_80432078@ha/@l`) to `preloadCache@ha/@l` in assembly to align static storage naming with the new C source.",
+    "Added missing dependent prototypes instead of relying on implicit or placeholder calls, including `efAsync_8006730C`, `lbHeap_80015BB8`, and `lbHeap_80015D6C`."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the PR dump, so there is no direct reviewer feedback to extract."
+  ],
+  "searchable_terms": [
+    "pr-1204",
+    "lbdvd",
+    "lbDvd",
+    "Match 30.70% of lbdvd",
+    "preloadCache",
+    "PreloadCache",
+    "PreloadEntry",
+    "PreloadCacheScene",
+    "HSD_AllocEntry",
+    "lbDvd_80432078",
+    "lbDvd_CachePreloadedFile",
+    "lbDvd_80017AB0",
+    "lbDvd_GetPreloadedArchive",
+    "lbDvd_80017EBC",
+    "lbDvd_800174BC",
+    "lbDvd_800174E8",
+    "lbDvd_80017598",
+    "lbDvd_80017740",
+    "lbDvd_80017CC4",
+    "lbDvd_80017E64",
+    "lbDvd_8001819C",
+    "lbDvd_80018C6C",
+    "lbDvd_80018F68",
+    "lbDvd_80019100",
+    "lbArchive_InitializeDAT",
+    "efAsync_8006730C",
+    "grDatFiles_801C5FC0",
+    "lbFile_800164A4",
+    "lbHeap_80015CA8",
+    "OSDisableInterrupts",
+    "OSRestoreInterrupts",
+    "DVDConvertPathToEntrynum",
+    "g_debugLevel",
+    "scratches.txt",
+    "symbols.txt",
+    "gm_1A36.s",
+    "grstadium.s",
+    "lb_00F9.s"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that improve `lbDvd_80017740` or `lbDvd_CachePreloadedFile`, since this PR's report still showed partial scores for those routines.",
+    "Search for later refinements to the `PreloadCache` and `PreloadEntry` layouts, especially unknown fields like `unknown004`, `field5_0x5`, `field8_0xa`, and `x974`.",
+    "Check whether `lbDvd_80018F68`/`lbDvd_80019100` were later fully split and decompiled after this symbol size adjustment.",
+    "Look for review or later cleanup around header guard style `GALE01_xxxxxx` and address-commented prototypes in lb headers.",
+    "Search for later PRs replacing placeholder types in `lbdvd.h`, `efasync.h`, and `lbheap.h` with concrete types."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

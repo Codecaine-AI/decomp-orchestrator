@@ -1,0 +1,138 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1421",
+  "pr": {
+    "number": 1421,
+    "title": "Match 34% of `sislib`",
+    "url": "https://github.com/doldecomp/melee/pull/1421",
+    "state": "MERGED",
+    "author": "thefoxcam",
+    "created_at": "2024-08-11T00:13:54Z",
+    "merged_at": "2024-08-11T16:22:41Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large decompilation/matching PR for sysdolphin baselib `sislib`, adding about 2000 lines of implementation and expanding `sislib.h` with provisional allocator/text-rendering structs and typed prototypes. It also updated two `mn` menu users, `mndeflicker.c` and `mnhyaku.c`, to consume the new `sislib_UnkAllocReturn` type instead of local `struct sislib_idk` float-array stubs. The author noted that struct and variable names would improve while working through `mn` files. Evidence includes one issue comment suggesting a failed build could likely be fixed with `tools/revert_asm.py`; no formal review comments were present in the slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "naming",
+      "tooling",
+      "menu-integration"
+    ],
+    "systems": [
+      "src/sysdolphin/baselib/sislib",
+      "src/sysdolphin/baselib/gobj",
+      "src/melee/mn"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/sislib.c",
+    "src/sysdolphin/baselib/sislib.h",
+    "src/melee/mn/mndeflicker.c",
+    "src/melee/mn/mnhyaku.c",
+    "src/sysdolphin/baselib/gobj.h"
+  ],
+  "what_changed": [
+    "Created a substantial `src/sysdolphin/baselib/sislib.c` implementation from an effectively empty file, adding includes, globals, allocator/free-list routines, text/SIS object lifecycle routines, camera/GObj-related setup, archive cleanup, and rendering-related functions shown in the diff excerpt.",
+    "Expanded `sislib.h` with concrete provisional structs: `sislib_UnkAllocData`, `sislib_UnkAllocReturn`, and `sislib_UnkAlloc3`, including fields such as `Vec4 x14`, `Vec2 x24`, `U8Vec4 x30`, `HSD_GObj* x54`, `SIS* x5C`, and linked-list pointers.",
+    "Replaced local `struct sislib_idk { float idk[40]; }` definitions in `mndeflicker.c` and `mnhyaku.c` with shared `sislib_UnkAllocReturn*` usage from `sislib.h`.",
+    "Updated menu code to access named vector fields `temp_r3_6->x24.x` and `temp_r3_6->x24.y` instead of raw float-array indices `idk[9]` and `idk[10]`.",
+    "Added and corrected multiple `HSD_SisLib_*` prototypes in `sislib.h`, including typed arguments/returns for `HSD_SisLib_803A5ACC`, `HSD_SisLib_803A5CC4`, `HSD_SisLib_803A6368`, `HSD_SisLib_803A7F0C`, `HSD_SisLib_803A8134`, and `HSD_SisLib_803A84BC`.",
+    "Changed `HSD_SisLib_8040C4B8` from `UNK_T` to `HSD_CObjDesc` and added `baselib/cobj.h` plus Dolphin matrix type includes to support the new typed declarations.",
+    "Commented out the `gobj.h` declaration `extern HSD_GObj* HSD_SisLib_804D797C` with a todo asking whether it is actually correct, while `sislib.h` introduces `HSD_SisLib_804D797C` as `sislib_UnkAlloc3*`.",
+    "Added a `PAD_STACK(4)` in `mnDeflicker_8024A4BC`, indicating a stack-layout/matching adjustment.",
+    "Added a comment in `mnhyaku.c` noting that `GET_GOBJ_USER_DATA` appears to be a common inline in `mn`."
+  ],
+  "smart_moves": [
+    "Promoted a repeated local unknown struct from menu files into a shared `sislib.h` type, reducing duplicated speculative definitions and making future users converge on one layout.",
+    "Used partial semantic structure fields (`Vec2`, `Vec4`, `U8Vec4`, `HSD_GObj*`, `SIS*`) while preserving unknown-offset names like `x24` and `x54`, which improves type safety without overclaiming final names.",
+    "Updated call sites to rely on the typed return of `HSD_SisLib_803A5ACC` instead of explicit casts from `UNK_T`/`void*`, making downstream code cleaner and more informative.",
+    "Kept uncertainty visible through `@todo` comments for names, user-data interpretation, and the questionable `HSD_SisLib_804D797C` declaration rather than pretending the structures were fully understood.",
+    "Identified a repeated `GET_GOBJ_USER_DATA` macro/inline pattern in `mn`, which is useful for later cleanup or common-header extraction.",
+    "Used `PAD_STACK(4)` as a targeted matching tactic rather than contorting local variables solely to satisfy stack layout."
+  ],
+  "decomp_lessons": [
+    "When decompiling a central baselib module, immediately update dependent callers to use the new shared structs; this validates layouts against real call sites and prevents drift from local placeholder types.",
+    "Provisional struct names such as `sislib_UnkAllocReturn` are acceptable when paired with offset-preserving field names and comments documenting uncertainty.",
+    "Replacing raw array-index access with vector fields can clarify intent and still preserve matching when the offset mapping is known, as with `idk[9]`/`idk[10]` becoming `x24.x`/`x24.y`.",
+    "Header fixes are part of matching work: typed prototypes, forward declarations, and correct includes can remove casts and make unrelated files easier to match.",
+    "Conflicting global declarations across headers should be resolved cautiously; if the correct type is uncertain, leaving an explicit todo/comment is better than exporting a likely wrong declaration.",
+    "Build failures during matching may sometimes be handled by reverting generated assembly with `tools/revert_asm.py`, according to the single issue comment in this PR."
+  ],
+  "naming_conventions": [
+    "Used `sislib_` prefix for newly introduced provisional types, e.g. `sislib_UnkAllocData`, `sislib_UnkAllocReturn`, and `sislib_UnkAlloc3`.",
+    "Kept DOL-address-style names for unmatched functions and globals, e.g. `HSD_SisLib_803A5ACC`, `HSD_SisLib_804D7978`, and `HSD_SisLib_8040C4B8`.",
+    "Used offset-like field names (`x0`, `x24`, `x54`, `x9F`) for unknown struct fields, with selective comments where behavior was suspected.",
+    "Used `fn_` names for functions that were not yet confidently assigned an `HSD_SisLib_` symbol in the header, e.g. `fn_803A60EC` and `fn_803A6FEC`.",
+    "Left explicit `@todo` comments beside uncertain names and types instead of converting them to speculative final names."
+  ],
+  "assembly_or_matching_tactics": [
+    "Added `PAD_STACK(4)` in `mnDeflicker_8024A4BC` to influence stack layout for matching.",
+    "Typed the return of `HSD_SisLib_803A5ACC` as `sislib_UnkAllocReturn*`, allowing menu call sites to remove casts and match through structured field access.",
+    "Converted placeholder float-array indexing to structured `Vec2` member access while preserving the same offsets.",
+    "Added typed function prototypes in `sislib.h` so callers compile with consistent ABI expectations.",
+    "Issue comment suggested using `tools/revert_asm.py` as a possible fix for a failed build, but the slice does not show the exact failure or resolution."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "type": "issue_comment",
+      "feedback": "Suspected the failed build could be fixed by using `tools/revert_asm.py`.",
+      "evidence": "PR issue comment excerpt: \"I haven't looked at it closely yet but I suspect the failed build can be fixed by using `tools/revert_asm.py`.\""
+    },
+    {
+      "author": "thefoxcam",
+      "type": "author_note",
+      "feedback": "Struct and variable names were expected to improve while continuing work in `mn` files.",
+      "evidence": "PR body excerpt: \"Will improve names for structs and variables as I work on files in `mn`.\""
+    }
+  ],
+  "searchable_terms": [
+    "PR1421",
+    "Match 34% of sislib",
+    "sislib",
+    "sysdolphin baselib sislib.c",
+    "sislib.h",
+    "sislib_UnkAllocData",
+    "sislib_UnkAllocReturn",
+    "sislib_UnkAlloc3",
+    "HSD_SisLib_803A5798",
+    "HSD_SisLib_803A594C",
+    "HSD_SisLib_803A5ACC",
+    "HSD_SisLib_803A5CC4",
+    "HSD_SisLib_803A6368",
+    "HSD_SisLib_803A84BC",
+    "HSD_SisLib_804D7970",
+    "HSD_SisLib_804D7974",
+    "HSD_SisLib_804D7978",
+    "HSD_SisLib_804D797C",
+    "HSD_CObjDesc",
+    "SIS",
+    "TextGlyphTexture",
+    "mndeflicker",
+    "mnhyaku",
+    "GET_GOBJ_USER_DATA",
+    "HSD_GObjGetUserData",
+    "PAD_STACK",
+    "tools/revert_asm.py"
+  ],
+  "follow_up_queries": [
+    "Check later PRs touching `sislib_UnkAllocReturn` for improved field names and confirmed semantics.",
+    "Search for later resolution of the `HSD_SisLib_804D797C` type conflict between `gobj.h` and `sislib.h`.",
+    "Search `mn` files for repeated `GET_GOBJ_USER_DATA` inline/macro patterns noted by this PR.",
+    "Inspect later sislib PRs for replacement of `sislib_UnkAllocData`, `sislib_UnkAlloc3`, and `fn_803A60EC` provisional names.",
+    "Look for commits around PR 1421 that mention `tools/revert_asm.py` to confirm whether it fixed the failed build."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

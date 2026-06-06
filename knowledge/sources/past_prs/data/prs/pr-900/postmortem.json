@@ -1,0 +1,159 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-900",
+  "pr": {
+    "number": 900,
+    "title": "Partially match `ftCo_CargoThrow`",
+    "url": "https://github.com/doldecomp/melee/pull/900",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-29T17:40:13Z",
+    "merged_at": "2023-05-29T17:48:07Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Moved most of the ftCo_CargoThrow block out of asm/melee/ft/ft_08A4.s into a new C translation unit and header, adding the CargoWait2 and CargoThrow directional callbacks for forward/back/high/low/air. The PR report shows the new file at 99.24% overall: every listed function matched 100% except ftCo_8009BF3C, which remained partially matched at 94.58% and was guarded with an ASM/MUST_MATCH fallback. Supporting changes added the new object to obj_files.mk, included ftCo_CargoThrow.h from neighboring cargo action files, tightened prototypes in ft_08A4.h, added a FighterEvent typedef, and lightly refactored ftCo_ItemThrow inline helpers to align with the same motion-transition callback pattern.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "fighter-action-callbacks",
+      "partial-match"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "cargo-throw",
+      "asm",
+      "build"
+    ]
+  },
+  "key_files": [
+    {
+      "file": "src/melee/ft/chara/ftCommon/ftCo_CargoThrow.c",
+      "role": "new C implementation for CargoWait2 and CargoThrow callbacks; 328 added lines; report says 99.24% file match"
+    },
+    {
+      "file": "src/melee/ft/chara/ftCommon/ftCo_CargoThrow.h",
+      "role": "new public header with address-commented prototypes for CargoWait2 and CargoThrow Anim/IASA/Phys/Coll callbacks"
+    },
+    {
+      "file": "asm/melee/ft/ft_08A4.s",
+      "role": "removed 526 lines of assembly corresponding to the ported CargoThrow block"
+    },
+    {
+      "file": "obj_files.mk",
+      "role": "added ftCo_CargoThrow.c.o to the build"
+    },
+    {
+      "file": "src/melee/ft/chara/ftCommon/ftCo_ItemThrow.c",
+      "role": "refactored inline motion-state helper shape and added MUST_MATCH unused stack padding around ftCo_80096250"
+    },
+    {
+      "file": "src/melee/ft/ft_08A4.h",
+      "role": "updated prototypes for ftCo_800DD724 and ftCo_800DE3FC and removed CargoThrow-local static declarations"
+    },
+    {
+      "file": "src/melee/ft/forward.h",
+      "role": "added typedef void (*FighterEvent)(Fighter* fp) for callback helper reuse"
+    }
+  ],
+  "what_changed": [
+    "Added src/melee/ft/chara/ftCommon/ftCo_CargoThrow.c and removed the corresponding CargoThrow assembly from asm/melee/ft/ft_08A4.s.",
+    "Implemented CargoWait2 callbacks: ftCo_CargoWait2_Anim calls ftCo_8008F744 then chooses ftCo_8009BC58 or ftCo_8009B518 based on x221C_b6 and ground_or_air; ftCo_CargoWait2_Phys delegates to ftCo_Damage_Phys; ftCo_CargoWait2_Coll handles ground/air transitions via ft_80082708, ft_80081D0C, ftCommon_8007D5D4, and ftCommon_8007D7FC.",
+    "Implemented directional CargoThrow callback wrappers for F/B/Hi/Lw/Air. Many IASA/Phys/Anim functions delegate directly to existing normal throw helpers such as ftCo_ThrowF_IASA, ftCo_ThrowB_Anim, ftCo_ThrowHi_Phys, and ftCo_ThrowLw_Phys.",
+    "Added helper logic for selecting cargo throw motion states from input: inlineA0 examines HSD_PAD_AB, left-stick X magnitude, facing_dir, attackhi3_stick_threshold_y, and xB0 to choose offsets +10 through +13 from fp->x2CC->x4_motion_state.",
+    "Kept ftCo_8009BF3C partially matched with an ASM bool definition under MUST_MATCH and a C/WIP version outside that mode; the report lists ftCo_8009BF3C at 94.58%.",
+    "Added ftCo_8009C02C to change motion state, refresh animation with ftAnim_8006EBA4, call ftCommon_8007E2F4(fp, 0x1FF), and notify the interacted fighter with ftCo_800DE3FC using a derived thrown motion id.",
+    "Added shared landing/air-transition helpers inlineB0 and inlineB1 that temporarily adjust facing_dir, call Fighter_ChangeMotionState with a large skip/update flag mask, restore facing_dir, and invoke ftCommon_8007E2F4.",
+    "Collision callbacks for ground cargo throws call ft_8008403C with ftCo_8009C170; the air collision callback calls ft_80082C74 with ftCo_8009C45C.",
+    "Created ftCo_CargoThrow.h and added includes for it in CargoFall, CargoJump, CargoKneebend, CargoTurn, CargoWait, and CargoWalk so neighboring cargo states can reference the new callbacks.",
+    "Refactored ftCo_ItemThrow.c inline helpers by splitting a motion-state-only helper inlineA1 from inlineA0, passing pre-offset msids instead of msid plus offset, and adding unused stack padding under MUST_MATCH."
+  ],
+  "smart_moves": [
+    "Ported the block as a dedicated ftCo_CargoThrow.c file instead of leaving cargo throw code mixed inside the broad ft_08A4.s assembly bucket.",
+    "Used thin C wrappers around existing throw routines where the assembly was simply delegating, which reduced matching risk and clarified the relation between cargo throws and normal throws.",
+    "Isolated the only non-fully-matching function, ftCo_8009BF3C, behind an ASM/MUST_MATCH fallback while still documenting a readable C/WIP structure for future work.",
+    "Factored repeated transition behavior into static inline helpers, especially the facing_dir save/restore plus Fighter_ChangeMotionState flag sequence reused by collision transition callbacks.",
+    "Added proper address-commented prototypes and a dedicated header, then included that header from adjacent cargo-state files rather than relying on broad ft_08A4 declarations.",
+    "Preserved exact-match stack behavior where needed with explicit MUST_MATCH-only unused stack arrays, as seen in ftCo_8009C02C, ftCo_8009C170, and the ftCo_ItemThrow refactor."
+  ],
+  "decomp_lessons": [
+    "For action-state files, match easy delegate callbacks first: Anim/IASA/Phys wrappers that call existing throw or damage helpers can often reach 100% quickly and shrink asm files substantially.",
+    "When one selector function resists matching, it is acceptable to keep only that function in inline ASM under MUST_MATCH while moving the rest of the file to C; this PR still achieved a 99.24% file report.",
+    "Cargo throw motion ids are derived from the character's base motion-state table, using offsets +10/+11/+12/+13 for directional cargo throws and +4/-4 style adjustments for ground/air transition variants.",
+    "Collision transition helpers often require preserving and temporarily overriding facing_dir before Fighter_ChangeMotionState, then restoring it afterward; this pattern is reusable in other throw/carry transitions.",
+    "Header cleanup matters during asm-to-C moves: once functions become real C symbols, local/static declarations should move out of catch-all headers into the new feature header, while only cross-file helpers remain in broader headers.",
+    "Unused stack padding under MUST_MATCH is a documented tactic for functions whose stack frame shape otherwise differs from the original."
+  ],
+  "naming_conventions": [
+    "New file naming follows the ftCommon action-state pattern: ftCo_CargoThrow.c and ftCo_CargoThrow.h.",
+    "Public callbacks use ftCo_CargoThrow<Direction>_<CallbackKind>, for example ftCo_CargoThrowF_Anim, ftCo_CargoThrowB_IASA, ftCo_CargoThrowHi_Phys, ftCo_CargoThrowLw_Coll, and ftCo_CargoThrowAir_Coll.",
+    "CargoWait2 callbacks are grouped with the same suffix convention: ftCo_CargoWait2_Anim, ftCo_CargoWait2_Phys, and ftCo_CargoWait2_Coll.",
+    "Unknown/internal helpers retain address-based names such as ftCo_8009BF3C, ftCo_8009C02C, ftCo_8009C170, and ftCo_8009C45C.",
+    "Header prototypes retain address comments like /* 09BE54 */ and use ftCo_GObj* gobj parameters consistently.",
+    "The new header guard uses the address-style project convention GALE01_09BE54."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `ASM bool ftCo_8009BF3C(ftCo_GObj* gobj)` with `#if !defined(MUST_MATCH) || defined(WIP)` for readable C and an `#else` nofralloc assembly body for matching builds.",
+    "Inserted `#pragma peephole on` after the inline ASM section for ftCo_8009BF3C.",
+    "Used MUST_MATCH-only dummy stack arrays such as `u8 _[16] = { 0 };` and `u8 _[8] = { 0 };` to reproduce unused stack behavior.",
+    "Split repeated motion-transition code into static inline functions so compiler inlining could reproduce the original instruction structure.",
+    "Kept literal motion-state flag combinations in Fighter_ChangeMotionState calls, including Ft_MF_SkipMatAnim, Ft_MF_SkipColAnim, Ft_MF_UpdateCmd, Ft_MF_SkipItemVis, Ft_MF_Unk19, Ft_MF_SkipModelPartVis, Ft_MF_SkipModelFlags, and Ft_MF_Unk27.",
+    "Used the ABS macro and p_ftCommonData stick-threshold fields to express the branch structure from the assembly's float comparisons."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the supplied PR context, so there is no direct reviewer feedback to extract."
+  ],
+  "searchable_terms": [
+    "pr-900",
+    "ftCo_CargoThrow",
+    "ftCo_CargoThrow.c",
+    "ftCo_CargoThrow.h",
+    "ftCo_CargoWait2_Anim",
+    "ftCo_CargoWait2_Phys",
+    "ftCo_CargoWait2_Coll",
+    "ftCo_8009BF3C",
+    "ftCo_8009C02C",
+    "ftCo_8009C170",
+    "ftCo_8009C45C",
+    "ftCo_CargoThrowF_Anim",
+    "ftCo_CargoThrowF_IASA",
+    "ftCo_CargoThrowF_Phys",
+    "ftCo_CargoThrowF_Coll",
+    "ftCo_CargoThrowB_Anim",
+    "ftCo_CargoThrowHi_Coll",
+    "ftCo_CargoThrowLw_Coll",
+    "ftCo_CargoThrowAir_Coll",
+    "ftCo_800DD724",
+    "ftCo_800DE3FC",
+    "ft_8008403C",
+    "ft_80082C74",
+    "FighterEvent",
+    "MUST_MATCH",
+    "WIP",
+    "nofralloc",
+    "unused stack",
+    "HSD_PAD_AB",
+    "p_ftCommonData",
+    "attackhi3_stick_threshold_y",
+    "cargo throw",
+    "asm-to-c"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match ftCo_8009BF3C or rename its helper logic.",
+    "Search for uses of FighterEvent after PR #900 to see whether the callback typedef became a broader convention.",
+    "Look for later cleanup of inlineA0/inlineB0 helper names in ftCo_CargoThrow.c.",
+    "Compare ftCo_ItemThrow transition helper refactors with ftCo_CargoThrow inlineB0 to reuse the facing_dir save/restore pattern."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

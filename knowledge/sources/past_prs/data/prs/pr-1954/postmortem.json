@@ -1,0 +1,186 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1954",
+  "pr": {
+    "number": 1954,
+    "title": "Implement nearly all remaining \"proxy\" functions",
+    "url": "https://github.com/doldecomp/melee/pull/1954",
+    "state": "MERGED",
+    "author": "lukechampine",
+    "created_at": "2025-09-30T02:44:40Z",
+    "merged_at": "2025-09-30T08:12:42Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large decomp-matching pass that replaced many `/// #` placeholders for simple proxy/trampoline functions with C bodies that only call one other function. The work was found with a new `table-typer dups` command, which grouped duplicated asm bodies and identified unmatched functions sharing the same opcode sequence as known proxy functions. The decomp.dev bot reported 114 new matches and +3648 matched bytes. Most changes landed in Kirby copy-ability motion callbacks, with smaller proxy implementations in ftCommon, Popo, stage files, menu, and toy code. The author deliberately left 8 proxy functions unimplemented because they lacked placeholders; follow-up comment clarified those TUs likely had not been scaffolded yet.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "proxy-functions",
+      "tooling",
+      "headers",
+      "types-structs"
+    ],
+    "systems": [
+      "fighter",
+      "kirby",
+      "popo",
+      "ftcommon",
+      "stage",
+      "menu",
+      "toy",
+      "tooling"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/chara/ftKirby/ftKb_Init.c",
+      "role": "Main implementation batch; many Kirby motion-state proxy callbacks now directly call existing shared physics, collision, animation, walk, jump, and model-scale helpers."
+    },
+    {
+      "path": "src/melee/ft/chara/ftKirby/ftKb_Init.h",
+      "role": "Added prototypes for newly implemented unnamed Kirby proxy functions such as `fn_800FE0E0` and `fn_8010B1D4`."
+    },
+    {
+      "path": "tools/table-typer/main.go",
+      "role": "Added and expanded tooling to locate duplicate function bodies and opcode-sequence candidates, including the new `dups` subcommand used to find the proxy backlog."
+    },
+    {
+      "path": "src/melee/ft/chara/ftCommon/ftCo_Attack100.c",
+      "role": "Implemented several common fighter proxy functions, including ItemScope phys and CaptureWait low callbacks."
+    },
+    {
+      "path": "src/melee/ft/chara/ftPopo/ftPp_SpecialS.c",
+      "role": "Implemented Popo special-move physics proxy callbacks."
+    },
+    {
+      "path": "src/melee/ft/chara/ftPopo/ftPp_SpecialS.h",
+      "role": "Added declarations for newly implemented Popo proxy callbacks."
+    },
+    {
+      "path": "src/melee/gr/grcorneria.c",
+      "role": "Implemented a stage proxy function forwarding to an existing Corneria helper."
+    },
+    {
+      "path": "src/melee/gr/grgarden.c",
+      "role": "Implemented stage proxy function(s); exact callees are not fully visible in the excerpt."
+    },
+    {
+      "path": "src/melee/gr/grkongo.c",
+      "role": "Implemented stage proxy function(s) and adjusted related header declaration."
+    },
+    {
+      "path": "src/melee/gr/grvenom.c",
+      "role": "Implemented stage proxy function(s) and adjusted related header declaration."
+    },
+    {
+      "path": "src/melee/gr/grzebesroute.c",
+      "role": "Implemented stage proxy function(s) and adjusted related header declaration."
+    },
+    {
+      "path": "src/melee/mn/mnmainrule.c",
+      "role": "Implemented menu proxy function and adjusted related header declaration."
+    },
+    {
+      "path": "src/melee/ty/toy.c",
+      "role": "Implemented toy-module proxy function(s)."
+    }
+  ],
+  "what_changed": [
+    "Replaced many `/// #function` placeholders with one-call C functions of the form `void name(Fighter_GObj* gobj) { callee(gobj); }` or equivalent one-argument proxy signatures.",
+    "In `ftCo_Attack100.c`, implemented proxies such as `ftCo_ItemScopeEnd_Phys -> ftCo_800CDE54`, `ftCo_ItemScopeAirEnd_Phys -> ftCo_800CDE74`, `ftCo_CaptureWaitLw_Anim -> ftCo_CaptureWaitHi_Anim`, and `ftCo_CaptureWaitLw_IASA -> fn_800DC014`.",
+    "In `ftKb_Init.c`, implemented many Kirby ground/air physics proxies using recurring callees: ground-state callbacks frequently call `ft_80084F3C`, air-state callbacks frequently call `ft_80084EEC` or `ft_80084DB0`, and selected walk/jump/collision callbacks forward to helpers such as `ftWalkCommon_800DFDDC`, `ftWalkCommon_800E0060`, `ftCo_KneeBend_Check_ShortHop`, `ftCo_Jump_Phys_Inner`, `ft_80083F88`, and `ftCo_AirCatchHit_Coll`.",
+    "Added missing includes in `ftKb_Init.c` for helpers used by newly implemented proxies: `ftCo_Jump.h`, `ftCo_KneeBend.h`, and `ftwalkcommon.h`.",
+    "Added header prototypes for newly exposed proxy implementations in Kirby and Popo headers.",
+    "Implemented smaller proxy functions across several stage/menu/toy TUs; one visible example is `grCorneria_801DFBCC` forwarding to `grCorneria_801DED50`.",
+    "Expanded `tools/table-typer` with root auto-location, updated report loading via `ninja`, enhanced `opseq` behavior, source placeholder/function definition location output, and a new `dups` command that finds duplicated asm function bodies.",
+    "Left 8 identified proxy functions unimplemented because they lacked `/// #` placeholders, including `fn_80246F0C`, `fn_802514B8`, several `un_*_OnFrame` wrappers, and related `vi_8031CAAC`/`HSD_*` callees."
+  ],
+  "smart_moves": [
+    "Used duplicated opcode sequences rather than manual browsing to find a broad class of trivial unmatched functions.",
+    "Anchored the search on a known matched proxy (`ftCl_AppealS_IASA`, which simply calls `ftCo_AppealS_IASA`) to identify functions with the same proxy-shaped asm body.",
+    "Generated proxy C by parsing assembly for the callee, then looking up the callee's type signature, reducing risk of wrong argument or return types.",
+    "Skipped functions with no `/// #` placeholder instead of guessing their location, preserving TU ownership and avoiding potentially misplaced implementations.",
+    "Added the `table-typer dups` command so the duplicate-body discovery technique is reusable for future mass matching, not just a one-off script.",
+    "Kept proxy bodies minimal and idiomatic: no extra locals or control flow, just direct forwarding to the known callee, which is the correct tactic for these 32-byte wrappers."
+  ],
+  "decomp_lessons": [
+    "Simple one-call proxy functions can be found at scale by grouping normalized asm bodies by opcode sequence and comparing matched references with unmatched candidates.",
+    "For wrappers, matching usually depends on using the exact existing callee and the correct function signature; a generated body is safer when it derives the signature from already declared code.",
+    "Do not implement functions in a TU merely because asm reveals a callee; if no placeholder exists, the TU may not have been scaffolded and file placement is not yet established.",
+    "A recurring fighter convention is that many ground physics callbacks forward to shared ground physics helpers while corresponding air callbacks forward to shared air physics helpers; this pattern can guide but should not replace asm/callee verification.",
+    "Mass proxy matching benefits from updating headers at the same time as C bodies when newly implemented functions are referenced externally or belong in existing declaration tables.",
+    "Tooling that reports both matched duplicates and unmatched duplicate candidates can convert repetitive decomp work into a searchable backlog sorted by match-byte impact."
+  ],
+  "naming_conventions": [
+    "`ftKb_*_Phys`, `ftKb_*_Anim`, `ftKb_*_IASA`, and `ftKb_*_Coll` names preserve motion-state callback suffix conventions while proxying to shared helper implementations.",
+    "Kirby copy-ability names use compact character prefixes in the existing style, e.g. `Mr`, `Lg`, `Pk`, `Kp`, `Lk`, `Ss`, `Fx`, `Ns`, `Dk`, `Sk`, `Mt`, `Pp`, and `Ms` within `ftKb_*` symbols.",
+    "Unknown proxy wrappers remain named `fn_800FE0E0`, `fn_8010B1D4`, etc. where no semantic name was introduced by the PR.",
+    "Header declarations retain address comments such as `/* 0FE0E0 */ void fn_800FE0E0(Fighter_GObj* gobj);`.",
+    "Stage proxy names retain module-prefixed address-style names like `grCorneria_801DFBCC` rather than inventing semantic names."
+  ],
+  "assembly_or_matching_tactics": [
+    "New `table-typer dups` normalizes asm function bodies by stripping labels and operands down to opcode names, then groups identical bodies to find duplicate functions.",
+    "`dups` separates matched reference functions from unmatched candidate functions using `build/GALE01/report.json`, allowing known implementations to serve as templates.",
+    "`opseq` was enhanced to accept opcode sequences from a file or comma-separated argument and to optionally list non-matching candidates with `-candidates`.",
+    "The updated opcode matching supports wildcard-like operands (`_`) and consistent operand variables, improving searches beyond literal line containment.",
+    "`loadReport` now runs `ninja -C <root>` before reading `build/GALE01/report.json`, ensuring table-typer decisions are based on the current match report.",
+    "The author used a generated-script workflow: identify duplicate proxy candidates with `table-typer dups`, parse asm to extract each callee, look up callee signature, and emit the one-call C implementation."
+  ],
+  "review_feedback": [
+    {
+      "author": "decomp-dev[bot]",
+      "summary": "Reported GALE01 matched code increased to 45.36%, a +0.09% improvement and +3648 bytes, with 114 new matched functions."
+    },
+    {
+      "author": "ribbanya",
+      "summary": "Clarified that missing `/// #` placeholders usually mean `scaffold.py` has not been run on that TU, generally because nobody has worked on it yet."
+    }
+  ],
+  "searchable_terms": [
+    "proxy functions",
+    "one-call wrappers",
+    "trampoline functions",
+    "table-typer dups",
+    "duplicate asm bodies",
+    "opseq candidates",
+    "ftCl_AppealS_IASA",
+    "ftCo_AppealS_IASA",
+    "ftKb_Init",
+    "Kirby proxy callbacks",
+    "ft_80084F3C",
+    "ft_80084EEC",
+    "ft_80084DB0",
+    "ftWalkCommon_800DFDDC",
+    "ftWalkCommon_800E0060",
+    "ftCo_Jump_Phys_Inner",
+    "ftCo_KneeBend_Check_ShortHop",
+    "ftCo_AirCatchHit_Coll",
+    "Fighter_UpdateModelScale",
+    "ftCo_ItemScopeEnd_Phys",
+    "ftCo_ItemScopeAirEnd_Phys",
+    "ftCo_CaptureWaitLw_Anim",
+    "ftCo_CaptureWaitLw_IASA",
+    "ftPp_SpecialLw_Phys",
+    "ftPp_SpecialAirLw_Phys",
+    "grCorneria_801DFBCC",
+    "scaffold.py",
+    "missing placeholders"
+  ],
+  "follow_up_queries": [
+    "Find remaining proxy functions without `/// #` placeholders after running `scaffold.py` on untouched TUs.",
+    "Run `tools/table-typer dups` with no target to rank duplicate unmatched bodies by potential matched bytes.",
+    "For a specific unmatched function, run `tools/table-typer dups <function>` to find matched proxy templates or sibling candidates.",
+    "Search for remaining placeholders whose asm body is a single call and return.",
+    "Audit newly scaffolded `un` or HSD-related TUs for the 8 proxies listed in the PR body."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

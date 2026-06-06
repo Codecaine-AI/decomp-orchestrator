@@ -1,0 +1,188 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1777",
+  "pr": {
+    "number": 1777,
+    "title": "HSD Synth matches",
+    "url": "https://github.com/doldecomp/melee/pull/1777",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-08-01T03:14:55Z",
+    "merged_at": "2025-08-01T03:27:56Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched a large slice of sysdolphin baselib synth code, adding concrete implementations and prototypes for HSD audio/SFX loading, bank management, pause/resume/check, pitch/volume/mix update helpers, and the main HSD_SynthCallback. The PR also refined synth static data layout, named several synth BSS/SBSS symbols, split data string labels in symbols.txt, and tightened Dolphin AX/DevCom/debug header types needed by the matches. decomp.dev reported +3204 bytes of matched code, 21 new 100% matches, and partial progress on HSD_SynthSFXUpdateAllVolume and HSD_Synth_80388D30.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "static-data-layout",
+      "symbol-naming",
+      "audio-synth"
+    ],
+    "systems": [
+      "src/sysdolphin/baselib/synth",
+      "src/sysdolphin/baselib/debug",
+      "src/sysdolphin/baselib/devcom",
+      "extern/dolphin/ax",
+      "config/GALE01/symbols"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/sysdolphin/baselib/synth.c",
+      "role": "Main matching work; replaced many placeholder functions with C implementations for HSD_AudioMalloc/HSD_AudioFree, SFX load/cancel/bank helpers, pause/resume/check, volume/pitch/mix update helpers, and HSD_SynthCallback."
+    },
+    {
+      "path": "src/sysdolphin/baselib/synth.static.h",
+      "role": "Added static globals, HSD_SynthSFXNode layout, SFX bank arrays, queue structs, callback pointers, and typed BSS/SBSS declarations required by synth.c."
+    },
+    {
+      "path": "src/sysdolphin/baselib/synth.h",
+      "role": "Replaced many UNK_RET/UNK_PARAMS prototypes with typed signatures and added AX include plus HSD_SynthSFXNode forward declaration."
+    },
+    {
+      "path": "config/GALE01/symbols.txt",
+      "role": "Renamed/split synth data symbols, identified BSS regions such as hsd_SynthSFXBankHead, HSD_SynthSFXNodes, hsd_SynthSFXBankNum, hsd_SynthSFXBankAREnd, and sfxGroupDataReaddressCounter."
+    },
+    {
+      "path": "extern/dolphin/include/dolphin/ax.h",
+      "role": "Corrected AXVPB linkage fields to struct _AXVPB* and changed priority from u32 to int."
+    },
+    {
+      "path": "src/sysdolphin/baselib/debug.h",
+      "role": "Added HSD_ASSERTREPORT macro that emits OSReport before asserting."
+    },
+    {
+      "path": "src/sysdolphin/baselib/devcom.h",
+      "role": "Typed HSD_DevComCancelEx as int HSD_DevComCancelEx(int, int, void*, int)."
+    }
+  ],
+  "what_changed": [
+    "Implemented HSD_AudioMalloc using OSAllocFromHeap on HSD_Synth_804D6018, with an OSReport(\"audio heap overflow.\\n\") and __assert on failure, plus HSD_AudioFree using OSFreeToHeap.",
+    "Implemented SFX load queue management: HSD_SynthSFXLoadNewProc, HSD_SynthSFXLoad, HSD_Synth_80388B0C, HSD_Synth_80388B50, and HSD_Synth_80388B60. The code uses OSDisableInterrupts/OSRestoreInterrupts around shared queue state and calls HSD_DevComRequest/HSD_DevComCancelEx.",
+    "Added bank/address helpers including HSD_Synth_80388CB0, partial HSD_Synth_80388D30, HSD_SynthSFXGroupDataReaddressCallback, HSD_SynthSFXBankDeflag, HSD_SynthSFXBankDeflagSync, and HSD_SynthSFXStopRange.",
+    "Implemented sound mode and node lifecycle helpers: HSD_Synth_80389094 returns OSGetSoundMode, HSD_Synth_803890B4 updates active node mix and calls OSSetSoundMode, and HSD_Synth_8038912C frees voices and calls driverInactivatedCallback when applicable.",
+    "Added inline helper patterns in synth.c, including stopRange for address-range voice stopping and getNode for validating an SFX handle against HSD_SynthSFXNodes[arg0 & 0x3F].",
+    "Implemented public SFX control functions HSD_SynthSFXPause, HSD_SynthSFXResume, HSD_SynthSFXCheck, HSD_SynthSFXSetVolumeFade, HSD_SynthSFXSetMix, HSD_SynthSFXUpdatePitch, HSD_SynthSFXUpdateVolume, and partial HSD_SynthSFXUpdateAllVolume.",
+    "Implemented HSD_SynthCallback, including deferred AXFreeVoice processing, an 8-node-per-callback sweep based on HSD_Synth_804D775C % 8 * 8, master clock callback invocation, and interrupt protection.",
+    "Added concrete synth static data declarations, including HSD_SynthSFXNode, HSD_SynthSFXNodes[0x40], SFX load queue entries, bank head arrays, per-user volume data, callback pointers, volatile queue/readdress counters, and audio heap/devcom state.",
+    "Updated synth.h include guards from GALE01-style names to SYSDOLPHIN_SYNTH_H and converted many previously unknown prototypes to concrete return/argument types.",
+    "Split broad synth data symbols in config/GALE01/symbols.txt into individual string labels and corrected BSS/SBSS symbol boundaries for synth bank/node storage."
+  ],
+  "smart_moves": [
+    "Header and static-layout work was done alongside function matching instead of only writing function bodies; typed AXVPB links, DevCom cancellation, callback pointers, and HSD_SynthSFXNode fields made downstream synth code expressible in C.",
+    "The PR used small static inline helpers, especially getNode and stopRange, to capture repeated compiler-shaped logic while keeping exported functions clean.",
+    "The HSD_ASSERTREPORT macro captured the common OSReport-then-assert pattern, avoiding local ad hoc code and allowing HSD_SynthSFXLoad and HSD_Synth_80388CB0 to match assertion/report behavior.",
+    "Renaming/splitting data symbols prevented broad anonymous blobs from hiding string boundaries and allowed more accurate references from matched code.",
+    "Shared audio queue and volume-update state was guarded with OSDisableInterrupts/OSRestoreInterrupts, matching the expected critical-section patterns for callback-driven audio code.",
+    "AXVPB::priority was changed to signed int, which supports loops such as for (i = 0; i < temp_r29->priority; i++) without unsigned-comparison artifacts."
+  ],
+  "decomp_lessons": [
+    "For baselib audio code, matching often depends on reconstructing static BSS/SBSS layout first; arrays like HSD_SynthSFXNodes, hsd_SynthSFXBankHead, HSD_Synth_804C2AE0, and HSD_Synth_804C2B60 clarified many pointer and index expressions.",
+    "Do not leave SDK structs as void* when linked-list traversal is visible. AXVPB next/prev needed to be struct _AXVPB* for natural list manipulation in bank defrag/free routines.",
+    "When an unknown global counter is polled or decremented asynchronously, volatile may be required; this PR marks HSD_Synth_804D772C and sfxGroupDataReaddressCounter volatile.",
+    "Callback signatures should be derived from call sites and SDK/devcom usage. The PR typed load/readdress callbacks with arguments like void*, int/s32, void*, and cancelflag.",
+    "SFX handles can encode a node slot in low bits; getNode validates arg0 > 0 and compares against node->x0 after indexing HSD_SynthSFXNodes[arg0 & 0x3F].",
+    "Volume and pitch update functions may queue work rather than directly mutate AX voice state. HSD_SynthSFXUpdateVolume links nodes through HSD_Synth_804D774C with a volume_update_pending flag.",
+    "Symbols.txt data blobs should be split once evidence shows string boundaries; this can unlock correct local label references without pretending unnamed strings have stable semantic names.",
+    "Partial matches can still be valuable if the surrounding type work is correct: decomp.dev reported HSD_SynthSFXUpdateAllVolume at 77.61% and HSD_Synth_80388D30 at 71.05% rather than full matches."
+  ],
+  "naming_conventions": [
+    "Use HSD_SynthSFX* for named synth SFX APIs and helpers when behavior is known, e.g. HSD_SynthSFXLoad, HSD_SynthSFXPause, HSD_SynthSFXUpdatePitch, HSD_SynthSFXBankDeflag.",
+    "Keep address-style names such as HSD_Synth_80388B60 and HSD_Synth_804D772C when semantics are still unclear or not renamed in the PR.",
+    "Use lower camel-case for some recovered global variables that appear to have original-like names: hsd_SynthSFXBankHead, hsd_SynthSFXBankNum, hsd_SynthSFXBankAREnd, sfxGroupDataReaddressCounter, driverInactivatedCallback, driverMasterClockCallback, driverPauseCallback.",
+    "Use struct HSD_SynthSFXNode for the reconstructed node type and field placeholders like x0, x14, x2C, x44 where member semantics are only partially understood.",
+    "For config symbols, prefer lbl_8040xxxx for split local data/string labels when no semantic symbol name is known, rather than preserving one broad HSD_Synth_8040xxxx blob."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used PAD_STACK in functions where stack shape mattered, including HSD_Synth_8038912C, HSD_SynthSFXUpdateAllVolume, and HSD_SynthCallback.",
+    "Used static inline helpers to reproduce codegen while avoiding extra exported symbols: stopRange, getNode, and freeVoices.",
+    "Used bool enabled = OSDisableInterrupts(); followed by OSRestoreInterrupts(enabled); to match critical-section codegen around shared synth state.",
+    "Preserved float constants as expressions like 1 / 255.0F * arg0 and 1 / 255.0 * arg1 where the literal form mattered for matching.",
+    "Used ARRAY_SIZE(HSD_SynthSFXNodes) in HSD_Synth_803890B4 while other loops explicitly use 0x40, reflecting local codegen needs.",
+    "Used pointer casts for hardware/AX address interpretation, e.g. reading a u32 through &voice[0]->pb.addr.currentAddressHi in stopRange.",
+    "Kept certain functions partially unmatched rather than forcing suspicious code: HSD_SynthSFXUpdateAllVolume and HSD_Synth_80388D30 were reported as improved but not 100%."
+  ],
+  "review_feedback": [
+    {
+      "source": "decomp.dev bot",
+      "feedback": "GALE01 matched code increased to 37.21%, +0.08%, +3204 bytes."
+    },
+    {
+      "source": "decomp.dev bot",
+      "feedback": "Reported 21 new 100% matches in main/sysdolphin/baselib/synth, including HSD_SynthCallback, HSD_SynthSFXLoad, HSD_Synth_80388B60, HSD_SynthSFXSetVolumeFade, HSD_Synth_8038912C, HSD_SynthSFXStopRange, HSD_SynthSFXUpdatePitch, HSD_SynthSFXBankDeflag, HSD_SynthSFXCheck, HSD_AudioMalloc, HSD_AudioFree, and HSD_Synth_80389094."
+    },
+    {
+      "source": "decomp.dev bot",
+      "feedback": "Reported 2 improvements in unmatched functions: HSD_SynthSFXUpdateAllVolume reached 77.61% and HSD_Synth_80388D30 reached 71.05%."
+    },
+    {
+      "source": "PR metadata",
+      "feedback": "No human review comments were present in the provided slice."
+    }
+  ],
+  "searchable_terms": [
+    "HSD Synth matches",
+    "sysdolphin baselib synth",
+    "HSD_AudioMalloc",
+    "HSD_AudioFree",
+    "HSD_SynthSFXLoad",
+    "HSD_SynthSFXLoadNewProc",
+    "HSD_Synth_80388B60",
+    "HSD_Synth_80388CB0",
+    "HSD_Synth_80388D30",
+    "HSD_SynthSFXGroupDataReaddressCallback",
+    "HSD_SynthSFXBankDeflag",
+    "HSD_SynthSFXBankDeflagSync",
+    "HSD_Synth_80389094",
+    "HSD_Synth_803890B4",
+    "HSD_Synth_8038912C",
+    "HSD_SynthSFXStopRange",
+    "HSD_SynthSFXPause",
+    "HSD_SynthSFXResume",
+    "HSD_SynthSFXCheck",
+    "HSD_SynthSFXSetVolumeFade",
+    "HSD_SynthSFXSetMix",
+    "HSD_SynthSFXUpdatePitch",
+    "HSD_SynthSFXUpdateVolume",
+    "HSD_SynthSFXUpdateAllVolume",
+    "HSD_SynthCallback",
+    "HSD_SynthSFXNode",
+    "HSD_SynthSFXNodes",
+    "hsd_SynthSFXBankHead",
+    "hsd_SynthSFXBankNum",
+    "hsd_SynthSFXBankAREnd",
+    "sfxGroupDataReaddressCounter",
+    "driverInactivatedCallback",
+    "driverMasterClockCallback",
+    "HSD_ASSERTREPORT",
+    "HSD_DevComCancelEx",
+    "AXVPB priority",
+    "AXVPB next prev",
+    "OSDisableInterrupts",
+    "OSRestoreInterrupts",
+    "OSGetSoundMode",
+    "OSSetSoundMode",
+    "AXFreeVoice",
+    "AXSetVoiceSrcRatio",
+    "PAD_STACK"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match HSD_SynthSFXUpdateAllVolume after this 77.61% partial implementation.",
+    "Find later PRs that finish HSD_Synth_80388D30 or rename HSD_Synth_80388DC8/HSD_Synth_80388E08.",
+    "Search for additional uses or refinements of struct HSD_SynthSFXNode fields x0, flags, voice_count, x2C, x44, x48, and x4C.",
+    "Search for other baselib modules that reuse HSD_ASSERTREPORT or need OSReport-before-assert matching.",
+    "Check whether AXVPB callback/userContext fields are further typed in later Dolphin AX header updates."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

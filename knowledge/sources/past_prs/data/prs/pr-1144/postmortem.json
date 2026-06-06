@@ -1,0 +1,127 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1144",
+  "pr": {
+    "number": 1144,
+    "title": "Clean up `lbrefract`",
+    "url": "https://github.com/doldecomp/melee/pull/1144",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-01-28T14:06:24Z",
+    "merged_at": "2024-01-28T14:07:33Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Cleaned up the lb refract module by collapsing several split lbrefract assembly/data fragments into one asm/melee/lb/lbrefract.s, replacing src/melee/lb/lbrefract3.c with a cleaner src/melee/lb/lbrefract.c, and updating build/config metadata to treat lbrefract as one unit. The new C file contains cleaned implementations for atan2f, acosf, asinf, atanf, and a local inverse-square-root helper, using explicit bitwise float handling, lookup-table constants, and MetroTRK intrinsics where needed for matching.",
+  "change_classification": {
+    "primary_type": "module-cleanup",
+    "categories": [
+      "code-change",
+      "assembly-consolidation",
+      "build-config-cleanup",
+      "source-cleanup",
+      "symbol-metadata"
+    ],
+    "systems": [
+      "lb",
+      "lbrefract",
+      "asm",
+      "math",
+      "config",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "asm/melee/lb/lbrefract.s",
+    "asm/melee/lb/lbrefract1.s",
+    "asm/melee/lb/lbrefract2.s",
+    "asm/melee/lb/lbrefract3.s",
+    "asm/melee/lb/lbrefract_data.s",
+    "asm/melee/lb/lbrefract_shared_001.s",
+    "src/melee/lb/lbrefract.c",
+    "src/melee/lb/lbrefract3.c",
+    "configure.py",
+    "obj_files.mk",
+    "config/GALE01/symbols.txt"
+  ],
+  "what_changed": [
+    "Added a single consolidated asm/melee/lb/lbrefract.s containing the lbrefract text and data that had previously been split across lbrefract1.s, lbrefract2.s, lbrefract3.s, lbrefract_data.s, and lbrefract_shared_001.s.",
+    "Deleted the old split assembly files asm/melee/lb/lbrefract1.s, asm/melee/lb/lbrefract2.s, asm/melee/lb/lbrefract3.s, asm/melee/lb/lbrefract_data.s, and asm/melee/lb/lbrefract_shared_001.s.",
+    "Deleted src/melee/lb/lbrefract3.c and added src/melee/lb/lbrefract.c with cleaned C implementations for atan2f, acosf, asinf, atanf, and static helper lbRefract_80022DF8.",
+    "Updated configure.py from separate NonMatching objects for lbrefract_data.c, lbrefract1.c, and lbrefract2.c to a single NonMatching object for melee/lb/lbrefract.c.",
+    "Updated obj_files.mk to replace several individual lbrefract object entries with one $(BUILD_DIR)/asm/melee/lb/lbrefract.s.o entry.",
+    "Updated config/GALE01/symbols.txt so atanf_lookup remains at .rodata:0x803B7300 but is annotated with data:float."
+  ],
+  "smart_moves": [
+    "Reduced object-file fragmentation by making lbrefract a single module in both the assembly layout and build configuration.",
+    "Kept fragile matching details explicit in the cleaned C: float bit reinterpretation macros, sign-bit checks, exact bit-pattern threshold constants, and MetroTRK intrinsics such as __frsqrte and __fnmsubs.",
+    "Replaced many magic external float labels from lbrefract3.c with clearer standard math constants and local macros where the evidence supported it, such as M_PI, M_PI_2, BITWISE_PI_2, NAN, and INF.",
+    "Converted the arctangent lookup data into a static const float atanf_lookup table in source and recorded the symbol metadata as data:float, improving readability and future tooling/type recovery.",
+    "Preserved known symbol names such as lbRefract_80021CE8, lbRefract_8002219C, lbRefract_PObjLoad, and lbRefract_80022DF8 while improving file organization."
+  ],
+  "decomp_lessons": [
+    "When a module has accumulated multiple temporary asm fragments, consolidating them into one module-level asm file can simplify obj_files.mk and configure.py without changing symbol boundaries.",
+    "For math-library decomp work, exact float bit patterns and sign handling may be clearer and safer as named macros than as scattered extern float labels.",
+    "Lookup tables should get explicit symbol metadata such as data:float when known; this helps future decompilation and searchability.",
+    "Do not prematurely hide matching-sensitive operations: intrinsics like __frsqrte and __fnmsubs, bitwise float casts, and explicit polynomial/lookup indexing are useful evidence for exact codegen.",
+    "Replacing a numbered file such as lbrefract3.c with the canonical module name lbrefract.c makes the source tree align better with the original .file \"lbrefract.c\" seen in assembly."
+  ],
+  "naming_conventions": [
+    "Canonical module source name: src/melee/lb/lbrefract.c instead of numbered lbrefract3.c.",
+    "Module function names retain the lbRefract_800xxxxx address-based convention where semantic names are not known.",
+    "Local helper lbRefract_80022DF8 remains static and address-named because no stronger semantic name is evidenced.",
+    "Bit-pattern macros use uppercase names such as SIGN_BIT, BITWISE_PI_2, BITWISE_INF, BITWISE_THRESHOLD_0, and GET_SIGN_BIT.",
+    "Lookup table name atanf_lookup is preserved and typed as float in symbols.txt."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used __frsqrte followed by three Newton-Raphson refinement steps in lbRefract_80022DF8, matching the inverse-square-root pattern visible in the assembly.",
+    "Used BITWISE(f), SIGNED_BITWISE(f), and GET_SIGN_BIT(f) macros to preserve exact IEEE-754 sign-bit behavior in atan2f and atanf.",
+    "Used exact hexadecimal float bit constants for thresholds and classifications in atanf, including BITWISE_0_5, BITWISE_1_0, BITWISE_2_0, and BITWISE_INF.",
+    "Used __fnmsubs in atanf's lookup-based range reduction to preserve fused negative multiply-subtract code generation.",
+    "Kept the atanf polynomial evaluation explicitly ordered and protected with clang-format off comments, suggesting expression shape mattered for readability or matching.",
+    "Used MSL_TrigF_80400770 and MSL_TrigF_80400774 arrays as sources for NAN and INF rather than inventing new constants."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "lbrefract",
+    "lbRefract",
+    "lbRefract_80021CE8",
+    "lbRefract_8002219C",
+    "lbRefract_80022DF8",
+    "lbRefract_PObjLoad",
+    "atan2f",
+    "atanf",
+    "acosf",
+    "asinf",
+    "atanf_lookup",
+    "MSL_TrigF_80400770",
+    "MSL_TrigF_80400774",
+    "__frsqrte",
+    "__fnmsubs",
+    "BITWISE_PI_2",
+    "GET_SIGN_BIT",
+    "SIGN_BIT",
+    "obj_files.mk",
+    "configure.py",
+    "symbols.txt",
+    "data:float",
+    "lbrefract1.s",
+    "lbrefract2.s",
+    "lbrefract3.s",
+    "lbrefract_data.s",
+    "lbrefract_shared_001.s"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that fully match or rename lbRefract_80022DF8, lbRefract_80021CE8, or lbRefract_8002219C.",
+    "Search for subsequent changes to atanf_lookup or the atan2f/atanf matching strategy.",
+    "Check whether later PRs split lbrefract.s back into source functions or replace more assembly with C."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,128 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1799",
+  "pr": {
+    "number": 1799,
+    "title": " Remove unused unions in lb/types.h and it/types.h",
+    "url": "https://github.com/doldecomp/melee/pull/1799",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-08-06T03:16:28Z",
+    "merged_at": "2025-08-06T03:21:20Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Removed unused anonymous union layers from item and library type headers, then updated item code to use the remaining direct fields and bitfield views. The cleanup converted Item::xDC0 from flag32 to u32, simplified flag32 to expose only its flags struct, flattened several lb/types.h bitfield wrappers, and adjusted call sites in item collision/behavior code. decomp.dev reported net matching improvements in main/melee/it/it_2725, especially it_80277040, it_802765BC, and it_802742F4, with one small regression in it_80276934.",
+  "change_classification": {
+    "primary_type": "header type cleanup with decomp-matching call-site adjustments",
+    "categories": [
+      "headers",
+      "types-structs",
+      "bitfields",
+      "decomp-matching",
+      "cleanup"
+    ],
+    "systems": [
+      "item",
+      "library",
+      "collision"
+    ]
+  },
+  "key_files": [
+    "src/melee/it/types.h",
+    "src/melee/lb/types.h",
+    "src/melee/it/it_2725.c",
+    "src/melee/it/itcoll.c",
+    "src/melee/it/it_26B1.c",
+    "src/melee/it/items/itchicorita.c"
+  ],
+  "what_changed": [
+    "In src/melee/it/types.h, struct flag32 no longer contains an anonymous union of flags and word; it now exposes only a nested flags bitfield struct.",
+    "In Item, xDA4 and xDA8 were simplified from anonymous unions to xDA4_word and xDA8_short, and xDC0 was changed from flag32 to u32.",
+    "In src/melee/lb/types.h, HitCapsule offset +43 bitfields were flattened by removing the union containing x43 and individual x43_b* bits.",
+    "In src/melee/lb/types.h, ECBFlagStruct was flattened by removing the raw byte union member and leaving direct b0, b1234, b5, b6, and b7 bitfields.",
+    "In src/melee/lb/types.h CollData, two float members x11C_f32 and x120_f32 were removed from the shown anonymous struct region.",
+    "Call sites that previously used xDC0.word now use xDC0 directly, including masks, OR assignments, and zeroing in it_802750E8 and itcoll.c.",
+    "Call sites that previously hand-shifted xDC8_word.word were changed to use named bitfield members such as xDC8_word.flags.xF and xDC8_word.flags.x17.",
+    "it_802742F4 was locally simplified: the cast on Item_8026849C(item_gobj) was removed, xDC8 flag update became xDC8_word.flags.xF |= 1 << ftLib_80086BE0(gobj), temporary HSD_JObj variables were removed, and HSD_JObjClearFlagsAll now receives HSD_JObjGetChild(item_gobj->hsd_obj).",
+    "it_80276408 was wrapped in #pragma push / #pragma dont_inline on / #pragma pop, indicating a matching-sensitive inlining control.",
+    "A stale commented-out flag32 cast line was removed from itchicorita.c."
+  ],
+  "smart_moves": [
+    "The PR did not just remove union members in headers; it also updated all visible call sites that depended on the old .word access pattern, keeping the type cleanup consistent.",
+    "Replacing manual shifts and masks like ((word >> 0xD) & 0xF) with xDC8_word.flags.xF made the intended bitfield use clearer and appears to have improved matching in multiple it_2725 functions.",
+    "Changing Item::xDC0 to a plain u32 avoided carrying a flag32 abstraction where the code only needed whole-word mask operations.",
+    "The cleanup preserved named bitfield access for xDC8_word where subfields are actively used, rather than flattening everything indiscriminately.",
+    "The dont_inline pragma on it_80276408 was a targeted matching tactic, not a broad compiler-setting change."
+  ],
+  "decomp_lessons": [
+    "Anonymous unions are useful only when both views are actively needed. If call sites only use one view, removing the unused alias can simplify headers and sometimes improve codegen/matching.",
+    "When a field is semantically a mask word, model it as u32 and write direct bitwise operations instead of forcing it through a flag wrapper.",
+    "When a field is semantically a packed bitfield with known subranges, named bitfields like flags.xF and flags.x17 can replace brittle shift/mask expressions and document intent.",
+    "Header cleanup can require small source-level rewrites in unrelated-looking item functions because anonymous union member names leak into call-site syntax.",
+    "Matching improvements may come from both type-shape changes and expression-shape changes; the bot report credited improvements in it_80277040, it_802765BC, and it_802742F4 after these edits.",
+    "Use function helpers such as HSD_JObjGetChild when the helper expresses the target access pattern better than manually declaring temporaries, but verify exact behavior because the diff excerpt alone does not explain the prior null-check shape."
+  ],
+  "naming_conventions": [
+    "Item bitfield submembers use x-prefixed hexadecimal/bit-offset style names such as x0, xF, x13, x17, and x1A.",
+    "Whole-word item fields retain suffixes describing the access width or role, such as xDA4_word, xDA8_short, xDC0, xDC4, and xDC8_word.",
+    "HitCapsule byte +43 bitfields use offset-plus-bit names x43_b0 through x43_b7.",
+    "ECBFlagStruct bitfields use compact bit names b0, b1234, b5, b6, and b7.",
+    "Unmatched item functions keep address-style names such as it_802742F4, it_802765BC, it_80276934, and it_80277040."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use named bitfield writes to preserve compact flag updates, e.g. xDC8_word.flags.xF |= 1 << ftLib_80086BE0(gobj), instead of reconstructing shifted whole-word expressions.",
+    "Use named bitfield reads for packed fields, e.g. xDC8_word.flags.x17, instead of (word >> 7U) & 3.",
+    "Use direct u32 mask operations for Item::xDC0 after converting it away from flag32, e.g. xDC0 |= 1, xDC0 |= 2, xDC0 = 0, and return xDC0 & mask.",
+    "Apply #pragma dont_inline locally around matching-sensitive helpers such as it_80276408 rather than changing broader compilation behavior.",
+    "Minor source expression changes, such as removing unnecessary casts or using truthiness checks for floats, were part of the diff and correlated with improved unmatched-function percentages, though the exact causal relationship is not proven by the available evidence."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided slice.",
+    "decomp.dev bot reported three unmatched-function improvements in main/melee/it/it_2725: it_80277040 improved from 50.21% to 80.19% (+249 bytes), it_802765BC from 38.81% to 60.59% (+194 bytes), and it_802742F4 from 87.00% to 95.00% (+32 bytes).",
+    "decomp.dev bot reported one small regression: it_80276934 in main/melee/it/it_2725 moved from 61.02% to 60.59% (-4 bytes)."
+  ],
+  "searchable_terms": [
+    "unused unions",
+    "anonymous union removal",
+    "lb/types.h",
+    "it/types.h",
+    "flag32",
+    "xDC0",
+    "xDC8_word",
+    "xDC8_word.flags.xF",
+    "xDC8_word.flags.x17",
+    "Item xDA4_word",
+    "Item xDA8_short",
+    "HitCapsule x43_b0",
+    "ECBFlagStruct",
+    "CollData",
+    "it_802742F4",
+    "it_802750E8",
+    "it_80276408",
+    "it_802765BC",
+    "it_80276934",
+    "it_80277040",
+    "itcoll.c",
+    "itchicorita.c",
+    "HSD_JObjGetChild",
+    "HSD_JObjClearFlagsAll",
+    "pragma dont_inline",
+    "decomp.dev GALE01"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching flag32 or xDC8_word to see whether more whole-word aliases were removed or restored.",
+    "Check whether the it_80276934 -4 byte regression was later recovered.",
+    "Search for remaining .word accesses on bitfield wrapper structs after this cleanup.",
+    "Audit other anonymous unions in item and library headers where only one view is used.",
+    "Compare CollData layout changes around x11C_f32 and x120_f32 with later struct-size or offset corrections."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

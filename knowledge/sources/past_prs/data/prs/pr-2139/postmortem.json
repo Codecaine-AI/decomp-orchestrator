@@ -1,0 +1,179 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2139",
+  "pr": {
+    "number": 2139,
+    "title": "result screen (gmresult) matches",
+    "url": "https://github.com/doldecomp/melee/pull/2139",
+    "state": "MERGED",
+    "author": "malvarezcastillo",
+    "created_at": "2026-01-27T21:19:31Z",
+    "merged_at": "2026-01-28T06:53:12Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched a large portion of the result-screen game-mode translation unit by replacing multiple gmresult.c asm stubs with C, adding local result-stat table structs, and adjusting gmresult headers/static declarations. The work centered on stats-list filtering/rendering, text creation and formatting for result stats, KO/time display routines, and related helper functions. The PR also exposed a regression/prototype discussion around fn_80174A60 returning u8: the author claimed it matched that function but caused caller code to emit extra clrlwi masking, while reviewers pushed back that the explanation was likely overconfident and that inline implementation issues, stack misalignments, and float/double discrepancies were more plausible areas to revisit. The merge was accepted despite the regression because breaking a same-TU function in an unlinked TU was considered acceptable.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "fix",
+      "headers",
+      "types-structs",
+      "result-screen",
+      "prototype-tradeoff",
+      "inline-loop-matching"
+    ],
+    "systems": [
+      "game-mode",
+      "gmresult",
+      "result-screen",
+      "stats-ui"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/gm/gmresult.c",
+      "role": "Primary implementation file; added most matched C for result-screen functions and local stats-related structs/tables."
+    },
+    {
+      "path": "src/melee/gm/gmresult.h",
+      "role": "Header updates accompanying gmresult signature/type changes."
+    },
+    {
+      "path": "src/melee/gm/gmresult.static.h",
+      "role": "Static declaration update for gmresult data."
+    }
+  ],
+  "what_changed": [
+    "Added include of gm/gm_1601.h to gmresult.c, suggesting newly matched code needed declarations from the gm_1601 area.",
+    "Introduced local StatsEntry and StatsList structs in gmresult.c, with fields for stat value, check callback, get callback, mode, count, and entries pointer.",
+    "Implemented fn_801743C4 as a stat-entry visibility/check helper that accepts entries with nonnegative literal values, rejects failed check callbacks, rejects missing get callbacks, and rejects zero get results.",
+    "Added static find_nth_nonzero, documented as finding the nth nonzero byte in an array using an 8x unrolled lbz/lbzu-shaped loop.",
+    "Implemented fn_80174468 to populate result-screen stat text, including special handling for list mode 2, inlined unrolled nonzero-byte search logic, HSD_SisLib text formatting, and label/value scaling.",
+    "Added ResultsStatsInfo and static lbl_8046E190[4], then implemented fn_801748EC to locate stats info by mode or return a per-index mode-2 entry.",
+    "Implemented fn_80174A60 with u8 return to count visible entries for non-mode-2 stat lists and return list->count directly for mode 2.",
+    "Added static StatsList lbl_803D6878 with modes 0, 1, 2, and 3 and placeholder NULL entry pointers in the diff excerpt.",
+    "Implemented fn_80174B4C to clear existing per-player stats text, choose the current stats list, compute scroll/start positions, maintain page/scroll flags, count visible entries, create up to 10 visible text rows, and delegate per-entry formatting to fn_80174468.",
+    "Refined fn_8017556C by changing float constants to F-suffixed literals, adding a stack-color pointer temporary, and applying text scale/color after formatting.",
+    "Added additional result display routines in the excerpt, including fn_801756E0 and fn_80175880, for score/KO/time-style text behavior with grey-out handling and result-dependent branches.",
+    "Updated gmresult.h and gmresult.static.h, but the provided excerpt does not show the full exact header edits beyond indicating signature/static declaration changes."
+  ],
+  "smart_moves": [
+    "Used explicit local structs with offsets and padding comments to encode the inferred result-stat table layout without overgeneralizing it into wider project headers.",
+    "Kept the 8x unrolled search pattern visible in C, including first lbz versus subsequent lbzu behavior, which directly targets the compiler's load/update instruction shape.",
+    "Inlined the nonzero-byte search logic inside fn_80174468 where needed rather than only calling the helper, preserving the assembly pattern for call sites that likely had inline code.",
+    "Used goto labels and deliberately shaped control flow for matching, including null_get/return_true in fn_801743C4 and found labels in the unrolled search blocks.",
+    "Preserved float precision choices with F-suffixed literals such as 0.0F, -30.0F, 0.05F, 0.0546875F, 0.08F, and 0.11F, reflecting sensitivity to float/double codegen.",
+    "Introduced stack temporaries like GXColor spC and a pointer variable before HSD_SisLib_803A74F0, likely to reproduce stack layout and argument-addressing behavior.",
+    "Accepted a net matching improvement even though one same-TU, not-yet-linked function regressed, following project tolerance for local regressions when the overall TU is still in progress."
+  ],
+  "decomp_lessons": [
+    "Callback return types can affect caller codegen: a u8 return prototype may cause the compiler to insert clrlwi masking at call sites, while an int prototype may not. Validate both callee and caller matches before treating a prototype as final.",
+    "Do not overstate impossible matching tradeoffs based only on an AI-generated explanation. Reviewers noted that claims like 'fundamentally impossible' or 'well-known tradeoff' are often signs the search is stuck, not proof.",
+    "When an inline-heavy function regresses, inspect inline implementation shape, stack alignment, and float-versus-double constants before concluding that the prototype conflict is unavoidable.",
+    "For unlinked or still-in-progress TUs, a regression in an already-unmatched function in the same TU can be acceptable if the PR produces significant net matching progress.",
+    "Result-screen UI code is sensitive to text-object allocation order, render callbacks, alignment fields, position signs, and per-label scaling calls; preserve these operations in the apparent original order.",
+    "Mode-specific data tables may require different struct views or lookup paths: this PR handled normal stat lists by scanning mode values and mode 2 by indexing lbl_8046E190.",
+    "For PowerPC loop matching, manually unrolling a loop and controlling pointer preincrement can be necessary to produce an lbz-first, lbzu-after pattern.",
+    "If an AI assistant gets stuck trying to match assembly too literally, a suggested recovery tactic from review was to restart context and reason from the function's semantics before returning to instruction-level matching."
+  ],
+  "naming_conventions": [
+    "Unidentified functions retained project-style address names such as fn_801743C4, fn_80174468, fn_801748EC, fn_80174A60, fn_80174B4C, fn_801756E0, and fn_80175880.",
+    "Inferred local structs used descriptive PascalCase names: StatsEntry, StatsList, ResultsStatsInfo.",
+    "Static data labels retained address-label names such as lbl_803D6878, lbl_8046E190, lbl_8046DBE8, lbl_804D3F8C, lbl_804D3FA0, and lbl_804D3FA4.",
+    "Temporary match-shaping variables used generic names visible in the diff, including loop_i, loop_n, loop_outer, loop_ptr, loop_val, const_zero, const_neg30, new_var, new_var2, and skip.",
+    "Struct fields with unknown semantics retained offset-style names such as x0, x1, x4, x44C, x94, x6, and x28."
+  ],
+  "assembly_or_matching_tactics": [
+    "Manual 8x unrolling was used to match a byte scan loop: first load with *ptr, then repeated *++ptr loads to mimic lbz followed by lbzu instructions.",
+    "Goto labels were used for exact branch structure, including early exits from unrolled search blocks and common epilogues.",
+    "Function pointer casts were used at call sites where the generic StatsEntry callback type did not match the desired argument/return interpretation, such as casting entry->check or entry->get for u8 slot calls.",
+    "F-suffixed float constants were used to avoid accidental double constants and preserve floating-point instruction/codegen behavior.",
+    "Stack-managed comments and explicit stack temporaries around GXColor suggest stack layout was part of the match strategy.",
+    "The u8 return type on fn_80174A60 was selected because it reportedly matched that function's own assembly, even though it may have affected caller codegen.",
+    "The code used intentionally awkward constructs such as `if (me && me) {}` in the excerpt, likely as a match-shaping artifact; no semantic justification is evident from the PR context."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "feedback": "Questioned the author's regression explanation, saying the inline function implementations were likely the problem and could perhaps be merged, with stack misalignments and a float/double discrepancy also present.",
+      "impact": "Did not block merge; framed future work around inline-shape and float/stack investigation rather than accepting the prototype-conflict explanation as final."
+    },
+    {
+      "author": "ribbanya",
+      "feedback": "Requested that future pasted Claude output be placed in markdown quotes.",
+      "impact": "Process/style guidance for clearer PR discussion."
+    },
+    {
+      "author": "ribbanya",
+      "feedback": "Stated that breaking a match of a function in the same TU is generally acceptable when the TU is not linked.",
+      "impact": "Provided rationale for merging despite the reported fn_80177B7C regression."
+    },
+    {
+      "author": "itsgrimetime",
+      "feedback": "Warned that AI claims like 'fundamentally impossible' or 'well-known trade-off' usually mean the model is stuck, not that the match is impossible.",
+      "impact": "Encouraged future decomp work to restart context, step back to function semantics, and avoid matching the ASM too literally when stuck."
+    }
+  ],
+  "searchable_terms": [
+    "pr-2139",
+    "gmresult",
+    "result screen",
+    "gmresult.c",
+    "gmresult.h",
+    "gmresult.static.h",
+    "StatsEntry",
+    "StatsList",
+    "ResultsStatsInfo",
+    "fn_801743C4",
+    "find_nth_nonzero",
+    "fn_80174468",
+    "fn_801748EC",
+    "fn_80174A60",
+    "fn_80174B4C",
+    "fn_8017556C",
+    "fn_801756E0",
+    "fn_80175880",
+    "fn_80177B7C regression",
+    "u8 return type",
+    "clrlwi r3 r3 24",
+    "caller prototype",
+    "inline functions",
+    "stack misalignment",
+    "float double discrepancy",
+    "lbz lbzu",
+    "8x unrolled loop",
+    "HSD_Text",
+    "HSD_SisLib_803A6368",
+    "HSD_SisLib_803A6B98",
+    "HSD_SisLib_803A7548",
+    "HSD_SisLib_803A5ACC",
+    "HSD_SisLib_803A6754",
+    "HSD_SisLib_803A74F0",
+    "MatchEnd",
+    "ResultsData",
+    "ResultsPlayerData",
+    "lbl_8046DBE8",
+    "lbl_8046E190",
+    "lbl_803D6878",
+    "gm_1601.h",
+    "gmresultplayer.c"
+  ],
+  "follow_up_queries": [
+    "Investigate whether fn_80177B7C can be recovered by changing inline helper structure rather than changing fn_80174A60's return type.",
+    "Compare caller prototypes for fn_80174A60 in gmresultplayer.c and gmresult.h to determine whether u8 versus int is truly required globally.",
+    "Audit fn_80174468 for opportunities to merge duplicated inlined find_nth_nonzero code while preserving the original inline assembly shape.",
+    "Check float constants in gmresult.c for accidental double codegen, especially around HSD_SisLib text positioning and scaling calls.",
+    "Review stack layout around GXColor temporaries in fn_8017556C, fn_801756E0, and fn_80175880 for avoidable stack misalignments.",
+    "Once more surrounding result-screen symbols are known, rename StatsEntry, StatsList fields, ResultsStatsInfo fields, and lbl_803D6878 entries with semantic names."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,129 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1049",
+  "pr": {
+    "number": 1049,
+    "title": "Match the initial GObj callback functions in some of the vi files",
+    "url": "https://github.com/doldecomp/melee/pull/1049",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-01-08T18:29:07Z",
+    "merged_at": "2024-01-08T18:45:55Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the first small callback functions in several melee/vi translation units by replacing leading assembly stubs with simple C wrappers. Most matched functions take an HSD_GObj*, load gobj->hsd_obj, cast it to HSD_JObj*, and call HSD_JObjAnimAll. One vi0601 callback simply forwards to un_8031CAAC. The PR added new vi source/header files and inserted their C object files before the remaining asm objects in obj_files.mk so only the newly matched functions moved out of assembly.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "build-system"
+    ],
+    "systems": [
+      "melee/vi",
+      "sysdolphin/baselib",
+      "obj_files.mk"
+    ]
+  },
+  "key_files": [
+    "src/melee/vi/vi0402.c",
+    "src/melee/vi/vi0601.c",
+    "src/melee/vi/vi1201v1.c",
+    "src/melee/vi/vi1201v2.c",
+    "src/melee/vi/vi1202.c",
+    "src/melee/vi/vi0402.h",
+    "src/melee/vi/vi0601.h",
+    "src/melee/vi/vi1201v1.h",
+    "src/melee/vi/vi1201v2.h",
+    "src/melee/vi/vi1202.h",
+    "src/melee/vi/vi.h",
+    "obj_files.mk",
+    "asm/melee/vi/vi0402.s",
+    "asm/melee/vi/vi0601.s",
+    "asm/melee/vi/vi1201v1.s",
+    "asm/melee/vi/vi1201v2.s",
+    "asm/melee/vi/vi1202.s"
+  ],
+  "what_changed": [
+    "Removed the matched leading assembly implementation of un_8031D6E4 from asm/melee/vi/vi0402.s and added src/melee/vi/vi0402.c with a C implementation calling HSD_JObjAnimAll((HSD_JObj*) gobj->hsd_obj).",
+    "Removed un_8031E6CC and un_8031E6EC from asm/melee/vi/vi0601.s and added C implementations: un_8031E6CC calls un_8031CAAC, while un_8031E6EC animates the HSD_JObj stored in the GObj.",
+    "Removed un_8031F990 and un_8031F9B4 from asm/melee/vi/vi1201v1.s and added equivalent C callbacks in src/melee/vi/vi1201v1.c.",
+    "Removed un_803204C0 and un_803204E4 from asm/melee/vi/vi1201v2.s and added equivalent C callbacks in src/melee/vi/vi1201v2.c.",
+    "Removed un_8032110C, un_80321130, and un_80321154 from asm/melee/vi/vi1202.s and added equivalent C callbacks in src/melee/vi/vi1202.c.",
+    "Added per-file headers declaring the newly matched functions and including <sysdolphin/baselib/gobj.h> for HSD_GObj.",
+    "Added src/melee/vi/vi.h with a declaration for un_8031CAAC(void), used by vi0601.c.",
+    "Updated obj_files.mk to compile the new C objects before the corresponding remaining asm objects for vi0402, vi0601, vi1201v1, vi1201v2, and vi1202."
+  ],
+  "smart_moves": [
+    "Targeted very small, repeated callback patterns first: load the HSD object from offset 0x28 of the GObj and call HSD_JObjAnimAll. This converted multiple functions with low semantic risk.",
+    "Kept the remaining unmatched functions in their existing asm files, avoiding a larger rewrite of each vi translation unit.",
+    "Placed each new C object immediately before the corresponding asm object in obj_files.mk, preserving section/order expectations while peeling off only the matched leading symbols.",
+    "Used the existing baselib types HSD_GObj and HSD_JObj rather than raw offset arithmetic, making the callback intent explicit while still matching the observed assembly.",
+    "Added local headers for each vi file so future decompilation work can include stable prototypes for these callbacks."
+  ],
+  "decomp_lessons": [
+    "A GObj callback whose assembly is just lwz r3, 0x28(r3) followed by HSD_JObjAnimAll can be expressed as HSD_JObjAnimAll((HSD_JObj*) gobj->hsd_obj).",
+    "When a file begins with a few matched functions followed by unmatched assembly, add a C object before the asm object rather than moving the whole file at once.",
+    "Tiny wrapper functions are useful decompilation footholds in large vi files: they reduce asm while introducing correct headers and object ordering for future matches.",
+    "If one callback is only a direct call-through to another existing symbol, a void wrapper such as un_8031E6CC calling un_8031CAAC can replace the prologue/call/epilogue assembly.",
+    "Preserve unknown address-based symbol names when no better semantic names are evidenced; this PR did not rename un_8031D6E4-style symbols."
+  ],
+  "naming_conventions": [
+    "New vi headers use lowercase include guards matching the file name pattern, such as _vi0402_h_, _vi0601_h_, _vi1201v1_h_, _vi1201v2_h_, and _vi1202_h_.",
+    "Unknown functions remain in the un_<address> style, for example un_8031D6E4, un_8031E6EC, un_8031F990, un_803204C0, and un_8032110C.",
+    "Per-translation-unit vi source/header filenames mirror the existing assembly filenames: vi0402, vi0601, vi1201v1, vi1201v2, and vi1202.",
+    "Function declarations in the new headers omit parameter names, using forms such as void un_8032110C(HSD_GObj*);."
+  ],
+  "assembly_or_matching_tactics": [
+    "Matched the repeated PowerPC pattern: function prologue, lwz r3, 0x28(r3), branch-and-link to HSD_JObjAnimAll, function epilogue.",
+    "Mapped the lwz from offset 0x28 of the incoming GObj to the typed field access gobj->hsd_obj.",
+    "Used an explicit cast from HSD_GObj object payload to HSD_JObj* before calling HSD_JObjAnimAll.",
+    "Matched a simple forwarding wrapper in vi0601 where the body only calls un_8031CAAC and returns.",
+    "Deleted only the matched symbols from the asm files, leaving the next global symbols such as un_8031D708, un_8031E710, un_8031F9D8, un_80320508, and un_80321178 in assembly."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR1049",
+    "vi-matches",
+    "melee/vi",
+    "GObj callback",
+    "HSD_GObj",
+    "HSD_JObj",
+    "HSD_JObjAnimAll",
+    "gobj->hsd_obj",
+    "un_8031D6E4",
+    "un_8031E6CC",
+    "un_8031E6EC",
+    "un_8031F990",
+    "un_8031F9B4",
+    "un_803204C0",
+    "un_803204E4",
+    "un_8032110C",
+    "un_80321130",
+    "un_80321154",
+    "un_8031CAAC",
+    "vi0402",
+    "vi0601",
+    "vi1201v1",
+    "vi1201v2",
+    "vi1202",
+    "obj_files.mk",
+    "asm-to-c"
+  ],
+  "follow_up_queries": [
+    "Find remaining vi GObj callbacks that load gobj->hsd_obj and call HSD_JObjAnimAll.",
+    "Inspect remaining assembly symbols after un_8031D708, un_8031E710, un_8031F9D8, un_80320508, and un_80321178 for similar wrapper patterns.",
+    "Search for other direct wrapper functions that only call un_8031CAAC or related vi helpers.",
+    "Look for opportunities to replace address-based un_ names with semantic names once surrounding vi behavior is understood."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

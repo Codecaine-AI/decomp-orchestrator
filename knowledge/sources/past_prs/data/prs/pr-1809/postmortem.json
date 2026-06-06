@@ -1,0 +1,142 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1809",
+  "pr": {
+    "number": 1809,
+    "title": "Match & link gmstamina, gmhomerun",
+    "url": "https://github.com/doldecomp/melee/pull/1809",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-08-08T02:34:39Z",
+    "merged_at": "2025-08-08T02:41:09Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched and linked the Stamina and Home-Run Contest game-mode objects by replacing placeholder/nonmatching functions with C implementations, adding their BSS/SBSS split ranges, and marking both gmstamina.c and gmhomerun.c as Matching in configure.py. The PR also improved PlayerInitData naming by identifying offset 0x14 as hp for stamina mode and propagated that name through related gm code.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "linking",
+      "headers",
+      "struct-field-naming",
+      "splits"
+    ],
+    "systems": [
+      "game-mode",
+      "stamina-mode",
+      "home-run-contest",
+      "config",
+      "melee-core",
+      "menu-types"
+    ]
+  },
+  "key_files": [
+    "configure.py",
+    "config/GALE01/splits.txt",
+    "src/melee/gm/gmstamina.c",
+    "src/melee/gm/gmstamina.h",
+    "src/melee/gm/gmhomerun.c",
+    "src/melee/mn/types.h",
+    "src/melee/gm/gm_1601.c",
+    "src/melee/gm/gm_16AE.c",
+    "src/melee/gm/gm_17C0.c"
+  ],
+  "what_changed": [
+    "Changed configure.py entries for melee/gm/gmstamina.c and melee/gm/gmhomerun.c from Object(NonMatching, ...) to Object(Matching, ...).",
+    "Added explicit BSS/SBSS ownership for gmstamina and gmhomerun in config/GALE01/splits.txt: gmstamina gained .bss 0x804975F8-0x80497618, gmhomerun gained .bss 0x80497618-0x80497758 and .sbss 0x804D68F8-0x804D6900, and gm_1BA8 ranges were shifted accordingly.",
+    "Implemented gmstamina functions previously left as placeholders: gm_801B9600, fn_801B96E8, gm_801B97C4, and fn_801B9850.",
+    "Added a static gmstamina state object at gm_804975F8 containing a u16 counter, per-player elimination flags, and per-player slowdown timers.",
+    "Implemented gmhomerun function gm_801B98E8, including CSS setup, cache manipulation for Sandbag, stage_id assignment, and timer/update logic using gm_804D68F8/gm_804D68F9.",
+    "Converted gmhomerun globals from extern declarations to real definitions: VsModeData gm_80497618 and static u8 gm_804D68F8/gm_804D68F9.",
+    "Removed an unnecessary function-pointer cast in gm_803DF198_MinorScenes by changing `(void (*)(MinorScene*)) gm_801B98E8` to `gm_801B98E8`.",
+    "Renamed PlayerInitData field x14 to hp in src/melee/mn/types.h and updated users in gm_1601.c, gm_16AE.c, gm_17C0.c, and gmstamina.c.",
+    "Updated gmstamina.h prototypes from UNK_RET/UNK_PARAMS placeholders to concrete signatures, including HSD_GObj* for fn_801B96E8."
+  ],
+  "smart_moves": [
+    "The PR did not only match function bodies; it also linked the objects by assigning the newly identified BSS/SBSS ranges to the correct source files and moving the residual ranges off gm_1BA8.",
+    "Renaming PlayerInitData.x14 to hp was supported by multiple call sites: stamina initialization writes 150, gm_16AE passes it to Player_SetOtherStamina, and gm_17C0 labels the related value as HP/stamina.",
+    "The gmstamina implementation models match-ending behavior through explicit per-slot eliminated flags and a team-aware remaining-player count, preserving team-rule handling instead of simply counting active slots.",
+    "The temporary slowdown behavior after a stamina knockout was captured with per-player timers and gm_SetGameSpeed transitions from 0.4F back to 1.0F.",
+    "The Home-Run Contest implementation materialized previously extern storage as actual owned globals/statics, which aligns with the split changes and makes the object link cleanly.",
+    "Header cleanup replaced placeholder.h in gmstamina.h with platform.h and forward declarations, reducing unknown-type leakage in public prototypes."
+  ],
+  "decomp_lessons": [
+    "When matching a source file that owns previously lumped BSS/SBSS, update splits.txt at the same time; otherwise the object may compile but not link at the correct addresses.",
+    "Struct field names should be propagated across all users once identified. Here, PlayerInitData offset 0x14 became hp and all accesses in stamina setup and player initialization were updated consistently.",
+    "Game-mode matching often requires both function decompilation and global data ownership fixes; gmhomerun needed gm_801B98E8 plus definitions for gm_80497618, gm_804D68F8, and gm_804D68F9.",
+    "Concrete function prototypes in headers are part of matching cleanup. Replacing UNK_RET/UNK_PARAMS with typed signatures helps reveal correct includes and call-site casts.",
+    "A cast in a data table can often be removed after the callee prototype is corrected, as shown by the MinorScene callback entry for gm_801B98E8.",
+    "For stamina-like modes, field semantics can be inferred from literals and API use: hp was initialized to 150 and passed into Player_SetOtherStamina."
+  ],
+  "naming_conventions": [
+    "PlayerInitData.x14 was renamed to hp with the comment `hit points, for stamina mode`.",
+    "The gmstamina public functions retained address-based names: gm_801B9600, fn_801B96E8, gm_801B97C4, fn_801B9850.",
+    "The gmhomerun global VsModeData kept its address-style name gm_80497618.",
+    "Small gmhomerun SBSS flags/timers were defined as static u8 globals with address-style names gm_804D68F8 and gm_804D68F9.",
+    "The local pointer to gm_80497618 in gm_801B98E8 was named `vs`, reflecting its VsModeData type.",
+    "The local pointer returned from gm_801A427C(scene) in gm_801B98E8 was named `css`, reflecting CSSData."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used PAD_STACK(4) in gm_801B9600 and fn_801B96E8, indicating stack-padding was needed to match generated assembly.",
+    "Represented gm_804975F8 as a static anonymous struct with explicit field sizes and array dimensions to match the 0x20-byte BSS region.",
+    "Used bool arrays and u16 arrays in the stamina state structure to express per-player flags/timers while preserving layout-sensitive storage.",
+    "Preserved hexadecimal constants where they appear behaviorally significant, such as 0x64 timer thresholds, stage_id 0x54, GObj creation arguments 0xF and 0x11, and proc priority 0x15.",
+    "Replaced magic 0x96 stamina HP initialization with decimal 150 after identifying the PlayerInitData field as hp.",
+    "Matched Home-Run Contest setup by directly editing the game cache: setting entries[1].char_id to CHKIND_SANDBAG, entries[1].color to 0, and game_cache->stage_id to 0x54."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR context.",
+    "The only activity evidence is the merged PR metadata and diff; there is no human review feedback excerpt to analyze."
+  ],
+  "searchable_terms": [
+    "pr-1809",
+    "r-burns",
+    "gmstamina",
+    "gmhomerun",
+    "Match & link gmstamina, gmhomerun",
+    "gm_801B9600",
+    "fn_801B96E8",
+    "gm_801B97C4",
+    "fn_801B9850",
+    "gm_801B98E8",
+    "gm_804975F8",
+    "gm_80497618",
+    "gm_804D68F8",
+    "gm_804D68F9",
+    "PlayerInitData",
+    "hp",
+    "Player_SetOtherStamina",
+    "Player_GetStocks",
+    "Player_GetTeam",
+    "Player_UpdateMatchFrameCount",
+    "gm_SetGameSpeed",
+    "HSD_GObjProc_8038FD54",
+    "GObj_Create",
+    "VsModeData",
+    "CSSData",
+    "GameCache",
+    "CHKIND_SANDBAG",
+    "stage_id 0x54",
+    "config/GALE01/splits.txt",
+    "Object(Matching)",
+    "BSS",
+    "SBSS",
+    "PAD_STACK"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename remaining PlayerInitData fields x10, x12, x18, x1C, or x20.",
+    "Search for subsequent cleanup of gmstamina address-named functions gm_801B9600, fn_801B96E8, gm_801B97C4, and fn_801B9850.",
+    "Search for later Home-Run Contest PRs that name gm_804D68F8, gm_804D68F9, or gm_80497618.",
+    "Check whether gm_1BA8 BSS/SBSS split ownership remains stable after this PR.",
+    "Look for PRs replacing PAD_STACK usage in gmstamina with cleaner source patterns."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

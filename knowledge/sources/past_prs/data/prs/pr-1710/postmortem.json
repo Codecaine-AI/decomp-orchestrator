@@ -1,0 +1,169 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1710",
+  "pr": {
+    "number": 1710,
+    "title": "/ef work (eflib could still use some love)",
+    "url": "https://github.com/doldecomp/melee/pull/1710",
+    "state": "MERGED",
+    "author": "AaronB-Hub",
+    "created_at": "2025-07-20T00:13:41Z",
+    "merged_at": "2025-07-20T06:35:39Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large effect-system decompilation pass that replaced many /ef stubs with C in efasync.c, efsync.c, and especially eflib.c, while tightening effect, particle, JObj, GObj, and fighter/item type declarations needed by those matches. The PR also exposed an enum-width matching issue: attempts to use FighterKind caused mwcc to treat it as int, so reviewers recommended keeping affected FighterKind-like parameters as s8 for now rather than using the global -enum min option.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "prototype-fix",
+      "effect-system"
+    ],
+    "systems": [
+      "effect",
+      "baselib",
+      "fighter",
+      "item",
+      "stage",
+      "game-mode"
+    ]
+  },
+  "key_files": [
+    "src/melee/ef/efasync.c",
+    "src/melee/ef/eflib.c",
+    "src/melee/ef/efsync.c",
+    "src/melee/ef/eflib.h",
+    "src/melee/ef/efasync.h",
+    "src/melee/ef/efsync.h",
+    "src/melee/ef/types.h",
+    "src/melee/ef/forward.h",
+    "src/melee/ef/inlines.h",
+    "src/sysdolphin/baselib/psappsrt.h",
+    "src/sysdolphin/baselib/particle.h",
+    "src/sysdolphin/baselib/jobj.h",
+    "src/sysdolphin/baselib/gobj.h",
+    "src/melee/ft/ftlib.c",
+    "src/melee/ft/ftlib.h",
+    "src/melee/ft/ftdata.h",
+    "src/melee/it/types.h"
+  ],
+  "what_changed": [
+    "Implemented a very large efAsync_80063930 switch over effect gfx IDs, replacing stub markers and routing cases through efLib helpers such as efLib_8005C814, efLib_8005C9FC, efLib_8005CAB0, efLib_8005CB34, efLib_8005CD2C, efLib_8005CF40, and hsd_8039EFAC.",
+    "Added efAsync static data for effect data-table archives and symbols, including strings such as EfCoData.dat, effCommonDataTable, EfMrData.dat, effMarioDataTable, and a 51-entry efAsync_803C025C table mapping effect data files to data-table names.",
+    "Implemented additional efAsync routines: efAsync_8006729C, efAsync_8006730C, efAsync_8006737C, efAsync_8006744C, efAsync_80067624, efAsync_80067688, and efAsync_Spawn.",
+    "Implemented many eflib.c functions and callbacks, including lifecycle functions efLib_8005B4B8, efLib_8005B704, efLib_8005B780, efLib_DestroyAll, efLib_PauseAll, efLib_ResumeAll, spawning helpers from efLib_8005C1B4 through efLib_8005D044, and many Effect callback/update functions through efLib_8005FCD8.",
+    "Implemented efSync_Spawn as a variadic effect-spawn entry point and updated its header prototype from a loose int-returning declaration to void* efSync_Spawn(s32 gfx_id, HSD_GObj* arg_gobj, ...).",
+    "Added ef/inlines.h with GET_EFFECT(gobj), including an M2CTX-specific cast form around HSD_GObjGetUserData.",
+    "Refined ef/types.h: Effect now records gobj, parent_gobj, xC as HSD_JObj*, x10 as efLib_UnkCallback taking Effect*, transform as Vec3, and documented size 0x2C; ef_UnkStruct2 and EffectDesc received clearer layouts; ef_UnkStruct3 and _struct_efAsync_803C025C_0xC were introduced.",
+    "Refined baselib particle/SRT structures in psappsrt.h: UnkGeneratorMember now has x20_unk and Vec3 x24 instead of separate x24/x28/x2C floats, UnkGeneratorStruct has x4_kind and adjusted fill, and UnkGeneratorStruct2 was added.",
+    "Updated baselib particle.h prototypes for several hsd_8039xxxx functions from UNK_RET/UNK_PARAMS to concrete void or typed signatures used by the /ef code.",
+    "Added offset comments to HSD_Joint fields in jobj.h and annotated possible effect GObj list slots x2C and x30 in gobj.h.",
+    "Touched fighter, item, stage, and game-mode callers/types to align with the new effect prototypes and enum-width constraints."
+  ],
+  "smart_moves": [
+    "Used centralized efLib helper functions to express repeated effect construction patterns instead of duplicating raw particle/JObj setup in every efAsync switch case.",
+    "Preserved matching-sensitive variadic behavior by passing and consuming a va_list-like void* in several helpers, while exposing public spawn APIs as variadic where appropriate.",
+    "Added explicit struct offsets and sizes around Effect, EffectDesc, ef_UnkStruct3, HSD_Joint, and particle generator structs, making subsequent /ef and baselib matching work easier to audit.",
+    "Introduced GET_EFFECT in ef/inlines.h with an M2CTX branch, keeping decomp-context casts isolated rather than sprinkling conditional casts throughout the effect code.",
+    "Kept questionable discoveries as comments instead of overclaiming names, e.g. Effect.x28 is only annotated as possible update control and ef_UnkStruct2 is flagged with uncertainty.",
+    "Backed away from replacing s8 fighter-kind parameters with FighterKind enum where it harmed matching, rather than forcing a broader compiler flag that could destabilize many other matches."
+  ],
+  "decomp_lessons": [
+    "Do not assume a C enum type will match the original storage width. In this PR, FighterKind as an enum compiled as int, while the asm appeared to require s8 in some call paths.",
+    "mwcc has an -enum min option that may make enums use smaller storage, but applying it globally affects all enums and can break many existing matches; local s8 declarations are safer until the project is ready for a global policy change.",
+    "For variadic spawn/factory code, helper prototypes may need to accept a va_list-like pointer or void* to preserve call/stack behavior even when the logical API is variadic.",
+    "Effect and particle work depends heavily on correct cross-system headers: baselib JObj/GObj/particle prototypes and structs may need to be corrected before /ef functions can match cleanly.",
+    "When building large switch-based effect spawn functions, exact constant types and signedness matter: the diff uses explicit U suffixes, s8 parameters, f64 temporaries for M_PI/M_PI_2 decisions, and Vec3 copies before helper calls.",
+    "Comments documenting uncertainty are useful in decomp PRs when field purpose is inferred from one function but not yet proven globally."
+  ],
+  "naming_conventions": [
+    "Unresolved effect-library symbols kept address-style names such as efLib_8005C814, efLib_8005F990, efAsync_80063930, and efSync_Spawn.",
+    "Data-table string symbols use address-style static names such as efAsync_803BFD68 and efAsync_803C025C until better names are known.",
+    "Structs with unknown provenance use generated names that include symbol and size context, e.g. _struct_efAsync_803C025C_0xC and _struct_efLib_80458EE0_0x8.",
+    "Local variables in newly decompiled code remain descriptive-but-mechanical names such as jobj_1, jobj_2, vec3_1, unkgen_struct_1, unkgen_member_1, ret_obj, f32_1, and f64_1.",
+    "Known or semi-known baselib particle names borrow MexTK remarks, e.g. GeneratorAppSRT, ptclGen, and Particle, but the C identifiers remain UnkGeneratorMember, UnkGeneratorStruct, and UnkGeneratorStruct2.",
+    "Affected fighter-kind parameters were named ft_kind while remaining typed as s8, with commented-out FighterKind versions left as evidence of the attempted type improvement."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used PAD_STACK(0x20) in efAsync_80063930 to control stack layout.",
+    "Used an #if 1 alternate signature for efAsync_80063930 that takes void* vlist, with the natural variadic version and va_start preserved in the disabled branch, indicating a matching workaround around variadic lowering.",
+    "Copied incoming Vec3 arguments to stack locals before calling helper constructors where the asm likely used stack temporaries.",
+    "Used f64 temporaries for constants such as M_PI, M_PI_2, and 2 * M_PI before setting JObj rotations, matching common mwcc float/double behavior around math constants.",
+    "Used explicit casts through GET_JOBJ, GET_FIGHTER, Effect*, and UnkGeneratorStruct* to guide codegen and field access.",
+    "Used exact small integer types and signedness in headers, including s8 for some fighter-kind-like APIs and u8 for HSD_GObj_804D7849.",
+    "Replaced generic UNK_RET/UNK_PARAMS baselib prototypes with concrete signatures where needed so calls in /ef decompile with correct argument passing and return handling."
+  ],
+  "review_feedback": [
+    {
+      "author": "AaronB-Hub",
+      "feedback": "Reported remaining errors and suspected FighterKind enum width was causing the issue; asked whether FighterKind could be forced to s8 instead of int."
+    },
+    {
+      "author": "r-burns",
+      "feedback": "Said there was no known way to force only FighterKind to s8 and recommended switching affected FighterKind types back to s8 for now."
+    },
+    {
+      "author": "r-burns",
+      "feedback": "Noted mwcc -enum min appears to treat FighterKind as s8, but applies to all enums and would likely break many current matches, making it hard to adopt immediately."
+    },
+    {
+      "author": "ribbanya",
+      "feedback": "Mentioned a similar pattern in lblanguage where enums declared as int were treated by asm as s8 in certain cases, suggesting the same phenomenon might be involved."
+    }
+  ],
+  "searchable_terms": [
+    "PR1710",
+    "ef work",
+    "eflib",
+    "efasync",
+    "efsync",
+    "efAsync_80063930",
+    "efAsync_Spawn",
+    "efSync_Spawn",
+    "efLib_8005B4B8",
+    "efLib_8005C814",
+    "efLib_8005C9FC",
+    "efLib_8005CAB0",
+    "efLib_8005CB34",
+    "efLib_8005CD2C",
+    "efLib_8005CF40",
+    "efLib_DestroyAll",
+    "efLib_PauseAll",
+    "efLib_ResumeAll",
+    "Effect",
+    "EffectDesc",
+    "GET_EFFECT",
+    "UnkGeneratorMember",
+    "UnkGeneratorStruct",
+    "UnkGeneratorStruct2",
+    "HSD_Joint",
+    "HSD_GObj_804D7849",
+    "FighterKind",
+    "s8 enum",
+    "mwcc -enum min",
+    "EfCoData.dat",
+    "effCommonDataTable",
+    "effMarioDataTable",
+    "JOBJ_USE_QUATERNION",
+    "PAD_STACK",
+    "va_list"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename efLib_8005C814, efLib_8005C9FC, efLib_8005CAB0, or efAsync_80063930.",
+    "Search for later adoption or rejection of mwcc -enum min in the melee project.",
+    "Search for FighterKind parameters that remain typed as s8 due to enum-width matching issues.",
+    "Investigate whether Effect.x28 update-control comment was later confirmed or renamed.",
+    "Compare later psappsrt.h or particle.h changes for final names of UnkGeneratorMember and UnkGeneratorStruct."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

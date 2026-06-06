@@ -1,0 +1,132 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1864",
+  "pr": {
+    "number": 1864,
+    "title": "sysdolphin particle matches",
+    "url": "https://github.com/doldecomp/melee/pull/1864",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-08-22T19:50:19Z",
+    "merged_at": "2025-08-22T20:01:53Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched several previously stubbed sysdolphin baselib particle/debug-support routines, mainly in particle.c, and tightened related prototypes in particle.h. The PR also moved OSCreateThread's declaration from the OSThread.c local declarations into the public Dolphin OSThread header, and corrected gm_80165388's argument types to u16/u8/u8/s32, matching the newly implemented hsd_80398310 signature pattern. The largest implementation was baselib_mfspr, a switch over PowerPC special-purpose register numbers using MWERKS_GEKKO inline assembly and OSReport fallback for unsupported registers.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "prototype-correction",
+      "inline-assembly",
+      "baselib-implementation"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "particle",
+      "dolphin-os",
+      "game-mode"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/particle.c",
+    "src/sysdolphin/baselib/particle.h",
+    "extern/dolphin/include/dolphin/os/OSThread.h",
+    "extern/dolphin/src/dolphin/os/OSThread.c",
+    "src/melee/gm/gm_1601.c",
+    "src/melee/gm/gm_1601.h"
+  ],
+  "what_changed": [
+    "Added particle.h as an include in particle.c and added required dependencies for MCC/FIOQuery, baselib gobj/cobj helpers, GX link setup, and MetroTRK ppc register names.",
+    "Implemented hsd_80392528(Event) as a small wrapper around fn_80392480(arg0, 0x80), guarded with #pragma push/#pragma dont_inline on/#pragma pop.",
+    "Implemented hsd_80393A04 as a boolean check around external state hsd_804D78A0 and FIOQuery(), clearing hsd_804D78A0 when FIOQuery returns 0.",
+    "Implemented hsd_80397DA4(OSContext*) by creating a local OSThread, starting fn_80397814 with a static 0x1000-byte stack buffer, and calling OSResumeThread.",
+    "Implemented baselib_mfspr(int spr) with many PowerPC SPR cases under MWERKS_GEKKO inline assembly, returning the selected register value and reporting unsupported SPR numbers via OSReport.",
+    "Implemented fn_803982E4(HSD_GObj*, int unused) to set the current camera object, call fn_80392934, and then hsd_8039254C.",
+    "Implemented hsd_80398310(u16, u8, u8, u32) to create a GObj, load a zeroed HSD_CObjDesc, attach the CObj, set up a GX link, register an event callback through hsd_80392528, initialize particle/event state via fn_80392A08(4, 1, 0), and return the created GObj.",
+    "Refined particle.h prototypes from UNK_RET/UNK_PARAMS to concrete signatures for fn_80392480, fn_80392A08, fn_80392A3C, fn_80397814, baselib_mfspr, fn_803982E4, and hsd_80398310.",
+    "Added OSCreateThread declaration to extern/dolphin/include/dolphin/os/OSThread.h and removed the redundant/non-public declaration from OSThread.c.",
+    "Changed gm_80165388 in gm_1601.c and gm_1601.h from four s32 arguments to u16, u8, u8, s32."
+  ],
+  "smart_moves": [
+    "Promoted OSCreateThread to the public OSThread header instead of leaving a one-off source-local declaration, allowing particle.c to call it without duplicating extern declarations.",
+    "Used exact-width argument types such as u16 and u8 for GObj creation-style APIs, improving ABI and callsite fidelity compared with broad s32 placeholders.",
+    "Preserved compiler behavior for hsd_80392528 with an explicit dont_inline pragma around a tiny wrapper, a common matching tactic for functions that would otherwise be optimized away or reshaped.",
+    "Isolated PowerPC SPR inline assembly behind #ifdef MWERKS_GEKKO, keeping host/tooling builds from trying to compile Gekko-specific assembly while preserving matching behavior for the target compiler.",
+    "Used named MetroTRK/ppc_reg.h SPR aliases where the compiler required them, while documenting suspicious cases with comments such as HID2 and USDA not producing or recognizing expected codegen.",
+    "Kept static data sizes explicit, such as hsd_804CF8E8[0x1000] and the zeroed HSD_CObjDesc, which helps match stack/thread setup and data layout."
+  ],
+  "decomp_lessons": [
+    "When a matched function needs an SDK routine from another translation unit, prefer moving the prototype into the correct public SDK header over adding local declarations in unrelated source files.",
+    "Small wrapper functions may require CodeWarrior pragmas such as #pragma dont_inline to preserve separate function boundaries and match the original binary.",
+    "Replacing UNK_RET/UNK_PARAMS with concrete prototypes can unlock additional matches by making call signatures, implicit casts, and register usage line up.",
+    "GObj factory functions in this area appear to use narrow types for the first three arguments: u16 for object kind/class-like IDs and u8 for link/priority-like fields, with a wider callback/link priority argument.",
+    "For PowerPC special-purpose register helpers, matching may require a large switch with direct inline assembly mnemonics rather than a generic mfspr instruction for every case.",
+    "Thread bootstrap code can depend on exact stack buffer size and top-of-stack pointer arithmetic; this PR uses a static 0x1000 buffer and passes hsd_804CF8E8 + 0xFFC to OSCreateThread."
+  ],
+  "naming_conventions": [
+    "Unidentified baselib functions retain address-based names such as hsd_80392528, hsd_80393A04, hsd_80397DA4, baselib_mfspr, fn_803982E4, and hsd_80398310.",
+    "Static data symbols use address-style lbl_/hsd_ names, including lbl_8040BF10 for the unsupported-SPR format string, lbl_8040BF70 for a zeroed HSD_CObjDesc, hsd_804CF8E8 for a thread stack, and hsd_804D78A0 for FIO state.",
+    "Function prototypes in headers keep the address comment prefix format, e.g. /* 397E0C */ int baselib_mfspr(int);",
+    "Event callback functions use the Event typedef where known, replacing generic unknown-parameter placeholders."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used #pragma push, #pragma dont_inline on, and #pragma pop around hsd_80392528 to force a non-inlined wrapper call to fn_80392480(arg0, 0x80).",
+    "Implemented baselib_mfspr with a register local variable named result and a switch over numeric SPR IDs to produce the desired inline assembly sequence.",
+    "Guarded inline assembly with #ifdef MWERKS_GEKKO so target-specific asm is only active under the intended compiler.",
+    "Used CodeWarrior-style inline asm forms such as mfxer, mflr, mfctr, mfdsisr, mfdar, mfdec, mfsprg, mfibatu, mfibatl, mfdbatu, mfdbatl, and mfspr result, symbolic_register.",
+    "Used SPR_HID2 and SPR_USDA aliases from MetroTRK/ppc_reg.h for cases where direct symbolic names were noted as problematic in comments.",
+    "Used an OSReport fallback with the exact literal string \"unsupported no. of special purpose register (%d).\" and returned 0 for unsupported registers."
+  ],
+  "review_feedback": [
+    "No review comments were included in the provided PR context, and the human text excerpt was empty. There is no evidence of reviewer-requested changes or discussion."
+  ],
+  "searchable_terms": [
+    "PR1864",
+    "sysdolphin particle matches",
+    "src/sysdolphin/baselib/particle.c",
+    "src/sysdolphin/baselib/particle.h",
+    "hsd_80392528",
+    "fn_80392480",
+    "hsd_80393A04",
+    "FIOQuery",
+    "hsd_804D78A0",
+    "hsd_80397DA4",
+    "fn_80397814",
+    "OSCreateThread",
+    "OSResumeThread",
+    "OSThread.h",
+    "baselib_mfspr",
+    "MWERKS_GEKKO",
+    "MetroTRK/ppc_reg.h",
+    "SPR_HID2",
+    "SPR_USDA",
+    "OSReport",
+    "fn_803982E4",
+    "HSD_CObjSetCurrent",
+    "hsd_80398310",
+    "GObj_Create",
+    "HSD_CObjLoadDesc",
+    "HSD_GObjObject_80390A70",
+    "GObj_SetupGXLinkMax",
+    "gm_80165388",
+    "u16 u8 u8 s32"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or further type hsd_80398310, fn_803982E4, hsd_80397DA4, or baselib_mfspr.",
+    "Search for other GObj creation functions taking u16, u8, u8, and a priority/link argument to confirm the signature pattern used here.",
+    "Check whether hsd_804D78A0 and FIOQuery state handling are later given semantic names.",
+    "Look for subsequent review or cleanup around the MWERKS_GEKKO inline assembly cases for HID2 and USDA.",
+    "Search for additional PRs that move SDK function declarations from source-local prototypes into extern/dolphin include headers."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

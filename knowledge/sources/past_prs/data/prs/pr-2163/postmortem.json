@@ -1,0 +1,128 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2163",
+  "pr": {
+    "number": 2163,
+    "title": "Some gm17C0 matches",
+    "url": "https://github.com/doldecomp/melee/pull/2163",
+    "state": "MERGED",
+    "author": "Duglas560",
+    "created_at": "2026-02-10T13:38:57Z",
+    "merged_at": "2026-02-10T20:01:41Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched several previously stubbed functions in src/melee/gm/gm_17C0.c, mainly around 1P/adventure-mode setup, trophy unlock state bookkeeping, adventure stage slot lookup, and match-end stock/status handling. The PR also refined related prototypes and struct layouts in gm_17C0.h, gm/types.h, and mn/types.h so argument and callback types better reflect observed usage.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-layout",
+      "prototype-correction"
+    ],
+    "systems": [
+      "game-mode",
+      "melee-core",
+      "adventure-mode",
+      "trophy",
+      "player-status",
+      "menu-rules"
+    ]
+  },
+  "key_files": [
+    "src/melee/gm/gm_17C0.c",
+    "src/melee/gm/gm_17C0.h",
+    "src/melee/gm/types.h",
+    "src/melee/mn/types.h"
+  ],
+  "what_changed": [
+    "Implemented fn_8017DD7C, which populates extra PlayerInitData entries from Unk1PData_x24 character data, setting character kind, slot type, stocks, team, color, CPU level, and several unknown fields, with a special CKIND_GKOOPS bitfield case.",
+    "Implemented gm_8017E280 as a small table updater over lbl_804706D8, accumulating unlock-state-like values for a u16 key and returning the stored u8 value or -1 if no slot is available.",
+    "Implemented fn_8017E3C8 to iterate lbl_804706D8 and call Trophy_SetUnlockState for valid entries.",
+    "Implemented gm_8017E440 to return the current adventure slot unless gm_801677F8 rejects the slot/x4 pair, in which case it returns 4.",
+    "Implemented gm_8017E4C4 as a sentinel-terminated lookup over gm_803DE650, returning the matching gm_803DE650_t entry for a u8 key or NULL.",
+    "Implemented gm_8017E7A0 to handle arg0 == 1 by calling Player_LoseStock(0), ifStatus_802F6948(0), and ifStatus_802F6E3C(0).",
+    "Changed lbl_804706D8_t field layout from two s16 fields to s16 x0 plus u8 x2 and u8 x3, matching the byte-sized counter/state behavior used by gm_8017E280 and fn_8017E3C8.",
+    "Added includes for <melee/if/ifstatus.h> and <melee/ty/toy.h> to support newly matched calls.",
+    "Updated gm_17C0.h prototypes from UNK_RET/UNK_PARAMS or looser integer types to concrete signatures for fn_8017DD7C, gm_8017E280, fn_8017E3C8, gm_8017E7A0, and gm_8017E7FC.",
+    "Expanded Unk1PData_x24 in gm/types.h with byte fields x1, x2, and x3 before existing int fields x4 and x8, enabling typed access in fn_8017DD7C.",
+    "Changed StartMeleeRules.x50 callback type in mn/types.h from void (*)(int) to void (*)(u8), aligning the VS match-end callback with gm_8017E7A0/gm_8017E7FC-style byte arguments."
+  ],
+  "smart_moves": [
+    "Matched multiple small functions by first tightening the data model: the lbl_804706D8_t split from s16 to u8 fields and Unk1PData_x24 byte-field expansion made the C code express the same access widths as the target.",
+    "Used sentinel-based table traversal for gm_8017E4C4, stopping on x0 == 0xFF rather than relying on a hard-coded count when the diff evidence shows the table itself carries its terminator.",
+    "Propagated type discoveries into headers and related menu rule callback declarations instead of only forcing local matches in gm_17C0.c.",
+    "Preserved unknown field names where semantics were not proven, while adding one narrow comment for Unk1PData.x4 as an EntryName slot.",
+    "Used exact subsystem includes for newly referenced APIs instead of relying on incidental declarations."
+  ],
+  "decomp_lessons": [
+    "When matching game-mode code, byte-vs-halfword field widths can be decisive; update struct field sizes to match observed arithmetic and return casts instead of hiding width mismatches with casts.",
+    "Small table-management functions often reveal struct layout: gm_8017E280 and fn_8017E3C8 together imply lbl_804706D8 entries contain a signed/invalid key field and a byte-sized trophy unlock state.",
+    "Callback argument widths should be corrected at the type source. The StartMeleeRules.x50 change to u8 makes future callback implementations less likely to drift toward int-only prototypes.",
+    "For partially understood 1P/adventure structs, adding explicitly placed unknown byte fields is preferable to treating the whole area as padding when matched code reads those bytes individually.",
+    "Special-case character behavior, such as CKIND_GKOOPS clearing xC_b1, should be represented directly once observed rather than hidden behind an unknown helper."
+  ],
+  "naming_conventions": [
+    "Unmatched or not-yet-understood functions retain address-based names such as fn_8017DD7C, gm_8017E280, and gm_8017E7A0.",
+    "Unknown struct fields continue to use offset-like names such as x0, x2, x3, x4, and x8 unless semantics are supported by evidence.",
+    "Nested unknown structs follow offset-derived names such as Unk1PData_x24.",
+    "Known enum and API names use project conventions such as CHKIND_NONE, CKIND_GKOOPS, Trophy_SetUnlockState, Player_LoseStock, and ifStatus_802F6948."
+  ],
+  "assembly_or_matching_tactics": [
+    "Inserted PAD_STACK(8) in fn_8017E3C8, indicating a stack-shape adjustment was needed for matching that otherwise simple loop.",
+    "Used explicit u8 casts and u8 return behavior in gm_8017E280, including returning -1 through an s8 function result when the fixed table has no free entry.",
+    "Used fixed loop bounds of 3 for companion Unk1PData_x24 entries and 12 for lbl_804706D8 entries, matching the apparent static array sizes.",
+    "Changed gm_8017E280's second parameter from bool to u32 even though the stored field is u8, preserving the apparent call/ABI type while narrowing only at storage/return points.",
+    "Matched simple control flow with early returns: gm_8017E4C4 returns on match or NULL at the sentinel, and gm_8017E440 returns fallback slot 4 on validation failure."
+  ],
+  "review_feedback": [
+    "No review comments were included in the provided PR slice. The context reports one issue comment but its body excerpt is empty, so reviewer intent or requested changes cannot be inferred."
+  ],
+  "searchable_terms": [
+    "pr-2163",
+    "Some gm17C0 matches",
+    "Duglas560",
+    "gm_17C0.c",
+    "gm_17C0.h",
+    "gm/types.h",
+    "mn/types.h",
+    "fn_8017DD7C",
+    "gm_8017E280",
+    "fn_8017E3C8",
+    "gm_8017E440",
+    "gm_8017E4C4",
+    "gm_8017E7A0",
+    "lbl_804706D8_t",
+    "lbl_804706D8",
+    "Unk1PData_x24",
+    "PlayerInitData",
+    "CHKIND_NONE",
+    "CKIND_GKOOPS",
+    "Trophy_SetUnlockState",
+    "Player_LoseStock",
+    "ifStatus_802F6948",
+    "ifStatus_802F6E3C",
+    "StartMeleeRules",
+    "x50 callback",
+    "EntryName Slot",
+    "PAD_STACK",
+    "adventure mode",
+    "trophy unlock state"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename or further type Unk1PData_x24 fields x1, x2, x3, x4, and x8.",
+    "Search for additional users of lbl_804706D8 to confirm whether x2 is always trophy unlock state and whether x3 has a known role.",
+    "Find callers of gm_8017E280 to determine whether its u32 arg1 should eventually be narrowed or named based on trophy unlock semantics.",
+    "Check later changes to StartMeleeRules.x50 and gm_8017E7FC to confirm all match-end callbacks consistently use u8 arguments.",
+    "Search for gm_803DE650_t definitions or later table renames to identify the adventure lookup entries returned by gm_8017E4C4."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

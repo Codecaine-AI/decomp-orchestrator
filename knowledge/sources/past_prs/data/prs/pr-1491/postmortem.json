@@ -1,0 +1,153 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1491",
+  "pr": {
+    "number": 1491,
+    "title": "Match `ftattacks4combo`",
+    "url": "https://github.com/doldecomp/melee/pull/1491",
+    "state": "MERGED",
+    "author": "in-amber",
+    "created_at": "2025-03-14T17:47:58Z",
+    "merged_at": "2025-03-24T15:24:35Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common fighter `ftattacks4combo` object by replacing the hand-written assembly file with C, marking the object as Matching, and updating build lists, splits, symbols, and the header prototype. The implementation covers the side-smash combo transition helper, AttackS42 animation/IASA/physics/collision wrappers, and the Link/Young Link-style fighter-kind check needed before entering motion state 0x155. Review focused mainly on correcting the object path in `obj_files.mk` and resolving missing includes in Link/Young Link init files, though those init-file changes are only mentioned in comments and are not visible in the provided changed-file list.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "build-config",
+      "symbols",
+      "headers",
+      "fighter-common"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "asm",
+      "config",
+      "build"
+    ]
+  },
+  "key_files": [
+    "asm/melee/ft/ftattacks4combo.s",
+    "src/melee/ft/ftattacks4combo.c",
+    "src/melee/ft/ftattacks4combo.h",
+    "config/GALE01/splits.txt",
+    "config/GALE01/symbols.txt",
+    "configure.py",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted `asm/melee/ft/ftattacks4combo.s`, removing the 147-line assembly implementation.",
+    "Added a C implementation in `src/melee/ft/ftattacks4combo.c` for `ftCo_800CECE8`, `ftCo_800CED30`, `ftCo_AttackS42_Anim`, `ftCo_AttackS42_IASA`, `ftCo_AttackS42_Phys`, and `ftCo_AttackS42_Coll`.",
+    "`ftCo_800CECE8` now checks `fp->cmd_vars[0]` and input bit `fp->input.x668 & 0x100`, calls `ftCo_800CED30`, and returns a boolean result.",
+    "`ftCo_800CED30` implements the fighter-kind gating, emits the original `OSReport(\"don't have smash42 motion!!!\\n\")` and `__assert(\"ftattacks4combo.c\", 0x36, \"0\")` failure path, clears `fp->allow_interrupt`, changes to motion state `0x155`, and calls `ftAnim_8006EBA4`.",
+    "AttackS42 Anim, Phys, and Coll functions were implemented as simple wrappers around the existing AttackS4 handlers.",
+    "`ftCo_AttackS42_IASA` checks bit 7 of `x2218` and calls `ftCo_Wait_IASA` when set.",
+    "Updated `src/melee/ft/ftattacks4combo.h` so `ftCo_800CED30` has a typed signature: `void ftCo_800CED30(ftCo_GObj* gobj)` instead of `UNK_RET ftCo_800CED30(UNK_PARAMS)`.",
+    "Changed `configure.py` from `Object(NonMatching, \"melee/ft/ftattacks4combo.c\")` to `Object(Matching, \"melee/ft/ftattacks4combo.c\")`.",
+    "Changed `obj_files.mk` to build `$(BUILD_DIR)/src/melee/ft/ftattacks4combo.c.o` instead of the old assembly object.",
+    "Adjusted `config/GALE01/splits.txt` data and sdata end addresses for the now-C-emitted strings: `.data` end changed from `0x803C6F78` to `0x803C6F72`, and `.sdata` end changed from `0x804D3CD8` to `0x804D3CD2`.",
+    "Updated `config/GALE01/symbols.txt` sizes and string annotations for `lbl_803C6F40`, `lbl_803C6F60`, and `ftCo_804D3CD0`."
+  ],
+  "smart_moves": [
+    "Preserved exact assert/report strings and source line number, which matters for matching `.data`/`.sdata` layout and call operands.",
+    "Used existing common side-smash routines (`ftCo_AttackS4_Anim`, `ftCo_AttackS4_Phys`, `ftCo_AttackS4_Coll`) instead of duplicating behavior for AttackS42 wrapper states.",
+    "Replaced an unknown header prototype with a concrete `void ftCo_800CED30(ftCo_GObj* gobj)` signature, improving type information for future callers.",
+    "Captured the redundant branch shape in `ftCo_800CED30` with deliberately structured `goto` code rather than simplifying to a clean switch, prioritizing binary match over source aesthetics.",
+    "Updated all build/config surfaces together: source object list, matching status in `configure.py`, removed asm object reference, and corrected split/symbol metadata."
+  ],
+  "decomp_lessons": [
+    "For tiny wrapper action-state files, exact match may still require non-idiomatic control flow if the original compiler emitted redundant branches.",
+    "When replacing an asm object with C, remember both build systems used here: `configure.py` matching status and `obj_files.mk` object path must be updated.",
+    "The object path in `obj_files.mk` must move from `asm/.../*.s.o` to `src/.../*.c.o`; changing only the suffix while leaving `asm` is wrong.",
+    "String sizes in `symbols.txt` and section boundaries in `splits.txt` may shrink once strings are emitted by C instead of hand-aligned asm; verify `.data` and `.sdata` ranges after matching.",
+    "Wrapper functions can often be matched by forwarding to an existing base action implementation, but IASA bit checks may still need direct field/bit expression matching.",
+    "Build failures after exposing new headers may come from downstream init files missing includes; in this PR, a reviewer specifically pointed to missing `#include \"ftCommon/ftCo_AttackS4.h\"` in `ftCl_Init` and `ftLk_Init`."
+  ],
+  "naming_conventions": [
+    "Common fighter action functions use the `ftCo_` prefix.",
+    "Side-smash combo state wrappers are named `ftCo_AttackS42_Anim`, `ftCo_AttackS42_IASA`, `ftCo_AttackS42_Phys`, and `ftCo_AttackS42_Coll`.",
+    "The matched file keeps the lowercase module name `ftattacks4combo` for source, header, and original assert filename string.",
+    "Typed fighter object parameters use `ftCo_GObj*` or `Fighter_GObj*`; this PR's header exposes `ftCo_GObj*` for `ftCo_800CED30`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used explicit nested `if`/`else` plus labels and `goto` in `ftCo_800CED30` to reproduce redundant branch instructions from the original assembly.",
+    "Kept `OSReport` before `__assert` in the invalid fighter-kind path to match the original failure sequence.",
+    "Matched motion-state constants directly: `Fighter_ChangeMotionState(gobj, 0x155, 0U, 0.0f, 1.0f, 0.0f, NULL)`.",
+    "Used `(u32) fp->cmd_vars[0] != 0` and `fp->input.x668 & 0x100` to match the command-variable/input gate in `ftCo_800CECE8`.",
+    "Expressed the IASA interrupt check as `((((Fighter*) gobj->user_data)->x2218 >> 7) & 1)` before calling `ftCo_Wait_IASA`.",
+    "Adjusted symbol metadata to mark string objects with exact sizes: `lbl_803C6F40` size `0x1E`, `lbl_803C6F60` size `0x12`, and `ftCo_804D3CD0` size `0x2`."
+  ],
+  "review_feedback": [
+    {
+      "author": "PsiLupan",
+      "file": "obj_files.mk",
+      "feedback": "Suggested changing the removed asm object entry to a C object entry for `ftattacks4combo`."
+    },
+    {
+      "author": "ribbanya",
+      "file": "obj_files.mk",
+      "feedback": "Corrected the path: the replacement object should be `$(BUILD_DIR)/src/melee/ft/ftattacks4combo.c.o\\`, not under `asm`."
+    },
+    {
+      "author": "PsiLupan",
+      "file": null,
+      "feedback": "Reported a likely build failure from missing `#include \"ftCommon/ftCo_AttackS4.h\"` in `ftCl_Init` and `ftLk_Init`. The provided changed-file list does not show those files, so the exact fix is not evidenced in the diff excerpt."
+    },
+    {
+      "author": "in-amber",
+      "file": null,
+      "feedback": "Commented that the issue should be fixed."
+    }
+  ],
+  "searchable_terms": [
+    "pr-1491",
+    "ftattacks4combo",
+    "ftCo_800CECE8",
+    "ftCo_800CED30",
+    "ftCo_AttackS42_Anim",
+    "ftCo_AttackS42_IASA",
+    "ftCo_AttackS42_Phys",
+    "ftCo_AttackS42_Coll",
+    "ftCo_AttackS4_Anim",
+    "ftCo_AttackS4_Phys",
+    "ftCo_AttackS4_Coll",
+    "ftCo_Wait_IASA",
+    "Fighter_ChangeMotionState",
+    "ftAnim_8006EBA4",
+    "FTKIND_LINK",
+    "FTKIND_CLINK",
+    "allow_interrupt",
+    "cmd_vars",
+    "x668",
+    "x2218",
+    "smash42",
+    "don't have smash42 motion",
+    "OSReport",
+    "__assert",
+    "motion state 0x155",
+    "obj_files.mk src object path",
+    "Object(Matching)",
+    "ftCo_804D3CD0",
+    "lbl_803C6F40",
+    "lbl_803C6F60"
+  ],
+  "follow_up_queries": [
+    "Search for later PRs that rename or type `ftCo_800CECE8` and `ftCo_800CED30`.",
+    "Check whether `ftCl_Init` and `ftLk_Init` received the missing `ftCommon/ftCo_AttackS4.h` include in this PR or a follow-up commit.",
+    "Compare other AttackS4/AttackS42 files for reusable wrapper patterns and IASA bit checks.",
+    "Look for future cleanup of non-idiomatic `goto` control flow once compiler/matching constraints are better understood."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

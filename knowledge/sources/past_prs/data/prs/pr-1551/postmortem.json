@@ -1,0 +1,134 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1551",
+  "pr": {
+    "number": 1551,
+    "title": "Small mnsound fixes",
+    "url": "https://github.com/doldecomp/melee/pull/1551",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-05-31T02:55:22Z",
+    "merged_at": "2025-05-31T02:59:55Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Small cleanup and matching fixes for the menu sound and sound test sources. The PR made several file-local globals static, corrected symbol/split sizes for mnSound data/sdata/sbss/bss ranges, adjusted function prototypes to use the actual HSD_GObj* callback-style parameter shape, and fixed a sound-test argument type from s8 to u8. Evidence is limited to the diff excerpt; there was no substantive review-comment excerpt.",
+  "change_classification": {
+    "primary_type": "decomp-matching-fix",
+    "categories": [
+      "decomp-matching",
+      "fix",
+      "headers",
+      "symbols",
+      "splits",
+      "static-storage-cleanup"
+    ],
+    "systems": [
+      "melee-core",
+      "menus",
+      "mnsound",
+      "mnsoundtest",
+      "config"
+    ]
+  },
+  "key_files": [
+    "src/melee/mn/mnsound.c",
+    "src/melee/mn/mnsoundtest.c",
+    "src/melee/mn/mnsoundtest.h",
+    "config/GALE01/symbols.txt",
+    "config/GALE01/splits.txt"
+  ],
+  "what_changed": [
+    "In config/GALE01/splits.txt, narrowed mnSound section extents: .data end changed from 0x803EEFD8 to 0x803EEFD1, .sdata end from 0x804D5018 to 0x804D5015, and .sbss end from 0x804D6C38 to 0x804D6C34.",
+    "In config/GALE01/symbols.txt, corrected mnSound string object sizes: mnSound_803EEF90 from 0x1E to 0x1F, mnSound_803EEFB0 from 0x20 to 0x21, mnSound_804D5008 from 0x8 to 0x7, and mnSound_804D5010 from 0x8 to 0x5.",
+    "Collapsed mnSound bss symbols by replacing separate mnSound_804A08A8 size 0x4 and mnSound_804A08AC size 0xC entries with one mnSound_804A08A8 object of size 0x10.",
+    "Reduced mnSound_804D6C30 sbss symbol size from 0x8 to 0x4.",
+    "In mnsound.c, made the StaticModelDesc storage file-local and tied it to mnSound_804A08A8 instead of a separate global mnSound_desc name.",
+    "In mnsound.c, made mnSound_804D6C30 a static HSD_GObj*.",
+    "Changed mnSound_80249C08 from taking no arguments to taking an unused HSD_GObj* parameter, and changed mnSound_8024A09C from taking s32 to HSD_GObj*.",
+    "Updated mnSound_8024A09C to load archive sections into mnSound_804A08A8 fields and to call mnSound_80249C08(arg0).",
+    "In mnsoundtest.c, made mnSoundTest_804D6C40, mnSoundTest_804D6C44, mnSoundTest_804D6C48, and mnSoundTest_804D6C4C static file-local variables, with declarations consolidated near the top.",
+    "In mnsoundtest.c and mnsoundtest.h, changed mnSoundTest_8024AD58 second parameter type from s8 to u8.",
+    "In mnsoundtest.c, reordered two local f32 declarations in mnSoundTest_8024ABF8 and removed an explicit float cast in HSD_JObjReqAnimAll(sp18, temp_r0)."
+  ],
+  "smart_moves": [
+    "Kept config symbol sizes and splits in sync with the C storage changes, preventing stale object boundaries around mnSound from polluting neighboring menu objects like mnDeflicker and mnLanguage.",
+    "Used static file-local linkage for menu globals that appear only to be used within mnsound.c or mnsoundtest.c, matching decomp storage intent while reducing exported-symbol noise.",
+    "Represented the 0x10-byte mnSound_804A08A8 storage as a single StaticModelDesc object instead of two artificial bss objects, which better matches the archive-loading code that fills joint, animjoint, matanim_joint, and shapeanim_joint fields.",
+    "Adjusted callback-like menu functions to accept HSD_GObj* rather than s32 or no argument, preserving call-shape compatibility while marking the parameter unused where appropriate.",
+    "Changed mnSoundTest_8024AD58's flag-like argument to u8 consistently in both implementation and header, avoiding signedness mismatches across declarations."
+  ],
+  "decomp_lessons": [
+    "When a decompiled object is actually a struct, prefer declaring the full typed static object over splitting the same storage into address-named fragments; then update symbols.txt bss sizes accordingly.",
+    "For menu code that is registered or called through HSD_GObj procedures, verify the callback signature against call sites and proc-registration patterns; a matching-looking no-arg function may still need an unused HSD_GObj* parameter.",
+    "Header prototypes must be updated together with implementation signedness changes, especially for small integer parameters like u8 versus s8 that affect matching and ABI expectations.",
+    "String symbol sizes in symbols.txt should include the correct terminator/padding-derived extent; off-by-one string sizes can shift section boundaries and create false neighboring symbols.",
+    "If changing C linkage to static, check the corresponding config entries and split extents so the map representation continues to match the source-level storage model.",
+    "Small declaration-order or cast changes, such as f32 local ordering or removing an unnecessary cast to f32, may be matching-sensitive in this codebase and should be preserved when evidence supports them."
+  ],
+  "naming_conventions": [
+    "Address-derived names remained for unknown menu globals and functions, such as mnSound_804A08A8, mnSound_804D6C30, mnSound_80249C08, mnSound_8024A09C, and mnSoundTest_8024AD58.",
+    "The previous descriptive global name mnSound_desc was removed in favor of the address-based symbol mnSound_804A08A8, likely because the config symbol identity and storage address mattered more than the inferred description name.",
+    "File-local unknown globals were declared as static while retaining their address-derived names, e.g. static HSD_GObj* mnSoundTest_804D6C40 and static s32 mnSoundTest_804D6C48.",
+    "Menu module prefixes stayed consistent: mnSound_ for the sound menu, mnSoundTest_ for the sound test menu, and mnDeflicker_/mnVibration_ neighboring symbols in config."
+  ],
+  "assembly_or_matching_tactics": [
+    "Changed function signatures to match callback ABI shape: mnSound_80249C08(HSD_GObj* unused) and mnSound_8024A09C(HSD_GObj* arg0).",
+    "Removed an explicit `(f32)` cast in `HSD_JObjReqAnimAll(sp18, temp_r0)`, suggesting the cast affected generated code or was unnecessary for matching.",
+    "Reordered local f32 declarations in mnSoundTest_8024ABF8 from temp_f30 before temp_f31 to temp_f31 before temp_f30, likely for stack/register allocation matching.",
+    "Changed mnSoundTest_8024AD58's second parameter from signed s8 to unsigned u8, consistent with boolean/flag use via `temp_r0 = !!arg1`.",
+    "Mapped archive-loaded model descriptor fields directly through `mnSound_804A08A8.joint`, `.animjoint`, `.matanim_joint`, and `.shapeanim_joint`, supporting a struct-sized bss symbol match."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR context.",
+    "The PR had one issue comment according to counts, but no human text excerpt was provided, so reviewer or author rationale cannot be extracted."
+  ],
+  "searchable_terms": [
+    "pr-1551",
+    "Small mnsound fixes",
+    "r-burns",
+    "mnsound",
+    "mnsoundtest",
+    "mnSound_804A08A8",
+    "mnSound_804D6C30",
+    "mnSound_80249C08",
+    "mnSound_8024A09C",
+    "mnSoundTest_8024AD58",
+    "mnSoundTest_804D6C40",
+    "mnSoundTest_804D6C44",
+    "mnSoundTest_804D6C48",
+    "mnSoundTest_804D6C4C",
+    "StaticModelDesc",
+    "HSD_GObj",
+    "HSD_GObjProc",
+    "HSD_JObjReqAnimAll",
+    "lbArchive_LoadSections",
+    "MenMainConSo_Top_joint",
+    "MenMainConSo_Top_animjoint",
+    "MenMainConSo_Top_matanim_joint",
+    "MenMainConSo_Top_shapeanim_joint",
+    "config/GALE01/symbols.txt",
+    "config/GALE01/splits.txt",
+    "static globals",
+    "u8 arg1",
+    "s8 to u8",
+    "bss size 0x10",
+    "sbss size 0x4",
+    "sdata string size"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename mnSound_804A08A8 or type StaticModelDesc objects in other mn menu files.",
+    "Check whether mnSound_80249C08 and mnSound_8024A09C are registered as HSD_GObj callbacks elsewhere and whether their prototypes stayed HSD_GObj*.",
+    "Search for other menu modules with split bss symbols that should be collapsed into a StaticModelDesc-sized object.",
+    "Audit adjacent mnSound string symbols in symbols.txt for correct null-terminated sizes and split boundaries.",
+    "Look for similar s8-to-u8 fixes in sound test or menu flag parameters."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

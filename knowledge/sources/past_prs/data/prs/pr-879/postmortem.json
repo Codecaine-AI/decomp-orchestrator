@@ -1,0 +1,121 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-879",
+  "pr": {
+    "number": 879,
+    "title": "Match `ftCo_ShieldBreakStand`",
+    "url": "https://github.com/doldecomp/melee/pull/879",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-27T11:58:04Z",
+    "merged_at": "2023-05-27T12:05:49Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common fighter ShieldBreakStand action file by replacing MWERKS_GEKKO inline assembly with C for ftCo_80098F3C, ftCo_ShieldBreakStand_Anim, ftCo_ShieldBreakStand_IASA, ftCo_ShieldBreakStand_Phys, and ftCo_ShieldBreakStand_Coll. The PR also tightened the ftCo_80099010 declaration in ft_08A4.h from an unknown placeholder signature to void ftCo_80099010(ftCo_GObj* gobj). The included report shows the file and all listed functions at 100.00%.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "fighter-action-state"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "shield-break"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/chara/ftCommon/ftCo_ShieldBreakStand.c",
+      "reason": "Main matched source file; removed inline assembly and implemented ShieldBreakStand state callbacks in C."
+    },
+    {
+      "path": "src/melee/ft/ft_08A4.h",
+      "reason": "Updated ftCo_80099010 prototype from UNK_RET/UNK_PARAMS placeholder to a typed ftCo_GObj* function declaration."
+    }
+  ],
+  "what_changed": [
+    "Removed local float constants ftCo_804D8668 and ftCo_804D866C that represented 0 and 1 in the old assembly path, replacing their uses with direct C arguments NULL, 0, 1, and 0 to Fighter_ChangeMotionState.",
+    "Reimplemented ftCo_80098F3C in C: reads ftCo_Fighter from gobj->user_data, selects ftCo_MS_ShieldBreakStandU when the current motion is ftCo_MS_ShieldBreakDownU, otherwise selects ftCo_MS_ShieldBreakStandD, then calls Fighter_ChangeMotionState.",
+    "Encoded the motion flags as named bitwise OR values: Ft_MF_KeepColAnimHitStatus | Ft_MF_SkipModel | Ft_MF_SkipMatAnim | Ft_MF_SkipColAnim, corresponding to the immediate 0x1094 used in assembly.",
+    "Reimplemented ftCo_ShieldBreakStand_Anim in C as a simple end-of-animation transition: if ftAnim_IsFramesRemaining(gobj) is false, call ftCo_80099010(gobj).",
+    "Kept ftCo_ShieldBreakStand_IASA as an empty callback, but changed its parameter type to ftCo_GObj* for consistency with the file's other callbacks.",
+    "Reimplemented ftCo_ShieldBreakStand_Phys as a direct wrapper around ft_80084F3C(gobj).",
+    "Reimplemented ftCo_ShieldBreakStand_Coll as a direct wrapper around ft_80083F88(gobj).",
+    "Added include of ft/forward.h, likely to supply forward declarations such as ftCo_GObj or related fighter types needed by the new C signatures.",
+    "Changed ftCo_80099010 declaration in ft_08A4.h from /* static */ UNK_RET ftCo_80099010(UNK_PARAMS) to void ftCo_80099010(ftCo_GObj* gobj)."
+  ],
+  "smart_moves": [
+    "Used named motion IDs instead of raw constants 0xCF, 0xD1, and 0xD2, making the state transition readable while preserving the branch behavior.",
+    "Replaced the raw 0x1094 motion flag immediate with documented Ft_MF_* flag names, which is reusable for future Fighter_ChangeMotionState matches.",
+    "Recognized that the physics and collision callbacks were pure tail-style wrappers around existing helper functions, allowing very small C implementations to match.",
+    "Typed ftCo_80099010 in the shared header so ftCo_ShieldBreakStand_Anim could call it with a proper ftCo_GObj* argument instead of relying on UNK placeholders.",
+    "Kept the no-op IASA callback explicit rather than deleting it, preserving the expected action callback table behavior."
+  ],
+  "decomp_lessons": [
+    "For common fighter action-state files, many animation callbacks follow the pattern: call ftAnim_IsFramesRemaining(gobj), and when it returns false, transition via a nearby ftCo_* helper.",
+    "Raw motion-state IDs in assembly can often be recovered by comparing against nearby ftCo_MS_* enum names; here ShieldBreakDownU maps to ShieldBreakStandU, otherwise ShieldBreakStandD.",
+    "Fighter_ChangeMotionState calls should be expressed with named Ft_MF_* flags once the immediate value is understood, because this both documents intent and helps future matching.",
+    "Simple phys/coll callbacks may compile cleanly as one-call wrappers to existing fighter helpers such as ft_80084F3C and ft_80083F88.",
+    "When replacing inline asm with C, update shared headers from UNK_RET/UNK_PARAMS to the inferred signature at the same time to avoid preserving unnecessary unknowns.",
+    "This PR demonstrates that tiny action-state callback files can be fully matched by identifying state selection, end-of-animation behavior, and one-call physics/collision delegates."
+  ],
+  "naming_conventions": [
+    "Common fighter action callbacks use the ftCo_ShieldBreakStand_* naming pattern for Anim, IASA, Phys, and Coll.",
+    "The local transition helper kept its address-derived name ftCo_80098F3C because no semantic name was introduced in the PR.",
+    "Motion enum names follow ftCo_MS_ShieldBreakDownU, ftCo_MS_ShieldBreakStandU, and ftCo_MS_ShieldBreakStandD.",
+    "Fighter motion flag constants use the Ft_MF_* prefix, such as Ft_MF_KeepColAnimHitStatus, Ft_MF_SkipModel, Ft_MF_SkipMatAnim, and Ft_MF_SkipColAnim.",
+    "The typed fighter object aliases in this area use ftCo_GObj* for game object callbacks and ftCo_Fighter* for fighter user_data."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted the assembly compare against motion_id 0xCF into a C ternary selecting between the up and down ShieldBreakStand motion states.",
+    "Matched the assembly lfs constants 0.0 and 1.0 by passing equivalent literal arguments to Fighter_ChangeMotionState rather than retaining file-scope float constants.",
+    "Matched branch-on-animation-remaining assembly with the idiomatic C condition if (!ftAnim_IsFramesRemaining(gobj)) { ftCo_80099010(gobj); }.",
+    "Removed MWERKS_GEKKO asm blocks after confirming equivalent C matched all listed functions at 100.00%.",
+    "Used direct wrapper functions for callbacks whose assembly only called a single helper, avoiding overcomplication."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-879",
+    "ftCo_ShieldBreakStand",
+    "ftCo_80098F3C",
+    "ftCo_ShieldBreakStand_Anim",
+    "ftCo_ShieldBreakStand_IASA",
+    "ftCo_ShieldBreakStand_Phys",
+    "ftCo_ShieldBreakStand_Coll",
+    "ftCo_80099010",
+    "ftAnim_IsFramesRemaining",
+    "Fighter_ChangeMotionState",
+    "ft_80084F3C",
+    "ft_80083F88",
+    "ftCo_MS_ShieldBreakDownU",
+    "ftCo_MS_ShieldBreakStandU",
+    "ftCo_MS_ShieldBreakStandD",
+    "Ft_MF_KeepColAnimHitStatus",
+    "Ft_MF_SkipModel",
+    "Ft_MF_SkipMatAnim",
+    "Ft_MF_SkipColAnim",
+    "ftCo_GObj",
+    "ftCo_Fighter",
+    "ft_08A4.h",
+    "asm-to-c",
+    "MWERKS_GEKKO",
+    "shield break stand"
+  ],
+  "follow_up_queries": [
+    "Look for other ftCommon ShieldBreak action files with callbacks that still use MWERKS_GEKKO asm and may share the same ftAnim_IsFramesRemaining transition pattern.",
+    "Search for remaining UNK_RET or UNK_PARAMS declarations around ftCo action helpers in ft_08A4.h that can be typed from matched call sites.",
+    "Search for other Fighter_ChangeMotionState calls using raw 0x1094 or equivalent flag combinations that should be expressed as Ft_MF_* names."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,137 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1447",
+  "pr": {
+    "number": 1447,
+    "title": "Match itdkinoko",
+    "url": "https://github.com/doldecomp/melee/pull/1447",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-09-09T17:07:51Z",
+    "merged_at": "2024-09-09T17:15:57Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the ditto/poison mushroom item module `itdkinoko` by replacing the 305-line assembly file with a 148-line C implementation, expanding the header prototypes, and moving the object from asm/nonmatching to src/matching in the build configuration. The implementation reconstructs the item state table, spawn/setup behavior, ground/air state callbacks, collision response, velocity handling, and destroy/interaction wrapper behavior using existing item helpers and shared Kinoko attributes.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "build-system-update",
+      "item-behavior"
+    ],
+    "systems": [
+      "item",
+      "items/itdkinoko",
+      "asm",
+      "configure.py",
+      "obj_files.mk"
+    ]
+  },
+  "key_files": [
+    "asm/melee/it/items/itdkinoko.s",
+    "src/melee/it/items/itdkinoko.c",
+    "src/melee/it/items/itdkinoko.h",
+    "configure.py",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted `asm/melee/it/items/itdkinoko.s`, removing the old hand-assembled implementation for functions `it_80293A08` through `it_80293D74` and data symbol `it_803F6130`.",
+    "Added a full C implementation in `src/melee/it/items/itdkinoko.c` including the two-entry `ItemStateTable it_803F6130[]`.",
+    "Implemented initialization in `it_80293A08`, including facing direction based on `it->pos.x`, clearing `xD5C`, initializing `xDD4_itemVar.kinoko` fields, and transitioning with `it_80293BE8`.",
+    "Implemented movement/state callbacks for grounded and aerial behavior using existing item helpers such as `it_8026B390`, `Item_8026AE84`, `Item_80268E5C`, `it_8026D78C`, `it_8026E414`, `it_80272860`, `it_80276408`, and `it_8026B894`.",
+    "Reconstructed collision behavior around `CollData.env_flags`, including `MPCOLL_UNK` handling via `it_80276408` and left/right wall handling by negating `facing_dir`, cached horizontal velocity, and live x velocity.",
+    "Reconstructed air deceleration behavior in `it_80293C40`, using item fall speed attributes and `KinokoAttrs.x4` to reduce horizontal velocity toward zero.",
+    "Expanded `src/melee/it/items/itdkinoko.h` from only the externally referenced prototypes to all local state callback prototypes present in the C file.",
+    "Updated `configure.py` from `Object(NonMatching, \"melee/it/items/itdkinoko.c\")` to `Object(Matching, \"melee/it/items/itdkinoko.c\")`.",
+    "Updated `obj_files.mk` to build `src/melee/it/items/itdkinoko.c.o` instead of `asm/melee/it/items/itdkinoko.s.o`."
+  ],
+  "smart_moves": [
+    "Used existing `itkinoko.h` shared types, especially `KinokoAttrs`, instead of inventing a separate special-attributes layout for `itdkinoko`.",
+    "Mapped raw offsets from assembly into established item struct fields such as `pos.x`, `facing_dir`, `xD5C`, `x40_vel`, `xDD4_itemVar.kinoko`, `xC4_article_data`, `xCC_item_attr`, `ground_or_air`, and `x378_itemColl`.",
+    "Preserved exact state-transition and callback shape by reconstructing `it_803F6130` as two `ItemStateTable` entries matching the deleted data section.",
+    "Used named item flags such as `ITEM_ANIM_UPDATE`, `ITEM_UNK_0x1`, and `ITEM_HIT_PRESERVE` instead of raw constants where available.",
+    "Used named collision flags `MPCOLL_UNK`, `MPCOLL_RIGHTWALL`, and `MPCOLL_LEFTWALL` to explain bit tests originally expressed as PowerPC rotate/mask instructions.",
+    "Inserted `PAD_STACK(8)` and `PAD_STACK(16)` in functions where stack shape mattered for matching, showing a practical stack-padding tactic rather than overcomplicating the C logic."
+  ],
+  "decomp_lessons": [
+    "Small item modules can often be matched by translating the state table first, then implementing each callback around existing item helper calls and shared item fields.",
+    "When assembly accesses item variable storage at offsets like `0xDD4` through `0xDE0`, checking for an existing union member such as `xDD4_itemVar.kinoko` can produce clearer matching C.",
+    "Raw constant callback arguments can often be represented with existing item flag names while still preserving the original bit patterns.",
+    "For item collision callbacks, `ground_or_air != GA_Air` gates are a direct way to express assembly checks against ground/air state before floor or wall collision handling.",
+    "Wall-bounce behavior in item code may require updating both facing direction and cached velocity fields, not only `x40_vel.x`, to keep later callbacks consistent.",
+    "Air friction/deceleration logic can be matched cleanly with explicit absolute-value logic instead of introducing library calls, avoiding unwanted codegen.",
+    "After an item file matches, both `configure.py` and `obj_files.mk` must be updated so the C object replaces the asm object in the build."
+  ],
+  "naming_conventions": [
+    "Kept address-based symbol names such as `it_80293A08`, `it_80293A70`, `it_80293AE0`, `it_80293AE8`, `it_80293B24`, `it_80293BE8`, `it_80293C10`, `it_80293C38`, `it_80293C40`, `it_80293CF0`, `it_80293D6C`, and `it_80293D74` because no semantic names were evidenced.",
+    "Used project-standard item aliases `Item_GObj`, `Item`, `ItemAttr`, `CollData`, and `ItemStateTable`.",
+    "Used `KinokoAttrs` and `xDD4_itemVar.kinoko` naming from the existing mushroom item infrastructure.",
+    "Used established enum/flag names `GA_Air`, `MPCOLL_UNK`, `MPCOLL_RIGHTWALL`, `MPCOLL_LEFTWALL`, `ITEM_ANIM_UPDATE`, `ITEM_UNK_0x1`, and `ITEM_HIT_PRESERVE`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced `.sdata2` float constants `0.0f`, `-1.0f`, and `1.0f` with direct C float literals in initialization and velocity code.",
+    "Converted the deleted assembly data table at `it_803F6130` into a C `ItemStateTable` array with two rows and callback pointers.",
+    "Matched stack-sensitive functions with `PAD_STACK(8)` in `it_80293A70` and `PAD_STACK(16)` in `it_80293B24`.",
+    "Expressed PowerPC `rlwinm`/`clrlwi` collision flag checks as named bitmask tests against `cd->env_flags`.",
+    "Kept simple always-false and always-true callback functions as direct `return false;` and `return true;`, matching trivial `li r3, 0/1; blr` assembly.",
+    "Translated wrapper functions around `Item_80268E5C` and `it_8026B894` directly rather than inlining or reworking behavior.",
+    "Used explicit sign checks and negation for horizontal velocity instead of a math helper, matching the assembly branch structure for absolute value and deceleration."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1447",
+    "Match itdkinoko",
+    "PsiLupan",
+    "itdkinoko",
+    "asm/melee/it/items/itdkinoko.s",
+    "src/melee/it/items/itdkinoko.c",
+    "src/melee/it/items/itdkinoko.h",
+    "it_803F6130",
+    "ItemStateTable",
+    "it_80293A08",
+    "it_80293A70",
+    "it_80293AE0",
+    "it_80293AE8",
+    "it_80293B24",
+    "it_80293BE8",
+    "it_80293C10",
+    "it_80293C38",
+    "it_80293C40",
+    "it_80293CF0",
+    "it_80293D6C",
+    "it_80293D74",
+    "KinokoAttrs",
+    "xDD4_itemVar.kinoko",
+    "x40_vel",
+    "facing_dir",
+    "ground_or_air",
+    "GA_Air",
+    "CollData",
+    "env_flags",
+    "MPCOLL_UNK",
+    "MPCOLL_RIGHTWALL",
+    "MPCOLL_LEFTWALL",
+    "PAD_STACK",
+    "ITEM_ANIM_UPDATE",
+    "ITEM_UNK_0x1",
+    "ITEM_HIT_PRESERVE",
+    "Object(Matching)",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename or semantically document `itdkinoko` functions after address-based matching.",
+    "Compare `itdkinoko.c` with `itkinoko.c` to identify reusable mushroom-item behavior and possible shared abstractions.",
+    "Search for additional item modules still using `xDD4_itemVar.kinoko` or similar item-var unions to guide future matching.",
+    "Check whether `MPCOLL_UNK` usage in item collision callbacks is later renamed or clarified."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

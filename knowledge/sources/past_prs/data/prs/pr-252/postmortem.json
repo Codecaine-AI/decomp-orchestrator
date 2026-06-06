@@ -1,0 +1,140 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-252",
+  "pr": {
+    "number": 252,
+    "title": "Continued TObj matching work",
+    "url": "https://github.com/doldecomp/melee/pull/252",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2022-02-03T18:34:08Z",
+    "merged_at": "2022-02-03T18:34:13Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Continued SysDolphin baselib TObj decompilation by matching TObjUpdateFunc, completing C implementations for HSD_TObjAnim, HSD_TObjAnimAll, TObjLoad, and HSD_TObjLoadDesc, and replacing large portions of asm/sysdolphin/baselib/tobj.s with C. The PR also promoted TObj-related labels to real symbols, added GXTexMtx enum definitions, adjusted TObj struct/class info fields, and renamed call sites from func_8035EB6C to HSD_TObjAnim across several Melee asm files.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "function-completion",
+      "symbol-renaming",
+      "headers",
+      "data-sdata-cleanup"
+    ],
+    "systems": [
+      "sysdolphin/baselib",
+      "tobj",
+      "dolphin/gx",
+      "asm",
+      "include"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/tobj.c",
+    "asm/sysdolphin/baselib/tobj.s",
+    "src/sysdolphin/baselib/tobj.h",
+    "include/dolphin/gx/gxtypes.h",
+    "include/functions.h",
+    "include/variables.h",
+    "asm/melee/ft/ftanim.s",
+    "asm/melee/gm/code_801601C4.s",
+    "asm/melee/if/ifstatus.s",
+    "asm/melee/mn/mngallery.s"
+  ],
+  "what_changed": [
+    "Removed the NON_MATCHING guard around TObjUpdateFunc and made it matching in C, replacing a large assembly implementation in asm/sysdolphin/baselib/tobj.s.",
+    "Added HSD_TObjAnim in C as a null-safe wrapper around HSD_AObjInterpretAnim(tobj->aobj, tobj, TObjUpdateFunc).",
+    "Added HSD_TObjAnimAll in C to iterate the linked TObj list and call HSD_TObjAnim on each node.",
+    "Added TObjLoad in C to populate an HSD_TObj from HSD_TObjDesc, including next-chain loading, texture source/id fields, default GX_IDENTITY matrix id, transform fields, wrap/repeat settings, blend flags, tlut loading, TEX_MTX_DIRTY, tlut_no set to (u8)-1, and TEV loading.",
+    "Added HSD_TObjLoadDesc in C to return NULL for a NULL descriptor, allocate via allocShadowTObj when class_name is missing or unknown, otherwise allocate via hsdNew(info), assert on allocation failure, and dispatch through HSD_TOBJ_METHOD(tobj)->load.",
+    "Defined HSD_TObjInfo hsdTObj = { TObjInfoInit } in tobj.c, and converted lbl_804D5C90/lbl_804D5C98 from assembly-side sdata labels into C string definitions for \"tobj.c\" and \"tobj\".",
+    "Added GXTexMtx enum to include/dolphin/gx/gxtypes.h with GX_TEXMTX0 through GX_TEXMTX9 and GX_IDENTITY = 60.",
+    "Changed HSD_TObj.mtxid from u32 to GXTexMtx and removed the anim_id field from HSD_TObj.",
+    "Removed the update callback field from HSD_TObjInfo, implying TObjUpdateFunc is used directly by HSD_TObjAnim rather than stored as a class method.",
+    "Updated declarations in tobj.h for TObjLoad, HSD_TObjLoadDesc, and HSD_TlutLoadDesc ordering.",
+    "Renamed func_8035EB6C to HSD_TObjAnim in include/functions.h and at existing asm call sites in ftanim.s, code_801601C4.s, ifstatus.s, and mngallery.s.",
+    "Renamed lbl_80405570 to hsdTObj in include/variables.h."
+  ],
+  "smart_moves": [
+    "Kept the animation update callback static in tobj.c and passed it directly to HSD_AObjInterpretAnim, which avoided exposing an unnecessary class-info update method and helped remove the HSD_TObjInfo update slot.",
+    "Used named GXTexMtx values instead of raw u32 for mtxid, making the default GX_IDENTITY assignment and texture matrix semantics clearer.",
+    "Cleaned up data/sdata by defining hsdTObj and TObj string literals in C rather than relying on external assembly labels, reducing extern clutter.",
+    "Propagated the resolved HSD_TObjAnim name to all known assembly call sites, improving cross-system searchability while preserving the existing asm code.",
+    "Replaced an assert string label for tobj->imagetbl with the literal \"tobj->imagetbl\", reducing dependence on an extern label while preserving assert evidence."
+  ],
+  "decomp_lessons": [
+    "For jump-table-heavy callbacks, matching the callback in C can unlock removal of a large assembly block once case ordering and constants are modeled correctly.",
+    "When a formerly unknown function is identified, update both central declarations and all existing asm call annotations so later decomp work inherits the semantic name.",
+    "Class-info objects and assert strings can often be moved from asm data/sdata into C once their types and initializers are understood.",
+    "Header struct cleanup can be part of matching work: removing fields such as anim_id or update from structs/class-info should be evidence-driven by matching offsets and method usage.",
+    "Adding SDK-style enums such as GXTexMtx can clarify magic constants and improve type accuracy without changing generated behavior."
+  ],
+  "naming_conventions": [
+    "func_8035EB6C was renamed to HSD_TObjAnim.",
+    "func_8035EE14 was renamed in declarations to HSD_TObjTevLoadDesc.",
+    "lbl_80405570 was renamed to hsdTObj.",
+    "The default TObj class/info object uses the HSD-style name hsdTObj.",
+    "Texture object API names follow the HSD_TObj* pattern: HSD_TObjAnim, HSD_TObjAnimAll, HSD_TObjLoadDesc.",
+    "Internal loader naming uses TObjLoad, matching class method style rather than the exported HSD_ prefix."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted TObjUpdateFunc from a NON_MATCHING C stub plus asm fallback into matching C, eliminating hundreds of lines from asm/sysdolphin/baselib/tobj.s.",
+    "Used a direct HSD_AObjInterpretAnim call with TObjUpdateFunc to match HSD_TObjAnim.",
+    "Preserved asm call sites but changed their symbolic branch target from func_8035EB6C to HSD_TObjAnim, a low-risk way to improve naming before decompiling those caller files.",
+    "Moved sdata strings and the hsdTObj class-info initializer into C to reduce label extern dependencies and match data placement.",
+    "Introduced GXTexMtx enum constants so assignments like GX_IDENTITY can produce clearer source while retaining the same underlying values."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice."
+  ],
+  "searchable_terms": [
+    "PR252",
+    "TObj matching",
+    "TObjUpdateFunc",
+    "HSD_TObjAnim",
+    "HSD_TObjAnimAll",
+    "HSD_TObjLoadDesc",
+    "TObjLoad",
+    "HSD_TObjTevLoadDesc",
+    "HSD_AObjInterpretAnim",
+    "HSD_AObjSetRate",
+    "HSD_AObjReqAnim",
+    "HSD_TObjInfo",
+    "hsdTObj",
+    "TObjInfoInit",
+    "GXTexMtx",
+    "GX_IDENTITY",
+    "GX_TEXMTX0",
+    "GX_TEXMTX9",
+    "TEX_MTX_DIRTY",
+    "tobj->imagetbl",
+    "allocShadowTObj",
+    "hsdSearchClassInfo",
+    "hsdNew",
+    "HSD_TOBJ_METHOD",
+    "HSD_TlutLoadDesc",
+    "sysdolphin baselib tobj",
+    "data sdata cleanup",
+    "func_8035EB6C",
+    "func_8035EE14",
+    "lbl_80405570",
+    "lbl_804D5C90",
+    "lbl_804D5C98"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs touching HSD_TObjInfo to confirm removal of the update callback remains consistent across class initialization.",
+    "Search for remaining func_8035EE14 references and confirm all are renamed to HSD_TObjTevLoadDesc.",
+    "Search for remaining raw texture matrix constants that could use GXTexMtx names.",
+    "Inspect later TObj PRs for completion of HSD_TObjTevLoadDesc, HSD_TObjRemoveAll, and related tlut/image descriptor routines.",
+    "Check whether any remaining asm references still use lbl_804055B8 or other TObj assert-string labels that can be moved into C."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

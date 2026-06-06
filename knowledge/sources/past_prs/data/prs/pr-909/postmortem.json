@@ -1,0 +1,130 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-909",
+  "pr": {
+    "number": 909,
+    "title": "Match `ftCo_MissFoot`",
+    "url": "https://github.com/doldecomp/melee/pull/909",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-31T06:37:09Z",
+    "merged_at": "2023-05-31T06:46:15Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the ftCommon MissFoot action-state code and a nearby light-object animation callback by moving functions out of asm/melee/ft/ft_08A4.s into new C files. The PR added src/melee/ft/chara/ftCommon/ftCo_MissFoot.c with ftCo_8009F39C and the MissFoot Anim/IASA/Phys/Coll callbacks, added src/melee/ft/chara/ftCommon/ftCo_09F4.c for ftCo_8009F480, wired both new objects into obj_files.mk, and updated includes/prototypes. The matching report shows 100% for both new C files.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "asm-to-c",
+      "build-system"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "MissFoot",
+      "asm",
+      "baselib",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/chara/ftCommon/ftCo_MissFoot.c",
+    "src/melee/ft/chara/ftCommon/ftCo_MissFoot.h",
+    "src/melee/ft/chara/ftCommon/ftCo_09F4.c",
+    "src/melee/ft/chara/ftCommon/ftCo_09F4.h",
+    "obj_files.mk",
+    "src/melee/ft/ft_081B.c",
+    "src/melee/ft/ft_08A4.h"
+  ],
+  "what_changed": [
+    "Removed the assembly implementations of ftCo_8009F39C, ftCo_MissFoot_Anim, ftCo_MissFoot_IASA, ftCo_MissFoot_Phys, ftCo_MissFoot_Coll, and the local label .L_8009F480 from asm/melee/ft/ft_08A4.s.",
+    "Added ftCo_MissFoot.c implementing the MissFoot state entry and callbacks in C.",
+    "Added ftCo_09F4.c implementing ftCo_8009F480, a callback that calls HSD_LObjAnimAll on gobj->hsd_obj.",
+    "Changed the remaining assembly in ft_08A4.s to reference ftCo_8009F480 as a global symbol instead of the former local label .L_8009F480.",
+    "Moved the sdata2 constants used by ftCo_8009F39C out of the asm file by expressing them as C literals: y velocity 0, animation start 0, animation speed 1, blend/arg 0, and NULL.",
+    "Added headers ftCo_MissFoot.h and ftCo_09F4.h with address-commented prototypes and ftCommon forward declarations.",
+    "Added the two new C objects to TEXT_O_FILES in obj_files.mk before the remaining ft_08A4.s object.",
+    "Updated src/melee/ft/ft_081B.c to include ftCommon/ftCo_MissFoot.h.",
+    "Removed the old generic prototype unk_t ftCo_8009F39C(void) from src/melee/ft/ft_08A4.h."
+  ],
+  "smart_moves": [
+    "Kept the partially decompiled ft_08A4.s file buildable by promoting the former internal label .L_8009F480 into a C function symbol and updating the asm callsite to use ftCo_8009F480@ha/@l.",
+    "Split the tiny light-object callback ftCo_8009F480 into its own ftCo_09F4.c unit instead of forcing it into the MissFoot file, matching the address/file partition shown by the report.",
+    "Used typed fighter access through ftCo_Fighter* fp = gobj->user_data, which made the assembly's offset writes/readable control flow become fp->x8c_kb_vel.y = 0 and a ground_or_air check.",
+    "Replaced unknown or broad declarations with action-specific headers under ftCommon, improving include locality for future ftCommon matching.",
+    "Preserved function ordering and object ordering so the new C code could replace only the matched assembly range while leaving later ft_08A4.s code intact."
+  ],
+  "decomp_lessons": [
+    "For small action-state handlers, the entry function often maps cleanly to: clear a fighter field, call Fighter_ChangeMotionState with an enum motion-state ID, call shared helper routines, then conditionally call another helper based on fighter state.",
+    "An empty IASA callback can be expressed as an empty C function body when the assembly is just blr.",
+    "Simple forwarding callbacks such as Phys and Coll can match as one-line wrappers around shared physics/collision helpers, here ft_80084DB0 and ft_80082F28.",
+    "When decompiling out of a mixed asm file, any remaining asm that referenced a local label must be retargeted to the new global C symbol.",
+    "C literals can eliminate sdata2 constants from the asm file when the generated code matches; in this PR, NULL/0.0 and 1.0 constants associated with MissFoot were no longer needed in ft_08A4.s.",
+    "Adding new C files to obj_files.mk in the same relative position as the removed asm region is part of the matching work, not just cleanup."
+  ],
+  "naming_conventions": [
+    "Common fighter action-state files use the ftCo_ prefix and action name, e.g. ftCo_MissFoot.c and ftCo_MissFoot.h.",
+    "Action-state callback names follow ftCo_<Action>_Anim, ftCo_<Action>_IASA, ftCo_<Action>_Phys, and ftCo_<Action>_Coll.",
+    "Unidentified address-based functions retained numeric names such as ftCo_8009F39C and ftCo_8009F480.",
+    "Header guards in this slice used GALE01 address-style names, e.g. GALE01_09CD5C and GALE01_09F480.",
+    "Headers kept address comments before prototypes, e.g. /* 09CD5C */ void ftCo_8009F39C(ftCo_GObj* gobj);"
+  ],
+  "assembly_or_matching_tactics": [
+    "Matched ftCo_8009F39C by assigning gobj->user_data to a local fighter pointer, clearing fp->x8c_kb_vel.y, then calling Fighter_ChangeMotionState(gobj, ftCo_MS_MissFoot, Ft_MF_None, 0, 1, 0, NULL).",
+    "Matched the post-motion-state setup by calling ftCommon_8007D468(fp), then calling ftCommon_8007D5D4(fp) only when fp->ground_or_air == GA_Ground.",
+    "Matched ftCo_MissFoot_Anim with if (!ftAnim_IsFramesRemaining(gobj)) ftCo_80090780(gobj);.",
+    "Matched ftCo_MissFoot_Phys and ftCo_MissFoot_Coll as direct wrappers around ft_80084DB0(gobj) and ft_80082F28(gobj).",
+    "Promoted the asm-local .L_8009F480 callback to void ftCo_8009F480(ftCo_GObj* gobj) and changed the existing HSD_GObjProc_8038FD54 setup in asm to pass ftCo_8009F480.",
+    "Used gobj->hsd_obj for the load from offset 0x28 before HSD_LObjAnimAll in ftCo_8009F480."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-909",
+    "ftCo_MissFoot",
+    "MissFoot",
+    "ftCo_8009F39C",
+    "ftCo_MissFoot_Anim",
+    "ftCo_MissFoot_IASA",
+    "ftCo_MissFoot_Phys",
+    "ftCo_MissFoot_Coll",
+    "ftCo_8009F480",
+    "ftCo_09F4",
+    "ft_08A4.s",
+    "Fighter_ChangeMotionState",
+    "ftCo_MS_MissFoot",
+    "Ft_MF_None",
+    "ftCommon_8007D468",
+    "ftCommon_8007D5D4",
+    "ftAnim_IsFramesRemaining",
+    "ftCo_80090780",
+    "ft_80084DB0",
+    "ft_80082F28",
+    "HSD_LObjAnimAll",
+    "HSD_GObjProc_8038FD54",
+    "x8c_kb_vel",
+    "ground_or_air",
+    "GA_Ground",
+    "obj_files.mk",
+    "asm-to-c",
+    "100% match",
+    "ribbanya"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or type ftCo_8009F39C or ftCo_8009F480.",
+    "Search for other ftCommon action-state PRs that use the Anim/IASA/Phys/Coll callback pattern.",
+    "Check whether ftCo_09F4.h header guard GALE01_09F480 or static comment on ftCo_8009F480 was later cleaned up.",
+    "Look for subsequent decompilation of the remaining ft_08A4.s functions around ftCo_8009F4A4."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

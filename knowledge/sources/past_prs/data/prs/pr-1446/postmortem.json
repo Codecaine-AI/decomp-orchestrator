@@ -1,0 +1,186 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1446",
+  "pr": {
+    "number": 1446,
+    "title": "Update `dtk-template`",
+    "url": "https://github.com/doldecomp/melee/pull/1446",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-09-07T02:52:22Z",
+    "merged_at": "2024-09-17T15:30:11Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Updated the repository's dtk-template-derived tooling and CI integration around decomp-toolkit 0.9.6, objdiff-cli report generation, and richer progress/report metadata. The main work refactored tools/project.py to resolve object/library options centrally, add ProgressCategory support, generate report.json as a Ninja build target, support objdiff-cli as a downloaded/built tool, and adjust configure.py to use the new template conventions. CI diff mode was changed to build report.json through Ninja and compare expected/current reports with objdiff-cli. Review discussion focused on the transitional CI behavior caused by checking out commits before master had the new report.json Ninja rule.",
+  "change_classification": {
+    "primary_type": "tooling-template-update",
+    "categories": [
+      "tooling",
+      "ci",
+      "decomp-matching",
+      "build-system",
+      "progress-reporting",
+      "dependency-update"
+    ],
+    "systems": [
+      ".github/workflows",
+      ".nix",
+      "configure.py",
+      "tools/project.py",
+      "tools/download_tool.py",
+      "tools/decompctx.py",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "tools/project.py",
+      "why_it_matters": "Largest change. Refactored project configuration/build generation to match newer dtk-template behavior, including Library alias, Object.resolve, ProjectConfig.objects, ProgressCategory, objdiff-cli tool support, report.json generation, and centralized option defaults."
+    },
+    {
+      "path": "configure.py",
+      "why_it_matters": "Adopted new template-facing API: Library instead of LibDict, ProgressCategory import/use, objdiff CLI argument/tag/path, updated tool versions, category assignment for game/HSD/SDK/runtime progress, and changed asm/debug/map handling."
+    },
+    {
+      "path": ".github/workflows/build.yml",
+      "why_it_matters": "Changed CI diff mode to build report.json via Ninja, copy/compare expected and current reports, and invoke build/tools/objdiff-cli report changes."
+    },
+    {
+      "path": "tools/download_tool.py",
+      "why_it_matters": "Added objdiff-cli release URL generation and registered objdiff-cli in downloadable tools."
+    },
+    {
+      "path": ".nix/decomp-toolkit.nix",
+      "why_it_matters": "Bumped decomp-toolkit from 0.9.3 to 0.9.6 and updated hashes/lock output hashes."
+    },
+    {
+      "path": "tools/decompctx.py",
+      "why_it_matters": "Relaxed include and include-guard regexes to accept preprocessor whitespace such as '# include' and '# ifndef'."
+    },
+    {
+      "path": ".gitignore",
+      "why_it_matters": "Ignored /result, likely for Nix build output symlink hygiene."
+    }
+  ],
+  "what_changed": [
+    "Bumped decomp-toolkit in Nix and configure defaults from v0.9.3 to v0.9.6.",
+    "Updated compiler toolchain tag in configure.py from 20231018 to 20240706.",
+    "Added objdiff-cli as a first-class configured/downloaded tool with configure.py --objdiff, ProjectConfig.objdiff_tag/objdiff_path, and tools/download_tool.py URL support.",
+    "Refactored tools/project.py so Object instances carry option dictionaries with None defaults and are resolved against library options and ProjectConfig defaults through Object.resolve.",
+    "Replaced ProjectConfig.find_object with ProjectConfig.objects, which creates a resolved object map and exits on duplicate object names.",
+    "Introduced ProgressCategory and configured progress categories in configure.py for game, hsd, sdk, and runtime.",
+    "Added per-library progress_category assignment through Lib(..., category=...) and wrapper helpers DolphinLib, SysdolphinLib, MeleeLib, and RuntimeLib.",
+    "Moved debug and map linker flag mutations into configure.py by appending -g and -mapunused to config.ldflags based on args.debug and args.map.",
+    "Removed the --use-asm argument and changed asm behavior so asm_dir is disabled unless --non-matching is enabled.",
+    "Changed default progress_each_module in ProjectConfig to False, then set it from args.verbose in configure.py.",
+    "Changed CI diff workflow to generate report.json through Ninja rather than directly running objdiff-cli report generate.",
+    "Changed CI comparison flow to build expected report after checking out base, then restore PR head and build current report before running objdiff-cli report changes.",
+    "Added /result to .gitignore.",
+    "Relaxed decompctx regexes for #include and #ifndef to permit whitespace after '#'."
+  ],
+  "smart_moves": [
+    "Centralizing object option resolution in Object.resolve reduces scattered default handling and makes library-level options, object-level overrides, and ProjectConfig defaults easier to reason about.",
+    "Generating report.json as a Ninja target makes progress/report artifacts part of the build graph instead of an external CI-only command, improving reproducibility between local and CI workflows.",
+    "Adding objdiff-cli to the same tool acquisition path as dtk, binutils, compilers, sjiswrap, and wibo keeps setup behavior consistent across platforms.",
+    "Adding explicit progress categories lets future progress reporting separate game, HSD, Dolphin SDK, and runtime code rather than relying only on all/modules aggregates.",
+    "Detecting duplicate object names when constructing the object map makes ambiguous build/progress metadata fail early.",
+    "Moving debug/map flag construction into configure.py keeps project-specific linker policy outside the generic template generator.",
+    "Using a cargo pool for Rust tool builds in project.py avoids uncontrolled parallel cargo invocations when multiple Rust tools are built from source.",
+    "The CI review recognized a bootstrap problem: the base commit did not yet have the new report.json Ninja rule, so transient CI failure was due to the template transition rather than normal project code."
+  ],
+  "decomp_lessons": [
+    "When importing upstream dtk-template changes, expect CI to be temporarily self-referential: diff jobs that check out the base branch may not understand newly added Ninja targets until the template update lands on master.",
+    "Prefer making reports and progress outputs explicit Ninja targets so local builds and CI consume the same artifact paths.",
+    "Keep generic template code and project-specific configuration separate: tools/project.py should provide mechanisms, while configure.py should choose flags, categories, versions, and project library groupings.",
+    "Use None as an unset sentinel in object/library options when merging object overrides, library defaults, and global ProjectConfig defaults.",
+    "Progress categorization is worth wiring through library constructors early, because it creates reusable metadata for report.json/progress.json without touching each object repeatedly.",
+    "Tooling PRs can affect matching workflows even if they do not change game source: report generation, object option resolution, asm inclusion, and compiler tags all influence how decomp work is built and measured.",
+    "Regexes in context-generation tools should tolerate preprocessor whitespace forms, not just canonical '#include' and '#ifndef'."
+  ],
+  "naming_conventions": [
+    "Renamed the type alias LibDict to Library in tools/project.py/configure.py.",
+    "Added ProgressCategory objects with short IDs and human-readable names: game => Game Code, hsd => HSD Code, sdk => Dolphin SDK Code, runtime => Gekko Runtime Code.",
+    "Used progress_category as the library/object option key for categorizing progress/report output.",
+    "Added ProjectConfig fields objdiff_tag and objdiff_path, mirroring existing dtk_tag/dtk_path-style tool configuration.",
+    "Used current=\"$root/report.json\" in CI for the generated current report, with expected-report.json and changes-report.json for comparison artifacts.",
+    "Registered the downloadable tool key as objdiff-cli in tools/download_tool.py."
+  ],
+  "assembly_or_matching_tactics": [
+    "configure.py now disables config.asm_dir unless --non-matching is set, making asm fallback opt-in for non-matching builds rather than controlled by the removed --use-asm flag.",
+    "Object.resolve computes src_path, asm_path, src_obj_path, asm_obj_path, host_obj_path, and ctx_path consistently from source/src_dir/asm_dir/build_dir.",
+    "Library and object options now include asm_dir, asflags, extra_asflags, cflags, extra_cflags, mw_version, shift_jis, host, and add_to_all in a resolved option set.",
+    "The build workflow now treats report.json as a target built alongside all_source, which can be reused for matching/progress checks.",
+    "Debug builds append -sym on and -DDEBUG=1 to C flags, while non-debug builds add -DNDEBUG=1; linker debug output is handled by appending -g to ldflags when requested.",
+    "Map generation appends -mapunused to ldflags in configure.py when --map is selected."
+  ],
+  "review_feedback": [
+    {
+      "file": ".github/workflows/build.yml",
+      "comment": "A reviewer asked why an extra report file/current-report copy was needed in CI."
+    },
+    {
+      "file": ".github/workflows/build.yml",
+      "comment": "Encounter explained the extra file was to restore/keep the artifact upload behavior."
+    },
+    {
+      "file": ".github/workflows/build.yml",
+      "comment": "The author questioned whether actual/current could just be $root/report.json after the script rolls back to master and then checks out the PR head, later noting the flow was fixed in commit cbb200bafdea263317c2ba58d954897a77532b86."
+    },
+    {
+      "file": ".github/workflows/build.yml",
+      "comment": "The author asked why Ninja could not build the report in both cases and whether the path had changed."
+    },
+    {
+      "file": ".github/workflows/build.yml",
+      "comment": "Encounter clarified that the checked-out base commit did not yet have the updated dtk-template support for the report.json rule; the error was a temporary bootstrap issue while adding support."
+    }
+  ],
+  "searchable_terms": [
+    "dtk-template",
+    "decomp-toolkit",
+    "dtk v0.9.6",
+    "objdiff-cli",
+    "report.json",
+    "progress.json",
+    "ProgressCategory",
+    "Library",
+    "LibDict",
+    "Object.resolve",
+    "ProjectConfig.objects",
+    "progress_category",
+    "progress_categories",
+    "all_source",
+    "expected-report.json",
+    "changes-report.json",
+    "current report",
+    "build/tools/objdiff-cli",
+    "tools/project.py",
+    "configure.py",
+    "tools/download_tool.py",
+    ".github/workflows/build.yml",
+    ".nix/decomp-toolkit.nix",
+    "asm_dir",
+    "non_matching",
+    "cargo pool",
+    "duplicate object name",
+    "decompctx include regex",
+    "mapunused",
+    "compiler tag 20240706"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rely on report.json as a Ninja target or objdiff-cli report changes in CI.",
+    "Check whether any downstream scripts still referenced LibDict or --use-asm after this template update.",
+    "Review subsequent fixes around progress categories game/hsd/sdk/runtime and report.json output format.",
+    "Look for CI changes after PR 1446 that remove temporary bootstrap handling for old base commits without report.json support.",
+    "Audit object names for duplicate detection failures introduced by ProjectConfig.objects."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

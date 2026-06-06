@@ -1,0 +1,133 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1685",
+  "pr": {
+    "number": 1685,
+    "title": "match gmpause",
+    "url": "https://github.com/doldecomp/melee/pull/1685",
+    "state": "MERGED",
+    "author": "sadkellz",
+    "created_at": "2025-07-12T19:53:29Z",
+    "merged_at": "2025-07-13T01:21:26Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the game-mode pause overlay module by replacing four placeholder gmpause functions with typed implementations, adding the PauseData struct, and updating prototypes to use concrete HSD_GObj/JObj-related types. The implementation loads the GmPause archive scene data, builds and animates the pause UI JObj tree, toggles visibility for LRAS/Z/analog-stick prompts based on flags, and rotates the analog stick/background based on controller input for the active slot.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-definition",
+      "game-ui"
+    ],
+    "systems": [
+      "game-mode",
+      "pause",
+      "baselib-jobj",
+      "controller"
+    ]
+  },
+  "key_files": [
+    "src/melee/gm/gmpause.c",
+    "src/melee/gm/gmpause.h",
+    "src/melee/gm/types.h"
+  ],
+  "what_changed": [
+    "Implemented fn_801A0E34, gm_801A0FEC, gm_801A10FC, and fn_801A1134 in src/melee/gm/gmpause.c instead of leaving them as placeholder match comments.",
+    "Added local/static data used by the matched functions, including lbl_80479B10 as struct PauseData, jobj assertion/string literals, a deg2rad constant, archive/gobj externs, and the GmPause archive name.",
+    "fn_801A0E34 now reads HSD_PadMasterStatus for the stored player slot, scales normal stick X/Y by 10.0f, converts to radians with 0.017453292F, and applies JObj rotations.",
+    "gm_801A0FEC now records the slot, requests the appropriate animation frame, and uses JOBJ_HIDDEN flag toggles to show or hide LRAS, Z, analog stick, analog stick outline, and background prompts according to a flag bitmask.",
+    "gm_801A10FC now resets the pause data slot sentinel to 99 and hides the background JObj.",
+    "fn_801A1134 now loads the GmPause archive and ScGamPause_scene_data, creates the GObj, loads the root JObj, finds child JOBJs by index, attaches the JObj to the GObj, sets up GX link/proc callback, runs initial animation, and initializes the slot sentinel.",
+    "Updated gmpause.h prototypes from UNK_RET/UNK_PARAMS placeholders to concrete signatures: fn_801A0E34(HSD_GObj*), gm_801A0FEC(s32, u8), gm_801A10FC(void), and fn_801A1134(void).",
+    "Added baselib forward declarations to gmpause.h and gm/types.h so HSD_GObj and HSD_JObj pointers can be used without pulling full baselib definitions into the headers.",
+    "Added struct PauseData to gm/types.h with JObj pointers for background, analog_stick, lras, z, analog_stick_outline, plus a signed slot field."
+  ],
+  "smart_moves": [
+    "Introduced a small PauseData struct instead of keeping the pause overlay state as untyped globals, making the matched code easier to read while preserving offsets.",
+    "Used baselib/forward.h in headers to type HSD_GObj and HSD_JObj pointers without unnecessary heavy includes.",
+    "Kept the slot sentinel value 99 explicit in both the update and reset paths, documenting the inactive/no-slot behavior visible in the code.",
+    "Modeled the prompt visibility as direct JOBJ_HIDDEN flag manipulation, matching how pause UI pieces are conditionally shown based on match-rule flags.",
+    "Preserved important asset/archive strings such as GmPause and ScGamPause_scene_data, which are key evidence for matching the scene-loading routine.",
+    "The child lookup sequence in fn_801A1134 captures the UI hierarchy indices for analog stick, LRAS, Z, and outline, giving future work concrete anchors for the pause scene structure."
+  ],
+  "decomp_lessons": [
+    "When matching UI overlay code, reconstructing the state holder struct can clarify repeated JObj accesses and naturally expose field offsets.",
+    "Asset-loading functions often require awkward pointer nesting, as shown by HSD_Joint**** joint and HSD_JObjLoadJoint(***joint); preserve the pointer shape that matches codegen even if it looks unusual.",
+    "Header cleanup from UNK_RET/UNK_PARAMS to concrete prototypes is valuable once call signatures are known, especially for GObj proc callbacks and game-mode entry points.",
+    "For JObj animation code, visibility changes frequently compile as HSD_JObjSetFlagsAll/HSD_JObjClearFlagsAll around JOBJ_HIDDEN rather than higher-level UI abstractions.",
+    "Controller-driven UI animation can require exact float constants and sign conventions; this PR used 10.0f scaling and 0.017453292F degree-to-radian conversion, with Y rotation applied to the analog stick and negative X rotation applied to the background.",
+    "Forward declarations are often enough in shared type headers when fields are only pointers, reducing include churn during matching."
+  ],
+  "naming_conventions": [
+    "Matched but still-unknown functions retained address-style names such as fn_801A0E34 and gm_801A0FEC.",
+    "The new state struct was named PauseData, with descriptive field names matching pause UI pieces: background, analog_stick, lras, z, and analog_stick_outline.",
+    "Static labels and externs retained generated lbl_ address names where semantic names were not yet established, such as lbl_80479B10, lbl_804D6700, and lbl_804D6704.",
+    "Header prototypes use concrete C signatures and address comments in the existing project style, for example /* 1A0FEC */ void gm_801A0FEC(s32, u8);"
+  ],
+  "assembly_or_matching_tactics": [
+    "Used PAD_STACK(8), suggesting stack padding was needed to preserve the original stack layout for fn_801A0E34.",
+    "Kept the literal deg2rad constant 0.017453292F and also declared lbl_804DA984, indicating float literal placement/order mattered for matching.",
+    "Preserved static assertion/string literals related to JObj quaternion checks, likely to reproduce rodata ordering required by HSD_JObjSetRotation calls.",
+    "Used explicit casts such as (u8)lbl_80479B10.slot and (u8) HSD_GObj_804D7849 to steer code generation.",
+    "Used exact unsigned constants in GObj creation/setup calls, including GObj_Create(0xEU, 2U, 0U), GObj_SetupGXLink(..., 0xBU, 0U), and HSD_GObjProc_8038FD54(..., 0U).",
+    "Kept the archive load call shape lbArchive_80016DBC(\"GmPause\", &joint, \"ScGamPause_scene_data\", 0), including the nested HSD_Joint pointer type."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "The context reports one issue comment but no human text excerpt was included, so no specific reviewer feedback can be extracted."
+  ],
+  "searchable_terms": [
+    "pr-1685",
+    "match gmpause",
+    "gmpause",
+    "gm pause",
+    "GmPause",
+    "ScGamPause_scene_data",
+    "PauseData",
+    "fn_801A0E34",
+    "gm_801A0FEC",
+    "gm_801A10FC",
+    "fn_801A1134",
+    "lbl_80479B10",
+    "lbl_804D6700",
+    "lbl_804D6704",
+    "HSD_PadMasterStatus",
+    "PAD_STACK",
+    "nml_stickX",
+    "nml_stickY",
+    "HSD_JObjSetRotationY",
+    "HSD_JObjSetRotationX",
+    "HSD_JObjReqAnimAll",
+    "HSD_JObjClearFlagsAll",
+    "HSD_JObjSetFlagsAll",
+    "JOBJ_HIDDEN",
+    "HSD_JObjAnimAll",
+    "lbArchive_80016DBC",
+    "HSD_JObjLoadJoint",
+    "lb_80011E24",
+    "HSD_JObjGetChild",
+    "GObj_Create",
+    "GObj_SetupGXLink",
+    "HSD_GObjProc_8038FD54",
+    "baselib/forward.h",
+    "gm/types.h",
+    "game-mode pause overlay"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename fn_801A0E34 or fn_801A1134 to semantic gmpause function names.",
+    "Search for other uses of struct PauseData or lbl_80479B10 to see whether the pause overlay state was refined.",
+    "Check callers of gm_801A0FEC to document the meaning of the u8 flag bits for LRAS, Z, and analog stick prompts.",
+    "Search for subsequent cleanup of the static JObj assertion strings and lbl_804DA984 deg2rad constant.",
+    "Compare other archive scene-loading matches that use lbArchive_80016DBC and nested HSD_Joint pointer types."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

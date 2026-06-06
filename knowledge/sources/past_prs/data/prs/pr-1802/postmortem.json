@@ -1,0 +1,151 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1802",
+  "pr": {
+    "number": 1802,
+    "title": "Create separate inner non-fighter HurtCapsule type",
+    "url": "https://github.com/doldecomp/melee/pull/1802",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-08-07T01:40:35Z",
+    "merged_at": "2025-08-07T01:46:33Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Split fighter hurt capsule storage from the generic lb/it HurtCapsule layout by introducing/using FighterHurtCapsule for Fighter::hurt_capsules and passing its inner .capsule member to generic collision-library routines. The stated motivation was to fix struct size discrepancies between fighter code and lb/item code. The PR also cleaned up item-field accesses that had been abusing xACC_itemHurtbox[1] members as unrelated Vec2/float storage, replacing them with direct xB54/xB5C/xB60/xB64 fields, and adjusted affected prototypes and symbol sizes.",
+  "change_classification": {
+    "primary_type": "types-structs",
+    "categories": [
+      "decomp-matching",
+      "fix",
+      "headers",
+      "types-structs",
+      "field-layout-correction",
+      "collision"
+    ],
+    "systems": [
+      "fighter",
+      "item",
+      "library",
+      "config"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/types.h",
+    "src/melee/lb/forward.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/ftcoll.c",
+    "src/melee/ft/ftcoll.h",
+    "src/melee/ft/chara/ftCommon/ftCo_0A01.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Bury.c",
+    "src/melee/ft/chara/ftSamus/ftSs_SpecialLw_0.c",
+    "src/melee/ft/ftdrawcommon.c",
+    "src/melee/it/types.h",
+    "src/melee/it/itcoll.c",
+    "src/melee/it/it_266F.c",
+    "src/melee/it/it_2725.c",
+    "src/melee/it/it_2725.h",
+    "config/GALE01/symbols.txt"
+  ],
+  "what_changed": [
+    "Changed Fighter::hurt_capsules from an array of HurtCapsule to an array of FighterHurtCapsule in src/melee/ft/types.h.",
+    "Updated fighter collision APIs and local variables to take FighterHurtCapsule* where fighter-specific hurt capsule records are being handled, including ftColl_80076764, ftColl_80078384, and ftColl_8007B5AC.",
+    "Updated calls into generic lb collision helpers to pass the embedded generic capsule as &fighter->hurt_capsules[i].capsule rather than the whole fighter-specific wrapper.",
+    "Moved direct generic capsule field accesses such as state, skip_update_pos, bone_idx, bone, a_offset, b_offset, a_pos, b_pos, and scale through the .capsule member.",
+    "Preserved fighter-only hurt capsule fields such as kind and is_grabbable on FighterHurtCapsule rather than treating them as part of the generic HurtCapsule.",
+    "Adjusted item code that previously referenced unrelated data through ip->xACC_itemHurtbox[1].b_pos.z or other hurtbox members to use direct item fields such as xB54, xB5C, xB60, and xB64.",
+    "Changed it_80274D04's position output parameter from Vec3* to Vec2*, matching its observed use writing x/y only.",
+    "Simplified item helper implementations in it_2725.c by using GET_ITEM, local float temporaries, and direct field names instead of misleading hurtbox-member aliases.",
+    "Updated config/GALE01/symbols.txt data object boundaries: it_803F1384 shrank from size 0x94 to 0x44 and three string labels lbl_803F13C8, lbl_803F13DC, and lbl_803F13F4 were added."
+  ],
+  "smart_moves": [
+    "Introduced a wrapper-style distinction instead of forcing one HurtCapsule struct to satisfy both fighter and non-fighter layouts, directly addressing the reported struct size discrepancy.",
+    "Kept generic lb collision APIs operating on HurtCapsule by passing the inner .capsule, avoiding unnecessary churn in shared library collision routines.",
+    "Made fighter-specific APIs explicitly accept FighterHurtCapsule*, which documents when code expects the extended fighter layout.",
+    "Replaced misleading item hurtbox aliasing with direct xB54/xB5C/xB60/xB64 accesses, reducing false structural coupling between item data and HurtCapsule.",
+    "Changed Vec3* to Vec2* for it_80274D04 where the function only fills x and y, making the prototype better match the data being written.",
+    "Updated symbol metadata after correcting data layout boundaries, keeping config evidence aligned with the decompiled types."
+  ],
+  "decomp_lessons": [
+    "Do not assume identically named gameplay concepts share one struct layout across systems; fighter hurt capsules can wrap or extend the generic collision capsule used by lb/item code.",
+    "When a shared library helper only needs the common prefix/subobject, pass the embedded common member explicitly rather than depending on whole-struct pointer compatibility.",
+    "A struct size mismatch is often a sign that local field aliases are wrong, not merely that padding is missing.",
+    "Suspicious accesses like xACC_itemHurtbox[1].b_pos.z used as unrelated item state should be treated as evidence of overlapping or misidentified fields and revisited with offsets.",
+    "Function prototypes should reflect actual memory usage; if only two coordinates are written, Vec2* may be more accurate than Vec3*.",
+    "After correcting data structure boundaries, revisit symbols.txt object sizes and adjacent labels because previously merged objects may split into separate strings or data objects."
+  ],
+  "naming_conventions": [
+    "Use FighterHurtCapsule for the fighter-specific wrapper/extended hurt capsule type.",
+    "Use HurtCapsule for the generic inner collision capsule consumed by lb collision routines.",
+    "Name the embedded generic member capsule and access shared fields through hurt->capsule.field.",
+    "Keep fighter-only semantic fields such as kind and is_grabbable directly on FighterHurtCapsule when the diff shows they are not part of the generic capsule.",
+    "Use direct offset-style item names like xB54, xB5C, xB60, and xB64 when the semantic type is not yet proven, rather than routing through an unrelated struct member."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use nested-member access to preserve the same offsets while distinguishing the outer fighter-specific record from the generic collision capsule.",
+    "Pass &hurt->capsule or &fp->hurt_capsules[i].capsule into lbColl_* calls to match APIs expecting HurtCapsule* without flattening fighter-only fields into the common struct.",
+    "When a decompiled access points into a later element of an array, verify whether the apparent array member is actually a mis-sized struct or unrelated field at the same offset.",
+    "For loops over fixed arrays, ARRAY_SIZE(item->x5D4_hitboxes) was used in it_8027146C instead of a hardcoded count of 4, while preserving the same iteration intent.",
+    "Local temporaries in it_80274D6C for ECB right/left/top components clarified which floats feed xB5C, xB60, and xB64 and likely helped produce cleaner matching code."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "The PR body/comment evidence only states: \"Fixes struct size discrepancies between ft and lb/it code.\""
+  ],
+  "searchable_terms": [
+    "PR1802",
+    "FighterHurtCapsule",
+    "HurtCapsule",
+    "hurt_capsules",
+    "capsule member",
+    "struct size discrepancy",
+    "fighter hurt capsule",
+    "non-fighter HurtCapsule",
+    "lbColl_800083C4",
+    "lbColl_80008248",
+    "lbColl_80007ECC",
+    "lbColl_8000805C",
+    "lbColl_8000A584",
+    "lbColl_8000A244",
+    "ftColl_80076764",
+    "ftColl_80078384",
+    "ftColl_8007B5AC",
+    "ftColl_8007AF28",
+    "ftColl_8007B0C0",
+    "ftColl_8007B128",
+    "ftCo_800A0DA4",
+    "ftSs_Init_80128A1C",
+    "it_80274D04",
+    "it_80274D6C",
+    "it_80274DAC",
+    "it_8027574C",
+    "it_8027146C",
+    "xACC_itemHurtbox",
+    "xB54",
+    "xB5C",
+    "xB60",
+    "xB64",
+    "Vec2",
+    "Vec3",
+    "symbols.txt",
+    "it_803F1384",
+    "lbl_803F13C8",
+    "lbl_803F13DC",
+    "lbl_803F13F4"
+  ],
+  "follow_up_queries": [
+    "Find other lbColl_* calls that pass Fighter::hurt_capsules directly instead of the .capsule member.",
+    "Audit remaining xACC_itemHurtbox[1] accesses in item code for possible false aliases to xB54/xB5C/xB60/xB64 or nearby fields.",
+    "Check whether other systems need wrapper types around generic HitCapsule or HurtCapsule layouts.",
+    "Verify that all FighterHurtCapsule-only fields are documented in lb/types.h or ft-related headers with correct offsets.",
+    "Review adjacent symbols around it_803F1384 for further object-size splits caused by corrected struct/data boundaries."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

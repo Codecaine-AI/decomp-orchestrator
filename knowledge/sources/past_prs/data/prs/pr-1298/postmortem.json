@@ -1,0 +1,140 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1298",
+  "pr": {
+    "number": 1298,
+    "title": "Match 99.89% of `itegg` (2.63 KB)",
+    "url": "https://github.com/doldecomp/melee/pull/1298",
+    "state": "MERGED",
+    "author": "wyatt-avilla",
+    "created_at": "2024-02-22T03:09:45Z",
+    "merged_at": "2024-02-22T03:43:53Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched nearly all of src/melee/it/items/itegg.c, adding a 312-line decompilation for Egg item behavior and reaching 99.89% file score. The PR also tightened symbol visibility for many itegg-local functions and one local sdata2 float, refined EggVars from an opaque filler/heal field into named fields, renamed the Item union member from Egg to egg, and updated heal-value access in it_8026B47C. The author explicitly called out uncertainty around type punning in it_802891E0 and whether EggVars needed adjustment; follow-up comments indicate agreement that the reused storage was the same struct and note the file was very close to linking.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "symbol-scope-cleanup",
+      "item-behavior"
+    ],
+    "systems": [
+      "item",
+      "config",
+      "common-items",
+      "egg",
+      "tomato"
+    ]
+  },
+  "key_files": [
+    "src/melee/it/items/itegg.c",
+    "src/melee/it/items/itegg.h",
+    "src/melee/it/itCommonItems.h",
+    "src/melee/it/types.h",
+    "src/melee/it/it_26B1.c",
+    "src/melee/it/items/ittomato.c",
+    "config/GALE01/symbols.txt"
+  ],
+  "what_changed": [
+    "Implemented src/melee/it/items/itegg.c from an effectively empty file to a 312-line decompilation covering Egg item state table setup, spawn helper it_80288C88, state callbacks, breaking/landing behavior, heal/effect behavior, and forwarding wrappers such as it_802893D4 through it_802895A8.",
+    "Added static prototypes for many local itegg callbacks and defined ItemStateTable it_803F5988 with seven state entries mapping animation/state IDs to callback triples.",
+    "Added a public declaration for it_80288C88 in itegg.h and included dolphin mtx forward declarations for Vec3.",
+    "Changed many itegg functions in config/GALE01/symbols.txt from global to local scope, matching the new static C declarations.",
+    "Changed sdata2 symbol it_804DC9B8 to local label @180, preserving address and float size but no longer exporting it as a global named object.",
+    "Refined EggVars in itCommonItems.h from an opaque u8 filler[0x60] plus xE34_heal into named fields: bool x0, int rand_max, padding from 0x8 to 0x60, and int heal_amount.",
+    "Renamed the Item union member from xDD4_itemVar.Egg to xDD4_itemVar.egg in src/melee/it/types.h and updated callers that use EggVars.",
+    "Updated it_8026B47C healing-item lookup so Pokemon_Lucky_Egg returns temp_item->xDD4_itemVar.egg.heal_amount instead of xE34_heal.",
+    "Temporarily commented out several ittomato.c accesses that previously reached into Egg.filler[4], likely because the EggVars layout/member rename made those raw filler accesses invalid or suspect."
+  ],
+  "smart_moves": [
+    "Used static functions and local symbol scope together: callbacks that are only used inside itegg.c were made static in C and marked scope:local in symbols.txt, reducing accidental external API surface.",
+    "Converted the Egg item variable struct from opaque filler-based access to named semantic fields where evidence existed, improving future readability and reducing reliance on magic offsets.",
+    "Preserved exact offsets in EggVars with explicit padding after the named fields, allowing decomp code to name known members without disturbing the underlying item variable layout.",
+    "Reused the same EggVars storage for multiple Egg-like contexts after discussion; the author identified suspicious type punning in it_802891E0 before changing the struct, and the follow-up comment says, 'Ah okay, so they are the same struct.'",
+    "Kept unresolved or questionable tomato-side bitfield/filler accesses commented rather than inventing a possibly wrong replacement member name.",
+    "Used PAD_STACK in functions such as it_80288E6C and the wrapper callbacks where the diff shows stack-shape padding was needed for matching."
+  ],
+  "decomp_lessons": [
+    "When an item variable union member is reused by several related item behaviors, first determine whether the observed type punning is actually shared struct storage before splitting or renaming fields.",
+    "Opaque filler arrays should be gradually replaced with named fields only when offsets and semantics are supported by usage; preserve unknown regions with explicit padding.",
+    "If a field rename breaks unrelated m2c output that was poking into filler bytes, it is safer to leave those accesses commented or unresolved than to assign unsupported semantics.",
+    "For item state callbacks, matching often benefits from making internal callbacks static and aligning symbols.txt scope to local.",
+    "Small item files can be brought close to fully linked status by combining state table reconstruction, callback matching, symbol-scope cleanup, and struct cleanup in the same PR.",
+    "Review comments may contain important type-layout guidance even when formal review comments are absent; here the useful feedback was in issue comments rather than code review threads."
+  ],
+  "naming_conventions": [
+    "EggVars fields were renamed to lower_snake_case semantic names such as rand_max and heal_amount instead of address-derived names like xE34_heal.",
+    "The Item union member for EggVars was changed from capitalized Egg to lowercase egg, matching the style used by direct variable-style union members in the touched code.",
+    "Unknown padding inside EggVars was named _8 with an offset comment, preserving layout documentation without inventing semantics.",
+    "Struct field comments use offset notation such as /* +0 */, /* +4 */, /* +8 */, and /* +60 */.",
+    "The file retained address-style function names such as it_80288C88 and it_802891E0 because no stronger semantic names were established in the PR evidence."
+  ],
+  "assembly_or_matching_tactics": [
+    "Marked many callbacks static and changed corresponding symbols.txt entries from scope:global to scope:local.",
+    "Introduced PAD_STACK(8) in it_80288E6C and PAD_STACK(4) in several forwarding wrapper functions to satisfy stack/layout matching.",
+    "Used explicit zeroing patterns for Vec3 and velocity fields, including chained assignments to x/y/z, consistent with matching-oriented C.",
+    "Used ternary form in it_802891E0 after pre-decrementing egg.rand_max: return ip->xDD4_itemVar.egg.rand_max > 0 ? false : true.",
+    "Maintained address-named local label @180 for a local sdata2 float instead of keeping the previous global symbol name it_804DC9B8.",
+    "Used casts such as Item_80268E5C((Item_GObj*) gobj, 2, ITEM_ANIM_UPDATE) where needed by the matched code shape."
+  ],
+  "review_feedback": [
+    {
+      "author": "wyatt-avilla",
+      "text": "The PR body says it was marked draft because type punning in it_802891E0 made the author think EggVars might need changing and they wanted a second opinion."
+    },
+    {
+      "author": "ribbanya",
+      "text": "Commented: 'Ah okay, so they are the same struct.' This supports the EggVars/shared-storage interpretation, but the context excerpt does not include the full discussion."
+    },
+    {
+      "author": "ribbanya",
+      "text": "Commented: 'Hm, very close to linking the file.' This reflects that the file was nearly complete but still not fully linked/matched at merge, consistent with the 99.89% score."
+    }
+  ],
+  "searchable_terms": [
+    "pr-1298",
+    "itegg",
+    "Match 99.89% of itegg",
+    "src/melee/it/items/itegg.c",
+    "EggVars",
+    "egg.rand_max",
+    "egg.heal_amount",
+    "xDD4_itemVar.egg",
+    "Pokemon_Lucky_Egg",
+    "it_80288C88",
+    "it_80288DC4",
+    "it_802891E0",
+    "it_80289218",
+    "it_803F5988",
+    "ItemStateTable",
+    "it_8026B47C",
+    "itCommonItems.h",
+    "it_26B1.c",
+    "ittomato.c",
+    "symbols.txt local scope",
+    "PAD_STACK",
+    "type punning",
+    "same struct",
+    "@180",
+    "it_804DC9B8"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching EggVars or xDD4_itemVar.egg to see whether rand_max, x0, and heal_amount were renamed or further validated.",
+    "Find later PRs touching src/melee/it/items/ittomato.c to see how the commented Egg.filler[4] accesses were resolved.",
+    "Search for PRs that fully link src/melee/it/items/itegg.c after this 99.89% match.",
+    "Search for additional comments around it_802891E0 type punning to recover the missing reasoning behind the shared EggVars conclusion.",
+    "Look for other item files that changed symbol scopes from global to local when static callbacks were introduced."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

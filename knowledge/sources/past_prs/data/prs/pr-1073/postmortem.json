@@ -1,0 +1,144 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1073",
+  "pr": {
+    "number": 1073,
+    "title": "Synchronize `Makefile` and `configure.py` C flags",
+    "url": "https://github.com/doldecomp/melee/pull/1073",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-01-17T18:20:48Z",
+    "merged_at": "2024-01-17T18:41:38Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Synchronized Metrowerks compiler flag definitions between the legacy Makefile and configure.py build generation path. The PR made Makefile CFLAGS more explicit and closer to configure.py, reordered and refactored configure.py flags, split include handling into base include lists, introduced a generic Lib helper for Dolphin/Sysdolphin libraries, and made missing config/source warnings depend on config.debug. There were no PR body comments or review comments in the provided slice, so intent beyond the title and diff is inferred from code changes.",
+  "change_classification": {
+    "primary_type": "build-system-configuration",
+    "categories": [
+      "code-change",
+      "compiler-flags",
+      "build-script-refactor",
+      "include-paths"
+    ],
+    "systems": [
+      "repo-root",
+      "Makefile",
+      "configure.py",
+      "Metrowerks build configuration"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "Makefile",
+      "role": "Updated CFLAGS to match configure.py-style Metrowerks options, including explicit PowerPC alignment, hardware floating point spelling, pragma flags, RTTI off, string reuse, and include ordering."
+    },
+    {
+      "path": "configure.py",
+      "role": "Refactored base C flags and include handling, added typed helper functions, introduced shared Lib helper, specialized Sysdolphin include paths, and changed missing file warnings to debug-only."
+    }
+  ],
+  "what_changed": [
+    "Makefile CFLAGS changed from combined options like `-proc gekko -fp hard` to explicit entries `-proc gekko`, `-fp hardware`, and added `-align powerpc`.",
+    "Makefile added flags already represented in configure.py-style builds: `-pragma \"cats off\"`, `-pragma \"warn_notinlined off\"`, `-RTTI off`, and `-str reuse`.",
+    "Makefile moved `$(INCLUDES)` after `-maxerrors $(MAX_ERRORS)`, and added a `TODO:-W all` note.",
+    "configure.py imported typing helpers `Any`, `Dict`, and `List`, and reformatted the tools.project import.",
+    "configure.py reordered `cflags_base` to mirror the Makefile CFLAGS sequence more closely.",
+    "configure.py removed include paths and some path-oriented flags from `cflags_base`, including direct `-i src/...` entries and `-nosyspath`, then rebuilt include behavior through separate include lists.",
+    "configure.py added `includes_base = [\"src\"]` and `system_includes_base` containing `src`, `src/MSL`, `src/Runtime`, and `build/{config.version}/include`.",
+    "configure.py added `cflags_melee`, extending `cflags_base` with melee-specific include paths: `src/melee`, `src/melee/ft/chara`, and `src/sysdolphin`.",
+    "configure.py introduced a generic `Lib` helper that constructs library dictionaries with cflags composed from base flags, normal includes, `-I-`, and system includes.",
+    "DolphinLib was reduced to `return Lib(lib_name, objects)`.",
+    "SysdolphinLib now calls `Lib` with custom include lists, including a documented `src/melee` hack for `lbrefract`, plus `src/sysdolphin`, `src/dolphin`, and `src/sysdolphin` as system includes.",
+    "configure.py changed `config.warn_missing_config` and `config.warn_missing_source` from always true to `config.debug`."
+  ],
+  "smart_moves": [
+    "Kept Makefile and configure.py compiler flags synchronized instead of allowing two build paths to drift, reducing risk that matching status depends on which build system is used.",
+    "Separated compiler behavior flags from include-path construction in configure.py, making future flag comparisons against Makefile easier and less noisy.",
+    "Introduced `Lib` as a shared helper so DolphinLib and SysdolphinLib can reuse common object-library configuration while still customizing include search paths.",
+    "Used explicit include lists and inserted `-I-`, which documents and controls the boundary between normal include paths and system include paths.",
+    "Left TODO comments for options that are still parameterized or unresolved, such as `-W all`, `-msgstyle gcc`, `-maxerrors 1`, and `-DMUST_MATCH`, rather than silently hard-coding them as final design.",
+    "Scoped noisy missing config/source warnings to debug mode, likely improving normal build ergonomics while preserving diagnostics for development."
+  ],
+  "decomp_lessons": [
+    "For decomp projects with multiple build entry points, compiler flag parity is matching-critical; even spelling changes such as `-fp hard` versus `-fp hardware`, alignment flags, pragmas, RTTI, and string reuse can affect generated code or diagnostics.",
+    "Keep base compiler flags distinct from project-specific include paths. This makes it easier to reuse flag sets across main DOL objects, libraries, and RELs without accidentally carrying wrong include precedence.",
+    "When matching CodeWarrior/Metrowerks output, preserve apparently small flags such as `-pragma \"warn_notinlined off\"`, `-pragma \"cats off\"`, `-RTTI off`, `-str reuse`, `-enum int`, and `-fp_contract on`; they encode assumptions about compiler behavior.",
+    "Use helper functions for repeated library configuration so individual library exceptions, such as Sysdolphin include hacks, are visible and localized.",
+    "Avoid making normal builds noisy with missing-source/config warnings unless the build is in a diagnostic/debug mode."
+  ],
+  "naming_conventions": [
+    "Common compiler flags are stored as `cflags_base`.",
+    "Main project-specific compiler flags are stored as `cflags_melee`.",
+    "Include path groups use descriptive names: `includes_base` for normal includes and `system_includes_base` for system include paths.",
+    "Library helper names are PascalCase-style functions: `Lib`, `DolphinLib`, `SysdolphinLib`, and `Rel`.",
+    "Boolean matching aliases remain capitalized: `Matching = True` and `NonMatching = False`.",
+    "The code uses Metrowerks flag spelling such as `-Cpp_exceptions off`, `-fp hardware`, `-align powerpc`, and `-RTTI off`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Synchronize all CodeWarrior C flags across Makefile and configure.py before investigating object-level mismatches, because flag drift can create false nonmatches.",
+    "Use explicit `-DMUST_MATCH` in configure.py base flags and `ASFLAGS += --defsym MUST_MATCH=1` in Makefile when non-matching mode is disabled, preserving build-time matching guards.",
+    "Preserve include search order and distinguish local from system includes with `-I-`; include precedence can affect which headers are used and therefore matching behavior.",
+    "For Sysdolphin, add targeted include exceptions rather than broadening all library include paths; the diff specifically notes `src/melee` as a hack for `lbrefract`."
+  ],
+  "review_feedback": [
+    {
+      "type": "none_provided",
+      "details": "The provided PR slice contains no issue comments, review comments, reviews, or PR body text. No explicit reviewer rationale or requested changes were available."
+    }
+  ],
+  "searchable_terms": [
+    "PR 1073",
+    "Synchronize Makefile and configure.py C flags",
+    "ribbanya",
+    "Makefile CFLAGS",
+    "configure.py cflags_base",
+    "Metrowerks flags",
+    "CodeWarrior flags",
+    "-msgstyle gcc",
+    "-nowraplines",
+    "-cwd source",
+    "-Cpp_exceptions off",
+    "-proc gekko",
+    "-fp hardware",
+    "-align powerpc",
+    "-fp_contract on",
+    "-O4,p",
+    "-enum int",
+    "-nodefaults",
+    "-inline auto",
+    "-pragma cats off",
+    "-pragma warn_notinlined off",
+    "-RTTI off",
+    "-str reuse",
+    "-maxerrors",
+    "-DMUST_MATCH",
+    "-DVERSION",
+    "-I-",
+    "includes_base",
+    "system_includes_base",
+    "cflags_melee",
+    "DolphinLib",
+    "SysdolphinLib",
+    "Lib helper",
+    "lbrefract",
+    "warn_missing_config",
+    "warn_missing_source",
+    "config.debug"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify `cflags_base`, `cflags_melee`, `includes_base`, or `system_includes_base` to see whether this flag synchronization was extended or corrected.",
+    "Search for uses of `cflags_melee` after PR 1073 to confirm whether main melee objects adopted the new include-separated flag set.",
+    "Search for `lbrefract` and `src/melee` include hacks to understand why Sysdolphin required melee headers.",
+    "Compare current Makefile CFLAGS against configure.py cflags to verify they remain synchronized.",
+    "Look for later changes to `config.warn_missing_config = config.debug` or `config.warn_missing_source = config.debug` to see whether debug-only warnings were retained."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

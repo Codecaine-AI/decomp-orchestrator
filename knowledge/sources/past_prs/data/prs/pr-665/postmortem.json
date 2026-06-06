@@ -1,0 +1,194 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-665",
+  "pr": {
+    "number": 665,
+    "title": "Fix `implicit-function-declaration` warnings, pass 9",
+    "url": "https://github.com/doldecomp/melee/pull/665",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-11T23:18:37Z",
+    "merged_at": "2023-01-12T04:10:36Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Pass 9 of implicit-function-declaration cleanup added missing prototypes/includes, corrected several function signatures and struct declarations, moved local ad-hoc types toward shared headers, and adjusted formatting/tooling so warning cleanup did not break matching-sensitive macros. The largest work was in ground/stage library code and Dolphin OS allocation code, with supporting header additions for particle generator structures, OS panic noreturn annotation, stage-specific callbacks, and archive/data-bank APIs.",
+  "change_classification": {
+    "primary_type": "header-and-prototype-cleanup",
+    "categories": [
+      "cleanup",
+      "fix",
+      "headers",
+      "tooling",
+      "decomp-matching"
+    ],
+    "systems": [
+      "dolphin-os",
+      "runtime-platform",
+      "sysdolphin-baselib",
+      "melee-ground",
+      "melee-stage",
+      "melee-item",
+      "melee-library",
+      "tooling"
+    ]
+  },
+  "key_files": [
+    ".clang-format",
+    "include/Runtime/platform.h",
+    "include/dolphin/os/os.h",
+    "include/sysdolphin/baselib/baselib_unknown_002.h",
+    "include/sysdolphin/baselib/psappsrt.h",
+    "include/sysdolphin/baselib/psstructs.h",
+    "src/dolphin/os/OSAlloc.c",
+    "src/melee/gr/grlib.c",
+    "src/melee/gr/grlib.h",
+    "src/melee/gr/grdatfiles.c",
+    "src/melee/gr/grdynamicattr.c",
+    "src/melee/gr/ground.c",
+    "src/melee/gr/ground.h",
+    "src/melee/gr/stage.c",
+    "src/melee/gr/stage.h",
+    "src/melee/gr/grbigblue.h",
+    "src/melee/gr/gricemt.h",
+    "src/melee/gr/grrcruise.h",
+    "src/melee/lb/types.h",
+    "src/melee/lb/lbunknown_003.h",
+    "src/melee/mp/mplib.h",
+    "tools/functions.sh"
+  ],
+  "what_changed": [
+    "Added `ATTRIBUTE_NORETURN` in `include/Runtime/platform.h`, using `__attribute__((noreturn))` for clang/GCC and an empty fallback otherwise.",
+    "Annotated `OSPanic` as `ATTRIBUTE_NORETURN` in `include/dolphin/os/os.h` and fixed that header guard from `_OS_H_` to `_OS_H__` to match the opening guard.",
+    "Added missing baselib prototypes in `baselib_unknown_002.h` for functions such as `func_8039D4DC`, `func_8039EFAC`, `func_8039F6CC`, and `func_8039D5DC`.",
+    "Expanded `_UnkGeneratorStruct` in `psappsrt.h` from an opaque fill-only prefix into named fields including `next`, `x10_jobj`, and `x16_flags`, allowing `grlib.c` to stop declaring its own local `UnkEffectStruct`.",
+    "Changed `psInitDataBankLocate` in `psstructs.h` to take `HSD_Archive*` for command and texture banks, and included `archive.h` to support that type.",
+    "Updated `grdatfiles.c` includes and calls so `map_ptcl` and `map_texg` are passed to `psInitDataBankLocate` with `NULL` for the form bank argument.",
+    "Added new small stage headers `grbigblue.h`, `gricemt.h`, and `grrcruise.h` with stage-specific Vec3 callback prototypes used by `grlib.c`.",
+    "Updated `grlib.c` and `grlib.h` signatures to use more specific types such as `UnkGeneratorStruct*`, `enum_t`, `UnkAnimStruct*`, and `void` parameter lists instead of untyped or incorrect declarations.",
+    "Wrapped the inline assembly implementation of `func_801C9EE8` behind `MWERKS_GEKKO` and provided a non-MW fallback stub using `NOT_IMPLEMENTED`.",
+    "Changed several ground/stage internal stage-id references from `InternalStageID` to `InternalStageId`.",
+    "Refined `OSAlloc.c` types, making helper functions static, using `any_t`/`unk_t`/`ssize_t` where appropriate, renaming forced-active unused strings to `_unused_str*`, and guarding them with `MUST_MATCH`.",
+    "Added `CHECK` to `.clang-format` `WhitespaceSensitiveMacros`, next to `HSD_ASSERT`, to protect assert-like macro formatting."
+  ],
+  "smart_moves": [
+    "Centralized particle-generator layout knowledge in `psappsrt.h` instead of keeping a private duplicate `UnkEffectStruct` in `grlib.c`, making future call-site cleanup safer and more searchable.",
+    "Used compiler abstraction for `ATTRIBUTE_NORETURN` in `Runtime/platform.h` rather than placing raw compiler attributes directly on `OSPanic`.",
+    "Followed reviewer feedback by avoiding an unknown-compiler hard error for `ATTRIBUTE_NORETURN`; the final diff falls back to defining it empty.",
+    "Added `.clang-format` awareness for `CHECK` instead of relying on local `clang-format off` blocks around `OSCheckHeap`.",
+    "Used `#ifdef MUST_MATCH` for matching-only artifacts such as unused stack padding and forced-active unused strings, preserving matching behavior while documenting that they are not semantic logic.",
+    "For non-MW builds, guarded MWERKS inline assembly with `MWERKS_GEKKO` and supplied a fallback stub, improving portability without pretending the function was decompiled."
+  ],
+  "decomp_lessons": [
+    "Implicit-function-declaration cleanup often requires both adding prototypes and improving types; merely adding `extern` declarations can leave mismatched structs or argument types hidden.",
+    "When a local struct is discovered to be a known engine structure, move the fields into the shared header and update users to that shared type.",
+    "Noreturn knowledge can affect compiler control-flow assumptions; adding a portable `ATTRIBUTE_NORETURN` macro helps non-matching/compiler builds understand functions such as `OSPanic`.",
+    "Assert-like macros that stringify their condition are formatting-sensitive. If clang-format inserts line breaks inside macro arguments, verify the generated string/match behavior and add the macro to `WhitespaceSensitiveMacros` when appropriate.",
+    "Use `u8 unused[n]` padding under `MUST_MATCH` for readable matching-only stack padding; reviewer confusion showed this should be recognized as a representation change rather than padding growth.",
+    "Assembly blocks should be compiler-gated, especially when cleaning headers for clang/GCC warning passes.",
+    "Stage-specific declarations are better represented by small headers with include guards and exact parameter types than by relying on implicit declarations from use sites."
+  ],
+  "naming_conventions": [
+    "Header guards for new ground headers used the pattern `MELEE_GR_<FILENAME>_H`, e.g. `MELEE_GR_GRBIGBLUE_H`, `MELEE_GR_GRICEMT_H`, and `MELEE_GR_GRRCRUISE_H`.",
+    "Shared unknown particle generator type kept the SysDolphin-style `_UnkGeneratorStruct` tag with `UnkGeneratorStruct` typedef and offset-based fields such as `x10_jobj` and `x16_flags`.",
+    "Matching-only unused string symbols in `OSAlloc.c` were renamed to neutral `_unused_str0` through `_unused_str5`.",
+    "The PR preferred `InternalStageId` spelling over `InternalStageID` in touched ground/stage code.",
+    "Generic enum-like parameters were converted to `enum_t` where exact enum identity was not yet established.",
+    "Function prototypes were normalized to explicit `void` parameter lists, e.g. `BOOL func_801C9EE8(void)`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Wrapped `func_801C9EE8` inline assembly in `#ifdef MWERKS_GEKKO` with `#pragma push`/`#pragma pop` and `clang-format off` inside the asm body.",
+    "Added a non-MWERKS fallback for `func_801C9EE8` that calls `NOT_IMPLEMENTED`, allowing nonmatching/toolchain builds to compile.",
+    "Inserted `u8 unused[8]` under `#ifdef MUST_MATCH` in `grdynamicattr.c`; author clarified in review that this was a conversion of existing padding to `u8` for readability, not an actual padding increase.",
+    "Guarded forced-active unused OS dump heap strings in `OSAlloc.c` under `#ifdef MUST_MATCH`, retaining matching-only data without exposing it as normal logic.",
+    "Changed `func_801C9A70` to add a non-`MUST_MATCH` return after `HSD_ASSERT(290, 0)` because the compiler does not know the assert is fatal.",
+    "Kept exact formatting concerns around `CHECK` macro conditions visible because the macro stringifies its condition for `OSReport`."
+  ],
+  "review_feedback": [
+    {
+      "author": "r-burns",
+      "file": "include/Runtime/platform.h",
+      "feedback": "Requested GCC support for `ATTRIBUTE_NORETURN`."
+    },
+    {
+      "author": "r-burns",
+      "file": "include/Runtime/platform.h",
+      "feedback": "Requested no hard error for unknown compilers; fallback should define `ATTRIBUTE_NORETURN` to nothing and continue."
+    },
+    {
+      "author": "r-burns",
+      "file": "src/melee/gr/grdynamicattr.c",
+      "feedback": "Questioned why padding appeared to grow when `u32 unused[2]` became `u8 unused[8]` under `MUST_MATCH`."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/melee/gr/grdynamicattr.c",
+      "feedback": "Clarified that padding did not grow; padding was converted to `u8` because it is quicker to read."
+    },
+    {
+      "author": "r-burns",
+      "file": "src/dolphin/os/OSAlloc.c",
+      "feedback": "Questioned whether a newline inside the `CHECK` condition would affect the assert string and whether the new `.clang-format` setting should prevent it."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/dolphin/os/OSAlloc.c",
+      "feedback": "Noted uncertainty about the newline/stringification behavior but reported that the result matched."
+    }
+  ],
+  "searchable_terms": [
+    "implicit-function-declaration",
+    "ATTRIBUTE_NORETURN",
+    "noreturn",
+    "__attribute__((noreturn))",
+    "OSPanic",
+    "OSReport",
+    "OSAlloc",
+    "OSCheckHeap",
+    "CHECK macro",
+    "WhitespaceSensitiveMacros",
+    "HSD_ASSERT",
+    "MUST_MATCH",
+    "MWERKS_GEKKO",
+    "func_801C9EE8",
+    "UnkGeneratorStruct",
+    "_UnkGeneratorStruct",
+    "psappsrt",
+    "psstructs",
+    "psInitDataBankLocate",
+    "HSD_Archive",
+    "map_ptcl",
+    "map_texg",
+    "grlib",
+    "grdatfiles",
+    "grdynamicattr",
+    "ground",
+    "stage",
+    "InternalStageId",
+    "enum_t",
+    "grbigblue",
+    "gricemt",
+    "grrcruise",
+    "func_8039D4DC",
+    "func_8039EFAC",
+    "func_8039F6CC",
+    "func_8039D5DC",
+    "u8 unused padding",
+    "clang-format"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that further type `_UnkGeneratorStruct` or rename particle generator fields from `psappsrt.h`.",
+    "Check whether `func_801C9EE8` was later decompiled or kept as MWERKS inline assembly.",
+    "Look for follow-up changes to `CHECK`/`HSD_ASSERT` formatting and stringification behavior.",
+    "Find later cleanup of `InternalStageId` versus `InternalStageID` naming.",
+    "Search for additional implicit-function-declaration warning passes after PR 665."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

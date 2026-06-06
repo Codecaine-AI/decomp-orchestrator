@@ -1,0 +1,140 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-163",
+  "pr": {
+    "number": 163,
+    "title": "Match OSLink, __ppc_eabi_init, convert Gecko_setjmp to inline asm, and bring in CelestialAmber's ctype match",
+    "url": "https://github.com/doldecomp/melee/pull/163",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-10T20:51:30Z",
+    "merged_at": "2021-12-10T20:51:42Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Converted several small runtime/Dolphin/MSL assembly stubs into source or inline-asm-backed C: matched __OSModuleInit in OSLink.c, added __ppc_eabi_init.c/.h with __init_user and _ExitProcess plus an inline-asm __init_cpp fallback, replaced MSL ctype.s with C toupper/tolower using named LowercaseTable/UppercaseTable rodata symbols, and renamed Gecko_setjmp.s to Gecko_setjmp.c using Metrowerks inline asm. obj_files.mk was updated to build these source files instead of the old asm objects where applicable.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "inline-asm",
+      "headers",
+      "symbol-naming",
+      "build-system"
+    ],
+    "systems": [
+      "MSL",
+      "Runtime",
+      "Dolphin OS",
+      "asm",
+      "include",
+      "src",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "src/dolphin/os/init/__ppc_eabi_init.c",
+    "src/dolphin/os/init/__ppc_eabi_init.h",
+    "asm/dolphin/os/init/__ppc_eabi_init.s",
+    "src/dolphin/os/OSLink.c",
+    "asm/dolphin/os/OSLink.s",
+    "src/MSL/ctype.c",
+    "asm/MSL/ctype.s",
+    "src/Runtime/Gecko_setjmp.c",
+    "asm/rodata.s",
+    "include/variables.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted the hand-written assembly implementation of MSL ctype.s and replaced it with src/MSL/ctype.c containing C implementations of toupper and tolower.",
+    "Renamed rodata symbols lbl_803B8D30 and lbl_803B8E30 to LowercaseTable and UppercaseTable, and updated include/variables.h comments accordingly.",
+    "Deleted asm/dolphin/os/OSLink.s and added src/dolphin/os/OSLink.c with __OSModuleInit implemented in C by zeroing __OSModuleInfoList.pLast, __OSModuleInfoList.pFirst, and __OSStringTable.",
+    "Introduced OSLink fixed-address declarations for __OSModuleInfoList and __OSStringTable using addresses derived from OS_BASE_CACHED, OS_MODULE_LIST_ADDR, and OS_STRING_TABLE_ADDR.",
+    "Moved Gecko_setjmp from asm/Runtime/Gecko_setjmp.s to src/Runtime/Gecko_setjmp.c while preserving the PowerPC instruction body as Metrowerks inline asm functions for __setjmp and longjmp.",
+    "Added src/dolphin/os/init/__ppc_eabi_init.c and src/dolphin/os/init/__ppc_eabi_init.h.",
+    "Moved __init_user and _ExitProcess out of asm/dolphin/os/init/__ppc_eabi_init.s into C source; _ExitProcess calls PPCHalt and __init_user calls __init_cpp.",
+    "Kept __init_cpp as inline asm in the matching path, with a readable NON_MATCHING C loop over the constructor table lbl_803B7240.",
+    "Left the .ctors data section in asm/dolphin/os/init/__ppc_eabi_init.s while removing the matched text functions from that assembly file.",
+    "Updated obj_files.mk to build src/Runtime/Gecko_setjmp.o, src/MSL/ctype.o, src/dolphin/os/OSLink.o, and src/dolphin/os/init/__ppc_eabi_init.o."
+  ],
+  "smart_moves": [
+    "Used simple semantic C for ctype once the table symbols were named, preserving the important MSL behavior that EOF/-1 returns -1 and other inputs are masked with c & 0xFF.",
+    "Renamed anonymous rodata labels to purpose-specific names before using them from C, making the decomp clearer and reducing dependence on raw lbl_ addresses.",
+    "Converted Gecko_setjmp to a C file without trying to force fragile compiler-generated output; inline asm preserved exact register save/restore behavior for low-level control-flow routines.",
+    "For __ppc_eabi_init, separated a readable NON_MATCHING constructor loop from the matching inline-asm implementation, documenting intended semantics while keeping the build matching.",
+    "Modeled OSLink's memory-mapped globals as fixed-address C declarations rather than leaving the tiny initialization routine in assembly.",
+    "Updated obj_files.mk alongside each source conversion so the build switched from asm objects to src objects in the same PR."
+  ],
+  "decomp_lessons": [
+    "Tiny assembly stubs are often good candidates for C conversion when their behavior is simple and the object ordering/build list is updated carefully.",
+    "For runtime primitives such as setjmp/longjmp, exact ABI and register behavior can matter more than source purity; inline asm is an acceptable bridge when full C matching is impractical.",
+    "When matching constructor initialization code, a NON_MATCHING C version can capture the intent of iterating over .ctors even if the matching version still requires inline asm.",
+    "Renaming rodata tables to semantic names enables cleaner C replacements and improves future searchability.",
+    "Fixed-address Dolphin OS globals can be represented in source with address annotations, allowing initialization code to decompile cleanly.",
+    "Keep residual assembly data sections, such as .ctors, in asm files when only the text portion has been matched or moved to C."
+  ],
+  "naming_conventions": [
+    "lbl_803B8D30 was renamed to LowercaseTable.",
+    "lbl_803B8E30 was renamed to UppercaseTable.",
+    "The OS module queue type was named struct OSModuleQueue.",
+    "Fixed-address OS symbols were named __OSModuleInfoList and __OSStringTable.",
+    "Address constants used uppercase macro-style names: OS_MODULE_LIST_ADDR, OS_STRING_TABLE_ADDR, and OS_BASE_CACHED.",
+    "The new init header used the path-local name src/dolphin/os/init/__ppc_eabi_init.h and declared __init_user and _ExitProcess."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used Metrowerks inline asm syntax with `asm int __setjmp(register *env)`, `asm void longjmp(register *env, register int val)`, and `nofralloc` to preserve exact assembly bodies.",
+    "Used `asm static void __init_cpp(void)` with `nofralloc` for the matching constructor-walk function.",
+    "Kept labels inside inline asm for __init_cpp, including lbl_8034CAFC, lbl_8034CB00, lbl_8034CB04, and lbl_8034CB10, matching the original branch structure.",
+    "Used an `#ifdef NON_MATCHING` block to provide an understandable C implementation of __init_cpp while keeping the default matching path in inline asm.",
+    "Represented toupper/tolower table lookup as `Table[c & 0xFF]`, matching the original clrlwi-to-byte-index behavior.",
+    "Preserved EOF handling in ctype by returning -1 immediately when c equals -1.",
+    "Moved matched assembly out of asm files but left unrelated or still-needed assembly sections in place, notably the .ctors section in __ppc_eabi_init.s."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR163",
+    "OSLink",
+    "__OSModuleInit",
+    "__OSModuleInfoList",
+    "__OSStringTable",
+    "OS_MODULE_LIST_ADDR",
+    "OS_STRING_TABLE_ADDR",
+    "OS_BASE_CACHED",
+    "__ppc_eabi_init",
+    "__init_user",
+    "__init_cpp",
+    "_ExitProcess",
+    "PPCHalt",
+    ".ctors",
+    "lbl_803B7240",
+    "Gecko_setjmp",
+    "__setjmp",
+    "longjmp",
+    "inline asm",
+    "nofralloc",
+    "MSL ctype",
+    "toupper",
+    "tolower",
+    "LowercaseTable",
+    "UppercaseTable",
+    "CelestialAmber",
+    "obj_files.mk",
+    "asm-to-c"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that replace inline asm __init_cpp with fully matching C.",
+    "Find later PRs that rename lbl_803B7240 or formalize the .ctors constructor table symbol.",
+    "Find later PRs touching OSLink fixed-address globals or struct OSModuleQueue.",
+    "Find later PRs modifying Gecko_setjmp.c, __setjmp, or longjmp inline asm.",
+    "Find later PRs that add proper extern declarations for LowercaseTable and UppercaseTable outside variables.h comments."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

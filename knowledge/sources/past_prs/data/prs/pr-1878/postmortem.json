@@ -1,0 +1,149 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1878",
+  "pr": {
+    "number": 1878,
+    "title": "Merge `CommandInfo` structs",
+    "url": "https://github.com/doldecomp/melee/pull/1878",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2025-08-29T08:48:30Z",
+    "merged_at": "2025-08-29T08:54:07Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Merged the fighter/game-mode command-script state and library CommandInfo representations into one shared `CommandInfo` type under `lb/types.h`, then retargeted fighter and item command execution code to use it. The PR is primarily a cross-system type/header refactor: `FtCmdState` was removed from `gm/types.h`, fighter `ftCmdScript` storage became `CommandInfo`, command callbacks now take `CommandInfo*`, and command pointer/timer fields were renamed to typed names such as `u`, `timer`, `frame_count`, and `loop_count`. Evidence is limited by an empty PR body and no human review comments; the only comment is a decomp.dev report showing multiple unmatched-function regressions after the merge.",
+  "change_classification": {
+    "primary_type": "shared struct/type unification refactor",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "command-script-refactor",
+      "include-hygiene"
+    ],
+    "systems": [
+      "fighter",
+      "item",
+      "library",
+      "game-mode",
+      "stage"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/types.h",
+    "src/melee/lb/lbcommand.c",
+    "src/melee/lb/lbcommand.h",
+    "src/melee/lb/forward.h",
+    "src/melee/lb/inlines.h",
+    "src/melee/gm/types.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/forward.h",
+    "src/melee/ft/ftaction.c",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/ftwaitanim.c",
+    "src/melee/ft/ftcolanim.c",
+    "src/melee/it/it_2725.c",
+    "src/melee/it/item.c",
+    "src/melee/it/forward.h",
+    "src/melee/gr/grmaterial.c"
+  ],
+  "what_changed": [
+    "`CommandInfo` was expanded into the shared command-script state in `src/melee/lb/types.h`, including `timer`, `frame_count`, a `union CmdUnion* u`, `loop_count`, `event_return`, `loop_count_dup`, and `unk_x18`.",
+    "The old fighter/game-mode command state `struct FtCmdState` was deleted from `src/melee/gm/types.h`.",
+    "The old fighter-local `struct ftCmdScript` was deleted from `src/melee/ft/types.h`; `Fighter::x3E4_fighterCmdScript` now has type `CommandInfo`.",
+    "`src/melee/ft/forward.h` now includes `lb/forward.h`, removes forward declarations for `ftCmdScript` and `FtCmdState`, and changes `typedef void (*FtCmd)(Fighter_GObj* gobj, FtCmdState* cmd)` to `CommandInfo*`.",
+    "`src/melee/lb/forward.h` gained `typedef struct CommandInfo CommandInfo;` so fighter/item headers can refer to the shared type without owning its definition.",
+    "`lbcommand.h` stopped defining a separate `_CommandInfo` and now includes `lb/forward.h`; the full definition lives in `lb/types.h`.",
+    "`gm/inlines.h` was renamed/moved to `lb/inlines.h`, keeping command pointer helpers such as `SKIP_CMD` in the library layer instead of the game-mode layer.",
+    "`lbcommand.c` was rewritten from raw `u32* data_position` access to typed `info->u->Command_##` bitfield access and `NEXT_CMD(info)` advancement.",
+    "Fighter script initialization in `fighter.c` and `ftwaitanim.c` now assigns `x3E4_fighterCmdScript.u = (union CmdUnion*) anim_script_ptr`, resets `loop_count`, and uses `timer` instead of old `x3E4_scriptEventTimer`.",
+    "Large portions of `ftaction.c` were retargeted from `FtCmdState*` to `CommandInfo*`, including callback prototypes, command dispatch tables, timer/frame loop logic, and many command handlers using `cmd->u->...` fields.",
+    "Item command-processing files such as `it_2725.c`, `it_2725.h`, `item.c`, and item forward declarations were adjusted to accept/use `CommandInfo*` for item scripts as well."
+  ],
+  "smart_moves": [
+    "Centralizing `CommandInfo` in `lb/types.h` reflects that command scripts are shared infrastructure used by fighter, item, and library code rather than a `gm`-owned or fighter-local type.",
+    "Using `lb/forward.h` for `CommandInfo` lets public fighter/item forward headers depend on a forward declaration instead of pulling in the full bitfield-heavy struct everywhere.",
+    "Replacing anonymous/raw script pointer reads with `union CmdUnion` bitfield views makes individual opcodes searchable by names such as `Command_03`, `set_hitbox_damage`, `set_hurt_state`, and `damage_amount`.",
+    "The rename from offset-style fields (`x3E4_scriptEventTimer`, `x3E8_scriptFrameTimer`, `x3EC_scriptCurrent`, `x3F0_scriptLoopNum`) to semantic shared names (`timer`, `frame_count`, `u`, `loop_count`) makes subsequent command interpreter work easier to grep and reason about.",
+    "Keeping `SKIP_CMD`/`NEXT_CMD` style pointer advancement isolates command-stream pointer arithmetic from the many individual action handlers."
+  ],
+  "decomp_lessons": [
+    "When two subsystems are independently modeling the same binary command state, prefer one shared struct in a neutral/library header rather than duplicate structs in subsystem headers.",
+    "For command bytecode interpreters, a union of opcode-specific bitfield layouts can document known encodings while still allowing unknown layouts (`unk##`) to coexist until named.",
+    "Moving a struct can improve type hygiene but may perturb matching heavily; here decomp.dev reported regressions in 14 unmatched functions after the type merge.",
+    "Header ownership matters: command script parsing helpers were moved from `gm/inlines.h` to `lb/inlines.h`, matching their broader library use.",
+    "Changing field names across a large interpreter should be done with careful build/match validation because even semantically equivalent pointer-expression rewrites can affect generated code.",
+    "A shared `CommandInfo` used by fighter and item code should preserve layout-sensitive padding/aliases; this PR kept comments like `ptr[1]` as a matching hack for `Command_04` and noted that `event_return[3]` size was made-up."
+  ],
+  "naming_conventions": [
+    "`CommandInfo` is the shared command-script state type.",
+    "`CmdUnion` is the shared union for opcode-specific command word interpretations.",
+    "Generic command opcodes are named `Command_00`, `Command_01`, etc., with union members such as `Command_03` and `Command_09`.",
+    "Known opcode payloads receive semantic member names when understood, e.g. `set_hitbox_damage`, `set_hitbox_scale`, `set_cmd_var`, `set_hurt_state`, and `damage_amount`.",
+    "Unknown command payloads remain numbered as `unk0`, `unk1`, `unk22`, etc., often with comments pointing to the function that uses them.",
+    "The command stream pointer is now named `u`; timer/frame bookkeeping is named `timer` and `frame_count`; nesting state is named `loop_count` and `event_return`."
+  ],
+  "assembly_or_matching_tactics": [
+    "`NEXT_CMD(info)` and `SKIP_CMD(cmd, n)` are used to advance `CommandInfo::u` through the command stream instead of manually updating raw `u32* data_position` everywhere.",
+    "Loop/subroutine/goto commands in `lbcommand.c` now manipulate `union CmdUnion*` pointers: `event_return[loop_count++] = info->u + 1`, `info->u = info->u->Command_05.ptr`, and `info->u = info->u->Command_07.ptr`.",
+    "`Command_04` keeps an alias `u32* ptr[1]` in the `CommandInfo` union with a comment that it is a hack to match `Command_04`.",
+    "Fighter command execution preserves the `F32_MAX` timer sentinel behavior while renaming fields to `timer` and `frame_count`.",
+    "Multi-word command handling can require manual pointer increments, shown by `ftAction_80071E04` using `++cmd->u` before reading subsequent `unk26_1` / `unk26_2` words.",
+    "The diff includes some commented-out rewrites and temporary-looking code in `ftaction.c`; paired with the bot's regression report, this suggests the type unification was not purely match-neutral."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the slice.",
+    "The PR body was empty, so intent is inferred from the title and diff.",
+    "decomp.dev bot reported 14 regressions in unmatched functions for GALE01, including `ftAction_8007121C`, `ftAction_80071FC8`, `ftAction_80072320`, `ftAction_80071028`, `ftAction_80072E4C`, `ftAction_80071B50`, `ftAction_80072CD8`, and item functions in `it_2725`.",
+    "The bot report specifically showed several functions dropping from high partial match percentages to near-zero after the change, so future follow-up likely needed rematching after the structural cleanup."
+  ],
+  "searchable_terms": [
+    "pr-1878",
+    "Merge CommandInfo structs",
+    "CommandInfo",
+    "CmdUnion",
+    "FtCmdState",
+    "ftCmdScript",
+    "lb/types.h",
+    "lbcommand.c",
+    "lbcommand.h",
+    "lb/inlines.h",
+    "gm/types.h",
+    "ftaction.c",
+    "Fighter_ChangeMotionState",
+    "x3E4_fighterCmdScript",
+    "timer",
+    "frame_count",
+    "loop_count",
+    "event_return",
+    "NEXT_CMD",
+    "SKIP_CMD",
+    "Command_00",
+    "Command_03",
+    "Command_04",
+    "Command_05",
+    "Command_07",
+    "Command_09",
+    "set_hitbox_damage",
+    "set_hitbox_scale",
+    "set_hurt_state",
+    "it_2725",
+    "decomp.dev regressions"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching `CommandInfo`, `CmdUnion`, or `lb/types.h` to see how this shared command struct was renamed or stabilized.",
+    "Find follow-up PRs that recover matches for `ftAction_80071028`, `ftAction_8007121C`, `ftAction_80071FC8`, `ftAction_80072320`, or `it_802799E4` after this merge.",
+    "Search for remaining references to `FtCmdState`, `ftCmdScript`, `x3EC_scriptCurrent`, and `x3E4_scriptEventTimer` to verify the old command state names were fully retired.",
+    "Inspect later changes to `NEXT_CMD`, `SKIP_CMD`, and `Command_04` for better matching tactics around `CommandInfo::u` pointer arithmetic.",
+    "Search for union members named `unk##` in `CmdUnion` that later gained semantic names."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

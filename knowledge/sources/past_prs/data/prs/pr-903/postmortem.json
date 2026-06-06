@@ -1,0 +1,112 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-903",
+  "pr": {
+    "number": 903,
+    "title": "Match `ftCo_8009BF3C`",
+    "url": "https://github.com/doldecomp/melee/pull/903",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-30T09:40:32Z",
+    "merged_at": "2023-05-30T09:49:14Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched `ftCo_8009BF3C` in the common fighter cargo-throw code by replacing a large inline PowerPC assembly block with C. The change also adjusted the helper `inlineA0` so its generated code matched: direct repeated field accesses were used instead of temporary stick variables, and motion-state offset additions were split into assignment from `fp->x2CC->x4_motion_state` followed by `+=` constants. The file report showed `src/melee/ft/chara/ftCommon/ftCo_CargoThrow.c` at 100% with `ftCo_8009BF3C` scoring 0/6000 after the change.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "fighter-common-logic",
+      "input-to-motion-state-selection"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "cargo throw"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_CargoThrow.c"
+  ],
+  "what_changed": [
+    "Removed the `ASM bool ftCo_8009BF3C(ftCo_GObj* gobj)` implementation guarded by `MUST_MATCH`/`WIP` and replaced it with a normal C function.",
+    "Implemented `ftCo_8009BF3C` as: compute `FtMotionId msid = inlineA0(gobj->user_data)`, compare it against `GET_FIGHTER(gobj)->motion_id`, call `ftCo_8009C02C(gobj, msid)` if the motion state changed, then return `true`; otherwise return `false`.",
+    "Updated `inlineA0` to derive cargo throw motion IDs from current input: A/B input gate via `fp->input.x668 & HSD_PAD_AB`, horizontal stick threshold via `ABS(fp->input.lstick.x) >= p_ftCommonData->x98`, facing-direction test for forward/backward selection, and vertical stick thresholds via `attackhi3_stick_threshold_y` and `xB0`.",
+    "Changed several expressions from `fp->x2CC->x4_motion_state + constant` into two statements, first assigning `fp->x2CC->x4_motion_state` to `msid`, then applying `msid += 10/11/12/13`.",
+    "Removed local `float lstick_x` and `float lstick_y` temporaries from `inlineA0`, using `fp->input.lstick.x` and `.y` directly instead.",
+    "The PR report indicated the whole file and all listed functions in `ftCo_CargoThrow.c`, including `ftCo_8009BF3C`, were at 100% after this match."
+  ],
+  "smart_moves": [
+    "Factored the decision tree into `inlineA0`, keeping `ftCo_8009BF3C` small and close to the assembly behavior: compute candidate motion ID, compare to current motion ID, transition only if changed.",
+    "Used `GET_FIGHTER(gobj)` for the comparison while passing `gobj->user_data` into the inline helper, matching the apparent codegen needs without changing the high-level behavior.",
+    "Split base motion-state load and constant addition into separate statements; this is a common decomp matching tactic when `base + immediate` expression shape does not produce the desired instruction ordering/register allocation.",
+    "Avoided extra float locals in the stick checks; direct struct-field access can help the compiler preserve the original load/comparison order for matching.",
+    "Preserved the existing cargo throw motion offset scheme: base motion state plus offsets 10, 11, 12, and 13 for directional throw variants."
+  ],
+  "decomp_lessons": [
+    "For small dispatcher functions, matching may require tuning both the function body and any inline helper it depends on; here `ftCo_8009BF3C` matched only after reshaping `inlineA0`.",
+    "When an assembly block uses a candidate motion ID initialized from the current motion ID and conditionally replaced, model that explicitly with a local `FtMotionId msid` initialized in the helper and compare it against the current `motion_id`.",
+    "Expression spelling matters for codegen: `msid = base; msid += constant;` can produce different output from `msid = base + constant;` even though the logic is equivalent.",
+    "Removing source-level temporaries can be beneficial when the target assembly reloads or uses original struct fields in a specific sequence.",
+    "Input threshold logic in fighter code often maps analog stick direction and common-data thresholds directly to motion-state offsets; preserve the original comparison boundaries (`>=`, `<=`) exactly when matching."
+  ],
+  "naming_conventions": [
+    "The matched function kept the placeholder-style symbol name `ftCo_8009BF3C`, consistent with unresolved or address-based ftCommon functions.",
+    "The helper name `inlineA0` remained an internal/static inline matching aid rather than being renamed to a semantic name in this PR.",
+    "Cargo throw callbacks use `ftCo_CargoThrow{Air,F,B,Hi,Lw}_{Anim,IASA,Phys,Coll}` naming in the same file report.",
+    "Types and accessors used include `ftCo_GObj`, `ftCo_Fighter`, `Fighter`, `FtMotionId`, and `GET_FIGHTER(gobj)`.",
+    "Stick and common-data fields were referenced with existing project names such as `fp->input.lstick.x`, `fp->input.lstick.y`, `p_ftCommonData->x98`, `attackhi3_stick_threshold_y`, and `xB0`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed a `nofralloc` inline assembly implementation after achieving C equivalence for `ftCo_8009BF3C`.",
+    "Used an inline helper to reproduce the assembly's candidate-motion-ID calculation before the function-level compare and branch.",
+    "Separated load of `fp->x2CC->x4_motion_state` from immediate additions (`+= 10`, `+= 11`, `+= 12`, `+= 13`) to match instruction sequencing.",
+    "Used direct field accesses instead of temporary `lstick_x`/`lstick_y` locals to affect float load/register behavior.",
+    "Kept the control flow as a simple early transition path returning `true` and a fall-through returning `false`, matching the assembly's boolean return structure.",
+    "The report showed `ftCo_8009BF3C` reached 100% with score `0` of max `6000`, and the file reached 100% overall."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-903",
+    "ftCo_8009BF3C",
+    "ftCo_8009C02C",
+    "ftCo_CargoThrow.c",
+    "src/melee/ft/chara/ftCommon/ftCo_CargoThrow.c",
+    "ftCommon",
+    "cargo throw",
+    "cargo throw motion state",
+    "FtMotionId",
+    "inlineA0",
+    "GET_FIGHTER",
+    "gobj->user_data",
+    "motion_id",
+    "x2CC",
+    "x4_motion_state",
+    "HSD_PAD_AB",
+    "lstick.x",
+    "lstick.y",
+    "p_ftCommonData",
+    "attackhi3_stick_threshold_y",
+    "MUST_MATCH",
+    "ASM removal",
+    "nofralloc",
+    "decomp matching",
+    "ribbanya"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or document `ftCo_8009BF3C` or `inlineA0`.",
+    "Search for other fighter input-to-motion functions where `base motion state; += offset` was required for matching.",
+    "Look for PRs touching `ftCo_8009C02C` to understand the transition semantics used by `ftCo_8009BF3C`.",
+    "Search cargo throw functions using offsets 10, 11, 12, and 13 from `x4_motion_state` for naming or enum opportunities."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

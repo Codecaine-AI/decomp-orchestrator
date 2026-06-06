@@ -1,0 +1,127 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-801",
+  "pr": {
+    "number": 801,
+    "title": "Clean up `ftPurin` motion definitions",
+    "url": "https://github.com/doldecomp/melee/pull/801",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-04-22T22:13:34Z",
+    "merged_at": "2023-04-22T22:23:04Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Cleaned up Jigglypuff/Purin motion-state definitions by replacing raw motion flag and move-id hex constants in `ftPr_Init_MotionStateTable` with named `FtStateChange`, `FtMoveId`, and new `ftPr_MF_*` composed constants. The PR also added the needed forward includes and introduced a Purin-specific `ftPr_MotionFlags` enum in `forward.h`. Large inline-asm hunks appear to be formatting-only numeric operand normalization, with instruction comments unchanged in the excerpt. There was no PR body or review discussion, so intent beyond code-quality cleanup is inferred from the title and diff.",
+  "change_classification": {
+    "primary_type": "code_quality_header_cleanup",
+    "categories": [
+      "headers",
+      "code-quality",
+      "motion-state-table-cleanup",
+      "constant-naming"
+    ],
+    "systems": [
+      "fighter",
+      "ftPurin",
+      "motion_states"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftPurin/forward.h",
+    "src/melee/ft/chara/ftPurin/ftPr_Init.c"
+  ],
+  "what_changed": [
+    "Added `#include \"ft/forward.h\"` to `src/melee/ft/chara/ftPurin/forward.h` so Purin forward declarations can refer to shared fighter state-change constants.",
+    "Added a new `typedef enum ftPr_MotionFlags` containing composed Purin motion flag groups such as `ftPr_MF_Special`, `ftPr_MF_SpecialN`, `ftPr_MF_SpecialAirN`, `ftPr_MF_SpecialHi`, `ftPr_MF_SpecialAirHi`, `ftPr_MF_SpecialLw`, `ftPr_MF_SpecialAirLw`, `ftPr_MF_SpecialS`, and charged neutral-special variants.",
+    "Updated `src/melee/ft/chara/ftPurin/ftPr_Init.c` to include local `forward.h` and `ftMars/forward.h` in addition to `ft/forward.h`.",
+    "Replaced raw `MotionState` flag values such as `0`, `0x00340211`, `0x003C0211`, `0x00340611`, `0x00340013`, `0x00340413`, `0x00340014`, and `0x00340414` with named constants including `FtStateChange_None`, `ftPr_MF_SpecialN`, `ftPr_MF_SpecialNCharged`, `ftPr_MF_SpecialAirN`, `ftPr_MF_SpecialHi`, `ftPr_MF_SpecialAirHi`, `ftPr_MF_SpecialLw`, and `ftPr_MF_SpecialAirLw`.",
+    "Replaced raw move-id upper-byte constants such as `0x01000000`, `0x12000000`, `0x13000000`, `0x14000000`, and `0x15000000` with expressions like `FtMoveId_Unk01 << 24`, `FtMoveId_SpecialN << 24`, `FtMoveId_SpecialS << 24`, `FtMoveId_SpecialHi << 24`, and `FtMoveId_SpecialLw << 24`.",
+    "Touched many inline-asm hunks in `ftPr_Init.c`; the shown changes convert operands such as `-0x18`, `0x14`, `0x2c`, `0x2340`, and bitfield operands like `0x1b`/`0x1f` into decimal forms such as `-24`, `20`, `44`, `9024`, `27`, and `31`, while the embedded machine-code comments remain unchanged."
+  ],
+  "smart_moves": [
+    "Factored recurring motion-state flag bitmasks into named, composable Purin-specific enum values instead of repeating opaque hex literals throughout the motion table.",
+    "Built air-state flag variants from their grounded equivalents plus `FtStateChange_SkipUpdateParasol`, making the ground/air relationship explicit and reducing risk of inconsistent future edits.",
+    "Separated the state-change flag field from the move-id field by using `ftPr_MF_*` for flags and `FtMoveId_* << 24` for move IDs, which documents the structure of each `MotionState` row.",
+    "Kept the change narrowly scoped to two Purin files and avoided renaming the motion callbacks themselves, limiting merge risk while improving readability.",
+    "Preserved matching-sensitive inline assembly at the byte-comment level in the excerpt; numeric spelling changed, but the instruction comments and labels indicate no intended behavior change."
+  ],
+  "decomp_lessons": [
+    "For fighter motion tables, prefer named `FtStateChange_*` and `FtMoveId_* << 24` expressions over raw packed hex constants once the bit meanings are known.",
+    "When several action states share most flags, introduce a character-local motion-flags enum and compose variants from base masks instead of duplicating literals.",
+    "Air versions of special-move states may share grounded special flags plus air-specific preservation/skip bits; encoding that relationship directly makes table audits easier.",
+    "Forward headers are a reasonable home for character-local enums that are needed by init tables and other character files, but they must include the shared forward headers that define the referenced enum constants.",
+    "Large cleanup PRs can include formatting-only inline-asm churn; future reviewers should distinguish semantic table cleanup from assembler operand spelling changes by checking that machine-code comments stay stable."
+  ],
+  "naming_conventions": [
+    "Character prefix used for Purin/Jigglypuff constants: `ftPr_`.",
+    "Purin motion flag enum name: `ftPr_MotionFlags`.",
+    "Purin motion flag members use `ftPr_MF_` plus action family, e.g. `ftPr_MF_SpecialN`, `ftPr_MF_SpecialAirN`, `ftPr_MF_SpecialHi`, `ftPr_MF_SpecialAirHi`, `ftPr_MF_SpecialLw`, `ftPr_MF_SpecialAirLw`, `ftPr_MF_SpecialS`, `ftPr_MF_SpecialAirS`.",
+    "Move IDs are expressed as shared `FtMoveId_*` values shifted into the high byte with `<< 24`, e.g. `FtMoveId_SpecialN << 24`.",
+    "State-change flags use the shared `FtStateChange_*` names and character-local aliases for repeated combinations."
+  ],
+  "assembly_or_matching_tactics": [
+    "Raw motion-table constants were replaced with named expressions that should compile to the same packed values, improving source clarity without changing table layout.",
+    "Inline asm numeric operands in the excerpt were rewritten from hexadecimal to decimal, e.g. stack frame sizes and structure offsets, while machine-code annotations such as `94 21 FF E8`, `93 E1 00 14`, and labels remained unchanged.",
+    "The cleanup demonstrates a safe matching tactic: change symbolic names around data-table constants while keeping function pointers, row order, and assembly byte comments stable.",
+    "No evidence in the PR slice shows new decompilation of the inline asm functions; the visible asm changes appear textual/formatting rather than behavioral."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the PR dump.",
+    "The PR had no body text; conclusions about intent are based on the title, code-quality label, and diff."
+  ],
+  "searchable_terms": [
+    "pr-801",
+    "ftPurin",
+    "ftPr_Init.c",
+    "forward.h",
+    "ftPr_Init_MotionStateTable",
+    "MotionState",
+    "ftPr_MotionFlags",
+    "ftPr_MF_Special",
+    "ftPr_MF_SpecialN",
+    "ftPr_MF_SpecialNCharged",
+    "ftPr_SpecialAirNCharged",
+    "ftPr_MF_SpecialAirN",
+    "ftPr_MF_SpecialHi",
+    "ftPr_MF_SpecialAirHi",
+    "ftPr_MF_SpecialLw",
+    "ftPr_MF_SpecialAirLw",
+    "ftPr_MF_SpecialS",
+    "ftPr_MF_SpecialAirS",
+    "FtStateChange_None",
+    "FtStateChange_SkipUpdateModel",
+    "FtStateChange_SkipUpdateItemVis",
+    "FtStateChange_Unk_UpdatePhys",
+    "FtStateChange_FreezeState",
+    "FtStateChange_PreserveFastFall",
+    "FtStateChange_PreserveGfx",
+    "FtStateChange_PreserveSfx",
+    "FtStateChange_PreserveColAnimHitStatus",
+    "FtStateChange_SkipUpdateParasol",
+    "FtStateChange_Unk_19",
+    "FtMoveId_Unk01",
+    "FtMoveId_SpecialN",
+    "FtMoveId_SpecialS",
+    "FtMoveId_SpecialHi",
+    "FtMoveId_SpecialLw",
+    "Jigglypuff",
+    "Purin motion definitions",
+    "fighter motion state flags"
+  ],
+  "follow_up_queries": [
+    "Find other fighter `*_Init_MotionStateTable` files still using raw `0x00...` state-change flag constants.",
+    "Search for other character-local `*_MotionFlags` enums to align naming and composition patterns with `ftPr_MF_*`.",
+    "Audit `FtMoveId_* << 24` usage across fighter init tables for remaining raw move-id high-byte constants.",
+    "Check whether `ftPr_SpecialAirNCharged` should follow the `ftPr_MF_*` naming pattern, since it appears in the enum as a flag constant without the `MF` infix.",
+    "Identify inline-asm hunks where only numeric base changed from hex to decimal, to avoid treating them as semantic decomp progress."
+  ],
+  "confidence": 0.78,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

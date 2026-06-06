@@ -1,0 +1,127 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1264",
+  "pr": {
+    "number": 1264,
+    "title": "Match itraikou and itsuikun",
+    "url": "https://github.com/doldecomp/melee/pull/1264",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-02-20T09:03:48Z",
+    "merged_at": "2024-02-20T09:05:28Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Raikou and Suicune item translation units by replacing their 345-line assembly files with C implementations, marking both objects as Matching, and wiring their C object files into the build. The PR also generalized Entei's special-attributes typedef to itPokeDogsAttributes because Entei, Raikou, and Suicune share the same f32 plus timer layout.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "build-system"
+    ],
+    "systems": [
+      "item",
+      "pokemon-items",
+      "asm",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "asm/melee/it/items/itraikou.s",
+    "asm/melee/it/items/itsuikun.s",
+    "src/melee/it/items/itraikou.c",
+    "src/melee/it/items/itsuikun.c",
+    "src/melee/it/items/itraikou.h",
+    "src/melee/it/items/itsuikun.h",
+    "src/melee/it/items/itentei.c",
+    "src/melee/it/itCommonItems.h",
+    "configure.py",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted the old hand-assembly item implementations for itraikou.s and itsuikun.s.",
+    "Added 164-line C implementations for src/melee/it/items/itraikou.c and src/melee/it/items/itsuikun.c, including state tables, spawn/setup routines, physics callbacks, hitlag effect callbacks, accessory callbacks, and state-transition wrappers.",
+    "Switched configure.py entries for melee/it/items/itraikou.c and melee/it/items/itsuikun.c from NonMatching to Matching.",
+    "Replaced obj_files.mk references to asm/melee/it/items/itraikou.s.o and asm/melee/it/items/itsuikun.s.o with src/melee/it/items/itraikou.c.o and src/melee/it/items/itsuikun.c.o.",
+    "Renamed the shared special-attributes struct in src/melee/it/itCommonItems.h from itEnteiAttributes to itPokeDogsAttributes, preserving fields f32 x0 and s32 timer.",
+    "Updated itentei.c to use itPokeDogsAttributes instead of itEnteiAttributes, showing the same attribute layout applies across the legendary dog Pokemon items.",
+    "Expanded itraikou.h and itsuikun.h prototypes and changed header includes from it/forward.h to platform.h plus it/item.h."
+  ],
+  "smart_moves": [
+    "Matched Raikou and Suicune together because their assembly structure is nearly parallel: each has the same state-table shape, timer-driven SFX loop, effect-spawn accessory callback, and common ground/air state handling.",
+    "Generalized the attribute typedef rather than duplicating separate Entei/Raikou/Suicune attribute types with the same layout, reducing future churn when other Pokemon dog code is touched.",
+    "Kept item-specific constants local to each C file: Raikou uses effect 0x46D and SFX 0x2745-0x2748, while Suicune uses effect 0x469 and SFX 0x2749-0x274C.",
+    "Preserved matching-sensitive stack shape with PAD_STACK(16) in init functions and PAD_STACK(8) in camera/effect helper routines.",
+    "Used existing item helpers and callbacks directly instead of open-coding behavior: Item_80268E5C, Item_8026AE84, it_80272C6C, it_80272860, it_8026E248, it_8026D62C, it_8027A118, efLib_PauseAll, efLib_ResumeAll, efLib_DestroyAll, and efSync_Spawn."
+  ],
+  "decomp_lessons": [
+    "When multiple items share identical special-attribute data, prefer a neutral typedef name. This PR renamed itEnteiAttributes to itPokeDogsAttributes once Raikou and Suicune also consumed the layout.",
+    "For Pokemon item families, compare sibling assembly files side by side; many functions differ mainly by symbol addresses, effect IDs, and SFX IDs.",
+    "After replacing item assembly with C, update both configure.py matching status and obj_files.mk object paths or the build may still use the old asm object.",
+    "State tables can be expressed directly as ItemStateTable arrays with two entries matching the assembly .data layout: one action-state entry and one -1 terminator/alternate-state entry.",
+    "Accessory callbacks can mirror itcmd flag behavior by checking xDAC_itcmd_var0, clearing it, setting xDB4_itcmd_var2, spawning the effect, and starting the initial SFX.",
+    "Timer loops in item per-frame callbacks can be matched by decrementing xDD4_itemVar.entei.timer, selecting an SFX with HSD_Randi(3), playing it, and restoring the timer from special attributes."
+  ],
+  "naming_conventions": [
+    "Shared legendary-dog item attributes are named itPokeDogsAttributes, not itEnteiAttributes, even though the item variable storage path remains xDD4_itemVar.entei.timer.",
+    "Unidentified functions remain address-based, e.g. it_802CF814, it_802CFC48, it_802CF978, it_802CFDAC.",
+    "Global item state tables retain address-based names: it_803F7DE8 for Raikou and it_803F7E08 for Suicune.",
+    "Header guards remain address-derived: GALE01_2CF814 for itraikou.h and GALE01_2CFC48 for itsuikun.h.",
+    "The C files use project item typedefs such as Item_GObj, Item, Article, HSD_GObj, HSD_JObj, and ItemStateTable."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used PAD_STACK(16) in the initialization functions and PAD_STACK(8) in routines whose assembly required extra stack space.",
+    "Used GET_ITEM((HSD_GObj*) gobj) in functions where that form matched generated code, while using gobj->user_data directly in others.",
+    "Represented trivial assembly functions as empty void functions with an explicit return.",
+    "Matched branch/state behavior with bool returns: per-frame callbacks return true when it_80272C6C reports false, otherwise false; transition callbacks return false after ground/air handling.",
+    "Used a switch on HSD_Randi(3) for the three randomized follow-up SFX values, matching the assembly branch table/compare pattern.",
+    "Kept effect-spawn scale as local f32 v = 1.0f passed by address to efSync_Spawn, corresponding to the deleted sdata2 0x3F800000 constants."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1264",
+    "PsiLupan",
+    "Match itraikou and itsuikun",
+    "itraikou",
+    "itsuikun",
+    "itentei",
+    "itPokeDogsAttributes",
+    "itEnteiAttributes",
+    "ItemStateTable",
+    "it_803F7DE8",
+    "it_803F7E08",
+    "it_802CF814",
+    "it_802CFC48",
+    "it_802CF978",
+    "it_802CFDAC",
+    "it_802CFAFC",
+    "it_802CFF30",
+    "efSync_Spawn",
+    "efLib_PauseAll",
+    "efLib_ResumeAll",
+    "efLib_DestroyAll",
+    "HSD_Randi",
+    "Item_8026AE84",
+    "Item_80268E5C",
+    "PAD_STACK",
+    "pokemon dogs",
+    "Raikou",
+    "Suicune",
+    "Entei"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename itPokeDogsAttributes fields x0 and timer or clarify xDD4_itemVar.entei reuse.",
+    "Search sibling Pokemon item PRs for the same ItemStateTable and accessory-callback matching pattern.",
+    "Check whether itraikou/itsuikun function names were later given semantic names beyond address-based symbols."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

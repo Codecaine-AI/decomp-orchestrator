@@ -1,0 +1,151 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1052",
+  "pr": {
+    "number": 1052,
+    "title": "Finish __strtoul match",
+    "url": "https://github.com/doldecomp/melee/pull/1052",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-01-10T08:30:49Z",
+    "merged_at": "2024-01-10T08:51:29Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Completed the C match for MSL __strtoul, allowing asm/MSL/strtoul.s to be deleted and removed from obj_files.mk. The replacement implements the base/max-width scanner as a state machine with ReadProc/fetch/unfetch callbacks, handling whitespace, signs, base autodetection including 0x, digit conversion, chars_scanned, negative, and overflow. The PR also cleaned related MSL stdio/wchar headers by removing duplicate FILE and enum definitions and updating fwide to use shared file_mode/orientation names. No PR body or review comments were present in the slice.",
+  "change_classification": {
+    "primary_type": "decompilation-match",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "library-code",
+      "cleanup"
+    ],
+    "systems": [
+      "MSL",
+      "strtoul",
+      "stdio",
+      "wchar_io",
+      "build"
+    ]
+  },
+  "key_files": [
+    "src/MSL/strtoul.c",
+    "asm/MSL/strtoul.s",
+    "obj_files.mk",
+    "src/stdio.h",
+    "src/MSL/wchar_io.c",
+    "src/MSL/wchar_io.h",
+    "src/MSL/ansi_files.h"
+  ],
+  "what_changed": [
+    "Deleted the 277-line asm implementation asm/MSL/strtoul.s, including __strtoul and the MSL_StrToUl jump table/data labels.",
+    "Removed $(BUILD_DIR)/asm/MSL/strtoul.s.o from TEXT_O_FILES in obj_files.mk so only src/MSL/strtoul.c.o supplies the symbol.",
+    "Added a 128-line C implementation of unsigned long __strtoul(int base, int max_width, int (*ReadProc)(void*, int, int), void* ReadProcArg, int* chars_scanned, int* negative, int* overflow).",
+    "The C __strtoul initializes negative and overflow, validates base and max_width, fetches input through the ReadProc-backed fetch macro/helper, then runs a scan_state switch until final_state(scan_state).",
+    "The scanner handles leading whitespace, optional '+'/'-' signs, base 0/8/10/16 behavior, 0x or 0X prefixes, decimal and alphabetic digits through isdigit/isalpha/toupper, ULONG_MAX overflow checks, chars_scanned adjustment, and unfetch(c) on exit.",
+    "Removed a duplicate FILE struct definition from src/stdio.h.",
+    "Removed console I/O prototypes for __close_console, __write_console, and __read_console from src/MSL/ansi_files.h.",
+    "Changed wchar_io.h to include ansi_files.h and removed local enum definitions for file kinds and file orientation.",
+    "Updated fwide in src/MSL/wchar_io.c from stream->mode and __unoriented/__wide_oriented/__char_oriented to stream->file_mode and UNORIENTED/WIDE_ORIENTED/CHAR_ORIENTED."
+  ],
+  "smart_moves": [
+    "Modeled the old assembly jump-table behavior as an explicit scan_state switch, making the decompiled logic readable while preserving state-machine control flow needed for matching.",
+    "Kept the callback-based input interface intact: __strtoul consumes characters with fetch(), returns one with unfetch(c), and reports count/negative/overflow through out-parameters, matching the MSL scanning helper style.",
+    "Used ULONG_MAX / base as value_max and checked both pre-multiply and add overflow paths, mirroring the assembly's divwu/mullw/subfic overflow logic.",
+    "Removed the asm object from the build in the same PR as deleting the asm file, avoiding duplicate symbol or stale object issues.",
+    "Consolidated FILE/file-mode/orientation definitions instead of leaving parallel local copies in wchar_io.h and stdio.h, reducing struct-layout drift risk for later MSL work."
+  ],
+  "decomp_lessons": [
+    "When replacing an asm scanner, preserve the original state machine structure first; readable state names like start, check_for_zero, need_digit, digit_loop, finished, and failure make the conversion easier to audit against branch labels.",
+    "For MSL numeric scanners, match edge cases around base validation: base < 0, base == 1, base > 36, and max_width < 1 all enter failure handling.",
+    "Base autodetection matters for matching and correctness: base 0 defaults to decimal unless a leading 0 makes octal, and a leading 0 followed by x/X sets base 16.",
+    "chars_scanned accounting can be non-obvious: this implementation increments through fetch, then decrements count on success and resets count/value on failure before storing *chars_scanned.",
+    "Header cleanup can be a prerequisite or side effect of matching: duplicate FILE and enum definitions can force wrong field names or layouts, as shown by fwide moving from mode to file_mode.",
+    "If a C file already has the public wrapper, adding the internal helper to the same file and removing the corresponding asm object is the clean path to retire an asm stub."
+  ],
+  "naming_conventions": [
+    "__strtoul is kept as the internal MSL helper name, distinct from public strtoul.",
+    "ReadProc and ReadProcArg are capitalized in the parameter list, matching the callback naming visible in the added implementation.",
+    "The state variable is named scan_state, with descriptive state names such as start, check_for_zero, need_digit, digit_loop, finished, and failure where available.",
+    "Out-parameters are named chars_scanned, negative, and overflow, matching their semantic roles.",
+    "Shared FILE mode/orientation fields use file_mode and enum constants UNORIENTED, WIDE_ORIENTED, and CHAR_ORIENTED; older local names like __unoriented and __wide_oriented were removed from wchar_io.h.",
+    "The old assembly labels used generated names like MSL_StrToUl_80325C98 and MSL_StrToUl_80400728; the C replacement avoids carrying those label names forward."
+  ],
+  "assembly_or_matching_tactics": [
+    "Translated the assembly jump table MSL_StrToUl_80400728 into a C switch over scan_state.",
+    "Matched the assembly's callback call pattern with fetch() and unfetch(c) abstractions rather than direct string indexing.",
+    "Preserved the loop guard shape: count <= max_width, c != -1, and !final_state(scan_state).",
+    "Used ctype helpers isspace, isdigit, isalpha, and toupper to represent the assembly's __ctype_map tests and toupper calls.",
+    "Replicated overflow detection using value_max = ULONG_MAX / base, a pre-multiply value > value_max check, and an add check against ULONG_MAX - value.",
+    "The added switch includes a raw case 4 while nearby states are named; this is likely evidence of preserving an exact state value/jump-table index for matching, though the slice does not include comments explaining it."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review records were present in the provided PR slice.",
+    "No explicit reviewer rationale was available; conclusions are based on title, changed files, and diff evidence only."
+  ],
+  "searchable_terms": [
+    "pr-1052",
+    "Finish __strtoul match",
+    "__strtoul",
+    "strtoul",
+    "src/MSL/strtoul.c",
+    "asm/MSL/strtoul.s",
+    "MSL_StrToUl_80400728",
+    "MSL_StrToUl_80325C98",
+    "MSL_StrToUl_80325D34",
+    "MSL_StrToUl_80325D7C",
+    "MSL_StrToUl_80325DCC",
+    "MSL_StrToUl_80325EB4",
+    "ReadProc",
+    "ReadProcArg",
+    "chars_scanned",
+    "negative",
+    "overflow",
+    "scan_state",
+    "start",
+    "check_for_zero",
+    "leading_zero",
+    "need_digit",
+    "digit_loop",
+    "failure",
+    "finished",
+    "final_state",
+    "success",
+    "fetch",
+    "unfetch",
+    "ULONG_MAX",
+    "value_max",
+    "isdigit",
+    "isalpha",
+    "isspace",
+    "toupper",
+    "obj_files.mk",
+    "TEXT_O_FILES",
+    "stdio.h",
+    "wchar_io.c",
+    "wchar_io.h",
+    "ansi_files.h",
+    "FILE",
+    "file_mode",
+    "UNORIENTED",
+    "WIDE_ORIENTED",
+    "CHAR_ORIENTED",
+    "__closed_file"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching src/MSL/strtoul.c to see whether the raw case 4 state was renamed or further clarified.",
+    "Search for other MSL scanner helpers using ReadProc/fetch/unfetch for reusable matching patterns.",
+    "Search for PRs that moved FILE or __file_modes definitions into common_structs.h or ansi_files.h to understand the header consolidation sequence.",
+    "Check whether console_io prototypes removed from ansi_files.h were moved to a dedicated header in nearby PRs."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

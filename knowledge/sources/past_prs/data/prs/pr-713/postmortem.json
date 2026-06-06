@@ -1,0 +1,128 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-713",
+  "pr": {
+    "number": 713,
+    "title": "Use `GET_FIGHTER` macro, pass 3",
+    "url": "https://github.com/doldecomp/melee/pull/713",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-20T16:26:08Z",
+    "merged_at": "2023-01-25T09:04:34Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Third pass converting fighter code from direct `HSD_GObj` field access or `getFighter` calls to the `GET_FIGHTER` macro, with related cleanup in `fighter.c` and introduction of a `GET_JOBJ` macro for typed joint-object access. The PR touched fighter core code plus Samus and Ness files, mostly preserving matching-sensitive unused-stack padding while regularizing accessor style. It depended on PR #712 and partially superseded PR #614.",
+  "change_classification": {
+    "primary_type": "macro_accessor_cleanup",
+    "categories": [
+      "headers",
+      "refactor",
+      "matching_cleanup",
+      "style"
+    ],
+    "systems": [
+      "fighter",
+      "fighter_common",
+      "Samus",
+      "Ness",
+      "sysdolphin_baselib",
+      "gobj"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/chara/ftSamus/ftsamus3.c",
+    "src/melee/ft/chara/ftSamus/ftsamus2.c",
+    "src/melee/ft/chara/ftNess/ftNess_SpecialHi.c",
+    "src/sysdolphin/baselib/gobj.h"
+  ],
+  "what_changed": [
+    "Replaced several `getFighter(fighter_gobj)` and direct `fighter_gobj->user_data` uses with `GET_FIGHTER(fighter_gobj)` in `src/melee/ft/fighter.c`.",
+    "Changed direct `fighter_gobj->hsd_obj` access and casts through `HSD_GObjGetHSDObj` to a new `GET_JOBJ(fighter_gobj)` macro in fighter code.",
+    "Added `#define GET_JOBJ(gobj) ((HSD_JObj*) HSD_GObjGetHSDObj(gobj))` in `src/sysdolphin/baselib/gobj.h`.",
+    "Changed `HSD_GObjGetUserData` and `HSD_GObjGetHSDObj` return types from `void*` to `any_t` in `gobj.h`, and normalized the `HSD_GObjGetHSDObj` parameter name to `gobj`.",
+    "Inlined the previously separate `Fighter_InitScale` helper back into `Fighter_UpdateModelScale`, using `GET_FIGHTER` and `GET_JOBJ` there.",
+    "Removed or localized temporary variables in `Fighter_UnkInitLoad_80068914`, including replacing a local `controller_index` with direct `fp->x61A_controller_index` access and replacing local `ftDataList` with direct `gFtDataList[...]` access.",
+    "Simplified zero-vector assignments in `Fighter_ActionStateChange_800693AC` by assigning `0.0F` directly instead of introducing a local float constant.",
+    "Localized `Vec3 vec` inside the branch where it is used in `Fighter_8006A360`.",
+    "Replaced a previous matching workaround using a void-pointer downcast with the expression `!fp;` in `Fighter_8006A360`.",
+    "Added blank-line spacing around `MUST_MATCH` unused stack declarations and variable declarations in Samus and Ness functions; these changes appear style/matching-preservation oriented rather than behavioral.",
+    "Some Samus functions still use lowercase `getFighter` in the shown diff excerpt, so this was not a complete global conversion."
+  ],
+  "smart_moves": [
+    "Centralizing fighter userdata access through `GET_FIGHTER` reduces repeated casts and makes future fighter decomp code more uniform.",
+    "Adding `GET_JOBJ` mirrors the fighter accessor pattern for `HSD_JObj` retrieval, avoiding repeated explicit casts from `hsd_obj` or `HSD_GObjGetHSDObj`.",
+    "The diff preserves `#ifdef MUST_MATCH` unused stack arrays while adjusting surrounding declarations, showing care not to break known stack-shape requirements during cleanup.",
+    "Inlining `Fighter_InitScale` into `Fighter_UpdateModelScale` likely reduced artificial helper indirection while keeping the scale logic explicit at the call site.",
+    "Moving temporary declarations closer to use, such as the color pointer and `Vec3 vec`, cleaned up decompiled C without changing the visible control flow.",
+    "The PR was staged as 'pass 3' and explicitly depended on #712, suggesting an incremental approach to broad mechanical accessor cleanup instead of one risky all-at-once rewrite."
+  ],
+  "decomp_lessons": [
+    "When an object field is semantically a typed fighter pointer, prefer the project macro `GET_FIGHTER(gobj)` over direct `gobj->user_data` access or ad hoc `getFighter` calls.",
+    "For joint-object access from an `HSD_GObj`, prefer `GET_JOBJ(gobj)` once available instead of open-coded casts from `hsd_obj`.",
+    "Accessor macro migrations can be done in matching-safe slices; leave known `MUST_MATCH` stack padding in place until the underlying stack issue is understood.",
+    "Small declaration-order and temporary-variable changes can matter for matching. The diff repeatedly keeps unused stack declarations and inserts spacing around them rather than deleting them.",
+    "Use typed accessor macros to express intent, but verify each replacement against matching because comments in the removed code indicate some previous casts/workarounds existed specifically to satisfy the compiler output.",
+    "If a cleanup only partially converts old names, make follow-up searches for remaining lowercase `getFighter` calls in the touched files."
+  ],
+  "naming_conventions": [
+    "`GET_FIGHTER(gobj)` is the preferred uppercase macro form for retrieving `Fighter*` from an `HSD_GObj*`.",
+    "`GET_JOBJ(gobj)` was introduced as the uppercase macro form for retrieving an `HSD_JObj*` from an `HSD_GObj*`.",
+    "Getter-like inline functions in `gobj.h` use `HSD_GObjGetUserData` and `HSD_GObjGetHSDObj`, with parameter name normalized to `gobj`.",
+    "Doxygen-style comments such as `/// @warning` and `/// @todo` are used in touched code, replacing or aligning older plain comments."
+  ],
+  "assembly_or_matching_tactics": [
+    "Kept explicit `#ifdef MUST_MATCH` unused byte arrays such as `u8 unused[8]`, `u8 unused[20]`, `u8 unused[24]`, and `u8 unused[32]` in Samus/Ness functions.",
+    "Used direct `0.0F` chained assignments instead of a local `float c = 0.0f` in `Fighter_ActionStateChange_800693AC`, implying this form matched or was cleaner under the compiler.",
+    "Replaced an old void-pointer downcast filler workaround with `!fp;`, an expression likely intended to influence codegen without affecting runtime behavior.",
+    "Localized variables to narrower scopes where possible, but not when `MUST_MATCH` stack padding needed to remain visible in the function body.",
+    "Removed the separate inline `Fighter_InitScale` helper and expressed scale setup directly in `Fighter_UpdateModelScale`, which may avoid inlining/codegen fragility.",
+    "Blank lines were inserted around unused-stack blocks in multiple functions, making matching scaffolding easier to see and less likely to be accidentally mixed with semantic declarations."
+  ],
+  "review_feedback": [
+    "No review comments were included in the provided PR slice.",
+    "The PR body states: \"Depends on #712\" and \"Partially supersedes #614\", which is the main contextual feedback/evidence available."
+  ],
+  "searchable_terms": [
+    "GET_FIGHTER",
+    "GET_JOBJ",
+    "getFighter",
+    "HSD_GObjGetUserData",
+    "HSD_GObjGetHSDObj",
+    "HSD_GObj",
+    "HSD_JObj",
+    "fighter_gobj",
+    "user_data",
+    "hsd_obj",
+    "any_t",
+    "MUST_MATCH",
+    "unused stack",
+    "Fighter_UpdateModelScale",
+    "Fighter_InitScale",
+    "Fighter_ActionStateChange_800693AC",
+    "Fighter_8006A360",
+    "Fighter_UnkInitLoad_80068914",
+    "Fighter_Create",
+    "ftSamus_801293BC_inner",
+    "ftSamus_SpecialN_StartAction",
+    "ftSamus_SpecialAirN_StartAction",
+    "ftNess_SpecialAirHiStart_Action",
+    "pr-getfighter-3"
+  ],
+  "follow_up_queries": [
+    "Search for remaining lowercase `getFighter(` calls after PR #713, especially in Samus files where the excerpt still shows some.",
+    "Search for direct `->user_data` access in fighter-related code and evaluate whether `GET_FIGHTER` or another typed accessor should be used.",
+    "Search for direct `->hsd_obj` access and decide whether `GET_JOBJ` is appropriate or whether the object is not an `HSD_JObj`.",
+    "Audit `gobj.h` for the duplicated `func_80390ED0(HSD_GObj* gobj, u32 mask);` declaration shown in the diff excerpt.",
+    "Compare with PR #712 and PR #614 to understand the full staged `GET_FIGHTER` migration and any earlier review constraints."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

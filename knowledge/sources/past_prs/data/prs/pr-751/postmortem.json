@@ -1,0 +1,177 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-751",
+  "pr": {
+    "number": 751,
+    "title": "Publish packages for building Melee and generating documentation",
+    "url": "https://github.com/doldecomp/melee/pull/751",
+    "state": "CLOSED",
+    "author": "ribbanya",
+    "created_at": "2023-03-05T15:39:49Z",
+    "merged_at": null
+  },
+  "agent_status": "agent_completed",
+  "summary": "Unmerged tooling/CI PR that proposed replacing the existing build and publish workflows with GHCR-hosted container images for Linux builds, Windows smoke-test builds, and documentation generation. It added Dockerfiles and entrypoints under .github/packages, split build-melee, publish-pages, and publish-packages workflows, and moved CI setup work into reusable images with dry-run validation before publishing. The PR was closed because it was superseded by #752; author noted current builds failed because the new images did not yet exist under doldecomp.",
+  "change_classification": {
+    "primary_type": "tooling",
+    "categories": [
+      "ci",
+      "github-actions",
+      "docker",
+      "containers",
+      "documentation-generation",
+      "build-system",
+      "windows-developer-experience",
+      "python-tooling"
+    ],
+    "systems": [
+      ".github",
+      ".github/workflows",
+      ".github/packages",
+      "repo-root",
+      "Makefile",
+      "tools/calcprogress",
+      "tools/m2ctx"
+    ]
+  },
+  "key_files": [
+    ".github/workflows/publish-packages.yml",
+    ".github/workflows/build-melee.yml",
+    ".github/workflows/publish-pages.yml",
+    ".github/workflows/build.yml",
+    ".github/workflows/publish.yml",
+    ".github/packages/build-linux/Dockerfile",
+    ".github/packages/build-linux/setup.sh",
+    ".github/packages/build-linux/entrypoint.sh",
+    ".github/packages/build-windows/Dockerfile",
+    ".github/packages/build-windows/setup.ps1",
+    ".github/packages/build-windows/entrypoint.ps1",
+    ".github/packages/gen-pages/Dockerfile",
+    ".github/packages/gen-pages/setup.sh",
+    ".github/packages/gen-pages/entrypoint.sh",
+    ".dockerignore",
+    "Makefile",
+    "tools/calcprogress/requirements.txt",
+    "tools/calcprogress/src/requirements.txt"
+  ],
+  "what_changed": [
+    "Added a new publish-packages GitHub Actions workflow to build GHCR images for build-linux, gen-pages, and build-windows, with scheduled weekly runs, path-based triggers, concurrency cancellation, and Docker metadata tags such as latest, edge, branch refs, PR refs, sha tags, and scheduled date tags.",
+    "Replaced the old .github/workflows/build.yml with a new build-melee.yml that pulls prebuilt GHCR images from the current GitHub repository and runs GENERATE_MAP=1 and NON_MATCHING=1 as separate matrix entries with fail-fast disabled.",
+    "Added a Linux build container based on ubuntu:latest that copies in WiBo from ghcr.io/decompals/wibo:latest, copies powerpc-eabi-as from devkitpro/devkitppc:latest, downloads the MELEE_COMPILERS.zip archive, sets WINE/DEVKITPRO/DEVKITPPC/PATH, and runs make through an entrypoint.",
+    "Added a Windows Server Core 2022 container intended primarily as a smoke test for Windows developer setup. It uses PowerShell 5.1, creates an unprivileged melee user, installs git/python/mingw through scoop, creates a Python venv, installs requirements.txt, downloads compilers, and builds through bash because the Makefile does not support cmd or PowerShell directly.",
+    "Added a gen-pages container that installs doxygen, Python, requirements.txt, clones doxygen-awesome-css, runs doxygen, creates .nojekyll, runs tools/m2ctx/m2ctx.py -pqr, and copies ctx.html into the generated documentation output.",
+    "Changed documentation publishing to use the prebuilt page generator image, generate pages for pull requests as a smoke test, and upload generated pages as an artifact while only publishing GitHub Pages from master or main.",
+    "Added .dockerignore entries for .git directories, __pycache__, venv, and .idea to reduce Docker build context noise.",
+    "Added requirements.txt files under tools/calcprogress and tools/calcprogress/src, likely to support Python package installation or packaging behavior, though the excerpt only shows one-line additions without details.",
+    "Made build artifacts and progress more container-oriented: Linux entrypoint copies build outputs to /output and creates build/PROGRESS.md from calcprogress when GALE01.map exists."
+  ],
+  "smart_moves": [
+    "Moved expensive and fragile dependency setup out of every CI run and into prebuilt images, making normal build-melee runs depend on the latest successful image rather than live upstream availability.",
+    "Used dry runs before publishing each image: build images try both GENERATE_MAP=1 and NON_MATCHING=1, while the page image tries documentation generation. This prevents broken images from becoming the latest GHCR package.",
+    "Avoided hardcoding doldecomp in the consuming workflows by deriving image names from github.repository, allowing forks to build and consume their own package namespace.",
+    "Kept GENERATE_MAP=1 and NON_MATCHING=1 as separate matrix jobs with fail-fast disabled so one build mode can fail without suppressing evidence from the other.",
+    "Used GHCR tag strategy with latest, edge, branch, PR, sha, and scheduled date tags, giving both convenient defaults and reproducible image references.",
+    "For Windows, deliberately smoke-tested a realistic unprivileged local setup path using PowerShell 5.1 and scoop rather than relying only on GitHub runner state.",
+    "Explicitly checked $LASTEXITCODE after native commands in PowerShell scripts, acknowledging that PowerShell 5.1 does not automatically fail on native executable errors even with strict mode and ErrorActionPreference.",
+    "Synced Python requirements again at container entrypoint time for Windows and gen-pages so images remain usable when requirements.txt changes after the image was built.",
+    "Used cached base images from GitHub-hosted runners to make very large Ubuntu and Windows base layers inexpensive to pull in CI.",
+    "Preserved developer-facing artifacts: GALE01.map remains uploaded for GENERATE_MAP=1 runs, and generated documentation is uploaded as a zipped artifact even when not published to Pages."
+  ],
+  "decomp_lessons": [
+    "For decompilation projects with pinned or unusual compiler toolchains, CI reliability can be improved by publishing project-specific build images that include WiBo, devkitPPC assembler support, and mwcc compiler placement conventions.",
+    "Container entrypoints should mirror the repository's expected local layout, such as linking or copying mwcc_compiler into tools/ before invoking make.",
+    "When validating matching and non-matching configurations, keep GENERATE_MAP=1 and NON_MATCHING=1 independent so regressions in one mode do not hide the other mode's status.",
+    "Documentation tooling should be smoke-tested in pull requests, because tools such as doxygen, m2ctx.py, Python dependencies, and CSS assets can fail independently of the C build.",
+    "Windows CI can serve as a developer-experience test rather than only a build test; using a fresh Server image and unprivileged user exposes setup assumptions that may affect real contributors.",
+    "If CI workflows consume newly introduced package images, the bootstrap problem matters: builds can fail until images exist under the target organization. A migration may need a staged merge or fallback strategy.",
+    "For fork-friendly automation, avoid hardcoded organization names and use GitHub context variables for registry image paths and repository ownership."
+  ],
+  "naming_conventions": [
+    "New workflows were named by purpose with hyphenated names: build-melee, publish-pages, publish-packages.",
+    "Container package targets were hyphenated by role: build-linux, build-windows, gen-pages.",
+    "Environment variables used uppercase descriptive names such as REGISTRY, IMAGE, IMAGE_NAME, CONTAINERFILE, MAKE_FLAGS, WINE, DEVKITPRO, DEVKITPPC, and MELEE_COMPILERS_URL.",
+    "Docker volume mount points were simple role names: /input and /output on Linux containers, C:/Input and C:/Output on Windows containers.",
+    "Published image tags followed common container naming semantics: latest, edge, branch ref, PR ref, sha, and scheduled YYYYMMDD date tags.",
+    "Build modes remained expressed through existing Makefile flags: GENERATE_MAP=1 and NON_MATCHING=1."
+  ],
+  "assembly_or_matching_tactics": [
+    "The Linux container copied powerpc-eabi-as from devkitpro/devkitppc:latest into the expected DEVKITPPC bin path and set DEVKITPRO, DEVKITPPC, and PATH so the Makefile could find assembler tooling.",
+    "The Linux build image copied WiBo from ghcr.io/decompals/wibo:latest and exported WINE to the WiBo path, allowing Windows mwcc tooling to run in Linux CI.",
+    "The build-linux entrypoint symlinked /opt/mwcc_compiler into tools/ before invoking make, preserving the repository's expected compiler directory convention.",
+    "The Windows entrypoint copied the saved mwcc_compiler directory into tools/mwcc_compiler before running make, matching the layout expected by the existing build system.",
+    "The Linux GENERATE_MAP=1 path ran tools/calcprogress/calcprogress.py against build/ssbm.us.1.2/main.dol and GALE01.map with --asm-obj-ext .s.o and --old-map true to generate PROGRESS.md.",
+    "The new CI matrix continued to exercise both GENERATE_MAP=1 and NON_MATCHING=1, preserving coverage of matching/progress and non-matching build configurations."
+  ],
+  "review_feedback": [
+    {
+      "source": "author comment",
+      "feedback": "Builds were failing because the new images did not yet exist under doldecomp; the author said they would force-merge once approved.",
+      "outcome": "The PR was not merged and was later closed."
+    },
+    {
+      "source": "author comment",
+      "feedback": "A note about branch filtering changed twice: first saying there was no point to filtering the branch, then clarifying that the attempted filtering was not allowed.",
+      "outcome": "No final reviewer-driven resolution is visible in the provided excerpt."
+    },
+    {
+      "source": "author comment",
+      "feedback": "The PR was superseded by #752.",
+      "outcome": "PR #751 was closed unmerged."
+    }
+  ],
+  "searchable_terms": [
+    "PR751",
+    "publish packages",
+    "GHCR",
+    "GitHub Container Registry",
+    "build-melee",
+    "publish-packages",
+    "publish-pages",
+    "build-linux",
+    "build-windows",
+    "gen-pages",
+    "Dockerfile",
+    "docker buildx",
+    "docker metadata action",
+    "docker login action",
+    "ubuntu latest",
+    "windows servercore ltsc2022",
+    "PowerShell 5.1",
+    "scoop",
+    "WiBo",
+    "devkitPro",
+    "devkitPPC",
+    "mwcc_compiler",
+    "MELEE_COMPILERS_URL",
+    "GENERATE_MAP=1",
+    "NON_MATCHING=1",
+    "GALE01.map",
+    "PROGRESS.md",
+    "calcprogress.py",
+    "m2ctx.py",
+    "doxygen",
+    "doxygen-awesome-css",
+    ".nojekyll",
+    "ctx.html",
+    ".dockerignore",
+    "requirements.txt",
+    "superseded by #752",
+    "bootstrap images do not exist"
+  ],
+  "follow_up_queries": [
+    "Inspect PR #752 to see the merged or revised version of the GHCR package workflow.",
+    "Check whether current build-melee workflows still derive image names from github.repository or moved back to doldecomp-specific images.",
+    "Look for later changes to the Windows build image, especially whether scoop was replaced by winget or PowerShell 7 behavior.",
+    "Search for later fixes to the package bootstrap problem where consuming workflows fail before GHCR images exist.",
+    "Review current calcprogress requirements placement to understand why both tools/calcprogress/requirements.txt and tools/calcprogress/src/requirements.txt were added."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

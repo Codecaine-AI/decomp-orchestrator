@@ -1,0 +1,142 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1277",
+  "pr": {
+    "number": 1277,
+    "title": "Match itmariofireball",
+    "url": "https://github.com/doldecomp/melee/pull/1277",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-02-20T18:51:29Z",
+    "merged_at": "2024-02-20T19:04:56Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched Mario fireball item code by replacing the 313-line asm file with C, switching itmariofireball.c from NonMatching to Matching in configure.py, and building the C object instead of the asm object. The PR also extracted PowerPC sqrt inline helpers from math.h into a new math_ppc.h/math_ppc.c pair and updated dependent files to include math_ppc.h where those MSL inline sqrt variants were needed for matching.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "build-configuration",
+      "math-library-refactor"
+    ],
+    "systems": [
+      "item",
+      "fighter",
+      "MSL",
+      "build",
+      "melee-core"
+    ]
+  },
+  "key_files": [
+    "asm/melee/it/items/itmariofireball.s",
+    "src/melee/it/items/itmariofireball.c",
+    "src/melee/it/items/itmariofireball.h",
+    "configure.py",
+    "obj_files.mk",
+    "src/MSL/math.h",
+    "src/MSL/math_ppc.h",
+    "src/MSL/math_ppc.c",
+    "src/melee/it/itCommonItems.h",
+    "src/melee/ft/chara/ftMario/ftMr_SpecialN.c"
+  ],
+  "what_changed": [
+    "Deleted asm/melee/it/items/itmariofireball.s and added a C implementation in src/melee/it/items/itmariofireball.c.",
+    "Changed configure.py so melee/it/items/itmariofireball.c is Object(Matching) instead of Object(NonMatching).",
+    "Changed obj_files.mk to link src/melee/it/items/itmariofireball.c.o instead of asm/melee/it/items/itmariofireball.s.o.",
+    "Implemented the Mario fireball item state table it_803F6788 and functions it_8029B6F8, it_8029B7C0, it_8029B868, it_8029B8A0, it_8029B8EC, it_8029BA38, it_8029BA40, it_8029BA60, it_8029BA68, it_8029BA70, it_8029BA78, and it_8029BA98 in C.",
+    "Updated itmariofireball.h with prototypes for the newly implemented functions and forward includes for Vec3/HSD types.",
+    "Moved the PowerPC inline sqrtf and sqrtf_accurate implementations out of src/MSL/math.h into new src/MSL/math_ppc.h, with src/MSL/math_ppc.c including that header.",
+    "Added math_ppc.c.o to obj_files.mk.",
+    "Added #include <math_ppc.h> or #include <MSL/math_ppc.h> to multiple files that depended on the former math.h inline PowerPC sqrt behavior.",
+    "Updated ftMr_SpecialN.c to include itmariofireball.h and call it_8029B6F8(gobj, &coords, It_Kind_Mario_Fire, fp->facing_dir) instead of the older guessed signature.",
+    "Removed the old it_8029B6F8 declaration from it_27CF.h and it_27CF.dox.",
+    "Extended itUnkAttributes in itCommonItems.h with float x10, used by itmariofireball.c as a speed/distance threshold."
+  ],
+  "smart_moves": [
+    "Separated math_ppc.h from math.h so files can opt into the exact PowerPC inline sqrt implementation only when needed, reducing global include side effects while preserving matching behavior.",
+    "Used a small static helper calc_dist_2d_accurate(Vec3* v) returning sqrtf_accurate(VEC2_SQ_LEN(*v)) to express the fireball velocity magnitude check while matching the assembly’s extra frsqrte refinement sequence.",
+    "Corrected the Mario fireball spawner API to take the owner gobj, position, ItemKind, and facing direction in the order reflected by the matched C, rather than keeping the older placeholder declaration in it_27CF.h.",
+    "Kept the item behavior table and unknown item functions under their address-based names, which avoided speculative renaming while still making the object match.",
+    "Reused existing item infrastructure calls such as Item_80268B18, it_802750F8, Item_80268E5C, it_80272860, it_80274658, itColl_BounceOffShield, and it_8026B894 instead of open-coding behavior.",
+    "Preserved precise float behavior with explicit 0.0f assignments, cosf/sinf velocity setup, sqrtf_accurate, and the math_ppc inline definitions."
+  ],
+  "decomp_lessons": [
+    "When matching code relies on MSL/PowerPC inline math behavior, isolate those helpers in a dedicated header so only matching-sensitive translation units include them.",
+    "A matched item file may require header cleanup outside the item itself: declarations should move from generic/placeholder headers like it_27CF.h into the item-specific header once the function signature is known.",
+    "Article attribute structs often need incremental field discoveries; here itUnkAttributes gained x10 because itmariofireball.c reads attrs->x10 in the collision/update logic.",
+    "For item spawn functions, reconstructing the SpawnItem initialization order matters: this implementation sets kind, prev_pos, position via it_8026BB68, facing_dir, damage, velocity, parent pointers, flag bit b0, and x40 before Item_80268B18.",
+    "Use existing macros and accessors such as GET_ITEM, GET_JOBJ, VEC2_SQ_LEN, and ITEM_ANIM_UPDATE to express known engine concepts without unnecessary pointer arithmetic.",
+    "Matching can require broad include churn even when the primary decomp target is small, especially when a common header such as math.h changes inline contents."
+  ],
+  "naming_conventions": [
+    "Unidentified functions and globals retained address-style names such as it_8029B6F8 and it_803F6788.",
+    "Item state tables use ItemStateTable and address-like global names when no semantic name is known.",
+    "Unknown article attributes retain offset-style field names such as x0_float, x4_float, x8, xC, and the newly added x10.",
+    "Known enums/constants are preferred where available, e.g. It_Kind_Mario_Fire and ITEM_ANIM_UPDATE.",
+    "The project distinguishes regular MSL math includes from PowerPC-specific inline math via math.h versus math_ppc.h."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced the asm object with the C object in obj_files.mk only after marking the source as Matching in configure.py.",
+    "Used sqrtf_accurate with an extra Newton-Raphson refinement iteration to reproduce the assembly sequence involving frsqrte/fnmsub/fmul before comparing velocity magnitude.",
+    "Kept sqrtf/sqrtf_accurate definitions as inline functions with volatile float temporaries, mirroring the previous math.h implementation and helping preserve codegen.",
+    "Used cosf and sinf to reconstruct x/y fireball velocity from special attributes and facing direction.",
+    "Used a bool-returning lifetime decrement function written as return item->xD44_lifeTimer <= 0 ? true : false, likely to match the target branch/codegen shape.",
+    "Preserved effect IDs observed in asm: Mario fireball path spawns effect 1147 and the other branch spawns 1184; Mario branch also calls Item_8026AE84 with the large negated constant expression ~0xFFFD40C6.",
+    "Added math_ppc.h includes to dependent files so moving inline sqrt out of math.h did not break other translation units that needed the inline symbol/codegen."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or formal reviews were present in the provided PR slice.",
+    "There is no direct evidence of reviewer-requested changes; conclusions are based on the title, changed files, and diff only."
+  ],
+  "searchable_terms": [
+    "itmariofireball",
+    "Mario fireball",
+    "it_8029B6F8",
+    "it_8029B7C0",
+    "it_8029B868",
+    "it_8029B8A0",
+    "it_8029B8EC",
+    "it_8029BA38",
+    "it_8029BA40",
+    "it_8029BA60",
+    "it_8029BA68",
+    "it_8029BA70",
+    "it_8029BA78",
+    "it_8029BA98",
+    "it_803F6788",
+    "ItemStateTable",
+    "SpawnItem",
+    "It_Kind_Mario_Fire",
+    "math_ppc.h",
+    "sqrtf_accurate",
+    "sqrtf",
+    "__frsqrte",
+    "VEC2_SQ_LEN",
+    "itUnkAttributes x10",
+    "Item_80268B18",
+    "Item_80268E5C",
+    "Item_8026AE84",
+    "efAsync_Spawn",
+    "itColl_BounceOffShield",
+    "Object(Matching)",
+    "asm removal"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or document itmariofireball functions it_8029B6F8 through it_8029BA98.",
+    "Search for later changes to math_ppc.h or sqrtf_accurate to see whether this split became the standard matching pattern.",
+    "Search for PRs that further type itUnkAttributes fields beyond x0_float/x4_float/x8/xC/x10.",
+    "Compare itluigifireball.c against itmariofireball.c for shared fireball item behavior and possible future semantic naming.",
+    "Look for later review discussion of the TODO-style comment near Item_8026AE84 and the effect/item ID used in Mario fireball collision logic."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,145 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1009",
+  "pr": {
+    "number": 1009,
+    "title": "Partially match `ftCo_PassiveWall`",
+    "url": "https://github.com/doldecomp/melee/pull/1009",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-11-17T20:29:44Z",
+    "merged_at": "2023-11-17T20:44:22Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Moved the PassiveWall action out of raw assembly in `asm/melee/ft/ft_0C08.s` into a new `src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c`/`.h` pair, with companion sdata2 literals in `asm/melee/ft/chara/ftCommon/ftCo_PassiveWall.s`. The file report shows the new C file at 99.47% overall: six functions fully matched and `ftCo_800C1E64` still partial at 98.08%. The PR also added the PassiveWall motion-var layout, refined related function prototypes and common-data fields, and wired the new object files into `obj_files.mk`.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-layout",
+      "assembly-cleanup",
+      "fighter-common-action"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "collision",
+      "animation",
+      "asm",
+      "library"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c",
+    "src/melee/ft/chara/ftCommon/ftCo_PassiveWall.h",
+    "asm/melee/ft/ft_0C08.s",
+    "asm/melee/ft/chara/ftCommon/ftCo_PassiveWall.s",
+    "src/melee/ft/chara/ftCommon/types.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/ft_0C08.h",
+    "src/melee/ft/ft_081B.c",
+    "src/melee/ft/ft_081B.h",
+    "src/melee/ft/ftcolanim.c",
+    "src/melee/ft/ftcolanim.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Added `ftCo_PassiveWall.c` with C implementations or partial C/ASM wrappers for `ftCo_800C1D38`, `ftCo_800C1E0C`, `ftCo_800C1E64`, `ftCo_PassiveWall_Anim`, `ftCo_PassiveWall_IASA`, `ftCo_PassiveWall_Phys`, and `ftCo_PassiveWall_Coll`.",
+    "Deleted about 477 lines of PassiveWall-related text assembly from `asm/melee/ft/ft_0C08.s`.",
+    "Added a small `ftCo_PassiveWall.s` containing sdata2 literals `ftCo_804D8C60`, `ftCo_804D8C64`, `ftCo_804D8C68`, `ftCo_804D8C70`, and `ftCo_804D8C78`, including `U32_TO_F32` and `S32_TO_F32` double constants.",
+    "Added `ftCo_PassiveWall.h` and moved PassiveWall prototypes out of the broad `ft_0C08.h` header.",
+    "Added `mv.co.passivewall` motion variables in `ftCommon/types.h`: `timer`, `x4`, `x8`, and `vel_y_exponent` at offsets `fp+2340` through `fp+234C`.",
+    "Refined `ftCommonData` around offsets `+760`, `+764`, and `+778`, naming `+778` as `passive_wall_vel_y_base` and exposing `x760`/`x764` used by PassiveWall setup/collision.",
+    "Changed `ftCo_DatAttrs.x100` from `int` to `float`, matching its use as PassiveWall horizontal velocity in `ftCo_PassiveWall_Anim`.",
+    "Tightened related prototypes: `ft_80083318` now takes a fighter gobj, callback, and event; `ftCo_800BFFD0` now takes `enum_t` and `bool`; `ftCo_800986B0` is exposed as `bool ftCo_800986B0(ftCo_GObj* gobj)`.",
+    "Added local includes of `ftCo_PassiveWall.h` in related common fighter files such as Damage, DownDamage, FlyReflect, Init, and wall-jump code.",
+    "Registered both the new C object and literal assembly object in `obj_files.mk`."
+  ],
+  "smart_moves": [
+    "Split the decompilation by action module instead of leaving the code in the catch-all `ft_0C08.s`, making PassiveWall easier to search, type, and iterate on independently.",
+    "Kept hard-to-express literals in a tiny dedicated `.s` file, preserving sdata2 symbol placement and float/double conversion constants while still decompiling the behavior into C.",
+    "Used the action-specific motion-variable union member `mv.co.passivewall` to replace raw offsets `0x2340`, `0x2344`, `0x2348`, and `0x234C` with meaningful local state.",
+    "Modeled the left/right wall branch through collision flags and ECB corrected positions, reusing `MPCOLL_FLAGS_B11`/`MPCOLL_FLAGS_B05` and named collision structs rather than raw bit tests everywhere.",
+    "Isolated a small inline helper for the PassiveWall-to-PassiveWallJump transition, which helped express a repeated motion-state change and timer reset cleanly.",
+    "Preserved matching-sensitive details in the C source with `ASM` wrappers, `#if !defined(MUST_MATCH) || defined(WIP)` fallbacks, `#pragma peephole on`, and explicit unused-stack padding notes."
+  ],
+  "decomp_lessons": [
+    "When decompiling a fighter action, move its callbacks into an action-named `ftCo_*` file and create a matching header, then remove only those prototypes from broader legacy headers.",
+    "For motion-state local storage, add a named member to `union ftCommon_MotionVars` once offsets are understood; this makes timer/state use clearer and reduces raw `fp+2340` style reasoning.",
+    "Common data fields should be named incrementally from observed usage. Here, `passive_wall_vel_y_base` was justified by its use in `powf` scaling of PassiveWall vertical velocity.",
+    "Type corrections in shared headers can be required for a match: `ftCo_DatAttrs.x100` becoming `float` aligns with multiplication into `self_vel.x`, and callback prototypes becoming concrete reduced `UNK` use.",
+    "Partial matches can still be valuable when most callbacks are fully matched and the remaining difficult function is isolated behind an `ASM`/C conditional.",
+    "Keep float constants and integer-to-double conversion helpers as named sdata2 symbols when the compiler will not naturally place or align them correctly."
+  ],
+  "naming_conventions": [
+    "Action module files use `ftCo_PassiveWall.c` and `ftCo_PassiveWall.h` naming under `src/melee/ft/chara/ftCommon/`.",
+    "Action callbacks use the pattern `ftCo_PassiveWall_Anim`, `ftCo_PassiveWall_IASA`, `ftCo_PassiveWall_Phys`, and `ftCo_PassiveWall_Coll`.",
+    "Unknown but address-stable helpers retain address-style names such as `ftCo_800C1D38`, `ftCo_800C1E0C`, and `ftCo_800C1E64`.",
+    "Motion variables are grouped under `fp->mv.co.passivewall`, with partially understood fields left as `x4`/`x8` and known roles named `timer` and `vel_y_exponent`.",
+    "Common-data unknowns remain offset-like (`x760`, `x764`) unless usage supports a semantic name, as with `passive_wall_vel_y_base`.",
+    "Header include guards in this area use address-style names such as `GALE01_0C1D38`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed the decompiled functions from `asm/melee/ft/ft_0C08.s` but retained sdata2 literals in a new action-local assembly file.",
+    "Used `.balign 8` and explicit `.float`/`.8byte` directives for constants `-1`, `1`, `0`, `U32_TO_F32`, and `S32_TO_F32`.",
+    "Declared C-side extern literals for `ftCo_804D8C60`, `ftCo_804D8C64`, `ftCo_804D8C68`, `ftCo_804D8C70`, and `ftCo_804D8C78`.",
+    "Used conditional `ASM` functions with C bodies under non-`MUST_MATCH`/`WIP` and inline assembly fallbacks for matching-sensitive functions.",
+    "Included explicit unused stack padding comments/arrays in functions where stack layout affected matching.",
+    "Used `powf(p_ftCommonData->passive_wall_vel_y_base, fp->mv.co.passivewall.vel_y_exponent)` to model the signed-int-to-float conversion path tied to the `S32_TO_F32` literal.",
+    "File report evidence: `ftCo_PassiveWall_Anim`, `ftCo_PassiveWall_IASA`, `ftCo_800C1D38`, `ftCo_PassiveWall_Phys`, `ftCo_800C1E0C`, and `ftCo_PassiveWall_Coll` were reported as 100%, while `ftCo_800C1E64` remained 98.08%."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or formal reviews were present in the provided PR slice.",
+    "There is no direct reviewer rationale in the evidence; conclusions are based on the title, file report, changed files, and diff."
+  ],
+  "searchable_terms": [
+    "pr-1009",
+    "ftCo_PassiveWall",
+    "PassiveWall",
+    "PassiveWallJump",
+    "ftCo_800C1D38",
+    "ftCo_800C1E0C",
+    "ftCo_800C1E64",
+    "ftCo_PassiveWall_Anim",
+    "ftCo_PassiveWall_IASA",
+    "ftCo_PassiveWall_Phys",
+    "ftCo_PassiveWall_Coll",
+    "ftCo_MS_PassiveWall",
+    "ftCo_MS_PassiveWallJump",
+    "passivewall.timer",
+    "passivewall.vel_y_exponent",
+    "passive_wall_vel_y_base",
+    "MPCOLL_FLAGS_B11",
+    "MPCOLL_FLAGS_B05",
+    "U32_TO_F32",
+    "S32_TO_F32",
+    "ftCo_804D8C60",
+    "ftCo_804D8C64",
+    "ftCo_804D8C68",
+    "ftCo_804D8C70",
+    "ftCo_804D8C78",
+    "ftKb_SpecialN_800F1F1C",
+    "Fighter_ChangeMotionState",
+    "efAsync_Spawn",
+    "ftColl_8007B760",
+    "ft_80083318",
+    "ftCo_800BFFD0"
+  ],
+  "follow_up_queries": [
+    "Investigate the remaining mismatch in `ftCo_800C1E64`, especially stack layout around the unused stack area and effect spawn position calculation.",
+    "Rename `ftCommonData.x760` and `ftCommonData.x764` once their PassiveWall timer/collision semantics are confirmed.",
+    "Determine semantic names for `mv.co.passivewall.x4` and `mv.co.passivewall.x8`; `x8` appears to gate a delayed transition to `ftCo_MS_PassiveWallJump`.",
+    "Validate whether `ftCo_DatAttrs.x100` should receive a semantic name related to PassiveWall horizontal velocity.",
+    "Check if the sdata2 literals can eventually be emitted from C without the dedicated `ftCo_PassiveWall.s` file."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,163 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1228",
+  "pr": {
+    "number": 1228,
+    "title": "Match `ftAnim_8006EBE8` (488 bytes)",
+    "url": "https://github.com/doldecomp/melee/pull/1228",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-02-15T01:35:03Z",
+    "merged_at": "2024-02-15T01:36:05Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the fighter animation routine ftAnim_8006EBE8, adding its implementation in ftanim.c and tightening nearby ftanim prototypes and struct/member types so the code can express JObj-based animation setup directly. The implementation resets/initializes root and animation skeleton JObjs, handles the no-blend versus blend paths separately, applies loop flags when fp->x594_b1 is set, sets HSD animation rates via HSD_ForeachAnim, and records blend frame state on the Fighter. The PR also updated scratches metadata, including marking func_8006EBE8 as OK. No PR body or review comments were present in the slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "fighter-animation",
+      "headers",
+      "type-correction",
+      "scratch-metadata"
+    ],
+    "systems": [
+      "fighter",
+      "ftanim",
+      "sysdolphin-baselib",
+      "config"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/ftanim.c",
+      "role": "Added matched implementation of ftAnim_8006EBE8."
+    },
+    {
+      "path": "src/melee/ft/ftanim.h",
+      "role": "Updated prototypes around ftAnim_8006EBE8 and related helper functions with more precise argument types."
+    },
+    {
+      "path": "src/melee/ft/types.h",
+      "role": "Changed ftData nested x20->x8 from int to HSD_Joint*."
+    },
+    {
+      "path": "src/melee/ft/chara/ftSeak/ftSk_SpecialS.c",
+      "role": "Adjusted a local item variable from int* to HSD_Joint** to align with corrected joint typing."
+    },
+    {
+      "path": "src/sysdolphin/baselib/object.h",
+      "role": "Simplified HSD_Type enum values after AOBJ_TYPE by relying on sequential enumeration."
+    },
+    {
+      "path": "config/GALE01/scratches.txt",
+      "role": "Updated scratch status metadata, including func_8006EBE8 becoming OK."
+    }
+  ],
+  "what_changed": [
+    "Added ftAnim_8006EBE8(HSD_GObj* gobj, float arg1, float anim_rate, float anim_blend_frames) to src/melee/ft/ftanim.c.",
+    "The new routine gets root_jobj with GET_JOBJ(gobj), gets Fighter with GET_FIGHTER(gobj), and uses fp->x8AC_animSkeleton as the animation skeleton JObj.",
+    "Both root_jobj and anim_jobj are passed through ftAnim_80070758 before the blend/no-blend branch.",
+    "For anim_blend_frames == 0, the code calls ftAnim_8006FA58(fp, true, fp->x108_costume_joint->child), ftAnim_8006FE08(fp, false), applies ftAnim_80070710 to root_jobj, optionally sets AOBJ_LOOP on root_jobj animations, and applies anim_rate to root_jobj animations.",
+    "For nonzero anim_blend_frames, the code calls ftAnim_8006FB88(fp, true, fp->x108_costume_joint->child), ftAnim_8006FE08(fp, true), applies ftAnim_80070710 to both anim_jobj and root_jobj, optionally sets AOBJ_LOOP on both animation trees, and applies anim_rate to both.",
+    "The implementation stores anim_blend_frames in fp->x8A4_animBlendFrames and clears fp->x8A8_unk to 0.",
+    "ftanim.h changed ftAnim_8006EBE8's first parameter from Fighter_GObj* to HSD_GObj* and named the anim_rate and anim_blend_frames parameters.",
+    "ftanim.h added a declaration for ftAnim_8006FE08(Fighter* fp, bool).",
+    "ftanim.h corrected helper prototypes so ftAnim_8006FA58 and ftAnim_8006FB88 use bool and HSD_Joint* rather than looser int placeholders, and ftAnim_80070010/ftAnim_80070108 use HSD_Joint* for their joint argument.",
+    "types.h changed a nested ftData field x20->x8 from int to HSD_Joint*.",
+    "ftSk_SpecialS.c changed a local variable from int* item to HSD_Joint** item, consistent with the corrected joint-pointer interpretation.",
+    "object.h changed HSD_Type enum entries after AOBJ_TYPE = 1 from explicit numeric assignments to implicit sequential values.",
+    "scratches.txt changed a large contiguous block of scratch records from percentage statuses to OK, with func_8006EBE8 specifically changing from 100% to OK."
+  ],
+  "smart_moves": [
+    "Used existing baselib animation traversal APIs instead of hand-walking all object animation nodes: HSD_ForeachAnim is called with JOBJ_TYPE, a combined mask, HSD_AObjSetFlags, and HSD_AObjSetRate.",
+    "Encoded the repeated animation object mask as a static const u32, keeping the large bitmask readable and avoiding recomputation/noise in the matched function body.",
+    "Separated the no-blend and blend paths cleanly, matching the behavioral difference that the blend path updates both fp->x8AC_animSkeleton and the root JObj while the no-blend path only updates root_jobj for timing/rate.",
+    "Improved types in headers and related caller code so the matched function can use HSD_Joint* and bool directly instead of placeholder int arguments.",
+    "Kept the public prototype compatible with generic HSD_GObj usage, matching how callers such as ftSk_SpecialS already receive an HSD_GObj*."
+  ],
+  "decomp_lessons": [
+    "When a match depends on animation tree APIs, first make the involved skeleton/costume fields real HSD_Joint* or HSD_JObj* types; placeholder ints can force awkward casts or mismatched codegen.",
+    "For HSD_ForeachAnim calls, the object type and mask constants matter: this match used JOBJ_TYPE plus a mask covering AOBJ, COBJ, DOBJ, FOBJ, FOG, JOBJ, LOBJ, POBJ, ROBJ, WOBJ, RENDER, CHAN, TEVREG, and CBOBJ.",
+    "Boolean helper parameters in animation setup functions should be typed as bool when the code is really passing true/false; this can clarify branch intent and improve matching ergonomics.",
+    "Blend-frame state in Fighter is updated after the setup branch, not inside either branch: fp->x8A4_animBlendFrames receives the requested blend frames and fp->x8A8_unk is cleared.",
+    "Enum cleanup is acceptable when preserving numeric values through sequential order; object.h kept AOBJ_TYPE = 1 and allowed following HSD_Type members to auto-increment."
+  ],
+  "naming_conventions": [
+    "Function name retained the address-based convention: ftAnim_8006EBE8.",
+    "New local names describe inferred roles rather than offsets only: root_jobj, anim_jobj, anim_rate, and anim_blend_frames.",
+    "Fighter fields still use project offset-style names such as x8AC_animSkeleton, x108_costume_joint, x8A4_animBlendFrames, x8A8_unk, and x594_b1.",
+    "Header comments keep address prefixes such as /* 06EBE8 */ for ftanim declarations."
+  ],
+  "assembly_or_matching_tactics": [
+    "Represented the long HSD_ForeachAnim mask as a static const u32 mask, likely matching the compiler's handling of a reused constant expression.",
+    "Used exact branch structure around anim_blend_frames == 0 to distinguish immediate animation setup from blended animation setup.",
+    "Called HSD_ForeachAnim separately for anim_jobj and root_jobj in the blend path, rather than trying to abstract the duplicated calls, preserving likely source/codegen shape.",
+    "Used AOBJ_ARG_AU with HSD_AObjSetFlags/AOBJ_LOOP and AOBJ_ARG_AF with HSD_AObjSetRate, matching the expected callback argument modes.",
+    "Adjusted prototypes and field types before or alongside the function match so calls could be written naturally without extra casts."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1228",
+    "ftAnim_8006EBE8",
+    "func_8006EBE8",
+    "488 bytes",
+    "ftanim.c",
+    "ftanim.h",
+    "HSD_ForeachAnim",
+    "HSD_AObjSetFlags",
+    "HSD_AObjSetRate",
+    "AOBJ_LOOP",
+    "AOBJ_ARG_AU",
+    "AOBJ_ARG_AF",
+    "JOBJ_TYPE",
+    "AOBJ_MASK",
+    "COBJ_MASK",
+    "DOBJ_MASK",
+    "FOBJ_MASK",
+    "FOG_MASK",
+    "JOBJ_MASK",
+    "LOBJ_MASK",
+    "POBJ_MASK",
+    "ROBJ_MASK",
+    "WOBJ_MASK",
+    "RENDER_MASK",
+    "CHAN_MASK",
+    "TEVREG_MASK",
+    "CBOBJ_MASK",
+    "GET_JOBJ",
+    "GET_FIGHTER",
+    "x8AC_animSkeleton",
+    "x108_costume_joint",
+    "x8A4_animBlendFrames",
+    "x8A8_unk",
+    "x594_b1",
+    "ftAnim_80070758",
+    "ftAnim_8006FA58",
+    "ftAnim_8006FB88",
+    "ftAnim_8006FE08",
+    "ftAnim_80070710",
+    "HSD_Joint",
+    "HSD_JObj",
+    "HSD_GObj",
+    "ftSk_SpecialS",
+    "object.h",
+    "HSD_Type",
+    "scratches.txt"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename ftAnim_8006EBE8 or identify the semantic name of arg1.",
+    "Search for later cleanup of fp->x8A8_unk and fp->x594_b1 to understand their animation-state roles.",
+    "Look for PRs matching ftAnim_8006FA58, ftAnim_8006FB88, ftAnim_8006FE08, or ftAnim_80070710 for additional context on this animation setup sequence.",
+    "Check whether the broad scratches.txt OK normalization around 0x800679B0-0x8006EBE8 was intentional metadata cleanup or generated by tooling."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,135 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1216",
+  "pr": {
+    "number": 1216,
+    "title": "Match 2.33% of `plbonuslib` (14.54 KB)",
+    "url": "https://github.com/doldecomp/melee/pull/1216",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-02-13T22:12:10Z",
+    "merged_at": "2024-02-13T22:13:14Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched two functions in `src/melee/pl/plbonuslib.c`: `plBonusLib_8003D514` at 98.06% and `pl_800402D0` at 100%, raising the file report by 2.33% / 14.54 KB. The PR also renamed the symbol at 0x8003D514 from `fn_8003D514` to `plBonusLib_8003D514`, moved the `pl_800402D0` declaration into `plbonuslib.h`, expanded `StaleMoveTable` to cover later player bookkeeping offsets, and adjusted player accessors/users to use the new nested `stale_moves` layout.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-layout",
+      "symbol-renaming",
+      "config-scratches"
+    ],
+    "systems": [
+      "player",
+      "plbonuslib",
+      "fighter",
+      "config"
+    ]
+  },
+  "key_files": [
+    "src/melee/pl/plbonuslib.c",
+    "src/melee/pl/plbonuslib.h",
+    "src/melee/pl/types.h",
+    "src/melee/pl/types.dox",
+    "src/melee/pl/player.c",
+    "src/melee/pl/player.h",
+    "src/melee/pl/pl_0371.h",
+    "src/melee/ft/ftcommon.c",
+    "src/melee/ft/chara/ftFox/ftFx_AppealS.c",
+    "config/GALE01/symbols.txt",
+    "config/GALE01/scratches.txt"
+  ],
+  "what_changed": [
+    "Added the first C contents for `src/melee/pl/plbonuslib.c`, implementing `plBonusLib_8003D514(int)` and `pl_800402D0(int slot, bool arg1, bool arg2)`.",
+    "`plBonusLib_8003D514` iterates over up to 6 player slots, skips the source slot, checks player/entity conditions with `Player_GetEntity`, `Player_8003221C`, `ftLib_80087354`, and `ftLib_8008732C`, reads positions/facing via `ftLib_80086644` and `ftLib_800865C0`, and sets bitflags at `StaleMoveTable + 0xdd1`.",
+    "`pl_800402D0` retrieves `Player_GetStaleMoveTableIndexPtr2(slot)`, returns early when `arg1` is true, increments `xCEC`, returns unless `arg2` is true, then increments `xCF0`.",
+    "Renamed the symbol entry `fn_8003D514` to `plBonusLib_8003D514` in `config/GALE01/symbols.txt`.",
+    "Moved the prototype for `pl_800402D0` out of `src/melee/pl/pl_0371.h` and into `src/melee/pl/plbonuslib.h`, with signature `void pl_800402D0(int slot, bool, bool)`.",
+    "Added `#include \"pl/plbonuslib.h\"` to `src/melee/ft/ftcommon.c`, indicating call sites there now need the plbonuslib declaration.",
+    "Expanded `StaleMoveTable` in `src/melee/pl/types.h` from only the stale move ring and attack count to include padding and later fields: `x5EC`, `xCEC`, and `xCF0`.",
+    "Collapsed separate `StaticPlayer` fields `total_attack_count`, `unkEC`, `buffer`, `unk6A8`, and `more_buffer` into the nested `StaleMoveTable stale_moves` plus a tail padding field `xDB0`.",
+    "Updated `Player_GetTotalAttackCountPtr` and `Player_GetUnk6A8Ptr` to return `int*` and to address `player->stale_moves.total_attack_count` and `player->stale_moves.x5EC` respectively.",
+    "Updated Fox side-taunt code in `ftFx_AppealS.c` from `s32*` to `int*` for `Player_GetTotalAttackCountPtr` results.",
+    "Rewrote a large section of `config/GALE01/scratches.txt`, converting many existing scratch entries around player/camera functions to `OK` status; the excerpt is broad and not specific to only the newly matched plbonuslib functions."
+  ],
+  "smart_moves": [
+    "The match used a struct-layout refinement rather than isolated raw offsets: fields previously modeled directly on `StaticPlayer` were recognized as belonging inside `stale_moves`, making future player/stale-move work cleaner.",
+    "Keeping explicit offset padding inside `StaleMoveTable` (`x30`, `x5F0`) preserved address-sensitive layout while exposing the fields needed by the new match (`total_attack_count`, `x5EC`, `xCEC`, `xCF0`).",
+    "Moving `pl_800402D0` to `plbonuslib.h` aligned the declaration with the file where the implementation now lives, instead of leaving it in the more generic `pl_0371.h` bucket.",
+    "The symbol rename from generic `fn_8003D514` to `plBonusLib_8003D514` made the function searchable by subsystem and address while retaining address-based naming.",
+    "Accessor functions in `player.c` were updated at the same time as the struct layout change, reducing the chance that other code keeps using stale direct offsets."
+  ],
+  "decomp_lessons": [
+    "When matching a function reveals that several later fields are part of a known substructure, prefer expanding that substructure with offset-preserving padding instead of leaving fields duplicated in the parent struct.",
+    "For partially understood player data, x-offset names such as `x5EC`, `xCEC`, and `xCF0` are acceptable temporary names when they encode reliable offsets and avoid inventing semantics.",
+    "If a function is implemented in a more specific subsystem file, move its prototype to that subsystem header at the same time; this prevents catch-all headers from accumulating unrelated declarations.",
+    "When an accessor changes from `s32*` to `int*`, update nearby call sites consistently. Here the Fox appeal-side code was adjusted to match the new `Player_GetTotalAttackCountPtr` signature.",
+    "Bitfield writes found through odd byte offsets can be matched with a temporary cast such as `((UnkFlagStruct*) ((u8*) ptr + 0xdd1))->bits.b6`, but this should be treated as a placeholder until the containing structure is better understood.",
+    "The PR body gives exact match evidence for only two functions; there was no review discussion, so intent beyond the diff and report is not evidenced."
+  ],
+  "naming_conventions": [
+    "`plBonusLib_8003D514` uses a subsystem-prefixed address name for a newly identified plbonuslib-local function.",
+    "`pl_800402D0` keeps the existing `pl_` address-based name but is declared in `plbonuslib.h` after this PR.",
+    "`StaleMoveTable` was changed from `typedef struct _StaleMoveTable` to `typedef struct StaleMoveTable`, removing the leading underscore tag style.",
+    "Unknown fields and padding use offset-derived names such as `x30`, `x5F0`, `x5EC`, `xCEC`, `xCF0`, and `xDB0`.",
+    "The PR continues using project address comments in prototypes, for example `/* 0402D0 */ void pl_800402D0(...)`."
+  ],
+  "assembly_or_matching_tactics": [
+    "`pl_800402D0` used `RETURN_IF(arg1)` and `RETURN_IF(!arg2)` to express short early-return control flow while preserving the exact increment order for `xCEC` and `xCF0`.",
+    "`plBonusLib_8003D514` used a `do { ... } while (var_r29 < 6)` loop over player slots, matching the fixed six-slot iteration visible in the implementation.",
+    "The match relies on explicit temporaries (`temp_r31`, `temp_r30`, `temp_f1`, `var_r29`, `temp_r31_2`) and stack `Vec3` locals, a common tactic for preserving compiler register allocation during early decomp.",
+    "Facing/position comparison was expressed as `(temp_f1 * sp18.x) > (temp_f1 * spC.x)`, preserving the multiply-on-both-sides form rather than simplifying algebraically.",
+    "Temporary pointer arithmetic to `StaleMoveTable + 0xdd1` with `UnkFlagStruct` was used to set bitfields `b6` and `b7` before the exact surrounding struct is known."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1216",
+    "ribbanya",
+    "plbonuslib",
+    "plBonusLib_8003D514",
+    "pl_800402D0",
+    "fn_8003D514",
+    "StaleMoveTable",
+    "StaticPlayer",
+    "Player_GetTotalAttackCountPtr",
+    "Player_GetUnk6A8Ptr",
+    "Player_GetStaleMoveTableIndexPtr2",
+    "Player_GetEntity",
+    "Player_8003221C",
+    "ftLib_80087354",
+    "ftLib_8008732C",
+    "ftLib_80086644",
+    "ftLib_800865C0",
+    "ftFx_AppealS",
+    "pl_0371.h",
+    "plbonuslib.h",
+    "types.h",
+    "types.dox",
+    "xCEC",
+    "xCF0",
+    "x5EC",
+    "xDB0",
+    "UnkFlagStruct",
+    "RETURN_IF",
+    "config/GALE01/symbols.txt",
+    "config/GALE01/scratches.txt"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or document `StaleMoveTable.xCEC` and `StaleMoveTable.xCF0`.",
+    "Search for later cleanup of the temporary `UnkFlagStruct` cast at `StaleMoveTable + 0xdd1` in `plBonusLib_8003D514`.",
+    "Check whether `plBonusLib_8003D514` was later made static or renamed with a semantic name.",
+    "Look for PRs reconciling `types.dox` with `types.h`, since this PR added a minimal `types.dox` copy while `types.h` gained a larger `StaleMoveTable` layout.",
+    "Search for additional matches in `src/melee/pl/plbonuslib.c` after PR 1216."
+  ],
+  "confidence": 0.82,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,134 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-973",
+  "pr": {
+    "number": 973,
+    "title": "Match HSD_ForeachAnim, finishing aobj.c",
+    "url": "https://github.com/doldecomp/melee/pull/973",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2023-09-24T19:29:54Z",
+    "merged_at": "2023-09-24T19:40:50Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched HSD_ForeachAnim and the needed foreach-animation helper logic in src/sysdolphin/baselib/aobj.c, completing the removal of the remaining aobj.s assembly stub from the build. The PR replaces large MUST_MATCH / MWERKS_GEKKO inline assembly blocks and a NOT_IMPLEMENTED fallback with C implementations that dispatch animation callbacks over JObj, DObj, MObj, PObj, TObj, LObj, CObj, RObj, WObj, and Fog object types.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "baselib-animation"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "aobj",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/aobj.c",
+    "src/sysdolphin/baselib/aobj.h",
+    "asm/sysdolphin/baselib/aobj.s",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted asm/sysdolphin/baselib/aobj.s, which had only data symbols for HSD_ForeachAnim panic strings and jump tables.",
+    "Removed $(BUILD_DIR)/asm/sysdolphin/baselib/aobj.s.o from obj_files.mk because aobj.c now supplies the matched implementation.",
+    "Implemented HSD_ForeachAnim in C instead of leaving it as NOT_IMPLEMENTED / inline assembly guarded by MWERKS_GEKKO.",
+    "Replaced the inline assembly implementation of JObjForeachAnim with a static C implementation.",
+    "Converted foreach helper routines such as callbackForeachFunc, TObjForeachAnim, RObjForeachAnim, PObjForeachAnim, MObjForeachAnim, and DObjForeachAnim to static file-local helpers.",
+    "Added new static traversal helpers for FogForeachAnim, WObjForeachAnim, CObjForeachAnim, and LObjForeachAnim.",
+    "Added includes for baselib/cobj.h, baselib/fog.h, baselib/lobj.h, and baselib/wobj.h so the new C traversal code can refer to those object structs and masks directly.",
+    "Updated HSD_AObjAlloc to use a local variable named new and HSD_ASSERT(489, new), replacing explicit __assert string globals.",
+    "Removed aobj.h prototypes for internal foreach helpers, leaving HSD_ForeachAnim as the public API.",
+    "Removed extern declarations for the old assembly-provided strings and jump tables HSD_AObj_8040601C, HSD_AObj_8040603C, jtbl_80406058, and jtbl_8040608C."
+  ],
+  "smart_moves": [
+    "Split HSD_ForeachAnim into small static object-specific traversal helpers, making a complex assembly control-flow graph matchable and maintainable in C.",
+    "Kept callback invocation centralized in callbackForeachFunc, preserving the common handling of AObj callback argument formats while simplifying per-object traversal.",
+    "Used object type and mask constants such as JOBJ_TYPE, DOBJ_TYPE, TOBJ_TYPE, FOG_TYPE, JOBJ_MASK, POBJ_MASK, WOBJ_MASK, and FOG_MASK instead of relying on raw jump table offsets.",
+    "Handled C varargs explicitly with va_start, va_arg, and va_end; notably, float-style callback arguments are read as f64, matching C default argument promotion.",
+    "Made helper functions static after removing them from the header, reducing exported surface area once the functions were proven to be implementation details.",
+    "Replaced raw PObj flag masking with pobj_type(pobj) == POBJ_SHAPEANIM, improving readability while preserving the shape-animation guard used before callback dispatch.",
+    "Removed the separate assembly data object only after migrating the panic strings into HSD_Panic calls inside C, avoiding dangling build dependencies."
+  ],
+  "decomp_lessons": [
+    "Large dispatcher functions with jump tables can often be recovered as a top-level switch plus small static recursive/list traversal helpers.",
+    "When matching variadic functions, account for default promotions: f32-style varargs may need to be consumed with va_arg(ap, f64).",
+    "Once a function is matched in C, remember to remove both the asm file and its obj_files.mk entry; otherwise duplicate or stale objects may remain in the link.",
+    "Assembly-only labels used for panic messages and jump tables can disappear if the C source naturally emits equivalent string data and switch dispatch.",
+    "Recursive scene-graph traversal is easier to match and audit when each object family owns a narrowly scoped helper: JObj recurses over children, DObj over material/polygon objects, WObj over RObj, CObj/LObj over their WObj endpoints, and so on.",
+    "Internal decomp helpers should not stay in public headers unless there is evidence other translation units need them.",
+    "Use project macros such as HSD_ASSERT and HSD_Panic where they reproduce the original assert/panic behavior and file/line data."
+  ],
+  "naming_conventions": [
+    "Object traversal helpers use the pattern <ObjectType>ForeachAnim, e.g. JObjForeachAnim, DObjForeachAnim, MObjForeachAnim, TObjForeachAnim, WObjForeachAnim, CObjForeachAnim, LObjForeachAnim, FogForeachAnim.",
+    "Mask/type constants use uppercase object prefixes, e.g. JOBJ_MASK/JOBJ_TYPE, TOBJ_MASK/TOBJ_TYPE, FOG_MASK/FOG_TYPE.",
+    "The public API remains HSD_ForeachAnim, while implementation helpers are lowercase/static or object-prefixed static functions.",
+    "The allocation local variable was intentionally named new in HSD_AObjAlloc, matching the assert expression HSD_ASSERT(489, new).",
+    "PObj shape animation checks prefer pobj_type(pobj) == POBJ_SHAPEANIM over raw flag constants when the helper is available."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed an inline assembly version of JObjForeachAnim and replaced it with C using HSD_ASSERT(715, obj), a JOBJ_MASK callback check, union_type_dobj(obj), RObj traversal, and child recursion gated by !(obj->flags & JOBJ_INSTANCE).",
+    "Replaced an inline assembly HSD_ForeachAnim dispatcher with a variadic C function that first normalizes the optional callback argument into callbackArg and then switches on HSD_Type.",
+    "The old assembly file contained two jump tables for HSD_ForeachAnim; the C rewrite expresses those dispatches as switch statements over arg_type and type.",
+    "Used for-loop traversal forms such as for (; tobj != NULL; tobj = tobj->next) and for (; dobj != NULL; dobj = dobj->next), which likely helped produce compact list-walk code.",
+    "Preserved early return for obj == NULL in HSD_ForeachAnim before vararg parsing.",
+    "Used HSD_Panic(__FILE__, 826, \"unexpected argument format.\\n\") and HSD_Panic(__FILE__, 862, \"unexpected type of object.\\n\") to replace assembly-referenced panic strings.",
+    "Kept PObj callback dispatch guarded by mask & POBJ_MASK, pobj != NULL, pobj_type(pobj) == POBJ_SHAPEANIM, pobj->u.x14_unk != NULL, and pobj->u.x14_unk->aobj != NULL."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice."
+  ],
+  "searchable_terms": [
+    "HSD_ForeachAnim",
+    "aobj.c",
+    "aobj.s",
+    "HSD_AObjAlloc",
+    "callbackForeachFunc",
+    "JObjForeachAnim",
+    "DObjForeachAnim",
+    "MObjForeachAnim",
+    "PObjForeachAnim",
+    "TObjForeachAnim",
+    "RObjForeachAnim",
+    "WObjForeachAnim",
+    "CObjForeachAnim",
+    "LObjForeachAnim",
+    "FogForeachAnim",
+    "AObj_Arg_Type",
+    "callbackArg",
+    "AOBJ_ARG_AF",
+    "AOBJ_ARG_AOF",
+    "AOBJ_ARG_AOTF",
+    "va_arg f64",
+    "JOBJ_INSTANCE",
+    "union_type_dobj",
+    "pobj_type",
+    "POBJ_SHAPEANIM",
+    "FOG_MASK",
+    "WOBJ_MASK",
+    "COBJ_MASK",
+    "HSD_Panic",
+    "HSD_ASSERT",
+    "obj_files.mk",
+    "asm removal"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching HSD_ForeachAnim or aobj.c to see whether any traversal helper names or masks were corrected.",
+    "Search for remaining public prototypes in baselib headers that only serve file-local foreach helpers.",
+    "Compare this variadic HSD_ForeachAnim pattern against other decompiled variadic dispatcher functions that require f64 va_arg for promoted floats.",
+    "Look for other asm files that only provide jump tables or panic strings after their code has moved into C."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

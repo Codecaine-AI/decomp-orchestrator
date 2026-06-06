@@ -1,0 +1,135 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-398",
+  "pr": {
+    "number": 398,
+    "title": "Fighter cleanup, remove fake filler, correct functions, change settings to -inline auto",
+    "url": "https://github.com/doldecomp/melee/pull/398",
+    "state": "MERGED",
+    "author": "RevoSucks",
+    "created_at": "2022-06-29T02:44:05Z",
+    "merged_at": "2022-07-03T23:38:49Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large fighter.c cleanup that removed the per-file Makefile override forcing `-inline noauto`, refactored several fighter routines to work under the default/auto inlining behavior, removed fake unused filler locals, and corrected an HSD JObj matrix helper name/use. The PR body documents the central matching issue: `Fighter_UnkProcessDeath_80068354` should call standalone `Fighter_UpdateModelScale`, but inline-auto depth around `HSD_JObjSetScale` and MTX dirty helpers made matching difficult without breaking later functions such as `Fighter_UnkProcessShieldHit_8006D1EC` / `Fighter_UnkTakeDamage_8006CC30`.",
+  "change_classification": {
+    "primary_type": "decomp-matching cleanup",
+    "categories": [
+      "cleanup",
+      "decomp-matching",
+      "compiler-settings",
+      "inline-control",
+      "headers",
+      "symbol-correction"
+    ],
+    "systems": [
+      "fighter",
+      "ft",
+      "ftPurin",
+      "sysdolphin-baselib",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "Makefile",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/chara/ftPurin/ftpurin.c",
+    "src/sysdolphin/baselib/jobj.h"
+  ],
+  "what_changed": [
+    "Removed the Makefile special case `$(BUILD_DIR)/src/melee/ft/fighter.c.o: CFLAGS += -inline noauto`, allowing fighter.c to build with the broader inline-auto setting.",
+    "Refactored `Fighter_UpdateModelScale` to use helper accessors, extracted `Fighter_InitScale`, and routed scale setting through a local `HSD_JObjSetScale_Hack` workaround to control the exact inlining of MTX dirty handling.",
+    "Reworked `Fighter_UnkProcessDeath_80068354` to eliminate fake filler locals and duplicated scale logic, use a single `Fighter* ft`, call `Fighter_UpdateModelScale(fighterObj)`, and simplify repeated `fighterObj->user_data` / `fighterObj->hsd_obj` reloads.",
+    "Extracted repeated or bulky blocks from fighter load/spawn paths into helpers such as `Fighter_UnkInitLoad_80068914_Inner1`, `Fighter_UnkUpdateCostumeJoint_800686E4`, `Fighter_UnkUpdateVecFromBones_8006876C`, `Fighter_80068E64`, and `Fighter_80068E98_Inline2`.",
+    "Adjusted `Fighter_ActionStateChange_800693AC` stack-sensitive code by moving the `volatile s32 volatile_integer` into a scoped block, with comments noting this preserved stack order.",
+    "Changed ftPurin code from calling `HSD_JObjUnkMtx_assert(...)` to `HSD_JObjGetMtx(...)` before copying the bone matrix.",
+    "Renamed the inline helper in `src/sysdolphin/baselib/jobj.h` from `HSD_JObjUnkMtx_assert` to `HSD_JObjGetMtx` while retaining its assert-and-matrix-pointer behavior."
+  ],
+  "smart_moves": [
+    "Preferred a real standalone call to `Fighter_UpdateModelScale` inside `Fighter_UnkProcessDeath_80068354` instead of preserving duplicated inline scale code with fake locals, matching the PR author's stated conclusion that the function definitely calls `Fighter_UpdateModelScale`.",
+    "Localized the questionable HSD inline behavior into `HSD_JObjSetScale_Hack` rather than globally changing inline depth to `inline auto,level=4`, because the PR body says that higher inline depth would break a later function's matching behavior.",
+    "Used small helper functions and inline wrappers to influence codegen while making the C source more semantic and less dependent on fake filler arrays or temporary aliases.",
+    "Documented hacky matching compromises directly in source comments, including the suspected fake HSD setup-matrix inline and a fake `(void*)` cast used to remove an `fp_temp` and filler.",
+    "Converted an unclear helper name, `HSD_JObjUnkMtx_assert`, into the more descriptive `HSD_JObjGetMtx`, and updated a caller in Purin code accordingly."
+  ],
+  "decomp_lessons": [
+    "Do not assume every apparent HSD inline is real: this PR explicitly flags that one HSD inline may be fake because inline-auto depth made one fighter function match while breaking another.",
+    "Changing global or per-file inline depth can trade one match for another; validate downstream functions before choosing `-inline noauto`, `-inline auto`, or deeper auto-inline levels.",
+    "If a known standalone function is expected in the original code, prefer structuring C to emit a call to that function instead of duplicating its body just to satisfy a local match attempt.",
+    "Fake filler arrays and unnecessary temporary pointer aliases can often be replaced by carefully scoped helpers, casts, or variable lifetime control, but those choices should be commented when they are codegen-driven.",
+    "Volatile locals can affect stack layout; scoping a volatile declaration may preserve stack order while reducing pollution of the outer function body.",
+    "Header inline names matter for future reuse: when an inline only asserts and obtains a matrix pointer, a descriptive name like `HSD_JObjGetMtx` is more searchable and less misleading than an `Unk...assert` placeholder."
+  ],
+  "naming_conventions": [
+    "`HSD_JObjUnkMtx_assert` was renamed to `HSD_JObjGetMtx`, indicating a move away from placeholder `Unk` names when behavior is understood.",
+    "New helper names generally preserve the parent function address and use suffixes such as `_Inner1`, `_Inline2`, or `_Inline_1` when the helper is codegen/matching-oriented rather than a fully identified game symbol.",
+    "Temporary source comments distinguish true API-like helpers from hacks, e.g. `HSD_JObjSetScale_Hack` is intentionally marked as a workaround rather than promoted to a canonical HSD name.",
+    "The code uses `Fighter* ft` / `Fighter* fp` abbreviations in cleaned-up fighter routines to reduce repeated `fighterObj->user_data` loads."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed `-inline noauto` for `fighter.c`, making matching depend on inline-auto behavior.",
+    "Avoided `inline auto,level=4` even though it could fix one scratch, because the PR body says it would break `Fighter_UnkProcessShieldHit_8006D1EC` by changing `Fighter_UnkTakeDamage_8006CC30` inlining.",
+    "Manually inlined the final MTX dirty portion inside `HSD_JObjSetScale_Hack` so `HSD_JObjSetMtxDirtySub` behavior appears without relying on the compiler to inline through `HSD_JObjSetMtxDirty`.",
+    "Used helper extraction to encourage specific call boundaries, especially making `Fighter_UnkProcessDeath_80068354` call `Fighter_UpdateModelScale` and making spawn/load code call existing helper routines.",
+    "Used a scoped `volatile s32 volatile_integer = fighter->x2070_int` in `Fighter_ActionStateChange_800693AC` to maintain stack order.",
+    "Used explicit casts such as `(void*)getFighter(fighterObj)` where comments say the cast removed an fp temporary and filler, while noting it is a matching compromise.",
+    "Introduced a `VEC_CLEAR` macro in the `Fighter_procUpdate` area to compact repeated vector-zeroing patterns."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The only rationale text is from the PR body, which explains the inline-auto depth conflict around `Fighter_UnkProcessDeath_80068354`, `Fighter_UpdateModelScale`, `HSD_JObjSetScale`, and later shield-hit/take-damage functions."
+  ],
+  "searchable_terms": [
+    "PR398",
+    "fighter_cleanup",
+    "RevoSucks",
+    "fighter.c",
+    "Makefile",
+    "-inline noauto",
+    "-inline auto",
+    "inline auto level=4",
+    "Fighter_UnkProcessDeath_80068354",
+    "Fighter_UpdateModelScale",
+    "Fighter_InitScale",
+    "HSD_JObjSetScale",
+    "HSD_JObjSetScale_Hack",
+    "HSD_JObjSetMtxDirty",
+    "HSD_JObjMtxIsDirty",
+    "HSD_JObjSetMtxDirtySub",
+    "Fighter_UnkProcessShieldHit_8006D1EC",
+    "Fighter_UnkTakeDamage_8006CC30",
+    "Fighter_UnkInitLoad_80068914_Inner1",
+    "Fighter_UnkUpdateCostumeJoint_800686E4",
+    "Fighter_UnkUpdateVecFromBones_8006876C",
+    "Fighter_80068E64",
+    "Fighter_80068E98_Inline2",
+    "Fighter_ActionStateChange_800693AC",
+    "volatile_integer",
+    "stack order",
+    "Fighter_UnkApplyTransformation_8006C0F0",
+    "HSD_JObjGetMtx",
+    "HSD_JObjUnkMtx_assert",
+    "ftpurin.c",
+    "jobj.h",
+    "fake filler",
+    "unused_filler",
+    "getFighter",
+    "getHSDJObj"
+  ],
+  "follow_up_queries": [
+    "Search later PRs for removal or replacement of `HSD_JObjSetScale_Hack` to see which HSD inline was eventually proven fake.",
+    "Search for later changes to `Fighter_UnkProcessDeath_80068354` after fighter.c switched to inline auto.",
+    "Search for later PRs touching `Fighter_UnkProcessShieldHit_8006D1EC` and `Fighter_UnkTakeDamage_8006CC30` to verify the inline-depth constraint described here.",
+    "Search for later renames of `Fighter_UnkInitLoad_80068914_Inner1`, `Fighter_80068E98_Inline2`, and other helper suffix names once their semantics became clearer.",
+    "Search for all callers of `HSD_JObjGetMtx` after this PR to determine whether the new name became the canonical baselib convention."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

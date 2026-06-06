@@ -1,0 +1,143 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-438",
+  "pr": {
+    "number": 438,
+    "title": "Fill out `lbrefract.h`",
+    "url": "https://github.com/doldecomp/melee/pull/438",
+    "state": "CLOSED",
+    "author": "ribbanya",
+    "created_at": "2022-08-06T08:04:34Z",
+    "merged_at": null
+  },
+  "agent_status": "agent_completed",
+  "summary": "Expanded the lbrefract header and moved a large amount of embedded assembly data/rodata/bss/sdata/sdata2 out of asm files into new .inc include files. The PR itself was closed unmerged, with the only visible comment saying it was merged into PR #440, so treat this as a staging PR rather than the final reviewed landing point.",
+  "change_classification": {
+    "primary_type": "header_fillout_and_asm_data_include_split",
+    "categories": [
+      "headers",
+      "asm cleanup",
+      "data relocation",
+      "function prototypes",
+      "local symbol scoping"
+    ],
+    "systems": [
+      "melee/lb/lbrefract",
+      "dolphin/gx",
+      "dolphin/os",
+      "include/functions"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/lbrefract.h",
+    "include/melee/lb/lbrefract.inc",
+    "asm/melee/lb/lbrefract.s",
+    "asm/dolphin/gx/GX.s",
+    "include/dolphin/gx/GX.inc",
+    "asm/dolphin/gx/GXAttr.s",
+    "include/dolphin/gx/GXAttr.inc",
+    "asm/dolphin/gx/GXInit.s",
+    "asm/dolphin/gx/GXMisc.s",
+    "include/dolphin/gx/GXMisc.inc",
+    "asm/dolphin/os/OSCache.s",
+    "include/dolphin/os/OSCache.inc",
+    "src/dolphin/os/OSCache.h",
+    "include/functions.h"
+  ],
+  "what_changed": [
+    "Added include/melee/lb/lbrefract.inc containing lbrefract-related data sections: .data, .rodata, .bss, .sdata, .sbss, and .sdata2.",
+    "Updated asm/melee/lb/lbrefract.s to include melee/lb/lbrefract.inc and removed the corresponding inline data block from the assembly file.",
+    "Expanded src/melee/lb/lbrefract.h with additional includes for baselib memory/pobj/tobj, GXMisc, OSCache, and string.h.",
+    "Replaced several vague or commented-out lbrefract declarations with concrete prototypes such as func_800222A4, func_8002247C(HSD_CObj *), func_800226A8(HSD_PObj *), and math helpers like atan2f.",
+    "Added temporary/local lbrefract callback declarations and RefractCallbackData scaffolding, explicitly marked with a comment: 'todo: locals to be removed'.",
+    "Split data tables and small-data constants out of Dolphin GX assembly files into .inc files, including GX.inc, GXAttr.inc, GXInit.inc, and GXMisc.inc.",
+    "Split OSCache data strings into include/dolphin/os/OSCache.inc and added src/dolphin/os/OSCache.h with a DCFlushRange(u8*, s32) prototype.",
+    "Removed broad placeholder declarations from include/functions.h where more specific headers or local scoping were being introduced, including removals around DCFlushRange and HSD_MemAlloc placeholders.",
+    "Changed some internal GX assembly labels from global func_* exports to local_* labels, e.g. func_8033D1B8 to local_8033D1B8 and func_8033D3E4 to local_8033D3E4."
+  ],
+  "smart_moves": [
+    "Moving section data into per-module .inc files made the asm sources more focused on text while preserving exact binary layout through included data definitions.",
+    "The PR avoided leaving internal assembly helper labels exported as globals by renaming selected func_* symbols to local_* and updating branch targets accordingly.",
+    "lbrefract.h was made more self-contained by including the baselib and Dolphin headers needed by its prototypes instead of relying only on global include/functions.h declarations.",
+    "The OSCache DCFlushRange prototype was placed in a dedicated OSCache header, which is a better long-term home than a project-wide functions.h placeholder.",
+    "The lbrefract.inc data preserved recognizable strings such as LbRf.dat, lbRefData, refract_class_library, refract_dobj, refract_pobj, lbRefSetUnuse error!, and lbrefract.c, improving searchability for future decomp work."
+  ],
+  "decomp_lessons": [
+    "When filling a module header, migrate only the declarations that the module actually needs into the closest domain header and remove corresponding generic placeholders from include/functions.h.",
+    "For asm files that still need exact data layout, per-module .inc files are useful intermediate artifacts: they keep section contents versioned and searchable without pretending the data has been fully typed in C.",
+    "Use local_* labels for assembly-only helper routines that should not be treated as public functions by later decomp work.",
+    "Strings and data table labels in .inc files can provide valuable anchors for reconstructing future typed structs and library metadata.",
+    "If callback signatures are uncertain, recording typed callback typedefs and a temporary struct can unblock matching, but mark them as temporary so future cleanups do not mistake them for final API knowledge."
+  ],
+  "naming_conventions": [
+    "Internal assembly helpers were renamed from func_8033D1B8/func_8033D3E4 to local_8033D1B8/local_8033D3E4 when not intended as global exports.",
+    "lbrefract callback typedefs used descriptive temporary names RefractCallbackTypeA, RefractCallbackTypeB, and RefractCallbackTypeC.",
+    "The temporary struct name RefractCallbackData was used for callback plumbing, with unknown fields named unk0, unk1, etc.",
+    "Raw data labels in lbrefract.inc used address-derived names such as struct_803BB0B0, skip40_804336D0, str_0_804D3868, and lbl_804D7D70.",
+    "New include files followed module paths, e.g. include/melee/lb/lbrefract.inc, include/dolphin/gx/GXAttr.inc, and include/dolphin/os/OSCache.inc."
+  ],
+  "assembly_or_matching_tactics": [
+    "Added .include directives at the top of asm files so section data could be maintained externally while text remained in the original asm file.",
+    "Moved .data jump tables and constants out of GX.s and GXAttr.s into module .inc files instead of deleting them outright.",
+    "Preserved section directives and alignment such as .section .data, .section .rodata, .section .bss, .section .sdata, .section .sbss, .section .sdata2, and .balign 8 in the new .inc files.",
+    "Kept decomp.me scratch links as comments near functions such as DCFlushRange and func_800222A4, indicating active matching experiments.",
+    "Removed .global directives from labels used as internal branch/jump-table targets where the diff showed they no longer needed external visibility."
+  ],
+  "review_feedback": [
+    "No review comments were present in the slice.",
+    "The only human text says: 'Merged into #440.' This explains why PR #438 is closed with merged_at null."
+  ],
+  "searchable_terms": [
+    "lbrefract.h",
+    "lbrefract.inc",
+    "lbrefract.s",
+    "LbRf.dat",
+    "lbRefData",
+    "refract_class_library",
+    "refract_dobj",
+    "refract_pobj",
+    "lbRefSetUnuse error",
+    "RefractCallbackData",
+    "RefractCallbackTypeA",
+    "RefractCallbackTypeB",
+    "RefractCallbackTypeC",
+    "local_80021CE8",
+    "local_8002219C",
+    "callback_80021F34",
+    "callback_80021F70",
+    "callback_80021FB4",
+    "callback_80021FF8",
+    "callback_8002206C",
+    "callback_80022120",
+    "func_800222A4",
+    "func_8002247C",
+    "func_800226A8",
+    "HSD_CObj",
+    "HSD_PObj",
+    "DCFlushRange",
+    "OSCache.inc",
+    "GX.inc",
+    "GXAttr.inc",
+    "GXInit.inc",
+    "GXMisc.inc",
+    "local_8033D1B8",
+    "local_8033D3E4",
+    "merged into #440"
+  ],
+  "follow_up_queries": [
+    "Inspect PR #440 for the final merged version and any review-driven corrections to the temporary lbrefract callback and struct declarations.",
+    "Check whether the duplicate callback_80021FB4 extern in lbrefract.h was corrected in the merged PR.",
+    "Verify RefractCallbackData field offsets and sizes before reusing the temporary struct as authoritative.",
+    "Search later history for conversion of include/melee/lb/lbrefract.inc data labels into typed C structs.",
+    "Compare OSCache.h and GX headers after PR #440 to see whether prototypes moved from include/functions.h into proper module headers."
+  ],
+  "confidence": 0.84,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

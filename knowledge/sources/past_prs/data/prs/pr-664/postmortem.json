@@ -1,0 +1,146 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-664",
+  "pr": {
+    "number": 664,
+    "title": "Fix `implicit-function-declaration` warnings, pass 8",
+    "url": "https://github.com/doldecomp/melee/pull/664",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-11T09:59:12Z",
+    "merged_at": "2023-01-11T10:40:05Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large warning-cleanup/header-refactor pass centered on `stage.c`: replaced the project-local `dolphin/types.h` shim with direct `Runtime/platform.h` includes, moved stage data types out of `stage.h` into new `src/melee/gr/types.h`, promoted the old `assert_line` macro into baselib as `HSD_ASSERT`, added/typed stage and ground prototypes, and removed very old `baselib_unknown_001.c`/`baselib_unknown_002.c` source files. The PR mattered because implicit function declarations were being eliminated by giving call sites real prototypes and by untangling broad legacy typedef/header placeholders.",
+  "change_classification": {
+    "primary_type": "warning cleanup and header refactor",
+    "categories": [
+      "fix",
+      "headers",
+      "types-structs",
+      "decomp-matching",
+      "prototype-correctness",
+      "cleanup"
+    ],
+    "systems": [
+      "include",
+      "Runtime",
+      "Dolphin",
+      "sysdolphin-baselib",
+      "stage",
+      "ground",
+      "fighter",
+      "library"
+    ]
+  },
+  "key_files": [
+    ".clang-format",
+    "include/dolphin/types.h",
+    "include/sysdolphin/baselib/debug.h",
+    "include/sysdolphin/baselib/jobj.h",
+    "include/dolphin/os/OSThread.h",
+    "include/sysdolphin/baselib/cobj.h",
+    "src/melee/gr/types.h",
+    "src/melee/gr/stage.h",
+    "src/melee/gr/stage.c",
+    "src/melee/gr/ground.h",
+    "src/melee/gr/ground.c",
+    "src/sysdolphin/baselib/baselib_unknown_001.c",
+    "src/sysdolphin/baselib/baselib_unknown_002.c"
+  ],
+  "what_changed": [
+    "Deleted `include/dolphin/types.h`, which had only wrapped `Runtime/platform.h` and carried temporary macros such as `assert_line`, `STRUCT_PLACEHOLDER`, `CALLBACK_PLACEHOLDER`, and `UNK_FUNC`.",
+    "Replaced many `#include <dolphin/types.h>` uses across Dolphin, baselib, MSL/runtime, and game headers with `#include <Runtime/platform.h>`.",
+    "Moved the assert macro into `include/sysdolphin/baselib/debug.h` as `HSD_ASSERT(line, cond)`, preserving the `MUST_MATCH` behavior of using the passed line number versus `__LINE__` outside matching builds.",
+    "Updated `.clang-format` `WhitespaceSensitiveMacros` from `assert_line` to `HSD_ASSERT` so assertion macro formatting remains stable.",
+    "Converted many baselib/jobjs and other call sites from `assert_line(...)` to `HSD_ASSERT(...)`.",
+    "Replaced placeholder macros with explicit forward typedefs, for example `OSThread_Unk1` through `OSThread_Unk4` and `cobj_Unk1` / `cobj_UnkCallback1`.",
+    "Created `src/melee/gr/types.h` and moved `InternalStageID`, `StageCameraInfo`, `StageBlastZone`, `StageInfo`, `StageCallbacks`, `StageData`, `StructPairWithStageID`, and `Map` out of `stage.h`.",
+    "Shrank `src/melee/gr/stage.h` to mostly includes and function declarations, now depending on `melee/gr/types.h` instead of carrying all stage struct definitions inline.",
+    "Tightened `stage.c` prototypes: many zero-argument functions now use `(void)`, stage index parameters became `InternalStageID`, and `Stage_802251B4` was corrected to return `void` rather than returning the result of `func_801C06B8`.",
+    "Added `ground.h` prototypes for several `func_801C...` helpers using `StructPairWithStageID*` and for `func_801C06B8(InternalStageID arg0)`.",
+    "Changed `func_801C06B8` from `void func_801C06B8(enum_t arg0)` to `void func_801C06B8(InternalStageID arg0)` and used named stage enum cases `IZUMI` and `PSTADIUM` instead of numeric cases `12` and `16`.",
+    "Removed old `src/sysdolphin/baselib/baselib_unknown_001.c` and `src/sysdolphin/baselib/baselib_unknown_002.c` files, described by the author as early learning-era artifacts."
+  ],
+  "smart_moves": [
+    "Removed the broad `dolphin/types.h` catch-all instead of continuing to hide missing dependencies behind it; this forced headers to depend directly on `Runtime/platform.h` and exposed real type/prototype needs.",
+    "Moved large stage structs/enums into a dedicated `melee/gr/types.h`, reducing `stage.h` coupling while still allowing `ground.h` and other users to reference shared stage types.",
+    "Renamed the temporary `assert_line` compatibility macro to the domain-appropriate `HSD_ASSERT` and placed it in baselib debug infrastructure, matching the existing `__assert`/`HSD_Panic` home.",
+    "Kept `MUST_MATCH` line-number semantics inside `HSD_ASSERT`, so the cleanup did not lose matching-sensitive assert behavior.",
+    "Replaced macro-generated placeholder declarations with explicit typedef declarations, making unknown structs/callbacks searchable and easier to refine later.",
+    "Resolved an uncertain return-type question by aligning `func_801C06B8` and `Stage_802251B4` as `void`, avoiding a misleading `StageData*` return based only on partial matching attempts."
+  ],
+  "decomp_lessons": [
+    "Implicit-function-declaration cleanup is often a header architecture task, not just a matter of sprinkling prototypes: shared structs should be factored into smaller type headers that can be included without circular dependencies.",
+    "Avoid project-wide shim headers that mix primitive typedefs with unrelated decomp convenience macros; they hide ownership and make later warning passes harder.",
+    "When replacing old-style C declarations, use explicit `(void)` on true no-argument functions to prevent old K&R-style function declarations from masking call-site mistakes.",
+    "For unknown placeholder types, prefer explicit `typedef struct _Name Name;` and explicit callback typedefs over generator macros; explicit names are easier to grep and evolve.",
+    "Assert macros used for matching need formatting support and `MUST_MATCH` semantics preserved when renamed or moved.",
+    "If an attempted C match suggests a return value but review evidence indicates callers ignore it and related wrappers are `void`, do not encode a speculative return type into the public prototype."
+  ],
+  "naming_conventions": [
+    "`assert_line` was replaced by baselib-style uppercase `HSD_ASSERT`.",
+    "Stage IDs continue to use existing enum constants such as `IZUMI` and `PSTADIUM`; the enum still carries a TODO to finish values and use PascalCase.",
+    "Unknown forward structs use `_Module_UnkN` tags and `Module_UnkN` typedef names, for example `_OSThread_Unk1` / `OSThread_Unk1`.",
+    "Unknown callback typedefs are named with an `UnkCallbackN` suffix, for example `cobj_UnkCallback1`.",
+    "Shared ground/stage types are grouped under `melee/gr/types.h` rather than being embedded in `stage.h`."
+  ],
+  "assembly_or_matching_tactics": [
+    "The review excerpt shows an attempted `#ifdef MUST_MATCH` inline assembly version of `func_801C06B8` with `asm StageData* func_801C06B8(InternalStageID arg0)`, `nofralloc`, raw PowerPC instructions, and `clang-format off`, but the merged diff kept a C implementation returning `void`.",
+    "The final `func_801C06B8` C form uses `InternalStageID` and named enum cases, while preserving the control flow that calls `func_800178E8`, `func_801CD2D4` for `IZUMI`, and `func_801D511C` for `PSTADIUM`.",
+    "For matching-sensitive asserts, `HSD_ASSERT(line, cond)` maps to `__assert(__FILE__, line, #cond)` under `MUST_MATCH` and to `__assert(__FILE__, __LINE__, #cond)` otherwise.",
+    "Stage wrapper `Stage_802251B4` was changed from returning `s32` and returning `func_801C06B8(...)` to `void` and simply calling `func_801C06B8(...)`, matching the reviewer’s return-type feedback."
+  ],
+  "review_feedback": [
+    "ribbanya noted on `src/melee/gr/ground.c` that they tried to make `func_801C06B8` match but got bored and invited others to try.",
+    "r-burns suggested it was more likely that `func_801C06B8` returns `void`, as does `Stage_802251B4`.",
+    "ribbanya replied, \"Okay I'll try that.\"",
+    "A later suggestion removed the TODO/comment path that claimed `func_801C06B8` needed to return `StageData*`; the final diff uses a `void` return."
+  ],
+  "searchable_terms": [
+    "implicit-function-declaration",
+    "pass 8",
+    "dolphin/types.h",
+    "Runtime/platform.h",
+    "HSD_ASSERT",
+    "assert_line",
+    "STRUCT_PLACEHOLDER",
+    "CALLBACK_PLACEHOLDER",
+    "UNK_FUNC",
+    "baselib debug.h",
+    "stage.h",
+    "gr/types.h",
+    "StageInfo",
+    "StageData",
+    "StageCameraInfo",
+    "StageBlastZone",
+    "InternalStageID",
+    "StructPairWithStageID",
+    "func_801C06B8",
+    "Stage_802251B4",
+    "IZUMI",
+    "PSTADIUM",
+    "baselib_unknown_001.c",
+    "baselib_unknown_002.c",
+    "MUST_MATCH",
+    "WhitespaceSensitiveMacros"
+  ],
+  "follow_up_queries": [
+    "Find remaining includes of `dolphin/types.h` after PR 664.",
+    "Find remaining uses of `assert_line` after migration to `HSD_ASSERT`.",
+    "Audit `InternalStageID` enum TODO for PascalCase naming and incomplete values.",
+    "Search for remaining old-style zero-argument declarations missing `(void)`.",
+    "Review users of `Stage_802251B4` and `func_801C06B8` to confirm `void` return assumptions.",
+    "Find remaining `STRUCT_PLACEHOLDER`, `CALLBACK_PLACEHOLDER`, and `UNK_FUNC` macro uses.",
+    "Investigate whether old `baselib_unknown_001.c` and `baselib_unknown_002.c` contents were truly dead or migrated elsewhere."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

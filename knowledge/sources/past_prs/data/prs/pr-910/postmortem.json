@@ -1,0 +1,141 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-910",
+  "pr": {
+    "number": 910,
+    "title": "Match `ftCo_Down`",
+    "url": "https://github.com/doldecomp/melee/pull/910",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-31T09:58:37Z",
+    "merged_at": "2023-05-31T10:06:22Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common fighter down-state file `ftCo_Down.c` and reorganized nearby `ftCo_09F4`/`ftCo_09F7` code and data out of the large `asm/melee/ft/ft_08A4.s` bucket. The PR removed inline assembly from `ftCo_Down_CheckInput` and `ftCo_80098324`, leaving C that reports 100% for all functions in `ftCo_Down.c`. It also split remaining address-range work into new source/asm/header files, moved shared GObj extern declarations into `gobj.h`, and folded `ftdynamics` data into the relevant ftCommon area for ordering/matching.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-split",
+      "headers",
+      "extern-cleanup",
+      "object-ordering"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "baselib-gobj",
+      "ground",
+      "item",
+      "interface-status",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_Down.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Down.h",
+    "src/melee/ft/chara/ftCommon/ftCo_09F4.c",
+    "src/melee/ft/chara/ftCommon/ftCo_09F4.h",
+    "src/melee/ft/chara/ftCommon/ftCo_09F7.c",
+    "src/melee/ft/chara/ftCommon/ftCo_09F7.h",
+    "asm/melee/ft/ft_08A4.s",
+    "asm/melee/ft/ftCo_09CB.s",
+    "asm/melee/ft/ftCo_09F4.s",
+    "src/melee/ft/ftdynamics.c",
+    "src/melee/ft/ftdynamics.h",
+    "src/sysdolphin/baselib/gobj.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "`src/melee/ft/chara/ftCommon/ftCo_Down.c` went from inline assembly for key functions to C for `ftCo_Down_CheckInput`, `ftCo_80098324`, `ftCo_80098400`, and the Down callbacks; the PR report shows the file at 0/17600 score, 100.00%.",
+    "`ftCo_80098324` retained a small `#ifdef MUST_MATCH` unused stack padding array (`u8 _[8] = { 0 };`) before calling `Fighter_ChangeMotionState`, `ftAnim_8006EBA4`, and `ftCommon_8007CCE8`.",
+    "`ftCo_80098400` was tightened to take `ftCo_GObj*` instead of `Fighter_GObj*`.",
+    "Large chunks of assembly for the 0x8009F4A4+ range were removed from `asm/melee/ft/ft_08A4.s` and redistributed into `ftCo_09F4.c`, `ftCo_09F7.c`, and small asm files for data sections.",
+    "Added `asm/melee/ft/ftCo_09CB.s` for `.sdata` strings such as `ftCo_804D3B28`/`ftCo_804D3B30`/`ftCo_804D3B38`/`ftCo_804D3B40`.",
+    "Added `asm/melee/ft/ftCo_09F4.s` for `.sbss` globals `ftCo_804D6568`, `ftCo_804D656C` and `.sdata` objects/strings around `ftCo_804D3B48`, `ftCo_804D3B50`, `ftCo_804D3B58`, and `ftCo_804D3B60`.",
+    "`ftCo_09F4.c` gained headers for ft, ground, lb, baselib gobj helpers, lobj, and trig/math; it contains one matched C function `ftCo_8009F480` and several `ASM UNK_RET` fallback bodies for still-unmatched functions when `MUST_MATCH` is active.",
+    "`ftdynamics.c` and `ftdynamics.h` were deleted; data including `ftDynamics_assert_msg_0`, `ftDynamics_803C5780`, and `ftDynamics_803C5794` was moved into `ftCo_09F4.c` under MWERKS/force-active guarded code.",
+    "`obj_files.mk` stopped building `src/melee/ft/ftdynamics.c.o` and started building the new `asm/melee/ft/ftCo_09CB.s.o`, `asm/melee/ft/ftCo_09F4.s.o`, and `src/melee/ft/chara/ftCommon/ftCo_09F7.c.o` entries.",
+    "Common declarations for `HSD_GObj_80408610`, `HSD_GObj_80408620`, and `HSD_GObj_804D7848`-`HSD_GObj_804D784A` were moved to `src/sysdolphin/baselib/gobj.h`, allowing duplicate local externs to be removed from `gobj.c`, `fighter.c`, `ground.c`, `grlib.c`, `ifstatus.c`, and `item.c`."
+  ],
+  "smart_moves": [
+    "The PR isolated exact data-section ordering problems into small asm files rather than forcing unrelated source files to own sdata/sbss symbols prematurely.",
+    "It matched `ftCo_Down.c` incrementally while leaving difficult neighboring functions as `ASM UNK_RET` wrappers, avoiding regression from trying to decompile too broad an address range at once.",
+    "The unused stack padding in `ftCo_80098324` is an explicit, localized matching shim and is annotated with `@todo`, making the remaining compiler artifact easy to find later.",
+    "Centralizing GObj externs in `gobj.h` reduced duplicated local extern declarations across unrelated gameplay systems and made subsequent includes more accurate.",
+    "Moving the `ftdynamics` constants/data into `ftCo_09F4.c` appears to preserve object/link order while deleting a tiny standalone source object that no longer fit the build layout."
+  ],
+  "decomp_lessons": [
+    "When a large asm bucket like `ft_08A4.s` is being retired, split both text and data deliberately: code can move to address-range C files while stubborn `.sdata`/`.sbss` symbols stay in small asm companions.",
+    "A function can be considered matched even if it needs a tiny stack-shaping local under `MUST_MATCH`; keep that shim narrow and documented.",
+    "Header cleanup is part of matching work: changing callers to include `ftCo_09F4.h` or `ftCo_09F7.h` prevents future files from depending on broad catch-all headers such as `ft_08A4.h`.",
+    "Central extern declarations belong in the owning subsystem header once multiple files use them; local extern duplicates become noise and can hide type mismatches.",
+    "Deleting or moving small data-only source files must be coordinated with `obj_files.mk` so object order and section placement remain controlled."
+  ],
+  "naming_conventions": [
+    "Address-range files use `ftCo_09F4` and `ftCo_09F7` naming when semantic names are not yet known.",
+    "The matched semantic state file remains `ftCo_Down.c`/`ftCo_Down.h`, with callbacks named `ftCo_Down_Anim`, `ftCo_Down_IASA`, `ftCo_Down_Phys`, and `ftCo_Down_Coll`.",
+    "The header guard for `ftCo_Down.h` changed from a path-style guard to an address-style guard, `GALE01_097D9C`.",
+    "Use `ftCo_GObj*` for common fighter callbacks where the function belongs to ftCommon, rather than the broader `Fighter_GObj*` spelling.",
+    "New headers such as `ftCo_09F4.h` and `ftCo_09F7.h` carry declarations for address-named functions like `ftCo_8009F4A4`, `ftCo_8009F578`, `ftCo_8009F7F8`, `ftCo_8009F834`, and `ftCo_800A0098`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `ASM UNK_RET ... #if !defined(MUST_MATCH) || defined(WIP) { NOT_IMPLEMENTED; } #else { nofralloc ... }` to keep unmatched functions buildable while preserving exact assembly under matching builds.",
+    "Used `#pragma peephole on` after inline assembly blocks in `ftCo_09F4.c`.",
+    "Used `#ifdef MWERKS_GEKKO` and `#pragma force_active on` around constants/data that need compiler/linker preservation.",
+    "Placed hard-to-match globals in dedicated asm files with explicit `.section .sdata`, `.section .sbss`, `.balign`, `.global`, `.asciz`, `.4byte`, and `.skip` directives.",
+    "For `ftCo_80098324`, inserted an 8-byte unused stack local under `MUST_MATCH` to reproduce the original frame while leaving the logic as normal C.",
+    "Used direct C includes for specific dependencies (`gobjgxlink.h`, `gobjobject.h`, `gobjproc.h`, `lobj.h`, `MSL/trigf.h`) rather than relying only on placeholder declarations."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice, so there is no explicit reviewer feedback to extract."
+  ],
+  "searchable_terms": [
+    "pr-910",
+    "Match ftCo_Down",
+    "ribbanya",
+    "ftCo_Down.c",
+    "ftCo_Down_CheckInput",
+    "ftCo_80098324",
+    "ftCo_80098400",
+    "ftCo_Down_Anim",
+    "ftCo_Down_IASA",
+    "ftCo_Down_Phys",
+    "ftCo_Down_Coll",
+    "ftCo_09F4",
+    "ftCo_09F7",
+    "ftCo_8009F480",
+    "ftCo_8009F4A4",
+    "ftCo_8009F578",
+    "ftCo_8009F5AC",
+    "ftCo_8009F7F8",
+    "ftCo_8009F834",
+    "ftCo_800A0098",
+    "ft_08A4.s",
+    "ftdynamics",
+    "ftDynamics_803C5794",
+    "ftDynamics_803C5780",
+    "HSD_GObj_804D7848",
+    "HSD_GObj_804D7849",
+    "HSD_GObj_804D784A",
+    "HSD_GObj_80408610",
+    "obj_files.mk",
+    "MUST_MATCH unused stack",
+    "GALE01_097D9C"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that replace the `ASM UNK_RET` bodies in `ftCo_09F4.c` and `ftCo_09F7.c` with C.",
+    "Check whether `ftDynamics_803C57B0` or other deleted `ftdynamics` symbols reappear elsewhere in subsequent object-order cleanups.",
+    "Search for additional conversions from path-style header guards to `GALE01_` address-style guards in ftCommon headers.",
+    "Find later cleanup of the `u8 _[8]` unused stack shim in `ftCo_80098324`."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

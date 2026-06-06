@@ -1,0 +1,176 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-574",
+  "pr": {
+    "number": 574,
+    "title": "func_8007B5AC match",
+    "url": "https://github.com/doldecomp/melee/pull/574",
+    "state": "CLOSED",
+    "author": "stephenjayakar",
+    "created_at": "2022-10-24T00:02:29Z",
+    "merged_at": null
+  },
+  "agent_status": "agent_completed",
+  "summary": "Attempted to add a C match for fighter collision function func_8007B5AC in ftcoll.c plus a header prototype in ftcoll.h, but the PR was closed unmerged and explicitly marked as superseded by #576. The proposed implementation initialized ftHurt fields from an s32 data array, resolved a hurt bone JObj via Fighter.x5E8_fighterBones and x40_bone_index, byte-copied Vec3-like float data through s32 pointers to avoid floating-point register/double behavior, set x1C_scale, and set Fighter.x221A_flag.bits.b6. Review focused less on the local C body and more on decomp build/linking mechanics: removing a function from the middle of ftcoll.s breaks object ordering and matching unless the whole asm unit is handled correctly or both C and asm are wired through obj_files.mk.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "fighter-collision",
+      "headers",
+      "build-linking",
+      "formatting",
+      "superseded"
+    ],
+    "systems": [
+      "fighter",
+      "ftcoll",
+      "hurtbox/collision"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/ftcoll.c",
+      "role": "Added proposed C implementation of func_8007B5AC and helper inline_fn."
+    },
+    {
+      "path": "src/melee/ft/ftcoll.h",
+      "role": "Added prototype for func_8007B5AC."
+    },
+    {
+      "path": "asm/melee/ft/ftcoll.s",
+      "role": "Discussed in review because deleting func_8007B5AC from the middle of the asm file would break link order/matching; final diff excerpt no longer shows asm deletion."
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "Mentioned by review as needing both ftcoll.c and ftcoll.s entries if C and asm are both meant to build."
+    }
+  ],
+  "what_changed": [
+    "Added func_8007B5AC(Fighter* arg0, ftHurt* arg1, s32* arg2) to src/melee/ft/ftcoll.c.",
+    "Added an inline helper inline_fn returning logical negation of a BOOL argument; reviewer suggested using BOOL rather than int/u32 for the helper signature.",
+    "func_8007B5AC assigned ftHurt fields x40_bone_index, x44_hurt_kind, x48_is_grabbable, x0_bone_state, x20_jobj, x4_hurt1_offset data, and x1C_scale from arg2 and Fighter bone data.",
+    "The implementation used integer loads/stores and s32 pointer casts to copy Vec3-like float bytes into x4_hurt1_offset instead of producing floating-point loads.",
+    "Added a prototype in src/melee/ft/ftcoll.h: void func_8007B5AC(Fighter *arg0, ftHurt *arg1, s32 *arg2);",
+    "Initial attempts apparently removed func_8007B5AC from asm/melee/ft/ftcoll.s, but reviewers warned this could not match because function order matters when linking; author restored the asm according to comments.",
+    "PR was closed unmerged after a comment saying it was superseded by #576."
+  ],
+  "smart_moves": [
+    "The C body attempted to preserve exact codegen by treating the Vec3-like float data as raw s32 words, avoiding GFPR/floating-point behavior that could arise from normal f32 copies.",
+    "The author reran clang-format after feedback and fixed indentation issues caused or masked by a missing header semicolon.",
+    "The author restored the asm after review explained that removing a function from the middle of an asm file is not safe for matching."
+  ],
+  "decomp_lessons": [
+    "Do not remove a single function from the middle of an asm file and replace it with C unless the surrounding object/link arrangement preserves function order; order matters when linking and can make the result fail to match.",
+    "If matching one function inside a larger asm translation unit, either leave the asm in place and keep the C as reference/example until surrounding functions are matched, or port the relevant asm into the C file as inline asm and match the function in place.",
+    "When both C and asm versions are involved, obj_files.mk must be configured so the intended objects are built; otherwise the build may silently compile the asm and ignore the new C.",
+    "Header prototypes must include trailing semicolons; a missing semicolon can confuse formatting and syntax downstream.",
+    "For matching raw data movement into float fields, integer/pointer-cast byte copies may be necessary to avoid unwanted floating-point register usage.",
+    "A decomp.me/permuter result may need cleanup before review, including removal of comments like 'Permuter spit this out' and replacement of register-style variable names when possible."
+  ],
+  "naming_conventions": [
+    "Existing unknown function naming retained address-style symbol func_8007B5AC.",
+    "The prototype used project-style primitive and struct types: Fighter*, ftHurt*, s32*.",
+    "Reviewer preferred BOOL for boolean helper return/argument types instead of int/u32 in inline_fn.",
+    "Struct fields remained offset-based names such as x40_bone_index, x44_hurt_kind, x48_is_grabbable, x0_bone_state, x20_jobj, x4_hurt1_offset, x1C_scale, x5E8_fighterBones, and x221A_flag.bits.b6.",
+    "Temporary names like R0, R7, new_var, p, and temp were present in the proposed match and appear permuter/register-driven rather than semantically finalized."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used raw s32 copies into x4_hurt1_offset to copy adjacent Vec3-like f32 fields without loading them as floating-point values.",
+    "Computed the Fighter bone entry offset as (x40_bone_index << 4) & 0xfffffff0 and loaded the JObj pointer from Fighter.x5E8_fighterBones plus that offset.",
+    "Included an empty if condition using inline_fn(R7) repeatedly, likely as a codegen artifact from the matching attempt; evidence does not clarify its semantic purpose.",
+    "Review emphasized link-order preservation: deleting func_8007B5AC from the middle of ftcoll.s will not match because later symbols shift.",
+    "Recommended alternatives were to keep the asm function and treat the C as an example, or convert the entire ftcoll.s into inline asm in ftcoll.c and match func_8007B5AC in place.",
+    "Review noted that if C and asm are both present, ftcoll.c and ftcoll.s must both be added to obj_files.mk or the new C may be ignored."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "topic": "helper type",
+      "feedback": "Suggested changing the helper to inline BOOL inline_fn(BOOL arg0)."
+    },
+    {
+      "author": "ribbanya",
+      "topic": "cleanup",
+      "feedback": "Suggested removing the comment 'Permuter spit this out'."
+    },
+    {
+      "author": "r-burns",
+      "topic": "asm link order",
+      "feedback": "Warned that order matters when linking, so a function cannot be removed from the middle of ftcoll.s without breaking the match."
+    },
+    {
+      "author": "r-burns",
+      "topic": "matching strategy",
+      "feedback": "Suggested either leaving the asm and using the C as an example until the rest is matched, or converting the entire ftcoll.s to inline asm in ftcoll.c and matching func_8007B5AC in place."
+    },
+    {
+      "author": "r-burns",
+      "topic": "header syntax",
+      "feedback": "Pointed out the ftcoll.h prototype needed a trailing semicolon."
+    },
+    {
+      "author": "ribbanya",
+      "topic": "formatting",
+      "feedback": "Noted indentation should be four spaces and suspected clang-format may have failed due to the missing semicolon."
+    },
+    {
+      "author": "r-burns",
+      "topic": "formatting",
+      "feedback": "Recommended rerunning clang-format after fixing syntax."
+    },
+    {
+      "author": "ribbanya",
+      "topic": "build configuration",
+      "feedback": "Explained that the build was currently compiling asm and ignoring the C; both ftcoll.c and ftcoll.s needed obj_files.mk entries, potentially requiring asm to be ported into C as-is."
+    },
+    {
+      "author": "ribbanya",
+      "topic": "PR status",
+      "feedback": "Stated that the PR was superseded by #576."
+    }
+  ],
+  "searchable_terms": [
+    "pr574",
+    "func_8007B5AC",
+    "ftcoll.c",
+    "ftcoll.h",
+    "asm/melee/ft/ftcoll.s",
+    "obj_files.mk",
+    "Fighter",
+    "ftHurt",
+    "HSD_JObj",
+    "x5E8_fighterBones",
+    "x40_bone_index",
+    "x44_hurt_kind",
+    "x48_is_grabbable",
+    "x0_bone_state",
+    "x20_jobj",
+    "x4_hurt1_offset",
+    "x1C_scale",
+    "x221A_flag.bits.b6",
+    "Vec3",
+    "GFPR",
+    "inline_fn",
+    "BOOL",
+    "link order",
+    "inline asm",
+    "superseded by #576",
+    "decomp.me r6vQW"
+  ],
+  "follow_up_queries": [
+    "Inspect PR #576 to see the superseding accepted solution for func_8007B5AC.",
+    "Search current ftcoll.c and ftcoll.s handling for examples where asm functions were ported into C with inline asm while preserving link order.",
+    "Check obj_files.mk conventions for building mixed C and asm translation units in the fighter subsystem.",
+    "Look for later renames or struct improvements around ftHurt fields x4_hurt1_offset, x1C_scale, and Fighter.x5E8_fighterBones."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

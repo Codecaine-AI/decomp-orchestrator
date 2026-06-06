@@ -1,0 +1,118 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1955",
+  "pr": {
+    "number": 1955,
+    "title": "match some ftKb_SpecialN functions",
+    "url": "https://github.com/doldecomp/melee/pull/1955",
+    "state": "MERGED",
+    "author": "lukechampine",
+    "created_at": "2025-10-01T20:20:07Z",
+    "merged_at": "2025-10-01T22:38:01Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched a batch of Kirby copy-ability hat setup functions in ftKb_Init.c, mostly by recognizing duplicate ftKb_SpecialN routines that allocate Kirby hat part data, load a hat joint, mark x2225_b2, attach the JObj through ftParts helpers, and initialize joint metadata. The PR also replaced several raw hat-table indices with FTKIND_* enum constants, clarifying that ft_80459B88.hats is indexed by fighter kind. The author noted uncertainty around ftKb_SpecialN_800EFA40 and the layout of ft_80459B88_t, initially seeing a possible negative array access, then resolving the match by using the separate x0 Kirby_Unk field rather than changing the struct to make hats start at offset 0.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "fighter-special-move",
+      "types-structs",
+      "naming-cleanup"
+    ],
+    "systems": [
+      "fighter",
+      "Kirby",
+      "ftKb_SpecialN",
+      "fighter-parts"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftKirby/ftKb_Init.c"
+  ],
+  "what_changed": [
+    "Implemented ftKb_SpecialN_800EFA40, replacing a nonmatching stub with C that initializes Kirby's base/unknown hat object path using ft_80459B88.x0.",
+    "Implemented repeated Kirby hat setup functions for several copied fighter kinds, including ftKb_SpecialN_800EFC58, ftKb_SpecialN_800F00B8, ftKb_SpecialN_800F01C4, ftKb_SpecialN_800F02D0, ftKb_SpecialN_800F04F8, ftKb_SpecialN_800F0604, ftKb_SpecialN_800F0710, ftKb_SpecialN_800F0B70, and ftKb_SpecialN_800F0D98.",
+    "Each added function checks fp->fv.kb.hat.jobj == NULL before allocating fp->fv.kb.hat.x14.data from fighter_x2040_alloc_data, calling ftParts_80074148, loading a hat joint with HSD_JObjLoadJoint, setting fp->x2225_b2, calling ftParts_80074170 and ftParts_80075650, then initializing hat x24/count data via ftParts_8007487C.",
+    "Converted raw ft_80459B88.hats indices to named fighter-kind enum constants in existing code: hats[0] became hats[FTKIND_MARIO], and hats[2] became hats[FTKIND_CAPTAIN].",
+    "The PR body documents an investigated but rejected struct-layout hypothesis for ft_80459B88_t: moving/removing the x0 field to treat the data as a contiguous hats array would have improved some array accesses but produced implausible use of ftCommon_SetAccessory with hat_dynamics instead of an HSD_Joint pointer."
+  ],
+  "smart_moves": [
+    "Used table-typer dups to identify duplicate-shaped Kirby hat initialization functions, allowing one matched pattern to be reused across many ftKb_SpecialN functions with only the FTKIND_* index changing.",
+    "Preserved the existing ft_80459B88_t distinction between x0 and hats after cross-checking consequences in other functions, rather than forcing a struct layout that matched one local negative-index symptom but contradicted ftCommon_SetAccessory's expected HSD_Joint* argument.",
+    "Replaced magic numeric hat-table indices with FTKIND_* constants, making the indexing semantics explicit and reducing future off-by-one or fighter-order confusion.",
+    "Matched ftKb_SpecialN_800EFA40 through ft_80459B88.x0 and Kirby_Unk fields instead of relying on negative array access, keeping the source more semantically plausible."
+  ],
+  "decomp_lessons": [
+    "When a match appears to require negative array access, test whether the data before the array is a real leading struct field before reshaping the whole struct.",
+    "Do not validate a struct-layout change solely by improving codegen in one function; check downstream call semantics and argument types in nearby functions.",
+    "For table-indexed fighter data, prefer FTKIND_* constants over numeric indices once the table order is understood.",
+    "Duplicate helper-shaped functions can often be matched by factoring the repeated local pattern mentally: GET_FIGHTER, null guard, table lookup, ObjAlloc, ftParts setup, HSD_JObjLoadJoint, and ftParts_8007487C.",
+    "Type plausibility matters in decompilation: the PR body specifically rejected a layout hypothesis because it would imply passing ftDynamics* where ftCommon_SetAccessory takes HSD_Joint*."
+  ],
+  "naming_conventions": [
+    "Kirby copied-hat setup functions retain address-style names such as ftKb_SpecialN_800EFC58 when no semantic name is established.",
+    "Fighter-kind table lookups should use enum constants like FTKIND_MARIO, FTKIND_FOX, FTKIND_SEAK, FTKIND_NESS, FTKIND_PEACH, FTKIND_PIKACHU, FTKIND_SAMUS, FTKIND_MEWTWO, FTKIND_CLINK, FTKIND_GAMEWATCH, and FTKIND_CAPTAIN rather than raw integers.",
+    "The global ft_80459B88 is treated as an ft_80459B88_t-like object with a leading x0 field and a hats array; uncertain fields remain generic names such as x0, x4, x14, x24, and joint_num rather than overnamed guesses."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use duplicate-function discovery tools such as table-typer dups to locate repeated functions whose only substantive difference is a constant table index.",
+    "Introduce local temporaries like KirbyHatStruct** hats and KirbyHatStruct* hat to coax the compiler into the expected load sequence for table lookups.",
+    "For ftKb_SpecialN_800EFA40, using Kirby_Unk* unk = ft_80459B88.x0 avoided the negative array access issue and produced a match while keeping ft_80459B88_t's leading field intact.",
+    "The repeated matched pattern uses HSD_ObjAlloc(&fighter_x2040_alloc_data), HSD_JObjLoadJoint(hat->hat_joint or unk->x0), ftParts_80075650, and ftParts_8007487C with the same x14.count address passed twice."
+  ],
+  "review_feedback": [
+    "No formal review comments were present in the provided slice.",
+    "The PR body includes the author's self-review: an initial suspicion that ft_80459B88_t might be laid out as hats[FTKIND_MAX + 1] was walked back after considering ftCommon_SetAccessory argument semantics; the author edited the description to say ftKb_SpecialN_800EFA40 was matched with x0 instead, though still not 100% certain."
+  ],
+  "searchable_terms": [
+    "pr-1955",
+    "ftKb_SpecialN",
+    "ftKb_Init.c",
+    "Kirby hat",
+    "Kirby copy ability",
+    "ft_80459B88",
+    "ft_80459B88_t",
+    "Kirby_Unk",
+    "KirbyHatStruct",
+    "table-typer dups",
+    "negative array access",
+    "FTKIND_MARIO",
+    "FTKIND_FOX",
+    "FTKIND_SEAK",
+    "FTKIND_NESS",
+    "FTKIND_PEACH",
+    "FTKIND_PIKACHU",
+    "FTKIND_SAMUS",
+    "FTKIND_MEWTWO",
+    "FTKIND_CLINK",
+    "FTKIND_GAMEWATCH",
+    "FTKIND_CAPTAIN",
+    "HSD_ObjAlloc",
+    "fighter_x2040_alloc_data",
+    "HSD_JObjLoadJoint",
+    "ftParts_80074148",
+    "ftParts_80074170",
+    "ftParts_80075650",
+    "ftParts_8007487C",
+    "ftCommon_SetAccessory",
+    "hat_joint",
+    "joint_num",
+    "hat_dynamics"
+  ],
+  "follow_up_queries": [
+    "Check later PRs touching ft_80459B88_t to see whether the x0 plus hats layout was confirmed or renamed.",
+    "Search for remaining ftKb_SpecialN stubs near 800EFBFC, 800EFD08, 800F0054, 800F0168, 800F0274, 800F0380, 800F0494, 800F05A8, 800F06B4, 800F07C0, 800F0B0C, 800F0C20, 800F0D34, and 800F0E48 for the same duplicate hat setup pattern.",
+    "Audit ftKb_Init_800EE528 and ftKb_SpecialNMs_8010B2FC for uses of ft_80459B88.hats and whether FTKIND_* constants clarify remaining raw indices.",
+    "Verify whether FTKIND_SEAK, FTKIND_CLINK, and other internal enum spellings are intentionally project-standard names before propagating them in new code."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

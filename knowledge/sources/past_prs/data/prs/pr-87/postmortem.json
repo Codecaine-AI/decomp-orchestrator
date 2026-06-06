@@ -1,0 +1,143 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-87",
+  "pr": {
+    "number": 87,
+    "title": "More incbin cleanup and pointer fixes",
+    "url": "https://github.com/doldecomp/melee/pull/87",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-09-28T22:51:24Z",
+    "merged_at": "2021-09-28T22:51:31Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large assembly-data cleanup that replaced many opaque baserom .incbin ranges with explicit .4byte constants, NULLs, string/table payloads, jump-table entries, and pointer arrays. The PR also added missing global labels at branch/jump-table targets in lb and ft assembly so the newly exposed data could refer to real symbols instead of raw incbin bytes.",
+  "change_classification": {
+    "primary_type": "asm_data_cleanup",
+    "categories": [
+      "cleanup",
+      "pointer_fix",
+      "incbin_reduction",
+      "data_symbolization",
+      "jump_table_reconstruction"
+    ],
+    "systems": [
+      "asm/data",
+      "asm/sdata",
+      "melee/lb",
+      "melee/ft"
+    ]
+  },
+  "key_files": [
+    {
+      "file": "asm/data.s",
+      "role": "Main cleanup target; replaces many baserom .incbin blocks with explicit .4byte data, pointers, NULLs, string fragments, float bit patterns, and jump-table entries."
+    },
+    {
+      "file": "asm/sdata.s",
+      "role": "Small-data pointer cleanup; exposes lbl_804D3800 as a shared NULL-like word, pointer lists around lbl_804D3B48/lbl_804D3B50, and fragmentID as .int -2 followed by NULL."
+    },
+    {
+      "file": "asm/melee/lb/code_8000E9F0.s",
+      "role": "Adds global function labels func_80013BB0 through func_80014234 so an exposed function-pointer table in data.s can reference these routines."
+    },
+    {
+      "file": "asm/melee/lb/code_80016A54.s",
+      "role": "Adds global labels for switch/jump-table branch targets around lbl_80019264-lbl_80019294 and lbl_80019D90-lbl_80019E4C."
+    },
+    {
+      "file": "asm/melee/ft/code_8006DBF4.s",
+      "role": "Adds global labels lbl_80095728 and lbl_80095738, enabling the exposed jtbl_803C55C0 entries in data.s to point at real code labels."
+    }
+  ],
+  "what_changed": [
+    "Converted many .incbin ranges in asm/data.s into explicit words, including zeroed data, integer tables, float bit patterns, NULL entries, pointers to strings, function-pointer tables, and jump tables.",
+    "Exposed lb-related data near lbl_803BA248 as a table of function pointers to func_80013BB0, func_80013BB8, func_80013BE4, func_80013C18, func_80013D68, func_80013E3C, func_80013F78, func_80013FF0, func_80014014, func_800140F8, and func_80014234.",
+    "Added explicit labels for heap-report strings near lbl_803BA400-lbl_803BA43C and changed the following data from raw incbin into string-pointer and word data.",
+    "Expanded disc/card/message data around lbl_803BA708-lbl_803BAA44 into explicit Shift-JIS/ASCII word sequences and pointer arrays that reference lbl_804D3800 and the newly exposed message labels.",
+    "Reconstructed jtbl_803BAAA8 as pointers to lbl_80019264, lbl_8001926C, lbl_80019274, lbl_8001927C, lbl_80019284, lbl_8001928C, lbl_80019294, and NULL.",
+    "Reconstructed lbl_803BAB08 as a table of pointers to lbl_80019D90 through lbl_80019E4C.",
+    "Converted several small 4-byte incbins that represented null pointers into `.4byte NULL`, including instances near lbl_803C2744 and lbl_803C54C4.",
+    "Reconstructed jtbl_803C55C0 as repeated pointers to lbl_80095728 and lbl_80095738.",
+    "Added code labels in lb and ft assembly at previously unlabeled branch targets so exposed data tables could reference them safely.",
+    "Updated asm/sdata.s to expose small-data words and pointer structures, including lbl_804D3800, lbl_804D3B48, lbl_804D3B50, and fragmentID."
+  ],
+  "smart_moves": [
+    "The cleanup paired data-table exposure with adding missing `.global` labels at the corresponding code targets, avoiding dangling or raw-address-style references.",
+    "Repeated null/empty-string slots were represented with symbolic NULL or lbl_804D3800 instead of leaving four-byte incbins, making pointer intent clearer.",
+    "Jump tables were reconstructed as symbol references rather than numeric words, which improves relocation visibility and makes future control-flow decompilation easier.",
+    "The PR did not try to over-name unknown data structures; most labels stayed address-based, but meaningful existing names such as func_80013BB0 and jtbl_* were used where evidence existed.",
+    "Large mixed data blocks were split by adding intermediate global labels, allowing later work to identify strings, pointer arrays, and tables independently."
+  ],
+  "decomp_lessons": [
+    "When removing data .incbins, expose pointer-bearing words as symbol references wherever possible; this reveals relocations and prevents future code/data matching issues.",
+    "If a data table points into the middle of an assembly function or switch body, add global labels at those exact branch targets before replacing the table bytes.",
+    "Small `.incbin` ranges of four bytes should be checked for NULL or symbol pointers; replacing them with `.4byte NULL` or `.4byte label` is low-risk and improves readability.",
+    "Jump-table cleanup often requires changes in both data.s and the corresponding code assembly file; data-only edits may fail if target labels are not exported.",
+    "Opaque Shift-JIS or ASCII message data can be represented as `.4byte` word sequences when string directives are not yet practical, while still eliminating the incbin.",
+    "Address-style labels are acceptable for uncertain data, but introducing global labels at table boundaries makes later struct recovery easier."
+  ],
+  "naming_conventions": [
+    "Unidentified data labels retained address-based names such as lbl_803BA708, lbl_803BA8D8, lbl_803C5780, and lbl_804D3800.",
+    "Jump tables use the existing `jtbl_` prefix, as seen with jtbl_803BAAA8 and jtbl_803C55C0.",
+    "Unidentified functions use `func_` plus address, such as func_80013BB0 through func_80014234.",
+    "Branch targets inside functions use `lbl_` plus address and are made global when referenced by data tables.",
+    "NULL pointer slots are written as `.4byte NULL` rather than raw `0x00000000` when pointer intent is clear."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replace `.incbin \"baserom.dol\", offset, size` with exact `.4byte` sequences when the raw bytes are known but the C type is not.",
+    "Use `.4byte label` for relocation-bearing table entries so the assembler/linker tracks symbol references.",
+    "Use `.global` labels on branch targets used by jump tables, e.g. lbl_80019264-lbl_80019294, lbl_80019D90-lbl_80019E4C, and lbl_80095728/lbl_80095738.",
+    "Represent switch tables explicitly as label arrays, ending with `.4byte NULL` when the original table has a null terminator or empty slot.",
+    "Preserve alignment and existing surrounding `.asciz` labels while splitting formerly opaque incbin regions into smaller labeled chunks.",
+    "For unknown encoded text or packed data, emit the exact bytes as `.4byte 0x...` words rather than inventing string encodings or struct types."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "More incbin cleanup and pointer fixes",
+    "incbin cleanup",
+    "pointer fixes",
+    "asm/data.s",
+    "asm/sdata.s",
+    "asm/melee/lb/code_8000E9F0.s",
+    "asm/melee/lb/code_80016A54.s",
+    "asm/melee/ft/code_8006DBF4.s",
+    "lbl_803BA248",
+    "func_80013BB0",
+    "func_80013BB8",
+    "func_80014234",
+    "lbl_803BA400",
+    "lbl_803BA708",
+    "lbl_804D3800",
+    "jtbl_803BAAA8",
+    "lbl_80019264",
+    "lbl_80019294",
+    "lbl_803BAB08",
+    "lbl_80019D90",
+    "lbl_80019E4C",
+    "jtbl_803C55C0",
+    "lbl_80095728",
+    "lbl_80095738",
+    "fragmentID",
+    "NULL",
+    "jump table",
+    "function pointer table",
+    "Shift-JIS data"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that convert the exposed lbl_803BA708-lbl_803BAA44 message words into named strings or typed card/disc message tables.",
+    "Search for later decompilation of func_80013BB0 through func_80014234 to identify the table at lbl_803BA248.",
+    "Search for later PRs touching jtbl_803BAAA8 or lbl_80019264-lbl_80019294 to see whether the switch was decompiled.",
+    "Search for later PRs touching jtbl_803C55C0 and lbl_80095728/lbl_80095738 in ftwaitanim-related code.",
+    "Look for follow-up cleanup around lbl_804D3B48, lbl_804D3B50, and fragmentID in asm/sdata.s."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,176 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-755",
+  "pr": {
+    "number": 755,
+    "title": "Update `split_suggester.py` to widen use cases",
+    "url": "https://github.com/doldecomp/melee/pull/755",
+    "state": "MERGED",
+    "author": "DRGN-DRC",
+    "created_at": "2023-03-08T16:45:37Z",
+    "merged_at": "2023-03-23T02:07:47Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Expanded and refactored `tools/split_suggester.py` so it could handle more assembly/data layouts and already-converted data syntax. The tool gained argparse-based CLI flags, a Python 3 shebang, explicit exit-code documentation, a `ProgramError` path, an `if __name__ == \"__main__\"`-style review-driven structure, support for `.float` and `.double` in `.sdata2` in addition to `.4byte`, preliminary bytecounting for additional sections, console-only/debug modes, map-file parsing as a function, and richer output including literals used per generated C file. `requirements.txt` added `black` and `isort`, likely to support formatting cleanup. The PR mattered because `split_suggester.py` became useful on files after `convert_data.py` had already run, letting contributors verify split suggestions against converted literals rather than only raw `.4byte` data.",
+  "change_classification": {
+    "primary_type": "tooling",
+    "categories": [
+      "tooling",
+      "decomp-matching",
+      "cleanup",
+      "data-parsing",
+      "cli-refactor",
+      "formatting"
+    ],
+    "systems": [
+      "tools",
+      "repo-root",
+      "split_suggester",
+      "requirements"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "tools/split_suggester.py",
+      "role": "Main tooling update: widened section/literal parsing, refactored argument parsing, reorganized execution flow, and improved split suggestion output."
+    },
+    {
+      "path": "requirements.txt",
+      "role": "Added `black==23.1.0` and `isort==5.12.0`."
+    }
+  ],
+  "what_changed": [
+    "Changed `split_suggester.py` usage from positional arguments to `argparse` flags such as `-s/--asmFile`, `-m/--mapFile`, `-d/--debug`, `-c/--consoleOnly`, and `-v/--version`.",
+    "Added a Python 3 shebang and removed old Python 2/3 compatibility branching around `input()`/`raw_input()`.",
+    "Documented exit codes in the file header: success, invalid CLI input, missing `.sdata2`, and failure to parse floats data.",
+    "Introduced `Version = \"1.2.1\"` and a `ProgramError(RuntimeError)` class carrying an `error_code`.",
+    "Moved map parsing into `parseMapFile(mapFilePath)`, returning a dictionary keyed by function start address.",
+    "Moved assembly parsing into `parseAssemblyFile(args)` with local tracking state for file sections, functions, float data, float types, suspicious padding, and uncertain bytecounts.",
+    "Reworked section handling from hardcoded `.text`, `.data`, and `.sdata2` booleans into a `fileSections` ordered dictionary keyed by encountered `.section` names.",
+    "Added support for `.float` and `.double` literal syntax in `.sdata2`, not just `.4byte`, including re-encoding decoded literals to inspect f32/f64 byte patterns.",
+    "Renamed float type labels in the parsing logic from older wording like `single`/`double` to `f32`/`f64` in the diff excerpt.",
+    "Added detection and warning cases where `convert_data.py` appears to have described a literal as `.float` when the usage suggests f64, or `.double` when the usage suggests f32.",
+    "Tracked all labels referenced by a function while also maintaining `uniqueLabels` through `Function.addLabel()`.",
+    "Expanded output to show total functions, total floats in `.sdata2`, per-section byte totals, uncertain bytecount warnings, optional debug dumps, and map-derived names.",
+    "PR body states the tool now prints all literals used in each generated C output file at the top, commented out by default.",
+    "Added preliminary support for parsing other file sections such as rodata, bss, sbss, etc., though exact completeness is only evidenced by the PR body and partial diff excerpt.",
+    "Added `black` and `isort` to `requirements.txt`."
+  ],
+  "smart_moves": [
+    "Made the splitter compatible with assembly after `convert_data.py` conversion by accepting `.float` and `.double`, allowing the tool to validate converted data instead of requiring raw `.4byte` input.",
+    "Inferred literal type from actual load instructions (`lfs` implies f32, `lfd` implies f64) and cross-checked that against data directives, which is a useful decomp sanity check.",
+    "Preserved raw-byte reasoning even when the assembly directive already contains decoded float text by packing floats/doubles back into big-endian bytes before interpreting them.",
+    "Kept duplicate label reference order in `labels` while adding `uniqueLabels`, preserving both call/reference frequency information and deduplicated summaries.",
+    "Generalized section bytecounting with an ordered section map instead of fixed `.data`/`.sdata2` counters, making later section support easier.",
+    "Added a console-only mode so contributors can inspect split suggestions without generating template files.",
+    "Turned command-line parsing into a real `argparse` interface after reviewer feedback, improving usability and future extensibility.",
+    "Separated parsing functions from top-level execution, making the script easier to test, import, and maintain."
+  ],
+  "decomp_lessons": [
+    "Decomp tooling should handle both raw assembler data (`.4byte`) and post-conversion literal syntax (`.float`, `.double`) because contributors may run tools in different orders.",
+    "For float matching, infer intended data width from instruction usage (`lfs` versus `lfd`) rather than trusting only the data directive emitted by a conversion tool.",
+    "When decoded literals obscure original bytes, re-pack the numeric value into target-endian bytes before checking whether it behaves as f32 or f64.",
+    "Split-suggestion tools are most useful when they report enough context for manual judgment: function counts, section byte totals, map names, suspicious padding, and per-file literals.",
+    "Avoid hardcoding only the known sections of today; decomp assembly often contains rodata/bss/sbss or other sections that affect file boundaries and byte totals.",
+    "Keep CLI tools import-safe by putting main execution under `if __name__ == \"__main__\"` and isolating parsing in functions.",
+    "Use explicit exit codes for contributor-facing tooling so failures can be distinguished in scripts or CI-like workflows.",
+    "When byte totals depend on ambiguous integer directives, report uncertainty rather than pretending exactness."
+  ],
+  "naming_conventions": [
+    "CLI argument names introduced in the diff use camelCase-style long options matching existing script variable names: `--asmFile`, `--mapFile`, `--consoleOnly`.",
+    "Float type names in the new logic use C-style width terminology `f32` and `f64`, replacing less precise `single`/`double` labels in the shown code.",
+    "Map names are only accepted when they do not start with `zz` and do not end with `_`, matching the existing heuristic shown in `Function.checkForMapName()`.",
+    "The new helper `grammarfyList` is named to describe producing a human-readable English list, used in uncertain-bytecount output.",
+    "The script version variable is capitalized as `Version`, as shown in the diff, rather than typical all-caps `VERSION`; no review comment on this naming is present."
+  ],
+  "assembly_or_matching_tactics": [
+    "Parse `.section` directives to track the active section and accumulate byte totals per section.",
+    "Strip `//` and `#` comments before interpreting assembly lines.",
+    "Use `.global` as a signal that a function boundary is certain.",
+    "Treat lines starting with `/*` as code lines and count them as 4 bytes in `.text`.",
+    "Treat `blr` as a likely function end, but discredit that end if a later label is the target of a branch from inside the current function.",
+    "Identify sdata labels referenced from code by looking for `lbl_` in instruction lines and extracting the label before any `@` suffix.",
+    "Classify float labels from load instructions: `lfs` records an f32 use and `lfd` records an f64 use.",
+    "For `.sdata2`, process `.4byte`, `.float`, and `.double` directives and use big-endian `struct.pack`/`struct.unpack` to reconstruct f32/f64 values.",
+    "For possible doubles represented as two 4-byte values, combine the first and second words before decoding as f64.",
+    "Track suspicious padding when f32 data is followed in a way that may indicate a file boundary.",
+    "Count `.4byte` and `.float` as 4 bytes for non-special sections, and `.asciz` by string length plus null aligned to 4 bytes, per the diff excerpt."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "file": "tools/split_suggester.py",
+      "feedback": "Requested replacing manual `sys.argv` parsing with `argparse`.",
+      "resolution": "Author replied `Done.` and the diff shows `import argparse` plus `parseArguments()`."
+    },
+    {
+      "author": "ribbanya",
+      "file": "tools/split_suggester.py",
+      "feedback": "Requested moving main execution into an `if __name__ == \"__main__\"` block.",
+      "resolution": "Author replied `Done.`; exact final block is not visible in the excerpt, but the review thread indicates it was addressed."
+    },
+    {
+      "author": "ribbanya",
+      "file": "tools/split_suggester.py",
+      "feedback": "Requested using multiline format string literals for long print blocks.",
+      "resolution": "Author replied `Done.`; the excerpt shows print formatting was being revised, but the complete final formatting is not fully visible."
+    },
+    {
+      "author": "DRGN-DRC",
+      "file": "tools/split_suggester.py",
+      "feedback": "Noted in the PR discussion that the tool was still useful as-is and that they personally used it whenever starting work on a file.",
+      "resolution": "Merged, with a stated plan by the author to come back later and clean it up more."
+    }
+  ],
+  "searchable_terms": [
+    "PR755",
+    "split_suggester.py",
+    "split suggester",
+    "convert_data.py",
+    "sdata2",
+    ".sdata2",
+    ".float",
+    ".double",
+    ".4byte",
+    "f32",
+    "f64",
+    "lfs",
+    "lfd",
+    "argparse",
+    "consoleOnly",
+    "asmFile",
+    "mapFile",
+    "parseArguments",
+    "parseAssemblyFile",
+    "parseMapFile",
+    "ProgramError",
+    "uniqueLabels",
+    "susPadding",
+    "uncertainBytecounts",
+    "fileSections",
+    "function boundaries",
+    "float constants",
+    "literals used",
+    "map names",
+    "black",
+    "isort",
+    "DRGN-DRC",
+    "ribbanya"
+  ],
+  "follow_up_queries": [
+    "Find later PRs modifying `tools/split_suggester.py` for the cleanup DRGN-DRC said they planned after PR #755.",
+    "Search for uses or documentation of `split_suggester.py -s` and `--consoleOnly` to see whether contributors adopted the new CLI.",
+    "Look for bugfixes around `.float`/`.double` parsing after this PR, especially cases involving `convert_data.py` output.",
+    "Inspect later requirements/tooling PRs to confirm why `black` and `isort` were added and whether formatting was standardized project-wide.",
+    "Search review history for section-bytecount or `.bss`/`.sbss` follow-ups, since this PR only claims preliminary support for other sections."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

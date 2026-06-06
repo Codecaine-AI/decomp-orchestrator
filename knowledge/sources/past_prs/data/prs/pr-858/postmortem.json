@@ -1,0 +1,158 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-858",
+  "pr": {
+    "number": 858,
+    "title": "Partially match `ftCo_DamageFall`",
+    "url": "https://github.com/doldecomp/melee/pull/858",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-19T23:43:25Z",
+    "merged_at": "2023-05-19T23:51:03Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added a new C translation unit and header for ftCommon DamageFall, moving most of the 0x80090574-0x8009095C range out of asm/melee/ft/ft_08A4.s while leaving the later callback at 0x80090984 as an exported asm symbol. The PR fully matched most DamageFall routines according to the PR report, while ft_80090594 remained a partial match at 75.92%. It also exported/renamed several Damage helpers, tightened fighter/common-data struct types needed by the translation, fixed call signatures such as ft_8009665C(gobj), and updated report_score.py to score functions from expected ELF symbols.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "struct-typing",
+      "tooling"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "DamageFall",
+      "asm",
+      "tooling"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_DamageFall.c",
+    "src/melee/ft/chara/ftCommon/ftCo_DamageFall.h",
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/chara/ftCommon/ftCo_Damage.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Damage.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/fighter.h",
+    "src/melee/ft/ft_081B.h",
+    "src/melee/ft/ft_0877.h",
+    "src/melee/ft/ft_08A4.h",
+    "src/melee/ft/ftcommon.c",
+    "obj_files.mk",
+    "tools/report_score.py",
+    "tools/asm-differ/diff.py"
+  ],
+  "what_changed": [
+    "Created src/melee/ft/chara/ftCommon/ftCo_DamageFall.c and added it to obj_files.mk.",
+    "Removed the assembly bodies for ftCo_80090574, ft_80090594, ft_80090690, ft_80090718, ft_80090780, ftCo_DamageFall_Anim, ftCo_DamageFall_IASA, ftCo_DamageFall_Phys, and ftCo_DamageFall_Coll from asm/melee/ft/ft_08A4.s.",
+    "Kept the function at 0x80090984 in asm but promoted its local label .L_80090984 to global ftCo_80090984, and updated parasol damage-fall collision code to reference that symbol.",
+    "Added ftCo_DamageFall.h prototypes with address comments for the translated DamageFall functions.",
+    "Implemented simple wrapper routines such as ftCo_80090574 calling ft_80081DD4, ftCo_DamageFall_Phys calling ft_80084DB0, and ftCo_DamageFall_Coll calling ft_8008370C(gobj, ftCo_80090984).",
+    "Implemented ftCo_DamageFall_IASA as an interrupt chain using early RETURN_IF checks for ft_8009665C, ft_80095328, ftCo_800D7100, ftCo_800C3B10, ftCo_AttackAir_CheckItemThrowInput, ftCo_800D705C, ft_800CB870, ftCo_800C5DDC, and ftCo_800C5CD4, plus a stick-threshold transition through ft_800CC730.",
+    "Translated ft_80090690 to return a Vec2* shift or NULL, using Fighter_804D6530 and the DamageFall model-shift fields.",
+    "Translated ft_80090718 to clear queued damage effects/sounds via ft_80088148 and ft_800889F4.",
+    "Translated ft_80090780 to handle parasol status and otherwise change to motion state 0x26 with flags 0x18001, then call ftCommon_8007D468 and ftCommon_8007EBAC.",
+    "Left ft_80090594 with a MUST_MATCH asm version and a non-MUST_MATCH C version, reflecting the reported partial match.",
+    "Renamed the formerly static damage motion table ftItemPickup_803C5520 to exported ftCo_803C5520 and updated assembly references to the new symbol.",
+    "Exported formerly static Damage.c helpers as ftCo_Damage_CheckAirMotion, ftCo_Damage_OnEveryHitlag, ftCo_Damage_OnExitHitlag, and ftCo_Damage_SetMv8FromKbThreshold so other code can reference them.",
+    "Improved prototypes for dependencies used by DamageFall: ft_8008370C takes a gobj and callback, ft_8009665C takes a gobj, ftCo_800C5CD4 and ftCo_800C5DDC return bool, and ftCo_800CF4DC takes a gobj.",
+    "Updated Fighter_804D6530 from UNK_T to Vec2**.",
+    "Typed ftCommonData fields x168 and x16C as floats and exposed x210, x214, and x218 around the stick-threshold data used by DamageFall_IASA.",
+    "Typed Fighter damage fields x1900/x1904 as floats, x1908 as enum_t, and x190C as UNK_T.",
+    "Fixed existing callers in Link boomerang and Peach float code to pass gobj to ft_8009665C.",
+    "Changed ftcommon.c model-shift handling to check ft_80090690(fp, &shift) != NULL before applying shift.x and shift.y.",
+    "Updated tools/report_score.py to read function symbols from the expected ELF with pyelftools and invoke asm-differ for each function name; also adjusted sorting of report entries."
+  ],
+  "smart_moves": [
+    "Split the work into a new ftCo_DamageFall.c rather than expanding ftCo_Damage.c, matching the subsystem boundary implied by the motion callbacks and making the object independently scoreable.",
+    "Used a MUST_MATCH asm fallback for ft_80090594 while providing a readable C attempt, preserving build correctness and documenting the remaining mismatch area.",
+    "Promoted .L_80090984 to ftCo_80090984 instead of leaving a local label referenced across code, making the collision callback reusable from both C and remaining asm.",
+    "Added precise return types and argument types for cross-file helpers before relying on them in the new translation, reducing dependence on UNK_PARAMS and avoiding accidental ABI mistakes.",
+    "Converted key struct fields only where the new C required them, such as ftCommonData floats and Fighter damage model-shift fields, giving the compiler enough type information without overclaiming broader struct knowledge.",
+    "Kept address comments in the new header, which makes future decomp work easy to map back to the original DOL addresses.",
+    "The PR report listed per-function scores, making the partial state explicit: all listed routines except ft_80090594 were reported as 100.00% matched."
+  ],
+  "decomp_lessons": [
+    "When a decomp slice depends on helpers that were static inside another file, promote them with subsystem-prefixed names and add prototypes rather than duplicating logic.",
+    "For collision callbacks that remain in asm, turning local labels into globally named symbols is a practical bridge that lets C call the remaining asm safely.",
+    "A nonmatching but readable C version guarded away from MUST_MATCH is useful for preserving understanding while retaining the exact asm in matching builds.",
+    "Damage/action-state code often needs small signature corrections in unrelated character files because shared helper prototypes become stricter once translated.",
+    "Model-shift and hitlag code exposed concrete struct knowledge: p_ftCommonData offsets 0x168/0x16C are floats, offsets 0x210/0x214 are used for stick threshold/timer checks, and Fighter dmg offsets 0x1900/0x1904 store floor-normal floats.",
+    "Returning NULL versus a Vec2* in ft_80090690 was reflected in ftcommon.c by changing a truthy integer-style check to an explicit pointer check.",
+    "Per-function scoring tools are valuable for partial PRs: the report clearly separated fully matched callback/simple-wrapper functions from the remaining partial ft_80090594."
+  ],
+  "naming_conventions": [
+    "New motion callback names use the ftCo_DamageFall_* pattern: ftCo_DamageFall_Anim, ftCo_DamageFall_IASA, ftCo_DamageFall_Phys, and ftCo_DamageFall_Coll.",
+    "Still-unknown functions keep address-based names such as ft_80090594, ft_80090690, ft_80090718, ft_80090780, and ftCo_80090984.",
+    "Formerly static ftCo_Damage helpers were exported with descriptive ftCo_Damage_* names: ftCo_Damage_CheckAirMotion, ftCo_Damage_OnEveryHitlag, ftCo_Damage_OnExitHitlag, and ftCo_Damage_SetMv8FromKbThreshold.",
+    "The damage motion table was renamed from a misleading static ftItemPickup_803C5520 to exported ftCo_803C5520.",
+    "The new header guard used the project’s address-style pattern GALE01_090824."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted the matched asm bodies from asm/melee/ft/ft_08A4.s and replaced them with C in a new object file.",
+    "Kept ft_80090594 under #if defined(MUST_MATCH) && !defined(WIP) as inline asm, with a C implementation in the #else branch.",
+    "Used M2C_FIELD in ft_80090780 for an unresolved field at offset 0xE0 rather than over-typing the containing structure.",
+    "Used the RETURN_IF macro in ftCo_DamageFall_IASA to match the early-exit interrupt chain compactly.",
+    "Used ABS(fp->input.lstick.x) with p_ftCommonData->x210/x214 to model the stick-threshold branch in IASA.",
+    "Updated exact asm symbol references from .L_80090984@ha/@l to ftCo_80090984@ha/@l so C and asm agree on the callback symbol.",
+    "The PR report showed ft_80090594 at score 1517/6300, 75.92%, while ftCo_DamageFall_IASA, ft_80090780, ft_80090690, ft_80090718, ftCo_DamageFall_Coll, ftCo_80090574, ftCo_DamageFall_Phys, and ftCo_DamageFall_Anim were listed as 100.00%."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice, so there is no explicit human review feedback to extract."
+  ],
+  "searchable_terms": [
+    "PR858",
+    "ftCo_DamageFall",
+    "ftCo_DamageFall.c",
+    "ftCo_DamageFall.h",
+    "ft_80090594",
+    "ftCo_80090574",
+    "ft_80090690",
+    "ft_80090718",
+    "ft_80090780",
+    "ftCo_DamageFall_Anim",
+    "ftCo_DamageFall_IASA",
+    "ftCo_DamageFall_Phys",
+    "ftCo_DamageFall_Coll",
+    "ftCo_80090984",
+    "Fighter_804D6530",
+    "ftCo_803C5520",
+    "ftCo_Damage_CheckAirMotion",
+    "ftCo_Damage_OnEveryHitlag",
+    "ftCo_Damage_OnExitHitlag",
+    "ftCo_Damage_SetMv8FromKbThreshold",
+    "ft_8009665C",
+    "ft_8008370C",
+    "ftCo_800C5DDC",
+    "ftCo_800C5CD4",
+    "ftCo_800CF4DC",
+    "p_ftCommonData x168 x16C x210 x214",
+    "model_shift_frames",
+    "DamageFall IASA",
+    "MUST_MATCH WIP asm fallback",
+    "RETURN_IF",
+    "report_score.py",
+    "pyelftools",
+    "asm-differ"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match ft_80090594 or rename it to a descriptive ftCo_DamageFall function.",
+    "Search for subsequent typing of Fighter_804D6530 from Vec2** into a named model-shift table type.",
+    "Look for PRs that remove M2C_FIELD usage around Fighter offset 0xE0 in ft_80090780.",
+    "Check later work on ftCo_80090984 to see whether the remaining collision callback asm was decompiled.",
+    "Find follow-up changes to report_score.py after its switch to pyelftools and expected ELF symbols."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

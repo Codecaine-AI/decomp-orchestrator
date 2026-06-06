@@ -42,6 +42,6 @@ build/tools/objdiff-cli diff -p . -u <unit> <symbol>
 (cd tools/table-typer && go run . dups)
 ```
 
-The original design referenced the old `.codex/skills/decomp-find` path for
-candidate ranking. The package-owned equivalent now lives under
+The original design referenced an external candidate-ranking helper path. The
+package-owned equivalent now lives under
 `decomp-orchestrator/knowledge/tools/`.

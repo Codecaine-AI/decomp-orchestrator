@@ -1,0 +1,126 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-202",
+  "pr": {
+    "number": 202,
+    "title": "Match HSD_MemAlloc",
+    "url": "https://github.com/doldecomp/melee/pull/202",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-18T18:40:46Z",
+    "merged_at": "2021-12-18T18:41:07Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched HSD_MemAlloc in C and removed its assembly object from the build. The C implementation preserves the original control flow: return NULL for non-positive sizes, allocate from HSD_GetHeap via OSAllocFromHeap, assert on allocation failure with file string lbl_80407300, line 52, and message \"adr\", then return the allocated pointer. The PR also adjusted prototypes and small data/string layout details needed for matching, including changing HSD_MemAlloc's size parameter to signed s32 and adding padding/null data around nearby sdata.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "build-config",
+      "sdata-layout"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "memory",
+      "shadow",
+      "dobj",
+      "include",
+      "asm",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/memory.c",
+    "src/sysdolphin/baselib/memory.h",
+    "asm/sysdolphin/baselib/memory.s",
+    "obj_files.mk",
+    "include/functions.h",
+    "src/sysdolphin/baselib/dobj.c",
+    "asm/sysdolphin/baselib/shadow.s"
+  ],
+  "what_changed": [
+    "Deleted asm/sysdolphin/baselib/memory.s, which contained the assembly implementation of HSD_MemAlloc and its sdata string \"adr\".",
+    "Added a C implementation of HSD_MemAlloc in src/sysdolphin/baselib/memory.c.",
+    "Removed $(BUILD_DIR)/asm/sysdolphin/baselib/memory.o from TEXT_O_FILES in obj_files.mk so the C object supplies HSD_MemAlloc.",
+    "Updated HSD_MemAlloc declaration in memory.h from void* HSD_MemAlloc(u32 size) to void* HSD_MemAlloc(s32 size), matching the assembly's signed size check.",
+    "Added #include <global.h> to memory.h, likely to provide s32/NULL or related shared definitions.",
+    "Gave OSAllocFromHeap a typed prototype, void* OSAllocFromHeap(void*, s32), in include/functions.h.",
+    "Gave HSD_GetHeap a typed return prototype, void* HSD_GetHeap(), in include/functions.h.",
+    "Adjusted nearby static strings in dobj.c: represented the empty string as \"\\0\" and shrank lbl_804D5C84 from an 8-byte array to a 5-byte \"dobj\\0\" array.",
+    "Inserted a .4byte NULL before lbl_804D5F78 in asm/sysdolphin/baselib/shadow.s, apparently to preserve the sdata layout after removing memory.s's sdata contribution."
+  ],
+  "smart_moves": [
+    "Used a signed s32 size parameter because the original assembly used a signed branch condition for size <= 0 before allocation.",
+    "Kept the assert call's exact evidence from assembly: file symbol lbl_80407300, line 0x34/52, and assertion string \"adr\".",
+    "Typed OSAllocFromHeap and HSD_GetHeap before relying on them from the matched C function, reducing implicit declaration risk and helping code generation.",
+    "Removed only the assembly object for memory.o while retaining the existing C memory.o, avoiding duplicate symbols and moving the matched function into src.",
+    "Compensated for sdata movement after deleting memory.s by inserting an explicit .4byte NULL in shadow.s and tightening unrelated string array sizes in dobj.c."
+  ],
+  "decomp_lessons": [
+    "When an assembly routine rejects size <= 0, the C function parameter may need to be signed even if an allocator size feels naturally unsigned.",
+    "Matching small allocator wrappers often depends on exact external prototypes; return types and parameter signedness can affect register use and comparisons.",
+    "Deleting an asm file can disturb .sdata ordering, so preserve nearby data layout with explicit padding or by correcting static string sizes in adjacent translation units.",
+    "Assert calls in matched C should preserve the original file-label symbol, source line number, and assertion/message string rather than replacing them with more idiomatic names.",
+    "Build list cleanup is part of a successful decomp match: once the C object provides the function, the corresponding asm object must be removed."
+  ],
+  "naming_conventions": [
+    "Matched exported function name retained as HSD_MemAlloc.",
+    "HSD memory subsystem functions use HSD_ prefix, as seen with HSD_MemAlloc, HSD_Free, and HSD_GetHeap.",
+    "Unidentified data labels remain in lbl_80xxxxxx form, such as lbl_80407300, lbl_804D5F70, lbl_804D5F78, lbl_804D5C80, and lbl_804D5C84.",
+    "Header guard in memory.h remains _memory_h_.",
+    "The assertion message string for this function is the short literal \"adr\"."
+  ],
+  "assembly_or_matching_tactics": [
+    "Translated the assembly's `or. r31, r3, r3` plus `bgt` into `if (size <= 0) return NULL;`, requiring signed comparison behavior.",
+    "Translated the heap allocation sequence `HSD_GetHeap(); OSAllocFromHeap(heap, size);` into a direct call using HSD_GetHeap() as the first argument.",
+    "Matched the null-result check by assigning OSAllocFromHeap's return value to a local `result`, checking `if (result == NULL)`, calling `__assert`, and returning `result`.",
+    "Preserved the assembly line immediate 0x34 as decimal 52 in the C assert call.",
+    "Moved the assembly file's trailing sdata impact to adjacent layout management instead of keeping the whole asm file alive.",
+    "Used exact string-array sizes in dobj.c to influence small-data packing."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR202",
+    "HSD_MemAlloc",
+    "HSD_Free",
+    "HSD_GetHeap",
+    "OSAllocFromHeap",
+    "OSFreeToHeap",
+    "__assert",
+    "memory.c",
+    "memory.h",
+    "memory.s",
+    "obj_files.mk",
+    "shadow.s",
+    "dobj.c",
+    "lbl_80407300",
+    "lbl_804D5F70",
+    "lbl_804D5F78",
+    "lbl_804D5C80",
+    "lbl_804D5C84",
+    "adr",
+    "s32 size",
+    "signed size check",
+    "sdata layout",
+    "TEXT_O_FILES",
+    "baselib memory",
+    "sysdolphin baselib"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename lbl_80407300 or replace the raw assert file-label in memory.c.",
+    "Check whether HSD_GetHeap later receives a fully prototyped void parameter list, e.g. void* HSD_GetHeap(void).",
+    "Look for follow-up cleanup of the explicit .4byte NULL inserted before lbl_804D5F78 in shadow.s.",
+    "Search for additional allocator wrappers where signedness of size parameters affects matching."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

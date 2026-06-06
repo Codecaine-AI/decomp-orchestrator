@@ -1,0 +1,158 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-868",
+  "pr": {
+    "number": 868,
+    "title": "Partially match `ftaction`",
+    "url": "https://github.com/doldecomp/melee/pull/868",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-26T06:48:23Z",
+    "merged_at": "2023-05-26T06:58:44Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Converted `ftaction` from an asm object into a partially decompiled C source file and wired it into the text object build. The PR introduced many `ftAction_80071xxx`/`ftAction_80072xxx` C implementations or C/asm hybrid stubs, command dispatch tables, subaction-event parsing helpers, and supporting fighter/header type refinements. The reported match status for `src/melee/ft/ftaction.c` was 78.99% overall, with many small skip/advance handlers at 100% and larger handlers still partial.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "struct-layout",
+      "tooling"
+    ],
+    "systems": [
+      "fighter",
+      "ftaction",
+      "ftcoll",
+      "ftparts",
+      "baselib",
+      "dolphin-mtx",
+      "lb",
+      "build-system",
+      "tools"
+    ]
+  },
+  "key_files": [
+    "obj_files.mk",
+    "src/melee/ft/ftaction.c",
+    "src/melee/ft/ftaction.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/inlines.h",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/forward.h",
+    "src/melee/ft/ftparts.c",
+    "src/melee/ft/ftparts.h",
+    "src/melee/ft/ftcoll.c",
+    "src/melee/ft/ftcoll.h",
+    "src/melee/lb/lbcollision.h",
+    "src/sysdolphin/baselib/gobj.h",
+    "tools/convert_data.py"
+  ],
+  "what_changed": [
+    "`obj_files.mk` now builds `$(BUILD_DIR)/src/melee/ft/ftaction.c.o` instead of `$(BUILD_DIR)/asm/melee/ft/ftaction.s.o`.",
+    "`asm/melee/ft/ftaction.s` was renamed to `src/melee/ft/ftaction.c` with about 60% similarity, keeping some inline asm while adding C implementations for numerous subaction command handlers.",
+    "`ftaction.c` added dispatch tables `ftAction_803C06E8` and `ftAction_803C07AC` of `FtCmd` function pointers plus a byte table `ftAction_803C0870`.",
+    "`ftaction.c` added MWERKS constants such as `ftAction_804D82A0`, `ftAction_804D82A8`, `ftAction_804D82B0`, and `ftAction_804D82C4 = F32_MAX`.",
+    "Several handlers use `#if defined(MUST_MATCH) && !defined(WIP)` to preserve exact asm while also providing C equivalents outside that configuration.",
+    "`ftAction_80071028` was documented as a `GFXSpawn` subaction event and implemented by decoding bitfield words into bone, GFX id, offset, range, and flags before calling `ft_8009F834`; invisible fighters skip it via `ftAction_800711DC`.",
+    "Many trivial or skip handlers were expressed as pointer advances on `cmd->x8`, for example `ftAction_800711DC`, `ftAction_800715EC`, and one-word skip handlers.",
+    "`src/melee/ft/types.h` introduced `ftSubactionList` and `ftCmdScript`, replacing separate Fighter fields `x3E4`, `x3E8`, `x3EC`, `x3F0`, and filler with `x3E4_fighterCmdScript` plus adjusted filler.",
+    "`fighter.c` was updated to use named script fields such as `x3E4_fighterCmdScript.x3EC_scriptCurrent`, `x3F0_scriptLoopNum`, and `x3E4_scriptEventTimer` in `Fighter_ChangeMotionState`.",
+    "`types.h` also refined layout around hitboxes by changing the `xDF4` filler into `HitCapsule xDF4[2]` and wrapped some fighter bitfields in byte/bitfield unions.",
+    "`inlines.h` added `gmScriptEventCast`, `gmScriptEventUpdatePtr`, and `getCmdScript(Fighter*)` helpers, with a `@todo Fix naming` note for the script-event macros.",
+    "`lbcollision.h` exposed concrete `HitCapsule` integer fields `x24`, `x28`, and `x2C` instead of an opaque byte range, supporting hitbox command decompilation.",
+    "`gobj.h` moved several `HSD_GObj_804D78xx` extern declarations out of `gobj.c` into the header and changed its include guard style.",
+    "`src/dolphin/mtx/types.h` added `struct IntVec3`, and `forward.h` added/reordered the forward typedef.",
+    "`src/Runtime/platform.h` changed `F32_MAX` from a double literal to a float literal by adding the `f` suffix.",
+    "`tools/convert_data.py` changed the default `input_glob` from character asm files to `**/ft/ftaction.s`, likely to support extracting/converting ftaction data during this decomp effort."
+  ],
+  "smart_moves": [
+    "Kept build progress incremental by switching `ftaction` to C while retaining exact inline asm under `MUST_MATCH && !WIP` for difficult functions.",
+    "Modeled the fighter command-script state as a named `ftCmdScript` substructure instead of continuing to use unrelated raw fields at `0x3E4` through `0x3F4`.",
+    "Added byte-plus-bitfield unions for fighter flags so code can match both whole-byte operations and named bit access patterns.",
+    "Used small local bitfield structs and `gmScriptEventCast`/`gmScriptEventUpdatePtr` macros to express packed subaction event decoding while preserving pointer-advance behavior.",
+    "Documented at least one command handler (`GFXSpawn`) with external HSDLib command-script field names, making future command decompilation more searchable.",
+    "Promoted needed prototypes and externs into headers rather than keeping them as local declarations, improving type availability for cross-file matching.",
+    "Fixed `F32_MAX` to be a float literal, which matters for generated load/constant behavior in float-heavy matching code.",
+    "Targeted the data conversion tool at `ftaction.s`, suggesting a focused workflow for moving embedded asm data/constants into C."
+  ],
+  "decomp_lessons": [
+    "For large asm files, it is acceptable and useful to land a partial C conversion when the object can be built from C and remaining mismatches are isolated behind `MUST_MATCH` asm fallbacks.",
+    "Packed script-command formats benefit from typed bitfield views, but helper macro names should be treated as provisional when the PR itself marks them with `@todo Fix naming`.",
+    "When a sequence of raw struct fields is repeatedly used together, replacing it with a named substruct can unlock clearer code and reduce offset mistakes in callers.",
+    "Subaction handlers often consume fixed-width command words by incrementing `cmd->x8`; matching code should preserve the exact number and order of pointer advances.",
+    "Float literal suffixes can affect matching; constants intended as `f32` should use `f` suffixes when the original code expects single precision.",
+    "Whole-byte writes and bitfield writes may both be necessary for a struct field; anonymous unions can preserve matching flexibility.",
+    "Header cleanup can be required before decompiling a central file because action handlers touch fighter data, collision capsules, audio, commands, baselib GObj globals, and matrix/vector types."
+  ],
+  "naming_conventions": [
+    "Fighter command-script substructure: `x3E4_fighterCmdScript`.",
+    "Command-script fields were named by offset and role: `x3E4_scriptEventTimer`, `x3E8_scriptFrameTimer`, `x3EC_scriptCurrent`, `x3F0_scriptLoopNum`, `x3F4_scriptReturn`.",
+    "Function pointer typedef for action commands: `typedef void (*FtCmd)(Fighter_GObj* gobj, FtCmdState* cmd);`.",
+    "Subaction list type: `ftSubactionList` with field `x0_opcode`.",
+    "Script-event helper names added: `gmScriptEventCast` and `gmScriptEventUpdatePtr`, explicitly marked with `@todo Fix naming`.",
+    "Bitfield names retain offset/bit notation such as `x2218_b0` style fields and `allow_interrupt`, often inside a union with the raw byte field.",
+    "Function symbols remain address-based (`ftAction_80071028`, `ftAction_800711DC`, etc.) because semantic names are not yet known for most handlers."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `#if defined(MUST_MATCH) && !defined(WIP)` blocks to choose between inline asm and C implementations.",
+    "Kept MWERKS inline asm syntax with `#pragma push`, `#pragma pop`, `nofralloc`, and `// clang-format off` for preserved assembly sections.",
+    "Converted asm labels from `.L_...` style to `lbl_...` inside inline asm functions.",
+    "Used `M2C_FIELD` and raw casts in some partial C handlers where struct layout or access width was still uncertain.",
+    "Added dummy unused stack arrays under `#ifdef MUST_MATCH` in some C implementations to influence stack layout.",
+    "Used a temporary variable assignment pattern such as `gmScriptEventUpdatePtr((new_var = cmd)->x8, struct test1)` and comments like `permuter jank?` to shape code generation.",
+    "Maintained exact command pointer consumption by repeated `cmd->x8 += 4` statements instead of collapsing them into a single addition in skip handlers.",
+    "Introduced float scaling constants around `1 / 256.0f` and `0.003906f` for decoding fixed-point event data."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR context.",
+    "In-code review-style TODOs are present: `@todo Fix naming` for `gmScriptEventCast`/`gmScriptEventUpdatePtr`, `@todo Unused stack`, `@todo Suggests #Fighter::cmd_vars isn't an array`, and `@todo Unify with #ftCmdScript` in `lbcommand.h`."
+  ],
+  "searchable_terms": [
+    "pr-868",
+    "Partially match ftaction",
+    "ribbanya",
+    "ftaction.c",
+    "ftaction.s",
+    "ftAction_80071028",
+    "ftAction_800711DC",
+    "ftAction_8007121C",
+    "ftAction_803C06E8",
+    "ftAction_803C07AC",
+    "FtCmd",
+    "FtCmdState",
+    "ftCmdScript",
+    "ftSubactionList",
+    "x3E4_fighterCmdScript",
+    "x3EC_scriptCurrent",
+    "x3F0_scriptLoopNum",
+    "x3E4_scriptEventTimer",
+    "gmScriptEventCast",
+    "gmScriptEventUpdatePtr",
+    "GFXSpawn",
+    "Fighter_ChangeMotionState",
+    "HitCapsule",
+    "F32_MAX",
+    "MUST_MATCH",
+    "WIP",
+    "M2C_FIELD",
+    "convert_data.py"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or replace `gmScriptEventCast` and `gmScriptEventUpdatePtr`.",
+    "Find later PRs that fully match `src/melee/ft/ftaction.c` or remove the remaining inline asm blocks.",
+    "Search for follow-up changes to `ftCmdScript`, `CommandInfo`, or the `@todo Unify with #ftCmdScript` note.",
+    "Search for later semantic names for `ftAction_80071028` and other subaction command handlers.",
+    "Check whether `Fighter::cmd_vars` layout was changed after the `@todo Suggests #Fighter::cmd_vars isn't an array` note."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

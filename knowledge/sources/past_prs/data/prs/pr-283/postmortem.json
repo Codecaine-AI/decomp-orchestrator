@@ -1,0 +1,145 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-283",
+  "pr": {
+    "number": 283,
+    "title": "Match some ftKoopa functions",
+    "url": "https://github.com/doldecomp/melee/pull/283",
+    "state": "MERGED",
+    "author": "Tri-Wing",
+    "created_at": "2022-02-19T17:57:04Z",
+    "merged_at": "2022-02-19T20:43:06Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched part of Bowser/Koopa fighter code by splitting ftkoopa into a new C translation unit, adding ftKoopa headers and needed Fighter struct fields, and wiring the new object into the build. The PR removed about 540 lines from asm/melee/ft/chara/ftkoopa.s and added src/melee/ft/chara/ftkoopa.c with a mix of inline asm carryover and C implementations for simpler helpers/state routines. Body evidence is minimal beyond \"Tested OK\"; there were no review comments.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c-split",
+      "headers",
+      "struct-layout",
+      "build-system"
+    ],
+    "systems": [
+      "fighter",
+      "ftKoopa",
+      "asm",
+      "include",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "asm/melee/ft/chara/ftkoopa.s",
+    "src/melee/ft/chara/ftkoopa.c",
+    "src/melee/ft/chara/ftkoopa.h",
+    "src/melee/ft/fighter.h",
+    "include/functions.h",
+    "e_files.mk",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Created src/melee/ft/chara/ftkoopa.c and moved a block of ftKoopa symbols out of the standalone asm file.",
+    "Kept many hard-to-decompile routines as inline `asm void` functions inside ftkoopa.c using `nofralloc` and `#pragma peephole on`, while converting simpler routines to normal C.",
+    "Implemented C helpers such as func_80132D38 and func_80132D7C as two calls to func_800704F0 using float constants lbl_804D9AC8 and lbl_804D9ACC.",
+    "Implemented float accessors func_80132DC0, func_80132DD0, func_80132DE0, func_80132DF0, func_80132E00, func_80132E10, and func_80132E20 by reading fields from `ft->x2D4_specialAttributes` cast to `ftKoopaAttributes`.",
+    "Implemented action/state setup routines func_80132EFC, func_80132F94, and func_8013302C in C, touching Fighter state variables, throw flags, action IDs 0x15B/0x161/348/349, and callbacks func_8013302C/func_801330E4.",
+    "Added src/melee/ft/chara/ftkoopa.h with `ftKoopaAttributes` and prototypes for func_80132EFC and func_8013302C.",
+    "Extended `Fighter` layout in src/melee/ft/fighter.h with x2200_ftcmd_var0 through x220C_ftcmd_var3, x2210_ThrowFlags, x2222_flag, and x2340_stateVar1 through x2350_stateVar5.",
+    "Added `ThrowFlags`, a bitfield/flags union used for x2210_ThrowFlags.",
+    "Promoted prototypes for func_8006EBA4 and func_8007E2D0 in include/functions.h.",
+    "Added ftkoopa.o entries to e_files.mk and obj_files.mk so the new C object participates in the build while the remaining asm ftkoopa object stays present."
+  ],
+  "smart_moves": [
+    "Used a hybrid translation-unit approach: decompiled the tractable ftKoopa routines to C while preserving exact assembly for unresolved functions, allowing incremental matching without requiring the whole file to be understood at once.",
+    "Introduced a character-specific `ftKoopaAttributes` struct only as far as needed, using named float fields at offsets 0x34 through 0x4C and a byte gap for unknown middle data instead of overclaiming unknown semantics.",
+    "Expanded `Fighter` with offset-anchored fields where the new C code needed symbolic access, avoiding raw pointer arithmetic in the matched functions.",
+    "Kept function pointer references alive by renaming address loads in the remaining asm to C symbol names such as func_80132B38, func_8013302C, and func_801330E4.",
+    "Added missing shared function prototypes only for functions used by the new C code, limiting header churn.",
+    "Recorded that the PR was tested with the short body note \"Tested OK\"."
+  ],
+  "decomp_lessons": [
+    "For large fighter character files, splitting off a new C object while retaining the old asm object can be a practical intermediate step when only a subset of routines is matchable.",
+    "Simple getters from special attributes are good early matching targets because they reveal structure offsets and reduce future raw-offset usage.",
+    "State-variable fields near 0x2340 and ftcmd variables near 0x2200 are shared enough to belong in `Fighter`, not only in character-local code, when multiple routines need typed access.",
+    "Bitfield unions like `ThrowFlags` can match byte/word flag operations while still allowing C code to use semantic bit access such as `ft->x2222_flag.bits.b2 = 1`.",
+    "When converting action setup routines, preserve action IDs, callback pointers, and state-var zeroing order carefully; these details are visible in the diff and likely matching-sensitive.",
+    "If no review discussion exists, future agents should rely on the diff and PR body only; reviewer intent is not evidenced here."
+  ],
+  "naming_conventions": [
+    "`ftKoopa_OnDeath` and `ftKoopa_OnLoad` follow the character lifecycle naming style for known callbacks.",
+    "Unknown ftKoopa functions remained address-based, e.g. `func_80132A64`, `func_80132EFC`, and `func_8013302C`.",
+    "Character-specific attributes were named `ftKoopaAttributes` with unknown fields as `unk34`, `unk38`, `unk3C`, `unk40`, `unk44`, `unk48`, and `unk4C`.",
+    "Fighter fields added in this PR use offset-prefixed names such as `x2200_ftcmd_var0`, `x2210_ThrowFlags`, and `x2340_stateVar1`.",
+    "Unknown flag structs and bitfields use generic names like `ThrowFlags`, `UnkFlagStruct`, and `bits.b2` where exact semantics are not known."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used inline MetroWerks-style `asm void` functions with `nofralloc` to keep exact instruction sequences in a C file.",
+    "Applied `#pragma peephole on` after inline asm functions, a tactic commonly used in this project to control compiler output around hand-written asm blocks.",
+    "Translated short instruction sequences into direct C calls where matching was straightforward, e.g. two calls to func_800704F0 with constant floats.",
+    "Modeled repeated special-attribute float loads as typed C access through `((ftKoopaAttributes*) ft->x2D4_specialAttributes)->field`.",
+    "Preserved remaining assembly labels and function-pointer targets by adding small symbol references in ftkoopa.s to C-side symbols.",
+    "Used explicit function prototypes in include/functions.h for cross-module calls needed by the new C routines."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or submitted reviews were present in the provided PR slice.",
+    "The only human body text was \"Tested OK\"."
+  ],
+  "searchable_terms": [
+    "PR283",
+    "ftKoopa",
+    "Koopa",
+    "Bowser",
+    "Match some ftKoopa functions",
+    "Tri-Wing",
+    "ftKoopa_OnDeath",
+    "ftKoopa_OnLoad",
+    "func_80132A64",
+    "func_80132A84",
+    "func_80132B38",
+    "func_80132D38",
+    "func_80132D7C",
+    "func_80132DC0",
+    "func_80132DD0",
+    "func_80132DE0",
+    "func_80132DF0",
+    "func_80132E00",
+    "func_80132E10",
+    "func_80132E20",
+    "func_80132EFC",
+    "func_80132F94",
+    "func_8013302C",
+    "func_801330E4",
+    "ftKoopaAttributes",
+    "ThrowFlags",
+    "x2200_ftcmd_var0",
+    "x2210_ThrowFlags",
+    "x2222_flag",
+    "x2340_stateVar1",
+    "x2344_stateVar2",
+    "x2348_stateVar3",
+    "x234C_stateVar4",
+    "x2350_stateVar5",
+    "func_8006EBA4",
+    "func_8007E2D0",
+    "inline asm",
+    "nofralloc",
+    "pragma peephole",
+    "Tested OK"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename ftKoopa address-based functions to semantic Bowser move names.",
+    "Search for subsequent changes to `ftKoopaAttributes` to replace `unk34` through `unk4C` with meaningful field names.",
+    "Check later Fighter struct layout revisions around offsets 0x2200, 0x2210, 0x2222, and 0x2340 to see whether these generic state vars were refined.",
+    "Look for PRs that fully convert inline asm functions from this ftkoopa.c split into normal C."
+  ],
+  "confidence": 0.84,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

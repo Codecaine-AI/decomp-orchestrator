@@ -1,0 +1,129 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1003",
+  "pr": {
+    "number": 1003,
+    "title": "Run Linux docker containers as current user",
+    "url": "https://github.com/doldecomp/melee/pull/1003",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-11-11T23:42:46Z",
+    "merged_at": "2023-11-11T23:51:55Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Updated GitHub Docker package workflows so Linux containers run as the host GitHub Actions user/group via `--user \"$(id -u):$(id -g)\"`, with outputs written under `${{ github.workspace }}/output` instead of `/tmp/output`. The Dockerfile was reorganized around a shared `linux-rw` stage for targets needing read/write volumes, and shell entrypoints/setup scripts were tightened to bash with `set -euo pipefail` while removing xtrace. The PR had no body or review comments in the provided slice, so rationale is inferred from the title and diff: avoid root-owned build artifacts and make CI/package outputs writable/uploadable by the runner user.",
+  "change_classification": {
+    "primary_type": "ci-docker-infrastructure",
+    "categories": [
+      "workflow-update",
+      "docker-packaging",
+      "ci-maintenance",
+      "developer-experience"
+    ],
+    "systems": [
+      ".github",
+      "GitHub Actions",
+      "Docker packages",
+      "build-linux",
+      "dump-asm",
+      "gen-pages",
+      "check-issues",
+      "publish-pages",
+      "publish-packages"
+    ]
+  },
+  "key_files": [
+    ".github/README.md",
+    ".github/packages/build-linux/Dockerfile",
+    ".github/packages/build-linux/entrypoint.sh",
+    ".github/packages/check-issues/entrypoint.sh",
+    ".github/packages/check-issues/setup.sh",
+    ".github/packages/dump-asm/entrypoint.sh",
+    ".github/packages/gen-pages/entrypoint.sh",
+    ".github/workflows/build-melee.yml",
+    ".github/workflows/dump-asm.yml",
+    ".github/workflows/publish-packages.yml",
+    ".github/workflows/publish-pages.yml"
+  ],
+  "what_changed": [
+    "Added `--user \"$(id -u):$(id -g)\"` to documented and CI `docker run` invocations so containers run as the current host user instead of root.",
+    "Changed workflow output mounts from hard-coded `/tmp/output` paths to directories created under `${{ github.workspace }}/output`, including separate `generate_map` and `non_matching` output subdirectories in package publishing tests.",
+    "Added `mkdir -p \"$output\"` before mounting output directories into containers, ensuring the host-side mount path exists and has runner-user ownership.",
+    "Reworked `.github/packages/build-linux/Dockerfile` so `linux-base` is followed by a shared `linux-rw` stage with `VOLUME [ \"/input\", \"/output\" ]`, and `build-linux`, `gen-pages`, and `dump-asm` derive from that stage.",
+    "Moved `dadosod` installation so the built binary is copied only into the `dump-asm` target rather than into the shared Linux base image.",
+    "Changed the Rust build stage for `dadosod` from cloning `https://github.com/InusualZ/dadosod.git` to copying local `tools/dadosod` into the image before `cargo build -r`.",
+    "Normalized several package scripts from `#!/bin/sh`/`set -e` or `set -euox pipefail` to `#!/bin/bash` and `set -euo pipefail`, removing xtrace logging while keeping stricter error handling.",
+    "In the shown `build-melee.yml` diff, one docker invocation changed the passed `MAKE_FLAGS` value to `NON_MATCHING=1`; the slice does not provide enough surrounding context to determine whether this was part of the user-id fix or an unrelated correction."
+  ],
+  "smart_moves": [
+    "Using `--user \"$(id -u):$(id -g)\"` directly in every relevant `docker run` call keeps file ownership aligned with the GitHub runner and mirrors the command documented for local users.",
+    "Creating output directories in `${{ github.workspace }}` before mounting avoids root-owned `/tmp` artifacts and makes later workflow steps such as uploads operate on predictable workspace paths.",
+    "Introducing a shared `linux-rw` Docker stage avoids repeating the `/input` and `/output` volume declaration across multiple image targets.",
+    "Keeping `dadosod` only in the `dump-asm` image reduces unnecessary tooling in build and page-generation images.",
+    "Switching setup/entrypoint scripts to bash plus `set -euo pipefail` makes CI shell behavior more consistent and safer when variables are unset or pipeline commands fail.",
+    "Removing `x` from shell options avoids verbose command tracing in CI logs, which can make package logs less noisy."
+  ],
+  "decomp_lessons": [
+    "For decomp CI that generates maps, dumps asm, or builds artifacts inside Docker, run containers as the host CI user to prevent root-owned files from breaking follow-up upload, cleanup, or local developer workflows.",
+    "Prefer output directories inside the GitHub Actions workspace over ad hoc `/tmp` mount points when later steps need to consume generated artifacts.",
+    "When a Docker image has multiple CI targets, factor shared volume and environment setup into an intermediate stage, but keep target-specific tools in the target that needs them.",
+    "Documentation for local Docker use should match CI invocation patterns, especially for user IDs and bind-mounted output directories.",
+    "Entry scripts used by CI packages should use a consistent shell and strict mode so failures are caught early and behavior does not depend on `/bin/sh` implementation details."
+  ],
+  "naming_conventions": [
+    "Intermediate Docker stage name `linux-rw` indicates a Linux base intended for read/write input-output volume workflows.",
+    "Workflow-local output variables are named `output` and point to `${{ github.workspace }}/output` or subdirectories such as `output/generate_map` and `output/non_matching`.",
+    "Existing package target names remain descriptive and task-oriented: `build-linux`, `gen-pages`, `dump-asm`, and `check-issues`.",
+    "Environment names continue to use uppercase CI-style names such as `MAKE_FLAGS`, `SHORT_SHA`, and `TREE_URL`."
+  ],
+  "assembly_or_matching_tactics": [
+    "The PR does not change decompilation logic or matching code directly.",
+    "For assembly dump automation, the `dump-asm` workflow now runs the Docker container as the current user and writes `/output` to a workspace-owned directory, reducing permissions issues for generated asm/readme artifacts.",
+    "The `dump-asm` image keeps `dadosod` as a target-specific dependency, which is useful for future assembly-dump tooling separation.",
+    "Package tests still exercise `GENERATE_MAP=1` and `NON_MATCHING=1` builds, preserving CI coverage for map generation and non-matching build paths while adjusting mount/user behavior."
+  ],
+  "review_feedback": [
+    "No PR body, issue comments, review comments, or review records were present in the provided slice.",
+    "No explicit reviewer rationale or requested changes are available; conclusions are based on the title and diff only."
+  ],
+  "searchable_terms": [
+    "PR1003",
+    "run docker as current user",
+    "docker --user id -u id -g",
+    "GitHub Actions Docker permissions",
+    "root-owned output artifacts",
+    "github workspace output",
+    "/tmp/output",
+    "build-linux Dockerfile",
+    "linux-rw",
+    "dump-asm",
+    "gen-pages",
+    "check-issues",
+    "publish-packages.yml",
+    "publish-pages.yml",
+    "build-melee.yml",
+    "dump-asm.yml",
+    "MAKE_FLAGS",
+    "GENERATE_MAP",
+    "NON_MATCHING",
+    "dadosod",
+    "tools/dadosod",
+    "set -euo pipefail",
+    "entrypoint.sh"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that mention root-owned Docker artifacts or GitHub Actions output permissions.",
+    "Check whether the `MAKE_FLAGS=\"NON_MATCHING=1\"` change in `build-melee.yml` was intentional or adjusted in a later PR.",
+    "Search for later Dockerfile changes to `linux-rw`, `dadosod`, or `tools/dadosod` to see whether this staging pattern persisted.",
+    "Look for CI failures around upload-artifact or generated pages after PR 1003 to validate the permissions fix."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

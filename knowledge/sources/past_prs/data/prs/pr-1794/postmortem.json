@@ -1,0 +1,143 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1794",
+  "pr": {
+    "number": 1794,
+    "title": "Split out gamemode-specific files from gm_1B03",
+    "url": "https://github.com/doldecomp/melee/pull/1794",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-08-05T06:07:52Z",
+    "merged_at": "2025-08-05T06:31:59Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Split a large gm_1B03 translation unit into address-range-based, gamemode-specific source files and headers. The new files cover special melee modes such as Super Sudden Death, Tiny, Giant, Stamina, Home-Run, Fixed Camera, Single Button, Invisible, Slow-Mo, Lightning, plus a later gm_1BA8 range. Build configuration and GALE01 splits were updated so the moved code is linked as separate objects. The decomp.dev report showed this was mostly a relocation of existing matches: 168 new matches in the new units and 168 broken matches in the old gm_1B03 unit, with linked code increasing by 4096 bytes (+0.11%).",
+  "change_classification": {
+    "primary_type": "source_split_refactor",
+    "categories": [
+      "decomp-matching",
+      "translation-unit-split",
+      "headers",
+      "build-config",
+      "splits-config",
+      "formatting-config"
+    ],
+    "systems": [
+      "game-mode",
+      "gm",
+      "config/GALE01",
+      "build-system",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "src/melee/gm/gm_1B03.c",
+    "src/melee/gm/gm_1B03.h",
+    "src/melee/gm/gm_1BA8.c",
+    "src/melee/gm/gm_1BA8.h",
+    "src/melee/gm/gmsupersudden.c",
+    "src/melee/gm/gmtiny.c",
+    "src/melee/gm/gmgiant.c",
+    "src/melee/gm/gmstamina.c",
+    "src/melee/gm/gmhomerun.c",
+    "src/melee/gm/gmfixedcamera.c",
+    "src/melee/gm/gmsinglebutton.c",
+    "src/melee/gm/gminvisible.c",
+    "src/melee/gm/gmslomo.c",
+    "src/melee/gm/gmlightning.c",
+    "src/melee/gm/gmscextern.h",
+    "src/melee/gm/gm_unsplit.h",
+    "src/melee/gm/gmscdata.c",
+    "config/GALE01/splits.txt",
+    "configure.py",
+    ".clang-format"
+  ],
+  "what_changed": [
+    "Shortened src/melee/gm/gm_1B03.c by moving about 1260 lines of later gamemode-specific code out of it while keeping the earlier gm_1B03 range in place.",
+    "Added new source files for individual special melee modes: gmsupersudden.c, gmtiny.c, gmgiant.c, gmstamina.c, gmhomerun.c, gmfixedcamera.c, gmsinglebutton.c, gminvisible.c, gmslomo.c, and gmlightning.c.",
+    "Added a new gm_1BA8.c/gm_1BA8.h pair for the remaining 0x801BA8FC-0x801BF948 range that was formerly part of gm_1B03.c.",
+    "Updated config/GALE01/splits.txt so gm_1B03.c now ends at 0x801B8BB4 and the newly created files own consecutive .text/.data/.bss/.sdata/.sbss/.sdata2 address ranges through 0x801BF948.",
+    "Updated configure.py to add each new gm object to the build with per-object matching status: several new mode files are marked Matching, while gmstamina.c, gmhomerun.c, and gm_1BA8.c are marked NonMatching.",
+    "Removed a large set of declarations from gm_1B03.h and introduced per-file headers for the split units, including gm_1BA8.h and small headers for each gamemode file.",
+    "Added gmscextern.h and adjusted gmscdata.c/gm_unsplit.h, apparently to centralize or expose declarations needed after the split.",
+    "Adjusted .clang-format by removing SortPriority: -1 from the static-header include category, which affects ordering around includes like gm_1B03.static.h."
+  ],
+  "smart_moves": [
+    "The split follows exact contiguous linker address ranges from splits.txt, making each new C file correspond to a real object-sized slice rather than an arbitrary source organization choice.",
+    "The PR updated both splits.txt and configure.py together, avoiding the common failure mode where code is moved but the build/link map still treats it as part of the old unit.",
+    "The new files use descriptive gamemode filenames for repeated special-melee patterns while leaving the still-address-named gm_1BA8.c for a less semantically named remaining range.",
+    "Per-object Matching/NonMatching annotations were preserved rather than assuming every moved function became matching. This lets the progress tracker distinguish successful object splits from still-unmatched functions.",
+    "Keeping moved functions at their original address-derived symbol names, with comments like /// #gm_801BA938 for unsolved functions, preserved searchability and decomp tracking across the split.",
+    "The decomp.dev report was effectively neutral at the function level: 168 matches moved out of gm_1B03 into new units and 168 disappeared from gm_1B03, confirming the split rather than a broad semantic rewrite."
+  ],
+  "decomp_lessons": [
+    "When splitting a large decomp unit, update linker splits and build object lists in the same PR as the source movement.",
+    "A clean object split can produce matching-report churn that looks like equal numbers of new and broken matches; interpret it as relocation if the broken unit is the old source and the new units cover the same functions.",
+    "Use semantically meaningful filenames where the gamemode is known, but keep address-range names like gm_1BA8 when the remaining code is not yet confidently named.",
+    "After a source split, shared statics, externs, and generated/static headers often need a header cleanup pass; do not leave all declarations in the old monolithic header.",
+    "Preserve address comments and address-derived symbol names during mechanical splits so future decomp work can grep old function names and correlate them to linker ranges."
+  ],
+  "naming_conventions": [
+    "Gamemode-specific files use lower-case gm-prefixed semantic names: gmsupersudden, gmtiny, gmgiant, gmstamina, gmhomerun, gmfixedcamera, gmsinglebutton, gminvisible, gmslomo, and gmlightning.",
+    "Unknown or broad address-range files retain the gm_1B03/gm_1BA8 style.",
+    "Lifecycle callbacks keep suffixes such as _OnInit, _OnLoad, and _OnUnload.",
+    "Unresolved functions remain documented with /// #gm_801xxxxx comments.",
+    "Local helper callbacks continue to use fn_801xxxxx names when no semantic name is established."
+  ],
+  "assembly_or_matching_tactics": [
+    "Split by exact object boundaries in config/GALE01/splits.txt: gm_1B03.c was truncated to 0x801B0348-0x801B8BB4 and subsequent files cover consecutive ranges through gm_1BA8.c ending at 0x801BF948.",
+    "Registered each new object in configure.py with an explicit Matching or NonMatching status to keep build output and progress accounting accurate.",
+    "Retained nonmatching pragmas and matching-sensitive constructs in moved code, including examples such as #pragma dont_inline on and M2C_FIELD uses in gm_1BA8.c.",
+    "Adjusted include ordering and .clang-format static-header handling around gm_1B03.static.h, indicating that include order can matter for split-file formatting and IWYU behavior.",
+    "Used per-file headers with forward includes and placeholder types where signatures were still incomplete, allowing the split to compile without prematurely resolving every type."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided slice.",
+    "decomp-dev[bot] reported GALE01 linked code at 25.32%, an increase of +0.11% / +4096 bytes.",
+    "decomp-dev[bot] reported 168 new matches in the new units and 168 broken matches in main/melee/gm/gm_1B03, consistent with moving matched functions to newly split files."
+  ],
+  "searchable_terms": [
+    "gm_1B03",
+    "gm_1BA8",
+    "gamemode split",
+    "game mode split",
+    "gmsupersudden",
+    "gmtiny",
+    "gmgiant",
+    "gmstamina",
+    "gmhomerun",
+    "gmfixedcamera",
+    "gmsinglebutton",
+    "gminvisible",
+    "gmslomo",
+    "gmlightning",
+    "gmscextern",
+    "gmscdata",
+    "gm_unsplit",
+    "config/GALE01/splits.txt",
+    "configure.py MatchingFor",
+    "Object(Matching)",
+    "Object(NonMatching)",
+    "gm_801B8BB4",
+    "gm_801BA8FC",
+    "gm_801BF948",
+    "168 new matches",
+    "168 broken matches",
+    "linked code +4096 bytes"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that convert gmstamina.c, gmhomerun.c, or gm_1BA8.c from NonMatching to Matching.",
+    "Search for additional splits of gm_1B03, gm_1BA8, or other monolithic gm files.",
+    "Inspect gmscextern.h and gm_unsplit.h follow-ups to see whether shared extern declarations were later renamed or replaced with typed headers.",
+    "Look for PRs that give semantic names to functions still left as /// #gm_801xxxxx in gm_1BA8.c."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}
