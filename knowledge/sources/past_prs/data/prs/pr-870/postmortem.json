@@ -1,0 +1,151 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-870",
+  "pr": {
+    "number": 870,
+    "title": "Partially match `ftCo_DownWait`",
+    "url": "https://github.com/doldecomp/melee/pull/870",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-27T01:38:42Z",
+    "merged_at": "2023-05-27T01:46:06Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Moved the DownWait portion of ftCommon down-bound/down-wait logic out of asm/melee/ft/ft_08A4.s and into src/melee/ft/chara/ftCommon/ftCo_DownBound.c, adding C implementations and prototypes for ftCo_80097E8C, ftCo_80097F38, ftCo_DownWait_Anim, ftCo_DownWait_IASA, ftCo_DownWait_Phys, and ftCo_DownWait_Coll. The PR partially matched the group: the report shows ftCo_80097E8C and all DownWait callbacks at 100%, while ftCo_80097F38 remained at 96.03%. It also improved supporting types by adding a downwait motion-var field at fp+2340, exposing ftCommonData->x424, tightening several prototypes, and switching some functions from HSD_GObj* to ftCo_GObj*.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "type-annotation",
+      "fighter-action-logic"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "DownBound",
+      "DownWait",
+      "asm",
+      "headers"
+    ]
+  },
+  "key_files": [
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/chara/ftCommon/ftCo_DownBound.c",
+    "src/melee/ft/chara/ftCommon/ftCo_DownBound.h",
+    "src/melee/ft/chara/ftCommon/types.h",
+    "src/melee/ft/ft_08A4.h",
+    "src/melee/ft/types.h"
+  ],
+  "what_changed": [
+    "Removed 169 lines of standalone assembly for ftCo_80097E8C, ftCo_80097F38, ftCo_DownWait_Anim, ftCo_DownWait_IASA, ftCo_DownWait_Phys, and ftCo_DownWait_Coll from asm/melee/ft/ft_08A4.s.",
+    "Added C-side DownWait implementations in ftCo_DownBound.c, with inline asm fallback blocks under defined(MUST_MATCH) && !defined(WIP) for the functions that still needed exact preservation in normal matching builds.",
+    "Implemented ftCo_80097E8C as a transition into DownWait: it checks GA_Air to call ftCommon_8007D7FC, selects ftCo_MS_DownWaitU versus ftCo_MS_DownWaitD based on current motion, initializes fp->mv.co.downwait.x0 from p_ftCommonData->x424, calls Fighter_ChangeMotionState with skip/keep flags, then calls ftAnim_8006EBA4 and ftCommon_8007E2F4.",
+    "Implemented ftCo_80097F38 as a DownDamage-to-DownWait transition using ftCo_MS_DownDamageU to choose ftCo_MS_DownWaitU versus ftCo_MS_DownWaitD, followed by animation setup and ftCommon_8007E2F4.",
+    "Implemented ftCo_DownWait_Anim as a timer countdown using fp->mv.co.downwait.x0, gated by !fp->x2224_flag.bits.b2, and transitioning through ftCo_80098160 to ftCo_MS_DownStandU or ftCo_MS_DownStandD when the timer reaches zero.",
+    "Implemented ftCo_DownWait_IASA with sequential RETURN_IF checks for ftCo_800984D4, ftCo_80098214, and ftCo_800980BC.",
+    "Implemented ftCo_DownWait_Phys as a thin wrapper around ft_80084F3C and ftCo_DownWait_Coll as a thin wrapper around ft_80083F88.",
+    "Added ftCommon_MotionVars.downwait with a float at fp+2340, matching the assembly access to offset 0x2340.",
+    "Split ftCommonData padding around +0x420 and identified +0x424 as float x424, used as the DownWait timer source.",
+    "Updated header prototypes: ftCo_800980BC and ftCo_800984D4 became bool ftCo_GObj* functions, ftCo_80098160 became void ftCo_80098160(ftCo_GObj*, FtMotionId), and DownWait prototypes were added to ftCo_DownBound.h.",
+    "Changed nearby ftCo_DownBound.c function signatures from HSD_GObj* to ftCo_GObj* for ftCo_800976A4, ftCo_8009794C, and ftCo_80097AF4."
+  ],
+  "smart_moves": [
+    "Used the existing motion-id naming to replace raw motion constants: DownBoundU/DownSpotU map to DownWaitU, other cases map to DownWaitD; DownWaitU maps to DownStandU in the timer expiry path, otherwise DownStandD.",
+    "Recovered a shared motion variable rather than leaving raw fp+2340 accesses: fp->mv.co.downwait.x0 documents the timer-like value used by DownWait_Anim.",
+    "Recovered p_ftCommonData->x424 as the source for the DownWait timer initialization, replacing an opaque load from +0x424 in the assembly.",
+    "Kept exact inline assembly under MUST_MATCH for the harder or build-sensitive pieces while still landing readable C under the alternate path, allowing incremental progress despite ftCo_80097F38 not fully matching.",
+    "Converted simple callbacks to idiomatic wrappers, making Phys and Coll trivial and searchable while preserving their original call targets.",
+    "Tightened prototypes in ft_08A4.h, which reduces UNK_RET/UNK_PARAMS leakage and supports future callers with correct return types and FtMotionId arguments."
+  ],
+  "decomp_lessons": [
+    "When a fighter action uses fp+2340, check the ftCommon_MotionVars union before inventing a global or local; this PR models that slot as mv.co.downwait.x0.",
+    "DownWait action state is controlled by a countdown initialized from ftCommonData +0x424, decremented unless x2224_flag.bits.b2 is set, then transitions to DownStandU/DownStandD.",
+    "For action transitions, compare current motion IDs to choose U/D variants instead of preserving raw numeric constants; this made the C much clearer and mapped directly to the assembly branches.",
+    "RETURN_IF chains are a concise match-friendly pattern for IASA routines that call several bool helpers in order and stop on the first handled input.",
+    "Thin Phys/Coll callbacks often just delegate to shared fighter helpers; here DownWait_Phys delegates to ft_80084F3C and DownWait_Coll delegates to ft_80083F88.",
+    "Tightening GObj typedefs from HSD_GObj* to ftCo_GObj* can unlock cleaner user_data access and more accurate headers without changing behavior.",
+    "Partial PRs can still be valuable if most functions become C and the remaining mismatch is isolated with MUST_MATCH assembly."
+  ],
+  "naming_conventions": [
+    "Use ftCo_DownWait_Anim, ftCo_DownWait_IASA, ftCo_DownWait_Phys, and ftCo_DownWait_Coll for common fighter action callbacks.",
+    "Use ftCo_GObj* for common fighter GObj parameters where the function accesses ftCo_Fighter data through gobj->user_data.",
+    "Use ftCo_Fighter* fp for fighter user_data variables.",
+    "Use FtMotionId msid for local motion-state choices.",
+    "Use ftCo_MS_* enum names for common motion IDs such as ftCo_MS_DownWaitU, ftCo_MS_DownWaitD, ftCo_MS_DownStandU, and ftCo_MS_DownStandD.",
+    "Unknown but structurally placed common data fields can remain xNNN names, as with ftCommonData.x424, while still being typed as float when proven by loads/stores.",
+    "Motion-variable union members should describe the action namespace when known, as with mv.co.downwait.x0."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed standalone assembly from asm/melee/ft/ft_08A4.s and colocated the decompiled functions in the relevant ftCommon C file.",
+    "Used #if defined(MUST_MATCH) && !defined(WIP) inline asm blocks with nofralloc for functions that still needed exact assembly preservation.",
+    "Used C alternatives beneath the asm guards so matching reports could evaluate readable decompiled logic while preserving exact output in strict builds.",
+    "Replaced raw floating constants from sdata loads with NULL, 0, 1 arguments to Fighter_ChangeMotionState where the C semantics were understood.",
+    "Preserved the original motion-state flags as a named OR combination: Ft_MF_SkipModel | Ft_MF_SkipMatAnim | Ft_MF_SkipNametagVis | Ft_MF_KeepColAnimPartHitStatus.",
+    "The report evidence shows ftCo_80097E8C, ftCo_DownWait_Anim, ftCo_DownWait_IASA, ftCo_DownWait_Phys, and ftCo_DownWait_Coll at 100%, while ftCo_80097F38 remained slightly mismatched at 96.03%."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "There is no explicit reviewer rationale in the available evidence; conclusions are based on the title, changed files, diff, and matching report."
+  ],
+  "searchable_terms": [
+    "pr-870",
+    "ftCo_DownWait",
+    "ftCo_DownBound",
+    "ftCo_80097E8C",
+    "ftCo_80097F38",
+    "ftCo_DownWait_Anim",
+    "ftCo_DownWait_IASA",
+    "ftCo_DownWait_Phys",
+    "ftCo_DownWait_Coll",
+    "ftCo_80098160",
+    "ftCo_800984D4",
+    "ftCo_80098214",
+    "ftCo_800980BC",
+    "ft_80084F3C",
+    "ft_80083F88",
+    "Fighter_ChangeMotionState",
+    "ftAnim_8006EBA4",
+    "ftCommon_8007E2F4",
+    "ftCommon_8007D7FC",
+    "p_ftCommonData",
+    "ftCommonData x424",
+    "mv.co.downwait.x0",
+    "fp+2340",
+    "x2224_flag.bits.b2",
+    "ftCo_MS_DownWaitU",
+    "ftCo_MS_DownWaitD",
+    "ftCo_MS_DownStandU",
+    "ftCo_MS_DownStandD",
+    "ftCo_MS_DownBoundU",
+    "ftCo_MS_DownSpotU",
+    "ftCo_MS_DownDamageU",
+    "Ft_MF_SkipModel",
+    "Ft_MF_SkipMatAnim",
+    "Ft_MF_SkipNametagVis",
+    "Ft_MF_KeepColAnimPartHitStatus",
+    "RETURN_IF",
+    "MUST_MATCH",
+    "WIP",
+    "ft_08A4.s",
+    "ft_08A4.h",
+    "ribbanya"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match ftCo_80097F38 after this 96.03% partial match.",
+    "Search for other users of ftCommonData.x424 to determine the semantic name of the DownWait timer constant.",
+    "Search for mv.co.downwait.x0 or fp+2340 in later ftCommon work to see if the field was renamed from x0.",
+    "Inspect later changes to ftCo_80098160, ftCo_800980BC, ftCo_80098214, and ftCo_800984D4 for prototype stabilization and naming improvements.",
+    "Search for additional HSD_GObj* to ftCo_GObj* conversions in ftCommon action files."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

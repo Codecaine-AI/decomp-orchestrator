@@ -1,0 +1,189 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-655",
+  "pr": {
+    "number": 655,
+    "title": "Fix `implicit-function-declaration` warnings, pass 5",
+    "url": "https://github.com/doldecomp/melee/pull/655",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-09T20:32:50Z",
+    "merged_at": "2023-01-10T17:19:28Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large cleanup pass to eliminate implicit-function-declaration warnings across fighter character code, especially finishing `ft/chara`. The PR replaced many local `extern` declarations with real header prototypes/includes, tightened internal linkage with `static`/`static inline`, moved shared collision/hurtbox types out of `fighter.h`, added missing baselib/MetroTRK/camera prototypes, and made some matching-sensitive fixes around Zelda reflector attributes and MUST_MATCH pragmas.",
+  "change_classification": {
+    "primary_type": "warning-cleanup-and-header-prototype-fix",
+    "categories": [
+      "cleanup",
+      "fix",
+      "headers",
+      "decomp-matching",
+      "naming",
+      "types-structs"
+    ],
+    "systems": [
+      "fighter",
+      "ft/chara",
+      "item",
+      "library",
+      "include/sysdolphin/baselib",
+      "MetroTRK",
+      "camera",
+      "docs"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftNess/ftNess_SpecialN.c",
+    "src/melee/ft/chara/ftNess/ftNess_AttackLw4.c",
+    "src/melee/ft/chara/ftYoshi/ftyoshi.c",
+    "src/melee/ft/chara/ftZelda/ftzelda3.c",
+    "src/melee/ft/chara/ftPikachu/ftpikachu3.c",
+    "src/melee/ft/ft_unknown_006.h",
+    "src/melee/it/code_8027CF30.h",
+    "src/melee/lb/lbcollision.h",
+    "src/melee/ft/fighter.h",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/ftparts.h",
+    "include/sysdolphin/baselib/jobj.h",
+    "include/sysdolphin/baselib/gobjobject.h",
+    "src/MetroTRK/intrinsics.h",
+    "src/melee/cm/camera.h",
+    "docs/glossary.md"
+  ],
+  "what_changed": [
+    "Removed many file-local `extern` function declarations from fighter character source files and replaced them with proper header includes/prototypes.",
+    "Added or expanded headers for functions used across fighter and item code, including `ft_unknown_006.h`, `code_8027CF30.h`, `code_80081B38.h`, `code_8007C114.h`, `code_8007C630.h`, `ftparts.h`, `ftcoll.h`, Samus subheaders, and other character headers.",
+    "Converted several helper functions that are only used in one translation unit to `static` or `static inline`, for example Fox special/appeal helpers and Game & Watch aerial action helpers.",
+    "Moved the `ftHurt` structure out of `fighter.h` into `lbcollision.h`, with review noting the move was pending a later rename.",
+    "Adjusted `jobj.h` dependencies by removing its include of `melee/lb/lbcollision.h`, adding prototypes such as `HSD_JObjDispAll`, and documenting that `HSD_JObjUnkMtxPtr` is misplaced because `jobj.h` should not include `lbcollision`.",
+    "Added missing prototypes such as `sqrtf__Ff` in `src/MetroTRK/intrinsics.h` and `func_80030E44(s32, Vec3*)` in `src/melee/cm/camera.h`.",
+    "Updated Zelda special-N/reflector code around `ftZeldaAttributes::x84`; review discussed changing it from `ReflectDesc*` to `ReflectDesc` and passing `&attributes->x84` to `ftColl_CreateReflectHit` to preserve functional equivalence and matching.",
+    "Some Zelda functions were temporarily reverted or gated with `#ifdef MUST_MATCH` assembly after correcting the `ftZeldaAttributes::x84` type caused matching complications.",
+    "Wrapped a Fox reflector `#pragma dont_inline` workaround with `#ifdef MUST_MATCH`, noting the pragma was fake/probably due to inline depth.",
+    "Deleted an accidental backup file `src/melee/ft/ftparts.h.orig`.",
+    "Added glossary entries for `chan` as channel and `id` as identifier, not an acronym.",
+    "Removed an extra blank line in the Makefile; no functional build-system change is evident from the excerpt."
+  ],
+  "smart_moves": [
+    "Centralized declarations in headers instead of suppressing warnings with scattered `extern` declarations, improving type checking across translation units.",
+    "Used includes for the subsystem that owns each declaration, such as item creation/removal functions in `code_8027CF30.h` and fighter utility declarations in fighter headers.",
+    "Reduced exported symbol surface by marking local-only helpers `static`/`static inline` rather than leaving them as globally visible functions or public header declarations.",
+    "Kept matching-sensitive compiler-control pragmas behind `#ifdef MUST_MATCH`, so nonmatching builds are less polluted by hacks while matching builds can preserve codegen.",
+    "Identified that Zelda reflector matching was caused by an attribute type/layout issue rather than just an expression syntax issue, preventing a non-functionally-equivalent decomp from being accepted.",
+    "Removed `jobj.h`'s dependency on `lbcollision.h`, which is a cleaner dependency direction for baselib headers and avoids broad include coupling.",
+    "Explicitly documented known header-placement debt with a `@todo` instead of hiding an uncertain declaration location.",
+    "Cleaned an accidental `.orig` file from the tree as part of the warning cleanup."
+  ],
+  "decomp_lessons": [
+    "Fixing implicit declaration warnings should usually mean finding or creating the correct owning header, not adding local `extern` declarations in every `.c` file.",
+    "When a helper is not shared outside its source file, prefer `static` or `static inline`; this both documents linkage intent and avoids leaking prototypes into character headers.",
+    "Header dependency direction matters: low-level baselib headers such as `jobj.h` should not include gameplay collision headers just to make one prototype compile.",
+    "Struct field type corrections can affect both code matching and data-section matching; Zelda `ftZeldaAttributes::x84` showed that changing `ReflectDesc*` to `ReflectDesc` also required removing later members from `x88` onward to avoid data-section mismatch.",
+    "Pointer arithmetic on raw integers, such as treating `x2D4_specialAttributes` as `u32` and adding `0x84`, is a smell; correct struct typing plus `&attributes->x84` is safer and more decomp-faithful when the layout evidence supports it.",
+    "Assembly fallbacks under `#ifdef MUST_MATCH` are acceptable temporary bridges when a type/layout fix regresses function matching, but comments should flag that the function can likely be rematched later.",
+    "Do not add empty `return;` statements to `void` stubs just for style; review expected clang-tidy `readability-redundant-control-flow` to catch them.",
+    "clang-format can support compact empty functions with `AllowShortFunctionsOnASingleLine: Empty`, which helps avoid adding redundant control flow to make empty stubs look intentional."
+  ],
+  "naming_conventions": [
+    "`chan` is documented as short for `channel`.",
+    "`id` is documented as short for `identifier` and explicitly not an acronym.",
+    "`ft` remains documented as short for `fighter`.",
+    "Character helper names kept the existing subsystem prefix style, e.g. `ftFox_`, `ftGameWatch_`, `ftPikachu_`, `ftZelda_`, and anonymous-address names like `func_800...` where symbols were still unknown.",
+    "Comments identify shared character behavior with paired names such as `Fox & Falco's Special Taunt` and `Fox & Falco's Reflector`.",
+    "The review notes `ftHurt` was moved to `lbcollision.h` pending a future rename, so the current name/location was not considered final."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `#ifdef MUST_MATCH` around inline assembly or pragma workarounds so exact-matching builds can preserve codegen without forcing the same hacks into all build modes.",
+    "Reverted a few `ftZelda/ftzelda3.c` functions after correcting `ftZeldaAttributes::x84`, with a note that they were probably not hard to rematch.",
+    "A Fox reflector helper used `#pragma dont_inline on` as a temporary/fake inline-depth workaround, then guarded the pragma with `#ifdef MUST_MATCH` and `#pragma pop`.",
+    "A temporary cast in `fighter.c` changed `func_80016C64(\"PlCo.dat\", &pData, ...)` to cast `&pData` to `unk_t`; the author called it a temporary hack because `fighter.c` was next up.",
+    "Review feedback emphasized matching and functional equivalence together: `ftColl_CreateReflectHit(fighter_gobj, &attributes->x84, ...)` plus the correct `ReflectDesc` field type was needed rather than only making code compile."
+  ],
+  "review_feedback": [
+    {
+      "file": "src/melee/ft/chara/ftZelda/ftzelda3.c",
+      "author": "ribbanya",
+      "feedback": "Needed to revert a few functions after correcting `ftZeldaAttributes::x84`; author thought the functions were probably not hard to match later."
+    },
+    {
+      "file": "src/melee/ft/fighter.c",
+      "author": "ribbanya",
+      "feedback": "The cast to `unk_t` for `func_80016C64` was called a temporary hack because `fighter.c` was next up."
+    },
+    {
+      "file": "src/melee/ft/fighter.h",
+      "author": "ribbanya",
+      "feedback": "`ftHurt` was moved to `lbcollision.h`, pending a rename."
+    },
+    {
+      "file": "src/melee/ft/chara/ftPikachu/ftpikachu3.c",
+      "author": "r-burns",
+      "feedback": "Requested removal of empty `return;` statements; clang-tidy `readability-redundant-control-flow` should check this."
+    },
+    {
+      "file": "src/melee/ft/chara/ftPikachu/ftpikachu3.c",
+      "author": "r-burns",
+      "feedback": "Noted clang-format option `AllowShortFunctionsOnASingleLine: Empty` for formatting empty functions compactly."
+    },
+    {
+      "file": "src/melee/ft/chara/ftZelda/ftzelda3.c",
+      "author": "r-burns",
+      "feedback": "Suggested `ftColl_CreateReflectHit(fighter_gobj, &attributes->x84, ...)` and changing `ftZeldaAttributes.x84` from `ReflectDesc*` to `ReflectDesc` to fix matching and preserve functional equivalence."
+    },
+    {
+      "file": "src/melee/ft/chara/ftZelda/ftzelda3.c",
+      "author": "r-burns",
+      "feedback": "When the type flip caused a `stage.c` data-section mismatch, advised removing the other members from `x88` onward."
+    }
+  ],
+  "searchable_terms": [
+    "implicit-function-declaration",
+    "extern removal",
+    "header prototypes",
+    "ft/chara finished",
+    "ft_unknown_006.h",
+    "code_8027CF30.h",
+    "lbcollision.h",
+    "ftHurt",
+    "fighter.h",
+    "jobj.h must not include lbcollision",
+    "HSD_JObjDispAll",
+    "HSD_JObjUnkMtxPtr",
+    "sqrtf__Ff",
+    "func_80030E44",
+    "ftZeldaAttributes x84",
+    "ReflectDesc",
+    "ftColl_CreateReflectHit",
+    "stage.c data section mismatch",
+    "MUST_MATCH",
+    "pragma dont_inline",
+    "inline depth",
+    "unk_t cast",
+    "func_80016C64",
+    "PlCo.dat",
+    "readability-redundant-control-flow",
+    "AllowShortFunctionsOnASingleLine Empty",
+    "ftPikachu_Stub_80124FDC",
+    "ftFox_SpecialLw_Turn",
+    "ftFox_AppealS_OnTakeDamage",
+    "ftGameWatch_AttackAirB_Action",
+    "ftparts.h.orig"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or relocate `ftHurt` after it was moved to `lbcollision.h`.",
+    "Find later work that rematches the reverted `ftZelda/ftzelda3.c` functions after the `ftZeldaAttributes::x84` correction.",
+    "Find whether `fighter.c` temporary `unk_t` cast around `func_80016C64` was removed in the next fighter cleanup.",
+    "Find clang-format or clang-tidy configuration changes adding `AllowShortFunctionsOnASingleLine: Empty` or `readability-redundant-control-flow`.",
+    "Audit remaining local `extern` declarations in `ft/chara` after PR 655."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

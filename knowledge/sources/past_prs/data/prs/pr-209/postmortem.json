@@ -1,0 +1,142 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-209",
+  "pr": {
+    "number": 209,
+    "title": "Match part of DSP",
+    "url": "https://github.com/doldecomp/melee/pull/209",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-20T02:01:37Z",
+    "merged_at": "2021-12-20T02:01:42Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Partially decompiled Dolphin DSP support by adding src/dolphin/dsp/dsp.c and dsp.h, moving several small DSP mail/init helpers out of assembly, wiring the new C object into obj_files.mk, and replacing anonymous func_/lbl_ references across DSP, AX, and CARD assembly with SDK-style DSP names. The PR also added basic integer pointer/size typedefs needed for hardware-register access and introduced a volatile mapped __DSPRegs array plus HW_REG macro. Evidence is limited to title and diff; there were no PR body notes or review comments.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-renaming",
+      "hardware-register-access",
+      "build-system"
+    ],
+    "systems": [
+      "dolphin-dsp",
+      "dolphin-ax",
+      "dolphin-card",
+      "include",
+      "asm",
+      "src",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "src/dolphin/dsp/dsp.c",
+    "src/dolphin/dsp/dsp.h",
+    "asm/dolphin/dsp/dsp.s",
+    "asm/dolphin/dsp/dsp_task.s",
+    "asm/dolphin/ax/AX.s",
+    "asm/dolphin/card/CARD.s",
+    "include/functions.h",
+    "include/variables.h",
+    "include/dolphin/types.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Added src/dolphin/dsp/dsp.c with C implementations for DSPCheckMailToDSP, DSPCheckMailFromDSP, DSPReadMailFromDSP, DSPSendMailToDSP, and DSPCheckInit.",
+    "Added DSPInit in dsp.c with a C version guarded under NON_MATCHING and an inline asm fallback for the matching implementation; the comment says it is non-matching due to externs and links a decomp.me scratch.",
+    "Added src/dolphin/dsp/dsp.h declaring the DSP mail/init APIs, defining HW_REG(reg, type), and mapping volatile u16 __DSPRegs[] to address 0xCC005000.",
+    "Updated obj_files.mk to build $(BUILD_DIR)/src/dolphin/dsp/dsp.o before the remaining DSP assembly objects.",
+    "Removed the now-decompiled helper routines from asm/dolphin/dsp/dsp.s while keeping and renaming remaining assembly routines such as DSPAddTask and DSPAssertTask.",
+    "Renamed cross-file assembly calls from anonymous func_ symbols to SDK-style DSP names in AX.s, CARD.s, dsp.s, and dsp_task.s, including DSPSendMailToDSP, DSPInit, DSPAddTask, DSPAssertTask, DSPCheckMailFromDSP, and DSPReadMailFromDSP.",
+    "Renamed several DSP sbss labels in assembly/commented variable declarations from lbl_804D72xx names to semantic globals such as __DSP_init_flag, __DSP_rude_task_pending, __DSP_rude_task, __DSP_tmp_task, __DSP_last_task, __DSP_first_task, and __DSP_curr_task.",
+    "Added intptr_t, uintptr_t, and size_t typedefs to include/dolphin/types.h.",
+    "Changed include/functions.h prototypes/comments to use named DSP functions and added concrete prototypes for __DSP_debug_printf, OSDisableInterrupts, OSRestoreInterrupts, __OSSetInterruptHandler, and __OSUnmaskInterrupts."
+  ],
+  "smart_moves": [
+    "Matched the simplest hardware-mailbox accessors in C first, using volatile 16-bit register reads/writes to preserve direct MMIO behavior.",
+    "Kept DSPInit buildable and matching by placing the intended C version under NON_MATCHING while retaining the exact inline assembly body as the active implementation.",
+    "Propagated new DSP symbol names into dependent AX and CARD assembly call sites, improving global searchability without requiring those modules to be decompiled first.",
+    "Introduced semantic names for DSP task scheduler globals, making later work in dsp_task.s easier to reason about.",
+    "Added the C object without removing still-unmatched assembly objects, enabling incremental decompilation of the DSP subsystem."
+  ],
+  "decomp_lessons": [
+    "For hardware subsystems, start by matching small MMIO accessors and provide a header with explicit volatile register mapping before tackling larger scheduler/interrupt routines.",
+    "When a function is logically understood but does not match because of externs or other compiler-sensitive details, a NON_MATCHING C implementation plus exact asm fallback documents intent while preserving the build.",
+    "Rename all known call sites after identifying SDK functions; even assembly-only neighbors become more readable and future matching efforts get better anchors.",
+    "Semantic sbss/global names are especially valuable in interrupt/task code because they clarify state transitions without changing codegen.",
+    "Adding uintptr_t/intptr_t/size_t typedef support can be necessary before introducing pointer-to-address MMIO macros in decompiled Dolphin code."
+  ],
+  "naming_conventions": [
+    "Dolphin DSP public-style functions use DSP-prefixed CamelCase names: DSPCheckMailToDSP, DSPCheckMailFromDSP, DSPReadMailFromDSP, DSPSendMailToDSP, DSPInit, DSPCheckInit, DSPAddTask, DSPAssertTask.",
+    "Internal DSP globals use a double-underscore __DSP_ prefix with descriptive snake_case suffixes: __DSP_init_flag, __DSP_curr_task, __DSP_first_task, __DSP_last_task, __DSP_tmp_task, __DSP_rude_task, __DSP_rude_task_pending.",
+    "The DSP interrupt handler keeps the double-underscore internal name __DSPHandler.",
+    "The hardware register mapping symbol is named __DSPRegs and is declared volatile."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced anonymous branch targets/calls in assembly with resolved symbol names while preserving instruction bytes and addresses.",
+    "Used inline asm for DSPInit to keep a matching active function while preserving a nearby C draft for future cleanup.",
+    "Used a volatile halfword register array at 0xCC005000 and direct high/low halfword operations to model DSP mailbox registers.",
+    "DSPCheckMailToDSP and DSPCheckMailFromDSP match the mailbox-ready bit extraction by reading 0xCC005000 or 0xCC005004 and shifting/masking bit 15.",
+    "DSPReadMailFromDSP combines two 16-bit DSP registers into a 32-bit mail value with (__DSPRegs[2] << 16) | __DSPRegs[3].",
+    "DSPSendMailToDSP splits a 32-bit mail word into high and low 16-bit writes to __DSPRegs[0] and __DSPRegs[1]."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR209",
+    "Match part of DSP",
+    "PsiLupan",
+    "dsp-match",
+    "Dolphin DSP",
+    "src/dolphin/dsp/dsp.c",
+    "src/dolphin/dsp/dsp.h",
+    "DSPCheckMailToDSP",
+    "DSPCheckMailFromDSP",
+    "DSPReadMailFromDSP",
+    "DSPSendMailToDSP",
+    "DSPInit",
+    "DSPCheckInit",
+    "DSPAddTask",
+    "DSPAssertTask",
+    "__DSPHandler",
+    "__DSPRegs",
+    "__DSP_init_flag",
+    "__DSP_curr_task",
+    "__DSP_first_task",
+    "__DSP_last_task",
+    "__DSP_tmp_task",
+    "__DSP_rude_task",
+    "__DSP_rude_task_pending",
+    "HW_REG",
+    "0xCC005000",
+    "0xCC005004",
+    "0xCDD10001",
+    "0xCDD10003",
+    "NON_MATCHING",
+    "decomp.me scratch zzu2Y",
+    "AX.s",
+    "CARD.s",
+    "dsp_task.s",
+    "obj_files.mk",
+    "intptr_t",
+    "uintptr_t",
+    "size_t"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match DSPInit after the extern-related NON_MATCHING issue.",
+    "Find follow-up PRs decompiling dsp_task.s functions around __DSPHandler and func_80336680.",
+    "Search for later movement of src/dolphin/dsp/dsp.h into include/dolphin/dsp.h or another shared Dolphin header location.",
+    "Check whether __DSPRegs and HW_REG conventions were reused in other Dolphin hardware modules.",
+    "Track later renames of __DSP_tmp_task, __DSP_last_task, __DSP_first_task, and __DSP_curr_task into typed task pointers or structs."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

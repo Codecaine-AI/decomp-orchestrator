@@ -1,0 +1,135 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1075",
+  "pr": {
+    "number": 1075,
+    "title": "Add most symbols from `GALE01.map` to `GALE01/symbols.txt`",
+    "url": "https://github.com/doldecomp/melee/pull/1075",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-01-17T23:48:55Z",
+    "merged_at": "2024-01-18T00:10:26Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large symbol-table/config update that imported many names and metadata from build/ssbm.us.1.2/GALE01.map into config/GALE01/symbols.txt, replacing many address-only fn_XXXXXXXX placeholders with map-derived names and adding explicit type, size, and scope fields. The PR also added a Rust workspace tool, tools/config-dtk, intended to parse the linker map with cwparse and emit symbols.txt, plus minor workspace/config plumbing.",
+  "change_classification": {
+    "primary_type": "symbol_import_and_tooling",
+    "categories": [
+      "naming",
+      "tooling",
+      "config",
+      "symbol_metadata"
+    ],
+    "systems": [
+      "GALE01",
+      "config/GALE01/symbols.txt",
+      "tools/config-dtk",
+      "Rust workspace",
+      "configure.py"
+    ]
+  },
+  "key_files": [
+    "config/GALE01/symbols.txt",
+    "tools/config-dtk/src/main.rs",
+    "tools/config-dtk/Cargo.toml",
+    "tools/config-dtk/Cargo.lock",
+    "Cargo.toml",
+    "Cargo.lock",
+    "configure.py",
+    "orig/GALE01/sys/.gitkeep",
+    "tools/__init__.py"
+  ],
+  "what_changed": [
+    "Updated config/GALE01/symbols.txt with 11227 added and 10605 deleted lines, a broad regeneration/import rather than isolated manual renames.",
+    "Replaced many generic symbols such as fn_80005940 with map-derived names such as Command_00, Command_Execute, lbColl_80005BB0, lbColl_JObjSetupMatrix, and TRK_memcpy where GALE01.map provided names.",
+    "Normalized/expanded symbol annotations in symbols.txt, including type:function/object/label, size:0x..., and scope:global/local/weak fields; examples include changing __check_pad3 and __init_data to scope:global based on map data.",
+    "Added the new Rust crate tools/config-dtk named melee-config-dtk and added it to the top-level Cargo workspace members.",
+    "Added Cargo workspace resolver = \"2\".",
+    "tools/config-dtk parses build/ssbm.us.1.2/GALE01.map, walks source paths, collects tree symbols and table symbols, joins them by a hash of translation unit plus identifier, sorts output by address with BTreeMap, and writes config/GALE01/symbols.txt.",
+    "tools/config-dtk maps linker-map section names to config section strings including .text, .data, .rodata, .bss, .sdata, .sdata2, .sbss, .sbss2, .init, .ctors, .dtors, extab, and extabindex.",
+    "configure.py progress mode now sets config.progress_all = False before calculate_progress(config).",
+    "Added placeholder files orig/GALE01/sys/.gitkeep and tools/__init__.py.",
+    "The PR included tools/config-dtk/.idea project files and a standalone LICENSE for the new tool."
+  ],
+  "smart_moves": [
+    "Used the official/generated linker map as a bulk source of symbol names and metadata instead of hand-renaming thousands of addresses.",
+    "Kept symbol output deterministic by sorting generated symbol strings by address before writing symbols.txt.",
+    "Joined two complementary map views: the tree view supplies name/type/scope and the section table supplies section/address/size/alignment.",
+    "Keyed symbols by translation unit plus identifier, reducing accidental collisions between repeated local or instance-qualified map names.",
+    "Used cwparse to parse CodeWarrior map syntax rather than ad-hoc string splitting.",
+    "Handled section-name conversion explicitly, which makes emitted config section names consistent with the existing symbols.txt format.",
+    "Preserved the existing address-based fallback convention where a better map-derived name was not available; not every fn_XXXXXXXX was replaced.",
+    "Filtered source-path collection to .c files and stripped .o suffixes from translation-unit names, matching the C-source-oriented decomp workflow."
+  ],
+  "decomp_lessons": [
+    "For large naming passes, generate symbols.txt from GALE01.map and keep type, size, scope, and section metadata together; this is safer and more reviewable than piecemeal manual edits.",
+    "When importing linker-map names, preserve deterministic ordering by address so diffs remain stable across regenerations.",
+    "Map-derived names can immediately improve searchability and decomp context even before functions are fully decompiled, especially for library-like areas such as TRK and lbColl.",
+    "Do not assume all map entries are equally useful: this PR title says \"most symbols,\" and the tool code explicitly ignores some entries, including .s.o translation units and debug/child cases.",
+    "Section handling should be explicit; extab/extabindex and small-data sections need correct config names just like .text/.data/.rodata.",
+    "Bulk symbol imports can affect progress tooling and lockfiles; include the generator/tooling context so future maintainers can reproduce or audit the generated symbols.",
+    "Evidence for reviewer intent is weak here because the dump contains no PR body, issue comments, review comments, or review records."
+  ],
+  "naming_conventions": [
+    "Address-only unknown function placeholders use fn_XXXXXXXX, e.g. fn_800051CC; these remain when no better imported name is available.",
+    "Map-derived global names are preferred over fn_XXXXXXXX when available, e.g. TRK_memcpy, Command_00, Command_Execute, lbColl_80005BB0, lbColl_JObjSetupMatrix.",
+    "Generated symbol lines follow: name = section:0xADDRESS; // type:<function|object|label> size:0xSIZE scope:<global|local|weak>.",
+    "config-dtk formats relative identifiers as @<idx>.",
+    "config-dtk formats string-base identifiers as @stringBase<idx>.",
+    "config-dtk formats instance-qualified named identifiers as name$instance.",
+    "config-dtk formats DotL linker labels as lbl<name>.",
+    "config-dtk formats section identifiers without an index as the section string and section identifiers with an index as ..<section>.<idx>."
+  ],
+  "assembly_or_matching_tactics": [
+    "This PR was primarily symbol/config generation, not a C matching change.",
+    "The tool reads build/ssbm.us.1.2/GALE01.map via a memory map and parses lines in parallel with rayon par_lines.",
+    "It only records tree and section-table symbols from translation units ending in .c.o, while .s.o entries are ignored, so imported names are oriented toward C-object decomp output.",
+    "It treats tree::Type::None as label, tree::Type::Object as object, and tree::Type::Function as function for symbols.txt output.",
+    "It uses memory-table entries to collect section records and section-symbol entries to infer split starts/ends, although split writing appears unfinished or unused in the diff excerpt.",
+    "It warns on zero-size table symbols and child symbols rather than silently treating them as normal parent entries.",
+    "It aborts on duplicate insertion for the same translation-unit/identifier key, a useful safeguard for generated config correctness."
+  ],
+  "review_feedback": [
+    "No human review comments, issue comments, reviews, or PR body text were present in the dump, so no explicit reviewer feedback can be extracted."
+  ],
+  "searchable_terms": [
+    "PR1075",
+    "GALE01.map",
+    "GALE01 symbols.txt",
+    "config/GALE01/symbols.txt",
+    "melee-config-dtk",
+    "tools/config-dtk",
+    "cwparse",
+    "linker map",
+    "symbol import",
+    "bulk symbol rename",
+    "TRK_memcpy",
+    "Command_00",
+    "Command_Execute",
+    "lbColl",
+    "lbColl_JObjSetupMatrix",
+    "fn_XXXXXXXX",
+    "type:function",
+    "scope:global",
+    "extab",
+    "extabindex",
+    "Cargo workspace resolver 2",
+    "progress_all False"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify or remove tools/config-dtk or its generated output.",
+    "Find later comments or commits explaining why tools/config-dtk included .idea files and a standalone Cargo.lock.",
+    "Search for subsequent symbols.txt regenerations from GALE01.map to see whether this became the standard workflow.",
+    "Audit whether config-dtk's .c.o-only filtering missed useful assembly object symbols.",
+    "Check later configure.py changes around config.progress_all to understand the progress-mode impact."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,168 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-537",
+  "pr": {
+    "number": 537,
+    "title": "JObj cleanup",
+    "url": "https://github.com/doldecomp/melee/pull/537",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-09-03T20:41:07Z",
+    "merged_at": "2022-09-03T23:15:15Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Cleaned up HSD_JObj flag naming and usage across baselib, item, ground, and lb code. The PR prefixed JObj flag macros with JOBJ_, added helper masks/predicates such as JOBJ_ROOT_MASK and union_type_spline, replaced raw bit constants with named flags, and collapsed large hand-expanded inline JObj transform setters in item.c back into calls like HSD_JObjSetRotationY, HSD_JObjSetTranslate, and HSD_JObjSetScale. It closed issue #536. Review evidence is limited to two approvals with no written comments.",
+  "change_classification": {
+    "primary_type": "cleanup",
+    "categories": [
+      "cleanup",
+      "headers",
+      "macro-renaming",
+      "decomp-matching",
+      "inline-helper-restoration",
+      "magic-constant-removal"
+    ],
+    "systems": [
+      "sysdolphin/baselib",
+      "JObj",
+      "item",
+      "lb",
+      "ground",
+      "gr"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "include/sysdolphin/baselib/jobj.h",
+      "role": "Renamed JObj flag macros to JOBJ_* names, added JOBJ_ROOT_MASK, added/updated union_type_* predicates, and replaced raw flag checks in inline setters."
+    },
+    {
+      "path": "src/sysdolphin/baselib/jobj.c",
+      "role": "Propagated JOBJ_* flag names through JObj traversal, animation, loading, display, parent transparency-bit recalculation, and accessor logic."
+    },
+    {
+      "path": "src/melee/it/item.c",
+      "role": "Removed large manually expanded JObj setter/assert/dirty-marking sequences and replaced them with HSD_JObjSetRotationY, HSD_JObjSetTranslate, and HSD_JObjSetScale calls."
+    },
+    {
+      "path": "src/melee/lb/lbunknown_001.c",
+      "role": "Replaced raw/old JObj flags with JOBJ_INSTANCE, JOBJ_MTX_INDEP_SRT, JOBJ_MTX_DIRTY, and JOBJ_USE_QUATERNION."
+    },
+    {
+      "path": "src/melee/gr/grlib.c",
+      "role": "Replaced raw 0x1000 instance flag check with JOBJ_INSTANCE."
+    },
+    {
+      "path": "src/melee/gr/ground.c",
+      "role": "Replaced raw 0x1000 instance flag check with JOBJ_INSTANCE."
+    }
+  ],
+  "what_changed": [
+    "Renamed bare JObj flag macros such as SKELETON, HIDDEN, MTX_DIRTY, INSTANCE, MTX_INDEP_SRT, ROOT_OPA, ROOT_XLU, and ROOT_TEXEDGE to JOBJ_SKELETON, JOBJ_HIDDEN, JOBJ_MTX_DIRTY, JOBJ_INSTANCE, JOBJ_MTX_INDEP_SRT, JOBJ_ROOT_OPA, JOBJ_ROOT_XLU, and JOBJ_ROOT_TEXEDGE.",
+    "Removed the old function-like JOBJ_INSTANCE(o) macro and used JOBJ_INSTANCE as a flag constant, making condition polarity explicit at call sites such as JObjLoadJointSub and HSD_JObjResolveRefs.",
+    "Added JOBJ_ROOT_MASK as the OR of JOBJ_ROOT_OPA, JOBJ_ROOT_TEXEDGE, and JOBJ_ROOT_XLU and used it in transparency/root-bit recalculation instead of raw 0x70000000-style masks.",
+    "Updated union-type helpers: union_type_ptcl now checks JOBJ_PTCL, union_type_spline was added for JOBJ_SPLINE, and union_type_dobj now returns false for either PTCL or SPLINE.",
+    "Replaced raw flag constants such as 0x1000 and 0x02000000 with JOBJ_INSTANCE and JOBJ_MTX_INDEP_SRT in ground/gr/lb/item-related code.",
+    "In item.c, replaced repeated hand-expanded inline setter logic, including asserts and HSD_JObjSetMtxDirtySub paths, with calls to HSD_JObjSetRotationY, HSD_JObjSetTranslate, and HSD_JObjSetScale.",
+    "Simplified item facing-direction code to call HSD_JObjSetRotationY(item_jobj2, (M_PI / 2) * item_data->x2C_facing_direction).",
+    "Updated the decomp.me scratch link comment for func_80268E5C from In9qm to cSrfX."
+  ],
+  "smart_moves": [
+    "Centralized JObj transform mutations through the existing inline setters instead of duplicating assert and dirty-matrix behavior in item.c, cutting a large amount of decompiled boilerplate while preserving the intended HSD_JObjSetMtxDirty path.",
+    "Prefixed all generic flag names with JOBJ_ to avoid global macro collisions and make bit checks self-documenting in non-baselib files.",
+    "Converted magic numbers to named flags in small caller files first, making traversal and instance-skip logic easier to audit.",
+    "Kept matching-sensitive behavior visible by changing condition polarity explicitly when replacing the old inverted JOBJ_INSTANCE(o) macro with a plain JOBJ_INSTANCE flag constant.",
+    "Added union_type_spline and folded spline handling into union_type_dobj, documenting that DObj payload selection excludes both PTCL and SPLINE cases."
+  ],
+  "decomp_lessons": [
+    "When an inline helper expands into many asserts, direct field writes, and dirty-flag logic, replacing the expansion with the named inline call can drastically simplify a function and often improve readability without losing matching intent.",
+    "Avoid unscoped macro names in shared headers; broad names like HIDDEN, INSTANCE, and MTX_DIRTY should be system-prefixed once their ownership is known.",
+    "Be careful when replacing a predicate macro with a flag constant: old macros may have inverted semantics, so each call site must be checked rather than mechanically renamed.",
+    "Named masks such as JOBJ_ROOT_MASK are preferable to repeated composed constants because they make bit propagation code easier to review and search.",
+    "Union-discriminating macros should express all known excluded variants; here DObj detection was updated to exclude both particle and spline JObjs."
+  ],
+  "naming_conventions": [
+    "Use JOBJ_* for HSD_JObj flag bits: JOBJ_SKELETON, JOBJ_HIDDEN, JOBJ_INSTANCE, JOBJ_MTX_DIRTY, JOBJ_MTX_INDEP_SRT, JOBJ_USE_QUATERNION, and related root/union flags.",
+    "Use JOBJ_ROOT_MASK for combined root transparency/render flags instead of hand-written ORs or raw constants.",
+    "Keep HSD_JObj* API helper names for mutating transforms, e.g. HSD_JObjSetRotationY, HSD_JObjSetTranslate, HSD_JObjSetScale.",
+    "Use union_type_dobj, union_type_ptcl, and union_type_spline for JObj union payload checks rather than ad hoc flag tests."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use inline HSD_JObj setter wrappers to reproduce the compiler's expected assert/field-store/dirty-matrix pattern while avoiding manually written duplicated code.",
+    "Replace raw flag constants only after confirming the exact bit value, e.g. 0x1000 corresponds to JOBJ_INSTANCE and 0x02000000 corresponds to JOBJ_MTX_INDEP_SRT.",
+    "For matching code that had expanded inline logic, introducing small inline wrapper calls can remove temporary variables such as phi flags and temp flag copies created by decompilation.",
+    "Explicit boolean expressions like `(itemStateFlags & ITEM_ANIM_UPDATE)` and `(jobj->flags & JOBJ_INSTANCE)` were used instead of `!= FALSE` or magic-number checks where the diff shows simplification."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "RevoSucks",
+      "state": "APPROVED",
+      "submitted_at": "2022-09-03T22:41:33Z",
+      "body": ""
+    },
+    {
+      "reviewer": "PsiLupan",
+      "state": "APPROVED",
+      "submitted_at": "2022-09-03T22:52:01Z",
+      "body": ""
+    },
+    {
+      "note": "No issue comments or review comments were present in the PR slice, so there is no written reviewer rationale to extract."
+    }
+  ],
+  "searchable_terms": [
+    "PR537",
+    "JObj cleanup",
+    "issue 536",
+    "r-burns",
+    "HSD_JObj",
+    "jobj.h",
+    "jobj.c",
+    "JOBJ_INSTANCE",
+    "JOBJ_MTX_DIRTY",
+    "JOBJ_MTX_INDEP_SRT",
+    "JOBJ_MTX_INDEP_PARENT",
+    "JOBJ_USE_QUATERNION",
+    "JOBJ_ROOT_MASK",
+    "JOBJ_ROOT_OPA",
+    "JOBJ_ROOT_XLU",
+    "JOBJ_ROOT_TEXEDGE",
+    "JOBJ_PTCL",
+    "JOBJ_SPLINE",
+    "union_type_dobj",
+    "union_type_ptcl",
+    "union_type_spline",
+    "HSD_JObjSetRotationY",
+    "HSD_JObjSetTranslate",
+    "HSD_JObjSetScale",
+    "HSD_JObjSetMtxDirty",
+    "HSD_JObjSetMtxDirtySub",
+    "func_80267130",
+    "func_8026849C",
+    "func_8026862C",
+    "func_80268E5C",
+    "func_80269978",
+    "func_8000B804",
+    "func_801C9908",
+    "func_801C4100",
+    "M_PI / 2",
+    "magic flag cleanup",
+    "inline setter cleanup"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that continue replacing raw JObj flag constants with JOBJ_* names.",
+    "Search for remaining bare macros or raw constants equivalent to JOBJ_INSTANCE, JOBJ_MTX_DIRTY, or JOBJ_MTX_INDEP_SRT.",
+    "Audit uses of union_type_dobj to ensure spline JObjs are consistently excluded after this PR.",
+    "Look for other item.c functions with manually expanded HSD_JObjSetTranslate, HSD_JObjSetScale, or HSD_JObjSetRotation* logic that can be collapsed.",
+    "Inspect issue #536 for the original motivation behind the JObj cleanup if more context is needed."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

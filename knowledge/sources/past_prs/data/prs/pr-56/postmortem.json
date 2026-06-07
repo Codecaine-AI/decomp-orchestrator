@@ -1,0 +1,135 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-56",
+  "pr": {
+    "number": 56,
+    "title": "Migrate all of HSD's id asm into the C file",
+    "url": "https://github.com/doldecomp/melee/pull/56",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2020-09-30T22:09:42Z",
+    "merged_at": "2020-10-22T11:42:00Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Moved the HSD ID module's standalone assembly from asm/id_asm.s into src/sysdolphin/id.c as inline asm, removed asm/id_asm.o from the build, exposed named HSD_ID APIs in id.h, and updated existing assembly/C call sites from anonymous func_8037xxxx labels to HSD_IDInsertToTable, HSD_IDRemoveByIDFromTable, and HSD_IDGetDataFromTable. The author also carried a NON_MATCHING C attempt for HSD_IDInsertToTable and noted an unresolved relocation error in the PR body.",
+  "change_classification": {
+    "primary_type": "asm-to-c migration",
+    "categories": [
+      "decomp-matching",
+      "inline-asm",
+      "headers",
+      "symbol-naming",
+      "build-system"
+    ],
+    "systems": [
+      "HSD",
+      "sysdolphin",
+      "id",
+      "objalloc",
+      "aobj",
+      "jobj",
+      "pobj",
+      "robj"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/id.c",
+    "src/sysdolphin/id.h",
+    "asm/id_asm.s",
+    "obj_files.mk",
+    "src/sysdolphin/aobj.c",
+    "src/sysdolphin/aobj.h",
+    "src/sysdolphin/objalloc.h",
+    "asm/jobj.s",
+    "asm/pobj.s",
+    "asm/robj.s",
+    "asm/ftkirby.s",
+    "asm/text_3.s",
+    "asm/text_4.s"
+  ],
+  "what_changed": [
+    "Deleted asm/id_asm.s, which contained the old standalone assembly for func_8037CDEC, func_8037CEE8, func_8037CF98, and the forget-memory routine.",
+    "Added the migrated ID routines to src/sysdolphin/id.c, including inline asm implementations for HSD_IDInsertToTable, HSD_IDRemoveByIDFromTable, HSD_IDGetDataFromTable, and _HSD_IDForgetMemory.",
+    "Kept a NON_MATCHING C implementation attempt for HSD_IDInsertToTable, showing the intended hash-table behavior while preserving inline asm for matching.",
+    "Removed $(BUILD_DIR)/asm/id_asm.o from TEXT_O_FILES in obj_files.mk so src/sysdolphin/id.o owns the ID code.",
+    "Added id.h declarations for HSD_IDInsertToTable, HSD_IDRemoveByIDFromTable, HSD_IDGetDataFromTable, and _HSD_IDForgetMemory.",
+    "Added #define hash(s) (s % 0x65) to id.h, matching the modulo-0x65 bucket logic visible in the migrated assembly.",
+    "Updated external call labels in existing asm/C files from func_8037CDEC to HSD_IDInsertToTable, func_8037CEE8 to HSD_IDRemoveByIDFromTable, and func_8037CF98 to HSD_IDGetDataFromTable.",
+    "Added #include \"id.h\" to src/sysdolphin/aobj.h and added the HSD_ObjFree prototype to src/sysdolphin/objalloc.h.",
+    "Renamed the comment for lbl_804C23C0 in id.c from alloc_data to hsd_iddata and added externs for lbl_804D5EE8 and lbl_804D5EF0 used by the migrated allocation failure path."
+  ],
+  "smart_moves": [
+    "Centralized the ID module in src/sysdolphin/id.c instead of keeping a separate asm/id_asm.s object, reducing split ownership and making later C decompilation easier.",
+    "Updated all known call sites to semantic HSD_ID names while preserving branch targets and instruction comments, improving searchability without changing behavior.",
+    "Used NON_MATCHING for the partial C reconstruction instead of forcing a risky nonmatching rewrite into the matching build.",
+    "Kept force_active pragmas around routines that might otherwise be dropped, consistent with the existing HSD_IDSetup comment about matching unused functions.",
+    "Exposed prototypes in id.h so other modules can call the named HSD_ID APIs rather than relying on anonymous func_ labels."
+  ],
+  "decomp_lessons": [
+    "When migrating a standalone asm file into a C translation unit, remember to remove the old asm object from obj_files.mk or duplicate symbols/order issues can occur.",
+    "Renaming call targets in remaining assembly files is useful decomp hygiene: it documents function purpose even before those caller files are decompiled.",
+    "A NON_MATCHING block can preserve high-level understanding of the algorithm while inline asm remains the authoritative matching implementation.",
+    "The ID table uses a default table when the table argument is NULL, so future rewrites should preserve that behavior.",
+    "The hash bucket calculation is semantically id % 0x65; the assembly implements this with a multiplication-by-magic sequence, so future matching attempts may need to account for compiler strength reduction.",
+    "Header work matters during asm-to-C migration: adding id.h includes/prototypes and objalloc.h's HSD_ObjFree declaration made cross-module references explicit."
+  ],
+  "naming_conventions": [
+    "func_8037CDEC was renamed/exposed as HSD_IDInsertToTable.",
+    "func_8037CEE8 was renamed/exposed as HSD_IDRemoveByIDFromTable.",
+    "func_8037CF98 was renamed/exposed as HSD_IDGetDataFromTable.",
+    "The reset/forget routine was exposed as _HSD_IDForgetMemory, using a leading underscore for the internal-style HSD helper.",
+    "The module uses HSD_ID* prefixes for public ID-table APIs and HSD_Obj* prefixes for allocator APIs."
+  ],
+  "assembly_or_matching_tactics": [
+    "Migrated raw asm into inline asm functions in src/sysdolphin/id.c with nofralloc to preserve exact prologue/control over generated code.",
+    "Preserved instruction address comments from asm/id_asm.s inside the inline asm bodies, making it easy to map migrated code back to the original disassembly.",
+    "Used #ifdef NON_MATCHING around the C version of HSD_IDInsertToTable and #else for the inline asm version.",
+    "Kept #pragma force_active around functions that need to remain linked for matching even if not directly referenced.",
+    "The migrated hash code corresponds to modulo 0x65, visible both as #define hash(s) (s % 0x65) and as the magic constant path using 0x446F8657 in assembly.",
+    "Call-site-only asm files were not decompiled here; they were minimally edited to replace anonymous branch labels with named HSD_ID symbols."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The PR body says the changes currently caused a relocation error for an undetermined reason; no later diagnostic discussion is included in the slice."
+  ],
+  "searchable_terms": [
+    "HSD_IDInsertToTable",
+    "HSD_IDRemoveByIDFromTable",
+    "HSD_IDGetDataFromTable",
+    "_HSD_IDForgetMemory",
+    "func_8037CDEC",
+    "func_8037CEE8",
+    "func_8037CF98",
+    "asm/id_asm.s",
+    "src/sysdolphin/id.c",
+    "src/sysdolphin/id.h",
+    "HSD_IDTable",
+    "IDEntry",
+    "hash(s)",
+    "0x65",
+    "0x446F8657",
+    "lbl_804C23C0",
+    "lbl_804C23EC",
+    "HSD_ObjAlloc",
+    "HSD_ObjFree",
+    "NON_MATCHING",
+    "nofralloc",
+    "force_active",
+    "relocation error"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that remove the NON_MATCHING HSD_IDInsertToTable block or convert the inline asm ID routines to matching C.",
+    "Search for the relocation error mentioned in PR #56 to see whether it was diagnosed in a later branch or PR.",
+    "Check later changes to src/sysdolphin/id.h for refinements to HSD_IDTable, IDEntry, and the hash macro.",
+    "Look for subsequent renames of lbl_804C23C0, lbl_804C23EC, lbl_804D5EE8, and lbl_804D5EF0 to confirm allocator/default table/string symbol names."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

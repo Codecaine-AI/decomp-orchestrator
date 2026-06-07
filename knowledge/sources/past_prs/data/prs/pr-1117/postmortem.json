@@ -1,0 +1,146 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1117",
+  "pr": {
+    "number": 1117,
+    "title": "Re-link `dolphin/os`",
+    "url": "https://github.com/doldecomp/melee/pull/1117",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-01-25T17:09:56Z",
+    "merged_at": "2024-01-25T17:11:02Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Re-linked part of the Dolphin OS library by moving OSSerial and OSSync out of splits.todo.txt into the main GALE01 splits, marking several dolphin/os objects as Matching in configure.py, and tightening symbol scopes/names around OS exception and syscall vector labels. The source edits mostly separate real Metrowerks/Gekko inline assembly paths from non-Metrowerks placeholder implementations by switching many guards from MUST_MATCH to MWERKS_GEKKO and adding NOT_IMPLEMENTED fallbacks where needed.",
+  "change_classification": {
+    "primary_type": "relink_matching_configuration",
+    "categories": [
+      "splits",
+      "symbols",
+      "build_config",
+      "matching_status",
+      "inline_assembly_guards",
+      "placeholder_fallbacks"
+    ],
+    "systems": [
+      "dolphin/os",
+      "config/GALE01",
+      "configure.py",
+      "src/placeholder.h"
+    ]
+  },
+  "key_files": [
+    "config/GALE01/splits.todo.txt",
+    "config/GALE01/splits.txt",
+    "config/GALE01/symbols.txt",
+    "configure.py",
+    "src/dolphin/os/OSInit.c",
+    "src/dolphin/os/OSMemory.c",
+    "src/dolphin/os/OSReboot.c",
+    "src/dolphin/os/OSReset.c",
+    "src/dolphin/os/OSSync.c",
+    "src/dolphin/os/OSTime.c",
+    "src/placeholder.h"
+  ],
+  "what_changed": [
+    "Deleted config/GALE01/splits.todo.txt entries for dolphin/os/OSSerial.c and dolphin/os/OSSync.c that had been annotated with WARNING: ninja hangs forever.",
+    "Added dolphin/os/OSSerial.c and dolphin/os/OSSync.c to config/GALE01/splits.txt with their text/data/bss/sbss ranges, placing them before OSThread.c.",
+    "Changed configure.py dolphin/os object statuses from NonMatching to Matching for OSInit.c, OSAudioSystem.c, OSMemory.c, OSSync.c, and OSTime.c.",
+    "Removed separate configure.py entries for OSSerial_data.c, OSThread_data.c, and init/__ppc_eabi_init_data.c from the dolphin/os library object list.",
+    "Updated config/GALE01/symbols.txt to make several OS exception/vector boundary labels local rather than global, including __OSDBINTSTART, __OSDBINTEND, __OSDBJUMPEND, __OSEVStart, __OSSystemCallVectorStart, and __OSSystemCallVectorEnd.",
+    "Replaced the anonymous fn_8034AB80 symbol with a named local function __OSSystemCallVector at 0x8034AB80.",
+    "In OSInit.c, guarded exception-vector-related declarations and inline assembly with MWERKS_GEKKO rather than MUST_MATCH, used _stack_addr instead of _db_stack_end for debugArenaLo calculation, and added a NOT_IMPLEMENTED fallback for OSExceptionInit outside MWERKS_GEKKO.",
+    "In OSMemory.c and OSTime.c, changed inline assembly function guards from MUST_MATCH to MWERKS_GEKKO.",
+    "In OSSync.c, made __OSSystemCallVectorStart and __OSSystemCallVectorEnd static declarations, guarded the inline assembly syscall vector and __OSInitSystemCall implementation with MWERKS_GEKKO, and added NOT_IMPLEMENTED fallbacks for non-MWERKS_GEKKO builds.",
+    "In OSReboot.c, separated MWERKS_GEKKO-only PAD include/static storage from MUST_MATCH DVD include, converted __OSReboot to use the ASM macro with a NOT_IMPLEMENTED non-MUST_MATCH body, and changed Header/SaveStart/SaveEnd storage from unk_t to void*.",
+    "In OSReset.c, renamed an unused fallback parameter from '_' to arg0.",
+    "In placeholder.h, changed the Metrowerks NOT_IMPLEMENTED asm-nop condition from defined(__MWERKS__) && (MUST_MATCH || WIP) to defined(__MWERKS__) && !defined(BUGFIX)."
+  ],
+  "smart_moves": [
+    "The PR did not only flip configure.py objects to Matching; it also updated splits and symbols so the re-link had coherent section boundaries and symbol visibility.",
+    "Renaming fn_8034AB80 to __OSSystemCallVector and marking vector boundary labels local improved symbol fidelity while avoiding accidental global exports for labels that are implementation details.",
+    "Using MWERKS_GEKKO for inline assembly guards decoupled compiler/assembler availability from the broader MUST_MATCH state, allowing matching code paths to exist while still providing portable NOT_IMPLEMENTED stubs.",
+    "Adding NOT_IMPLEMENTED fallbacks for OSExceptionInit, __OSSystemCallVector, and __OSInitSystemCall kept non-Metrowerks or non-matching builds structurally compilable instead of relying on unavailable inline assembly.",
+    "Moving OSSerial and OSSync from splits.todo.txt into splits.txt appears to resolve prior relinking/tooling blockage noted as ninja hangs forever, though the PR has no body/comments explaining the exact root cause."
+  ],
+  "decomp_lessons": [
+    "When re-linking a library slice, synchronize configure.py matching status, splits.txt ranges, and symbols.txt scopes/names in one change; changing only one layer can leave the build graph or linker view inconsistent.",
+    "Boundary labels emitted inside inline assembly should often be local symbols unless external code genuinely references them.",
+    "Replace generated fallback names like fn_8034AB80 with SDK-style or assembly-entry names once the role is known, especially for vector stubs and hand-written assembly regions.",
+    "Use compiler/target feature guards such as MWERKS_GEKKO for source that requires Metrowerks inline assembly, rather than overloading MUST_MATCH as a general assembly-availability switch.",
+    "For decomp source that cannot be implemented portably yet, explicit NOT_IMPLEMENTED functions are preferable to omitting definitions under preprocessor guards.",
+    "Data-only companion object files may need to be removed from configure.py when relinking consolidates or reclassifies Dolphin OS objects; verify section ownership before keeping old _data object entries."
+  ],
+  "naming_conventions": [
+    "Use SDK-style double-underscore OS internal names for Dolphin OS vectors and internals, such as __OSSystemCallVector, __OSSystemCallVectorStart, __OSSystemCallVectorEnd, __OSDBINTSTART, __OSDBINTEND, and __OSEVStart.",
+    "Prefer meaningful parameter names in stubs over placeholder underscores when the codebase style or compiler permits, as shown by Reset(s32 arg0).",
+    "Use typed storage such as void* for pointer-like static scratch variables instead of unk_t when the pointer role is evident, as in OSReboot Header, SaveStart, and SaveEnd.",
+    "Keep vector boundary labels local in symbols.txt when they are assembly labels rather than API-visible functions."
+  ],
+  "assembly_or_matching_tactics": [
+    "Changed multiple inline assembly guards from MUST_MATCH to MWERKS_GEKKO in OSInit.c, OSMemory.c, OSSync.c, and OSTime.c.",
+    "Provided non-assembly NOT_IMPLEMENTED fallback bodies outside MWERKS_GEKKO or MUST_MATCH so the files remain buildable when inline assembly is unavailable.",
+    "Used the ASM macro for __OSReboot with a non-MUST_MATCH fallback body and a preserved MUST_MATCH assembly body.",
+    "Kept comments noting peephole sensitivity: OSInit references a peephole bug around __OSFPRInit, and OSSync notes peephole off is needed to match __OSInitSystemCall.",
+    "Made __OSSystemCallVectorStart and __OSSystemCallVectorEnd static C declarations matching their local symbol treatment.",
+    "Used _stack_addr rather than _db_stack_end in OSInit's debugArenaLo calculation, likely aligning with the linker symbol expected after relinking."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1117",
+    "Re-link dolphin/os",
+    "ribbanya",
+    "dolphin/os",
+    "OSInit.c",
+    "OSMemory.c",
+    "OSReboot.c",
+    "OSReset.c",
+    "OSSync.c",
+    "OSTime.c",
+    "OSSerial.c",
+    "OSAudioSystem.c",
+    "configure.py",
+    "splits.txt",
+    "splits.todo.txt",
+    "symbols.txt",
+    "Matching",
+    "NonMatching",
+    "MWERKS_GEKKO",
+    "MUST_MATCH",
+    "NOT_IMPLEMENTED",
+    "__OSSystemCallVector",
+    "__OSSystemCallVectorStart",
+    "__OSSystemCallVectorEnd",
+    "fn_8034AB80",
+    "__OSInitSystemCall",
+    "OSExceptionInit",
+    "OSExceptionVector",
+    "__OSDBINTSTART",
+    "__OSDBINTEND",
+    "__OSDBJUMPEND",
+    "__OSEVStart",
+    "_stack_addr",
+    "_db_stack_end",
+    "ninja hangs forever",
+    "OSSerial_data.c",
+    "OSThread_data.c",
+    "__ppc_eabi_init_data.c",
+    "placeholder.h",
+    "BUGFIX"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs touching dolphin/os/OSSerial.c or OSSync.c to see whether the former ninja hang was fully resolved or only bypassed by relinking.",
+    "Search for subsequent changes to MWERKS_GEKKO versus MUST_MATCH guards to confirm this became the preferred inline assembly convention.",
+    "Check later symbols.txt updates around __OSSystemCallVector and OS exception labels for additional scope or naming corrections.",
+    "Investigate why OSAudioSystem.c was marked Matching in configure.py without appearing in this diff's source-file edits."
+  ],
+  "confidence": 0.83,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

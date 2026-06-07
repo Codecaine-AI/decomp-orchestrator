@@ -1,0 +1,165 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1846",
+  "pr": {
+    "number": 1846,
+    "title": "Identify remaining functions in lbl tables",
+    "url": "https://github.com/doldecomp/melee/pull/1846",
+    "state": "MERGED",
+    "author": "lukechampine",
+    "created_at": "2025-08-16T15:44:18Z",
+    "merged_at": "2025-08-16T21:56:30Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Identified and typed several remaining function-pointer tables that had been represented as generic lbl data, reducing the remaining unknown-function tables to 17 un_* tables according to the PR body. The changes added concrete table declarations in gm, lb, and audio code, corrected symbol sizes/data widths, and propagated function signatures from UNK_RET/UNK_PARAMS or int/s32 to bool/void typed callbacks. Review discussion focused on matching a ColorOverlay byte/word access in lb_00F9 and suggested using a better local match plus a union for the light_color representation.",
+  "change_classification": {
+    "primary_type": "function-pointer-table-identification",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "tooling",
+      "symbol-map-cleanup"
+    ],
+    "systems": [
+      "game-mode",
+      "library",
+      "audio",
+      "results",
+      "config",
+      "tooling"
+    ]
+  },
+  "key_files": [
+    "config/GALE01/symbols.txt",
+    "src/melee/gm/gm_1601.h",
+    "src/melee/gm/gm_16F1.c",
+    "src/melee/gm/gm_16F1.h",
+    "src/melee/gm/gm_18A5.c",
+    "src/melee/gm/gm_18A5.h",
+    "src/melee/gm/gmmain_lib.c",
+    "src/melee/gm/gmmain_lib.h",
+    "src/melee/gm/gmresultplayer.c",
+    "src/melee/gm/gmresultplayer.h",
+    "src/melee/lb/lb_00F9.c",
+    "src/melee/lb/lb_00F9.h",
+    "src/melee/lb/lb_00F9.static.h",
+    "src/melee/lb/lbaudio_ax.c",
+    "src/melee/lb/lbaudio_ax.h",
+    "src/melee/lb/types.h",
+    "src/melee/un/un_3028.c",
+    "src/melee/un/un_3028.h",
+    "tools/table-typer/main.go",
+    "tools/table-typer/c.go"
+  ],
+  "what_changed": [
+    "Split and corrected symbol-table entries for previously broad lbl objects, including changing lbl_803BCA24 from one 0xF4 object into lbl_803BCA24, lbl_803BCA4C, and lbl_803BCAC8 with separate sizes.",
+    "Changed lbl_803D6300 metadata in config/GALE01/symbols.txt from data:2byte to data:4byte, matching its use as an array of u32/function-pointer pairs.",
+    "Added struct lbl_803D6300_t in gm_16F1.c with fields u32 x0 and bool (*x4)(void), then initialized lbl_803D6300 with many known callbacks such as fn_801735F0, gm_80164ABC, fn_80162CCC, gmMainLib_8015D508, and gmMainLib_8015CF94.",
+    "Updated gm_1601.h and gm_16F1.h prototypes so table callbacks return bool and take no parameters where appropriate instead of UNK_RET/UNK_PARAMS or int.",
+    "Added typedef lbl_803D9FD8_fn as void (*)(s32*, u32, u32) in gm_18A5.c and initialized lbl_803D9FD8 with menu-related callbacks such as fn_801937C4, fn_80193B58, fn_80194D84, fn_80195AF0, and fn_8019610C.",
+    "Updated gm_18A5.h to give the lbl_803D9FD8 callback functions concrete void return and (s32*, u32, u32) parameter signatures.",
+    "Changed gmMainLib_8015CF94 and gmMainLib_8015D508 from s32-returning functions to bool-returning functions in both source and header to fit their callback-table usage.",
+    "Implemented several small gmresultplayer callback wrappers and camera draw callbacks: fn_80179D3C through fn_80179DA8 forward to fn_80179990 with constant mode indices, while fn_80179DCC through fn_80179F04 set the current CObj, call Camera_800313E0, set gxlink_prios to 0x80, call HSD_GObj_80390ED0, then end the current CObj.",
+    "Added lb_803BA248 as a bool (*)(ColorOverlay*) function-pointer table in lb_00F9.c and retitled several ColorOverlay command handlers from int or ad-hoc struct arguments to bool ColorOverlay* callbacks.",
+    "Added lbl_803BCA24 as a bool (*)(HSD_GObj*) table in lbaudio_ax.c, identifying audio callback entries fn_800251EC through fn_80025E38.",
+    "Adjusted related headers and static headers so declarations match the newly identified callback signatures.",
+    "Modified tools/table-typer/main.go and tools/table-typer/c.go, though the provided excerpt does not show enough detail to summarize the exact tooling algorithm changes beyond their relationship to table typing."
+  ],
+  "smart_moves": [
+    "Used the structure of data tables to infer function prototypes and then propagated those prototypes consistently through source and headers.",
+    "Represented lbl_803D6300 as a small explicit struct containing a u32 key/flags field and a bool callback pointer, making the 4-byte data interpretation visible in C rather than leaving it as anonymous lbl data.",
+    "Introduced local typedefs for callback arrays such as lb_803BA248_fn, lbl_803BCA24_fn, and lbl_803D9FD8_fn, which keeps table declarations readable and forces consistent signatures across entries.",
+    "Matched tiny wrapper functions in gmresultplayer by recognizing repeated forwarding patterns and repeated camera render callback bodies.",
+    "Converted return types from int/s32 to bool where table semantics showed the functions were predicates or boolean callbacks.",
+    "Split oversized symbol entries where one lbl object actually contained multiple adjacent tables, improving future table discovery and symbol search precision."
+  ],
+  "decomp_lessons": [
+    "Function-pointer tables are strong evidence for callback signatures: once one table type is known, every referenced function should be checked and retitled to the same return and parameter shape if matching supports it.",
+    "Symbol metadata can block or obscure table identification; correcting object boundaries and data width in symbols.txt is part of the decomp fix, not just cleanup.",
+    "Prefer named callback typedefs for lbl tables because they make wrong prototypes easier to spot in headers and cross-file references.",
+    "When a data table alternates scalar words and pointers, model it as a struct array rather than parallel anonymous data if the layout supports it.",
+    "Repeated small wrapper functions often encode table-specific constant arguments; matching them can unlock callback tables without needing to fully understand the callee.",
+    "For color or packed data accesses, matching may depend on forcing a word load instead of byte loads; a union or packed representation can be cleaner than pointer-casting, according to review discussion."
+  ],
+  "naming_conventions": [
+    "Kept address-based lbl names for unidentified data tables, e.g. lbl_803D6300, lbl_803D9FD8, lbl_803BCA24, and lb_803BA248.",
+    "Used table-specific typedef names ending in _fn, such as lbl_803D9FD8_fn, lbl_803BCA24_fn, and lb_803BA248_fn.",
+    "Used anonymous field names with offsets for newly modeled table structs where semantics are still weak, e.g. struct lbl_803D6300_t with x0 and x4.",
+    "Preserved existing address-based function names such as fn_801722BC and subsystem-prefixed names such as gmMainLib_8015D508 when only signatures, not semantic names, were identified.",
+    "ColorOverlay fields follow offset-style descriptive names such as x0_timer, x8_ptr1, x50_light_color, x7C_color_enable, and x7C_flag2."
+  ],
+  "assembly_or_matching_tactics": [
+    "Changed lbl_803D6300 from data:2byte to data:4byte after identifying it as entries containing 32-bit values plus function pointers.",
+    "Used explicit callback return types such as bool and void to match table consumers and eliminate generic UNK_RET/UNK_PARAMS declarations.",
+    "For lb_80013BB8, the submitted code used a cast through void to read light_color as s32 and mask it with 0x03FFFFFF, because accessing individual members reportedly compiled to byte loads instead of the desired word load.",
+    "Review feedback suggested a union-based representation for light_color to obtain a better match than raw pointer casting.",
+    "Repeated camera callback bodies in gmresultplayer use HSD_CObjSetCurrent, Camera_800313E0, gxlink_prios assignment, HSD_GObj_80390ED0, and HSD_CObjEndCurrent, indicating a reusable matching pattern for render callbacks."
+  ],
+  "review_feedback": [
+    {
+      "author": "lukechampine",
+      "file": "src/melee/lb/lb_00F9.c",
+      "feedback": "Noted uncertainty about the ColorOverlay light_color access and said member access compiled to lbz instead of the desired lbw."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/melee/lb/lb_00F9.c",
+      "feedback": "Said not to worry because a local match existed, then linked to matching versions of lb_00F9.c."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/melee/lb/lb_00F9.c",
+      "feedback": "Pointed to a better local version and specifically mentioned using a union, with a link to the relevant types.h lines."
+    }
+  ],
+  "searchable_terms": [
+    "pr-1846",
+    "Identify remaining functions in lbl tables",
+    "lbl tables",
+    "function pointer table",
+    "table-typer",
+    "tools/table-typer/main.go",
+    "tools/table-typer/c.go",
+    "symbols.txt",
+    "lbl_803BCA24",
+    "lbl_803BCA4C",
+    "lbl_803BCAC8",
+    "lbl_803D6300",
+    "lbl_803D9FD8",
+    "lb_803BA248",
+    "ColorOverlay",
+    "light_color",
+    "lb_80013BB8",
+    "lb_80013FF0",
+    "lb_80014234",
+    "lbaudio_ax",
+    "gm_16F1",
+    "gm_18A5",
+    "gmresultplayer",
+    "gmMainLib_8015CF94",
+    "gmMainLib_8015D508",
+    "bool callbacks",
+    "UNK_RET",
+    "UNK_PARAMS",
+    "data:4byte",
+    "lbz vs lbw",
+    "union matching"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that update lb_00F9 ColorOverlay light_color to use a union instead of pointer-casting.",
+    "Search for remaining un_803F9FA4 through un_803FDAF8 tables mentioned as the final 17 unknown-function tables.",
+    "Inspect tools/table-typer changes around PR 1846 to learn how the table identification workflow was improved.",
+    "Search for later semantic renames of lbl_803D6300, lbl_803D9FD8, lbl_803BCA24, and lb_803BA248.",
+    "Find follow-up PRs that further type gmresultplayer callbacks fn_80179D3C through fn_80179F04."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

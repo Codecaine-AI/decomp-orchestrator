@@ -1,0 +1,158 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1574",
+  "pr": {
+    "number": 1574,
+    "title": "Match gx",
+    "url": "https://github.com/doldecomp/melee/pull/1574",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-07T01:31:27Z",
+    "merged_at": "2025-06-07T01:35:21Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the remaining nonmatching Dolphin GX library objects touched by this slice by correcting GX context layout/state semantics, splitting GX initialization into GXInit plus __GXInitGX, adding __GXSetTmemConfig, and fixing several small register constants and bpSent updates. configure.py promoted GXInit, GXAttr, GXMisc, GXGeometry, GXTexture, GXPixel, and GXTransform from NonMatching to Matching. The decomp.dev bot reported 27 new function matches, +10292 matched code bytes, and +18328 linked code bytes for GALE01.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "external-sdk",
+      "build-config",
+      "symbols"
+    ],
+    "systems": [
+      "dolphin/gx",
+      "GXInit",
+      "GXTexture",
+      "GXPixel",
+      "GXAttr",
+      "GXMisc",
+      "GXTransform",
+      "GXGeometry",
+      "GXDisplayList",
+      "config/GALE01"
+    ]
+  },
+  "key_files": [
+    "configure.py",
+    "config/GALE01/symbols.txt",
+    "extern/dolphin/src/dolphin/gx/__gx.h",
+    "extern/dolphin/src/dolphin/gx/GXInit.c",
+    "extern/dolphin/src/dolphin/gx/GXTexture.c",
+    "extern/dolphin/src/dolphin/gx/GXPixel.c",
+    "extern/dolphin/src/dolphin/gx/GXAttr.c",
+    "extern/dolphin/src/dolphin/gx/GXMisc.c",
+    "extern/dolphin/src/dolphin/gx/GXTransform.c",
+    "extern/dolphin/src/dolphin/gx/GXDisplayList.c",
+    "extern/dolphin/src/dolphin/gx/GXGeometry.c"
+  ],
+  "what_changed": [
+    "configure.py changed seven Dolphin GX objects from NonMatching to Matching: GXInit.c, GXAttr.c, GXMisc.c, GXGeometry.c, GXTexture.c, GXPixel.c, and GXTransform.c.",
+    "config/GALE01/symbols.txt renamed __GXSetSUTexSize at .text:0x8033F3AC to __GXSetSUTexRegs and renamed the global BSS GX context symbol at 0x804A76C8 from __GXContext to gxData.",
+    "__gx.h adjusted the beginning of __GXData_struct: offset 0 became unsigned short unk, offset 2 remained bpSent, and vNum/vLim became two unsigned shorts at offsets 4 and 6 instead of vNum at 0 and a 32-bit vLim at 4.",
+    "GXDisplayList.c and GXGeometry.c changed flush checks from reading a u32 through gx->vNum to reading through gx->unk, preserving the intended combined check over the first context words under the corrected layout.",
+    "GXInit.c split initialization: GXInit now handles early FIFO/context setup, texture/TLUT cache region setup, low-level FIFO register writes, __GXSetTmemConfig(0), then calls a new static __GXInitGX; __GXInitGX contains render mode/default GX state setup and ends by clearing GP metrics.",
+    "GXTexture.c added __GXSetTmemConfig with two TMEM register write configurations and changed __SetSURegs/GXLoadTexObjPreLoaded bpSent writes from 1 to 0. GXInitTexObj now uses a different mode0 bit pattern for mipmapped formats where format - 8 <= 2U.",
+    "GXPixel.c changed many BP-register-writing routines to set gx->bpSent to 0 rather than 1, and corrected the fog range adjustment center offset from +340 to +342.",
+    "GXTransform.c corrected scissor and scissor-box offsets from +340 to +342.",
+    "GXAttr.c changed __GXXfVtxSpecs to set bpSent to 1 and made GX_VA_NRM/GX_VA_NBT mutually update hasNrms/hasBiNrms while preserving nrmType only for non-GX_NONE types.",
+    "GXMisc.c updated GXSetMisc(GX_MT_XF_FLUSH) to maintain gx->unk and bpSent alongside vNum, changed GXFlush to emit eight GX_WRITE_U32(0) writes instead of thirty-two GX_WRITE_U8(0) writes, and changed GXPixModeSync bpSent to 0."
+  ],
+  "smart_moves": [
+    "The match was achieved largely by fixing the GX context layout first; once the leading fields were modeled as unk, bpSent, vNum, and vLim, existing u32 alias checks in GXBegin and GXCallDisplayList could be expressed against the correct base field.",
+    "Splitting GXInit into GXInit and __GXInitGX mirrored the observed symbol/function boundaries and allowed the large initialization sequence to match as two functions instead of forcing all state setup into one routine.",
+    "Moving texture/TLUT region setup before __GXInitGX in GXInit preserved initialization behavior while matching the compiler's function boundaries and call ordering.",
+    "Representing GXFlush as eight 32-bit zero writes rather than thirty-two byte writes preserved the same byte count but matched emitted code shape.",
+    "Small hardware-register constant corrections, especially +340 to +342 scissor/fog offsets and bpSent polarity changes after BP writes, unlocked many near-matches in GXPixel, GXTransform, GXTexture, and GXMisc.",
+    "Adding __GXSetTmemConfig as explicit FIFO write sequences avoided over-abstracting the hardware setup and matched the SDK-style register programming pattern visible in the binary."
+  ],
+  "decomp_lessons": [
+    "For SDK-style hardware libraries, matching often depends on exact context struct packing and field widths; a wrong 16-bit/32-bit split at the start of a global context can cascade into many nonmatches.",
+    "When code casts the address of a struct field to u32*, verify which adjacent fields the original binary is checking. The correct source field may be an unknown/padding-like member rather than the semantically obvious field name.",
+    "Do not assume flag names imply boolean polarity. In this PR, many BP-register writers needed gx->bpSent = 0, while selected XF/misc paths used gx->bpSent = 1.",
+    "Equivalent byte streams are not necessarily equivalent for matching. GXFlush needed 32-bit writes, not byte writes, to match the compiler output.",
+    "Large init functions may hide real internal helper boundaries. If a known SDK symbol such as __GXInitGX exists in the map/binary, split the code even if a combined implementation is easier to read.",
+    "Tiny register bias constants such as 340 versus 342 matter for exact matches and should be checked against hardware SDK behavior and assembly, not inferred from nearby assertions alone.",
+    "After matching a group of GX files, update configure.py and symbols.txt together so object matching status and symbol names reflect the new function boundaries."
+  ],
+  "naming_conventions": [
+    "__GXSetSUTexRegs is the symbol name used for the function at .text:0x8033F3AC; the prior __GXSetSUTexSize name was corrected in symbols.txt.",
+    "The GX global context BSS symbol at 0x804A76C8 is named gxData, not __GXContext, in this PR's symbol update.",
+    "Internal GX helper functions keep the double-underscore prefix, e.g. __GXInitGX, __GXSetTmemConfig, __GXSetSUTexRegs, __SetSURegs, and __GXXfVtxSpecs.",
+    "The leading unknown 16-bit field in __GXData_struct was named unk because the slice does not provide a more specific semantic name; future work should avoid inventing a stronger name without evidence.",
+    "GX source files keep SDK-style module naming: GXInit.c, GXTexture.c, GXPixel.c, GXAttr.c, GXMisc.c, GXGeometry.c, GXDisplayList.c, and GXTransform.c."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use u32 pointer reads over adjacent 16-bit GX context fields when the binary checks combined state, e.g. *(u32*)&gx->unk == 0 for the combined unk/bpSent check.",
+    "Prefer GX_WRITE_U32(0) loops when the assembly performs word stores to the write-gather pipe; replacing thirty-two byte writes with eight word writes can preserve behavior while matching instruction selection.",
+    "Match hardware register programming sequences literally with repeated GX_WRITE_U8(0x61) plus GX_WRITE_U32(register_value) calls when the binary emits direct BP register writes.",
+    "Introduce small dummy stack storage when needed for stack layout; GXInit added u8 _[8] after local declarations, suggesting stack-shape matching.",
+    "For bitfield macros such as SET_REG_FIELD, constants in the first argument and field values are part of the match surface; this PR adjusted values like fog/scissor +342 and mipmap mode0 0xA0 versus 0xC0.",
+    "Function-boundary recovery can be more important than local cleanup: moving render-mode/default-state setup into __GXInitGX produced a 100% match for both GXInit and __GXInitGX according to the bot report."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided slice.",
+    "The decomp.dev bot reported GALE01 matched code improved to 29.04% (+0.26%, +10292 bytes) and linked code improved to 21.11% (+0.47%, +18328 bytes).",
+    "The bot listed 27 new 100% matches, including GXInit, __GXInitGX, __GXSetTmemConfig, __GXSetSUTexRegs, __GXSetVCD, GXSetVtxDesc, GXSetDrawDone, GXInitTexObj, GXSetFog, GXSetMisc, __GXSendFlushPrim, GXSetScissor, GXSetFogRangeAdj, GXSetScissorBoxOffset, GXLoadTexObjPreLoaded, __SetSURegs, and several GXPixel setters."
+  ],
+  "searchable_terms": [
+    "pr-1574",
+    "Match gx",
+    "r-burns",
+    "Dolphin GX",
+    "GXInit",
+    "__GXInitGX",
+    "GXTexture",
+    "__GXSetTmemConfig",
+    "__GXSetSUTexRegs",
+    "__GXSetSUTexSize",
+    "GXPixel",
+    "GXAttr",
+    "GXMisc",
+    "GXTransform",
+    "GXGeometry",
+    "GXDisplayList",
+    "__GXData_struct",
+    "gxData",
+    "__GXContext",
+    "bpSent",
+    "vNum",
+    "vLim",
+    "unk",
+    "GX_WRITE_U32",
+    "GX_WRITE_U8",
+    "GX_WRITE_RAS_REG",
+    "GXWGFifo",
+    "GXSetFogRangeAdj",
+    "GXSetScissor",
+    "GXSetScissorBoxOffset",
+    "GXFlush",
+    "GXInitTexObj",
+    "GXLoadTexObjPreLoaded",
+    "__SetSURegs",
+    "TMEM",
+    "TLUT",
+    "TexRegions",
+    "TlutRegions",
+    "NonMatching to Matching",
+    "GALE01 symbols.txt"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or explain __GXData_struct.unk in Dolphin GX.",
+    "Search for follow-up changes to bpSent semantics in GXPixel, GXTexture, GXMisc, GXGeometry, and GXDisplayList.",
+    "Search for PRs touching __GXSetTmemConfig or TMEM register sequences to confirm arg0 meanings.",
+    "Look for later cleanup around gxData versus __GXContext symbol naming.",
+    "Compare other Dolphin SDK decomp projects for __GXInitGX and GXInit function-boundary conventions."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

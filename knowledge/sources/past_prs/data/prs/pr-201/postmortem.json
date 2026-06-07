@@ -1,0 +1,150 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-201",
+  "pr": {
+    "number": 201,
+    "title": "Finish splitting sdata, remove list.s",
+    "url": "https://github.com/doldecomp/melee/pull/201",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-18T18:10:50Z",
+    "merged_at": "2021-12-18T18:10:57Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Finished splitting the monolithic asm/sdata.s small-data file into per-module .sdata sections, removed asm/sdata.s from the build, and deleted the remaining asm/sysdolphin/baselib/list.s assembly file. The PR also promoted the baselib random seed symbols from anonymous sdata labels to C globals named seed and seed_ptr, updated sda21 references to seed_ptr, and replaced several C references to sdata string labels with local/static strings, string literals, or __FILE__.",
+  "change_classification": {
+    "primary_type": "sdata_split_and_asm_cleanup",
+    "categories": [
+      "data-section-split",
+      "assembly-cleanup",
+      "build-system-cleanup",
+      "symbol-naming",
+      "c-source-data-migration"
+    ],
+    "systems": [
+      "asm",
+      "Makefile",
+      "obj_files.mk",
+      "include/variables.h",
+      "src/sysdolphin/baselib",
+      "asm/sysdolphin/baselib",
+      "asm/melee/gm"
+    ]
+  },
+  "key_files": [
+    "asm/sdata.s",
+    "Makefile",
+    "obj_files.mk",
+    "asm/sysdolphin/baselib/list.s",
+    "src/sysdolphin/baselib/list.c",
+    "src/sysdolphin/baselib/random.c",
+    "include/variables.h",
+    "asm/melee/gm/gmmain.s",
+    "asm/sysdolphin/baselib/AXDriver.s",
+    "asm/sysdolphin/baselib/code_80391580.s",
+    "asm/sysdolphin/baselib/initialize.s",
+    "asm/sysdolphin/baselib/jobj.s",
+    "asm/sysdolphin/baselib/pobj.s",
+    "asm/sysdolphin/baselib/robj.s"
+  ],
+  "what_changed": [
+    "Deleted asm/sdata.s, a 919-line monolithic small read/write data file containing .section .sdata entries for many unrelated baselib and system symbols.",
+    "Removed SDATA_O_FILES from the Makefile O_FILES list and deleted the asm/sdata.o entry from obj_files.mk, so the build no longer links a standalone sdata object.",
+    "Added .section .sdata blocks directly to many owning assembly files under asm/sysdolphin/baselib, including AXDriver.s, bytecode.s, class.s, displayfunc.s, fog.s, initialize.s, jobj.s, pobj.s, robj.s, synth.s, texp.s, wobj.s, and others.",
+    "Deleted asm/sysdolphin/baselib/list.s, indicating the list module no longer needed its separate assembly file in this slice.",
+    "Changed src/sysdolphin/baselib/random.c from extern anonymous labels lbl_804D5F90 and lbl_804D5F94 to real C definitions: u32 seed = 1; and u32* seed_ptr = &seed.",
+    "Updated random-number code and inline assembly references from lbl_804D5F94 to seed_ptr, including HSD_Rand, HSD_Rand_inline, HSD_Randf assembly comments/operands, and _HSD_RandForgetMemory.",
+    "Updated asm/melee/gm/gmmain.s to load seed_ptr@sda21(r13) instead of lbl_804D5F94@sda21(r13).",
+    "Updated include/variables.h comments to refer to seed_ptr rather than lbl_804D5F94.",
+    "Changed src/sysdolphin/baselib/list.c to stop using extern sdata string labels for assertions and instead use __FILE__, \"list\", and \"prev\".",
+    "Changed src/sysdolphin/baselib/object.c to pass the literal \"hsd_obj\" to hsdInitClassInfo instead of an extern sdata string label.",
+    "Adjusted small static string definitions in aobj.c, dobj.c, and id.c to include explicit trailing NUL characters and sizes, such as \"aobj.c\\0\", \"dobj.c\\0\", and \"entry\\0\"."
+  ],
+  "smart_moves": [
+    "Moved small-data entries into the same assembly files as the code that logically owns them, reducing the global dumping-ground effect of asm/sdata.s and making future decompilation attribution easier.",
+    "Removed the build-system references to SDATA_O_FILES at the same time as deleting asm/sdata.s, avoiding a stale object-file dependency.",
+    "Promoted the random seed state to named C globals, seed and seed_ptr, while preserving the sda21 access pattern required by existing assembly references.",
+    "Used source-level constructs where possible, such as __FILE__ and string literals in list.c/object.c, instead of keeping unnecessary extern references to anonymous sdata labels.",
+    "Preserved explicit layout details for split .sdata blocks, including .balign 4 and NULL padding, which is important for matching small-data address order.",
+    "Updated cross-module assembly references such as gmmain.s when renaming lbl_804D5F94 to seed_ptr, preventing symbol drift between C and assembly."
+  ],
+  "decomp_lessons": [
+    "When splitting a monolithic .sdata file, migrate entries into the owning object files and update the object list so the linker order still matches without a separate sdata.o.",
+    "Small-data symbols can sometimes be converted from anonymous lbl_ names to meaningful C globals if all sda21 references are updated consistently.",
+    "String labels used only for assertions or class names may be replaced with __FILE__ or string literals when that preserves emitted data and ordering.",
+    "Explicit string sizes and explicit \"\\0\" text can be useful matching levers for forcing the compiler to emit the same small-data layout as hand-written assembly.",
+    "Do not assume every sdata item should become C immediately; this PR leaves many labels as lbl_804Dxxxx in per-module assembly when evidence for better names is not present.",
+    "Large data-section-only cleanups can still matter for decomp progress because they reduce global assembly dependencies and make later source-file matching less entangled."
+  ],
+  "naming_conventions": [
+    {
+      "old": "lbl_804D5F90",
+      "new": "seed",
+      "context": "Baselib random seed value in src/sysdolphin/baselib/random.c."
+    },
+    {
+      "old": "lbl_804D5F94",
+      "new": "seed_ptr",
+      "context": "Pointer to random seed, referenced through sda21 in random.c assembly and asm/melee/gm/gmmain.s."
+    },
+    {
+      "pattern": "Retain lbl_804Dxxxx names for split .sdata items when no semantic name is evidenced.",
+      "context": "Most migrated .sdata entries in baselib assembly files kept address-style labels."
+    },
+    {
+      "pattern": "Prefer source literals or __FILE__ over extern small-data string labels when matching allows it.",
+      "context": "list.c and object.c replaced labels such as lbl_804D5F48, lbl_804D5F50, lbl_804D5F60, and lbl_804D5F68."
+    }
+  ],
+  "assembly_or_matching_tactics": [
+    "Append .section .sdata blocks to the relevant asm/sysdolphin/baselib/*.s files, commonly before existing .sbss sections, to preserve object-local data ownership.",
+    "Maintain .balign 4 after .asciz strings and keep explicit .4byte NULL padding where present in the original monolithic sdata layout.",
+    "For sda21 small-data references, rename the symbol operand consistently across assembly files, e.g. lbl_804D5F94@sda21(r13) to seed_ptr@sda21(r13).",
+    "Use explicit char array sizes and explicit trailing NULs in C static strings when the compiler's default string object size would not match the expected data layout.",
+    "Remove obsolete assembly object entries from obj_files.mk and Makefile after moving their data into other objects, rather than leaving an empty or stale section file."
+  ],
+  "review_feedback": [
+    {
+      "type": "none_recorded",
+      "text": "The PR context contains no issue comments, review comments, or reviews, so no human review feedback is evidenced."
+    }
+  ],
+  "searchable_terms": [
+    "sdata split",
+    "asm/sdata.s",
+    "SDATA_O_FILES",
+    "asm/sdata.o",
+    "list.s removal",
+    "sysdolphin baselib",
+    "seed",
+    "seed_ptr",
+    "lbl_804D5F90",
+    "lbl_804D5F94",
+    "sda21",
+    "HSD_Rand",
+    "HSD_Randf",
+    "_HSD_RandForgetMemory",
+    "HSD_SListAlloc",
+    "HSD_SListPrependList",
+    "__FILE__",
+    "hsd_obj",
+    ".section .sdata",
+    ".balign 4",
+    "NULL padding"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that convert remaining lbl_804Dxxxx .sdata labels in asm/sysdolphin/baselib/*.s into C globals or literals.",
+    "Search for additional uses of seed_ptr and seed to confirm all random-state references were fully renamed after this PR.",
+    "Compare post-PR linker map order for .sdata to verify that per-object .sdata splitting preserved addresses after removing asm/sdata.o.",
+    "Look for subsequent removal or decompilation of other standalone baselib assembly files after list.s was deleted."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

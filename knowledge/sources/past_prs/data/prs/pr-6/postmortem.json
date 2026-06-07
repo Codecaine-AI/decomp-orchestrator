@@ -1,0 +1,143 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-6",
+  "pr": {
+    "number": 6,
+    "title": "Add __mem matching C, optimization flag for current matching, remove line ending in ssbm.sha1",
+    "url": "https://github.com/doldecomp/melee/pull/6",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2020-07-02T15:11:59Z",
+    "merged_at": "2020-07-02T15:14:43Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Replaced the hand-written assembly for the early .init memory routines with matching C for memset and __fill_mem, added the new source/header files, adjusted the linker script so __mem.o(.text) is placed at the start of .init at 0x80003100, and changed compiler flags from -O2,p to -O4,p because -O2,p did not match due to variable ordering in memset. The Makefile also gained an INCLUDES variable covering include and src, and ssbm.sha1 was normalized by removing a problematic trailing carriage return/no-newline issue.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "runtime-library",
+      "headers",
+      "tooling",
+      "linker-script",
+      "build-flags",
+      "checksum-fix"
+    ],
+    "systems": [
+      "asm/init",
+      "src",
+      "Makefile",
+      "ldscript.lcf",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/__mem.c",
+      "role": "New matching C implementation for memset and __fill_mem, replacing the removed assembly block from asm/init.s."
+    },
+    {
+      "path": "src/__mem.h",
+      "role": "New header declaring memset and __fill_mem using unsigned long for the size/count parameter."
+    },
+    {
+      "path": "asm/init.s",
+      "role": "Removed the assembly implementation of memset and func_80003130-sized fill routine from the .init section."
+    },
+    {
+      "path": "ldscript.lcf",
+      "role": "Explicitly inserts __mem.o(.text) into the .init section before remaining *(.init) input sections."
+    },
+    {
+      "path": "Makefile",
+      "role": "Adds INCLUDES := -i include -i src and changes CFLAGS optimization from -O2,p to -O4,p."
+    },
+    {
+      "path": "ssbm.sha1",
+      "role": "Normalized checksum file line ending/no-newline state so sha1sum works for the author."
+    }
+  ],
+  "what_changed": [
+    "Added src/__mem.c with C versions of memset and __fill_mem. memset calls __fill_mem(dst, val, n) and then returns the original dst pointer.",
+    "Added src/__mem.h with include guard ___mem_ and prototypes for void *memset(void *dst, int val, unsigned long n) and void __fill_mem(void *dst, int val, unsigned long n).",
+    "Deleted the assembly implementation of memset and the following fill routine from asm/init.s, leaving later init symbols such as func_800031F4 in place.",
+    "Updated ldscript.lcf so .init BIND(0x80003100) begins with __mem.o(.text) followed by *(.init), preserving the expected address placement for the decompiled memory routines.",
+    "Changed Makefile CFLAGS from -O2,p -i include to -O4,p $(INCLUDES), with INCLUDES defined as -i include -i src.",
+    "Adjusted ssbm.sha1 to remove a trailing carriage return or line ending issue described by the PR body as breaking sha1sum for the author."
+  ],
+  "smart_moves": [
+    "Kept the linker ordering explicit by placing __mem.o(.text) before *(.init), which is important when replacing assembly located at fixed early .init addresses.",
+    "Captured a matching-sensitive compiler option change in the PR body: -O2,p was non-matching due to variable ordering for the return in memset, while -O4,p matched the current implementation.",
+    "Moved the routine into src while adding -i src to the compiler include paths, avoiding ad hoc include paths in individual files.",
+    "The C implementation mirrors the assembly structure with byte alignment handling, replicated byte value construction, 32-byte unrolled word stores, remaining word stores, and tail byte stores, which makes it easier to match generated code against the original assembly.",
+    "Preserved memset semantics by saving the original dst through the wrapper and returning it after __fill_mem mutates its local dst pointer during filling."
+  ],
+  "decomp_lessons": [
+    "For early runtime/library routines, matching C may need both source replacement and linker-script placement; adding the C file alone is not enough if the original code lived in .init at fixed addresses.",
+    "Optimization flags can be function-critical. In this PR, -O2,p produced non-matching variable ordering for memset, while -O4,p was used for the current match.",
+    "When decompiling low-level memory routines, pointer pre-decrement and pre-increment idioms can reproduce assembly patterns such as stbu/stwu update stores.",
+    "Use explicit object placement in ldscript.lcf when the decompiled object must occupy a specific section position previously held by assembly.",
+    "Repository checksum files are sensitive to line endings; a stray carriage return or unexpected newline state can break sha1sum even when the hash text appears unchanged."
+  ],
+  "naming_conventions": [
+    "The new source/header pair uses the runtime-style name __mem.c and __mem.h.",
+    "The helper routine is named __fill_mem, while the public C library entry point remains memset.",
+    "The header guard added here is ___mem_, matching the double-underscore file name but using a lower-case guard. No review feedback is available to confirm whether this became a preferred convention.",
+    "Function parameters in the new code use short names dst, val, and n, matching typical C library memory routine naming."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replace assembly in asm/init.s only after adding matching C and forcing object placement in .init through ldscript.lcf.",
+    "Use -O4,p for this matching C case; the PR body states -O2,p caused non-matching variable ordering for the return in memset.",
+    "Model the fill helper with unsigned long temporaries and casts through unsigned char * and unsigned long * to trigger the byte and word store patterns seen in the removed assembly.",
+    "Replicate byte value expansion with v |= v << 24 | v << 16 | v << 8 when v is nonzero, corresponding to building a repeated-byte word for word stores.",
+    "Use loops that decrement with while (--i) / while (--n) and pre-incremented stores to resemble the original counted loops and update-address stores."
+  ],
+  "review_feedback": [
+    "No inline review comments or issue comments were present in the provided PR slice.",
+    "The available review evidence is limited to two reviews with no excerpted comments, so reviewer rationale cannot be reconstructed from this slice."
+  ],
+  "searchable_terms": [
+    "PR 6",
+    "PsiLupan",
+    "__mem.c",
+    "__mem.h",
+    "__fill_mem",
+    "memset",
+    "asm/init.s",
+    "ldscript.lcf",
+    "Makefile",
+    "ssbm.sha1",
+    ".init",
+    "BIND(0x80003100)",
+    "__mem.o(.text)",
+    "-O4,p",
+    "-O2,p",
+    "INCLUDES",
+    "-i include",
+    "-i src",
+    "sha1sum",
+    "trailing carriage return",
+    "line ending",
+    "matching C",
+    "variable ordering",
+    "unsigned long",
+    "unsigned char",
+    "word stores",
+    "runtime memory routine"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify __mem.c or __mem.h to see whether this initial matching implementation or naming was refined.",
+    "Search for additional Makefile optimization flag changes after PR #6 to determine whether -O4,p remained global or became per-file.",
+    "Look for linker script changes involving .init and __mem.o to understand how early runtime object placement evolved.",
+    "Search for comments or later issues mentioning ssbm.sha1 line endings or sha1sum portability."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

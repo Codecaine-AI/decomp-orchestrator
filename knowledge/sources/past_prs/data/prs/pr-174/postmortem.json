@@ -1,0 +1,144 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-174",
+  "pr": {
+    "number": 174,
+    "title": "Split part of sbss and sdata, get rid of rodata via splitting",
+    "url": "https://github.com/doldecomp/melee/pull/174",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-11T02:58:53Z",
+    "merged_at": "2021-12-11T02:59:05Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Moved large monolithic small-data and rodata assembly blobs into the asm translation-unit files that actually own those constants or globals. The Makefile stopped linking a separate RODATA_O_FILES group, while asm/rodata.s, asm/sdata.s, and asm/sbss.s were largely emptied. Many MSL, MetroTRK, Dolphin, SysDolphin, fighter, item, menu, and stage asm files gained local .rodata, .sdata, or .sbss sections containing labels that had previously lived in global section files. This mattered because it made data ownership more local and enabled future per-file decompilation/matching without carrying a single centralized rodata object.",
+  "change_classification": {
+    "primary_type": "asm-data-section-split",
+    "categories": [
+      "code-change",
+      "linker-layout",
+      "data-splitting",
+      "asm-organization"
+    ],
+    "systems": [
+      "Makefile",
+      "asm",
+      "MSL",
+      "MetroTRK",
+      "Runtime",
+      "Dolphin JPEG",
+      "sysdolphin baselib",
+      "melee fighter",
+      "melee item",
+      "melee stage",
+      "melee game/menu"
+    ]
+  },
+  "key_files": [
+    "Makefile",
+    "asm/rodata.s",
+    "asm/sdata.s",
+    "asm/sbss.s",
+    "asm/MSL/ansi_fp.s",
+    "asm/MSL/math.s",
+    "asm/MSL/printf.s",
+    "asm/Runtime/runtime.s",
+    "asm/MetroTRK/nubinit.s",
+    "asm/MetroTRK/targimpl.s",
+    "asm/dolphin/jpeg/jpegdec.s",
+    "asm/melee/ft/code_8006DBF4.s",
+    "asm/melee/gm/code_801601C4.s",
+    "asm/melee/it/code_8027CF30.s",
+    "asm/melee/gr/grcastle.s",
+    "src/MSL/ctype.c"
+  ],
+  "what_changed": [
+    "Removed $(RODATA_O_FILES) from the Makefile O_FILES link list, so rodata was no longer linked as its own object group.",
+    "Deleted the contents of the centralized asm/rodata.s file, with the changed-file summary showing 2795 deleted lines.",
+    "Deleted most/all centralized small-data blobs from asm/sdata.s and asm/sbss.s, with 659 deleted lines from sdata and 183 deleted lines from sbss.",
+    "Appended .section .rodata blocks to many asm files, including MSL ansi_fp/math/printf, Runtime runtime, MetroTRK nubinit/targimpl, dolphin/jpeg/jpegdec, and many melee subsystem files.",
+    "Appended .section .sdata and .section .sbss blocks to the owning asm files where small data or uninitialized small data belonged; the diff excerpt shows fighter data moving into asm/melee/ft/code_8006DBF4.s and ef globals moving into asm/melee/ef/eflib.s.",
+    "Preserved existing raw label naming such as lbl_803B8BA8, lbl_804D3A18, and lbl_804D64E8 rather than inventing semantic names during the split.",
+    "Updated src/MSL/ctype.c slightly, but the provided excerpt does not show enough detail to characterize that source change beyond its relation to section/data cleanup."
+  ],
+  "smart_moves": [
+    "Moved constants next to the code file that references them instead of leaving every constant in a monolithic asm/rodata.s, reducing future ownership ambiguity.",
+    "Kept section directives inside asm files after the text/data they accompany, letting a single object contribute text plus rodata/sdata/sbss while preserving link order.",
+    "Used explicit .section .rodata, .section .sdata, and .section .sbss boundaries so moved data remained section-correct after splitting.",
+    "Kept alignment directives such as .balign 4 around moved .asciz strings in sdata, which is important for preserving layout.",
+    "Preserved raw .4byte, .float, .double, .asciz, NULL, and label references exactly enough for matching, rather than trying to prematurely type all data.",
+    "Removed the separate rodata object group from the Makefile only after distributing its contents to per-file asm objects."
+  ],
+  "decomp_lessons": [
+    "For large decomp projects, central rodata/sdata/sbss files are a temporary crutch; splitting constants into their owning translation units makes later C conversion and object matching easier.",
+    "When relocating data, maintain the original section, symbol order, padding, and alignment; small changes in .balign or NULL padding can shift every following label.",
+    "Do not rename unknown labels during mechanical section splitting unless there is strong evidence; address-style lbl_* names are safer for searchability and matching.",
+    "Data can be split before the corresponding functions are decompiled. This PR shows progress can come from improving object boundaries even when most content remains asm.",
+    "MSL/libc-style tables and numeric constants often need to remain as raw hex .4byte values until their exact type and compiler emission behavior are known.",
+    "Small-data ownership matters separately from rodata ownership: .sdata and .sbss symbols should be moved into the same object as their referencing code when possible."
+  ],
+  "naming_conventions": [
+    "Unknown symbols retained address-derived labels with the lbl_XXXXXXXX form.",
+    "Function symbols in asm retained func_XXXXXXXX style where present.",
+    "Files kept subsystem path conventions such as asm/MSL/*.s, asm/MetroTRK/*.s, asm/dolphin/jpeg/*.s, asm/sysdolphin/baselib/*.s, and asm/melee/{ft,gr,it,gm,mn}/*.s.",
+    "Small-data symbols in the excerpt use lbl_804Dxxxx addresses, while rodata examples use lbl_803Bxxxx addresses.",
+    "No semantic renaming convention or reviewer-requested naming guidance is present in the supplied PR text."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replace one central rodata object with per-object .section .rodata blocks appended to the asm files that own the constants.",
+    "Move .sdata strings and pointer tables using .asciz plus .balign 4 and explicit .4byte NULL padding to preserve exact layout.",
+    "Move .sbss entries using .skip sizes under .section .sbss to preserve uninitialized small-data allocation sizes.",
+    "Keep constants as raw .4byte hex where float/double/table interpretation might affect assembler output or readability is uncertain.",
+    "Use .float and .double where the existing data is safely represented that way, as shown by moved vector constants and Runtime double constants.",
+    "Update the object list/link composition in Makefile in tandem with data splitting so obsolete aggregate section objects are not linked."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR context.",
+    "Because there is no human text excerpt or review feedback, reviewer intent beyond accepting the split cannot be inferred."
+  ],
+  "searchable_terms": [
+    "PR174",
+    "PsiLupan",
+    "more-split",
+    "split sbss",
+    "split sdata",
+    "split rodata",
+    "remove RODATA_O_FILES",
+    "asm/rodata.s",
+    "asm/sdata.s",
+    "asm/sbss.s",
+    ".section .rodata",
+    ".section .sdata",
+    ".section .sbss",
+    "lbl_803B8BA8",
+    "lbl_803B8F40",
+    "lbl_803B93A0",
+    "lbl_803B9410",
+    "lbl_804D3A18",
+    "lbl_804D64E8",
+    "MSL math rodata",
+    "MSL ansi_fp rodata",
+    "MetroTRK rodata",
+    "jpegdec rodata",
+    "fighter sdata",
+    "stage rodata",
+    "small data split",
+    "monolithic rodata removal"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that convert per-file rodata labels from this split into typed C constants.",
+    "Search for remaining centralized section files after PR 174 to see what rodata/sdata/sbss still needed splitting.",
+    "Inspect src/MSL/ctype.c in PR 174 to determine the exact source-level adjustment connected to ctype table ownership.",
+    "Search for lbl_804D3A18 and neighboring ft/code_8006DBF4.s sdata labels in later PRs for semantic naming or decompilation.",
+    "Look for future Makefile or linker-script PRs that further refine per-object data section ordering."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

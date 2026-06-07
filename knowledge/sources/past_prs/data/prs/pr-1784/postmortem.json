@@ -1,0 +1,147 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1784",
+  "pr": {
+    "number": 1784,
+    "title": "Add tools/table-typer and infer more types",
+    "url": "https://github.com/doldecomp/melee/pull/1784",
+    "state": "MERGED",
+    "author": "lukechampine",
+    "created_at": "2025-08-03T04:21:06Z",
+    "merged_at": "2025-08-04T01:55:18Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added a new Go utility, tools/table-typer, to infer concrete function signatures from table declarations and asm data, currently hard-coded for ItemStateTable. The PR also applied the tool's output across many item files, replacing UNK_RET/UNK_PARAMS or void(void) placeholders with bool/void Item_GObj* callback signatures. This improved header/source type precision for item state-table callbacks without changing GALE01 output.",
+  "change_classification": {
+    "primary_type": "tooling-assisted type inference",
+    "categories": [
+      "tooling",
+      "headers",
+      "types-structs",
+      "signature-cleanup",
+      "no-binary-change"
+    ],
+    "systems": [
+      "tooling",
+      "item",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "tools/table-typer/main.go",
+    "tools/table-typer/c.go",
+    "tools/table-typer/README.md",
+    "tools/table-typer/go.mod",
+    "tools/table-typer/LICENSE",
+    ".editorconfig",
+    "src/melee/it/items/itfoods.c",
+    "src/melee/it/items/itlucky.h",
+    "src/melee/it/items/itwhitebea.h",
+    "src/melee/it/items/itclinkmilk.c",
+    "src/melee/it/items/itclinkmilk.h",
+    "src/melee/it/items/ithitodeman.h",
+    "src/melee/it/items/itmatadogas.h",
+    "src/melee/it/items/itunknown.h"
+  ],
+  "what_changed": [
+    "Introduced tools/table-typer, a Go command invoked as `go run . ItemStateTable ../../src/ ../../asm/`.",
+    "Documented that the tool finds extern declarations of a table type, locates matching data in asm files, parses table entries, and rewrites .c/.h signatures to known types.",
+    "Implemented ItemStateTable support as a 4-entry table pattern whose callback fields infer `bool (*)(Item_GObj*)`, `void (*)(Item_GObj*)`, and `bool (*)(Item_GObj*)` after an ignored enum-like field.",
+    "Implemented C signature parsing and rewriting that preserves existing parameter names when possible and supplies `gobj` when an unnamed parameter must be added.",
+    "Added type-equivalence normalization so `Item_GObj` and `Fighter_GObj` are treated as equivalent to `HSD_GObj` for comparison purposes.",
+    "Updated many item headers from `UNK_RET fn(UNK_PARAMS)` to concrete `bool fn(Item_GObj* gobj)` or `void fn(Item_GObj* gobj)` declarations.",
+    "Updated matching C definitions and static prototypes that previously used `void` parameters to accept `Item_GObj* gobj`.",
+    "Changed several `int` callback returns in `itfoods.c` to `bool`, while preserving the existing `return 0;` bodies.",
+    "Added missing item-local header includes where the signature rewrite needed declared types, including `itclinkmilk.h` and `itnesspkthundertrail.h`.",
+    "Added `[*.go] indent_style = tab` to `.editorconfig` and added an Unlicense-style license file for the new tool subdirectory."
+  ],
+  "smart_moves": [
+    "Turned a one-off script from PR #1776 into a checked-in, documented tool so the table-derived signature inference can be reused and extended.",
+    "Used existing asm table data and extern `ItemStateTable` declarations as evidence for callback types instead of manually guessing each placeholder signature.",
+    "Kept the tool narrowly scoped to a hard-coded `ItemStateTable` first, but structured it with a `tableTypes` map so other table layouts could be added later.",
+    "Handled common decomp typedef noise by normalizing `Item_GObj`, `Fighter_GObj`, and `HSD_GObj` when comparing signatures.",
+    "Applied inferred signatures consistently to both headers and implementation stubs, reducing mismatches between declarations and definitions.",
+    "Preserved no-binary-change behavior; the decomp.dev report said GALE01 had no changes."
+  ],
+  "decomp_lessons": [
+    "State-table layouts can be mined to recover callback signatures in bulk: for ItemStateTable, callback slots commonly correspond to `bool Item_GObj*`, `void Item_GObj*`, and `bool Item_GObj*` handlers.",
+    "Replacing `UNK_RET`/`UNK_PARAMS` with concrete callback prototypes in headers can expose more type information without requiring full function decompilation.",
+    "When a tool rewrites signatures, check for needed includes afterward; the README explicitly warns that rewritten files may reference a type they do not currently include.",
+    "For item callback stubs that return false/0, `bool` is often the better table-derived return type than `int` when the function is a state-table predicate/update callback.",
+    "Tooling that parses source should tolerate decomp conventions such as address comments, placeholder prototypes, unnamed parameters, and typedef aliases.",
+    "Even no-op empty callback definitions should carry their table-derived `Item_GObj* gobj` parameter if the state table passes one."
+  ],
+  "naming_conventions": [
+    "Inferred item callback parameters were generally named `gobj`, producing signatures such as `bool it_802D59D0(Item_GObj* gobj)`.",
+    "Header declarations retained address comments in the existing style, e.g. `/* 2D246C */ bool it_802D246C(Item_GObj* gobj);`.",
+    "The tool's table registry is named `tableTypes`, with entries keyed by C type name such as `ItemStateTable`.",
+    "The tool models callback signatures with `FuncType` and rewritten declarations with `FuncSignature`.",
+    "Existing symbol names were not renamed; the PR only improved return and parameter types for symbols like `it_802C8F20`, `it_802D5048`, and `it_802E3588`."
+  ],
+  "assembly_or_matching_tactics": [
+    "The tool scans asm files for non-.text and non-.sdata sections, extracts `.global` blocks containing `.byte` data, and records `.byte`, `.2byte`, `.4byte`, and `.8byte` entries.",
+    "It maps extern table declarations from headers to asm table labels, then parses entries only when the asm table length is a multiple of the known table entry count.",
+    "For `ItemStateTable`, it skips `NULL` callback entries and only yields non-null function names with known function types.",
+    "Signature rewriting is guarded by a function-name containment check before parsing and editing each file, limiting unnecessary work.",
+    "The tool compares normalized types before rewriting so equivalent object pointer typedefs do not cause redundant or harmful edits.",
+    "The decomp.dev bot reported `No changes` for GALE01, confirming these type/signature edits did not alter the built binary."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "ribbanya",
+      "state": "CHANGES_REQUESTED",
+      "feedback": "Asked the author to add a copyleft or permissive license to the new tool subdirectory.",
+      "resolution": "The PR added `tools/table-typer/LICENSE`, and the author replied `done`; a later review approved the PR."
+    },
+    {
+      "reviewer": "lukechampine",
+      "state": "comment",
+      "feedback": "Noted that the linter was unhappy because the new tool was written in Go rather than Python.",
+      "resolution": "The PR added `.editorconfig` settings for Go files and proceeded to approval."
+    }
+  ],
+  "searchable_terms": [
+    "PR 1784",
+    "table-typer",
+    "ItemStateTable",
+    "tools/table-typer",
+    "Go tooling",
+    "signature inference",
+    "UNK_RET",
+    "UNK_PARAMS",
+    "Item_GObj",
+    "HSD_GObj",
+    "FuncType",
+    "FuncSignature",
+    "asm table parsing",
+    "extern ItemStateTable",
+    "itfoods",
+    "itlucky",
+    "itwhitebea",
+    "itclinkmilk",
+    "ithitodeman",
+    "itmatadogas",
+    "itunknown",
+    "it_802C8F20",
+    "it_802D59D0",
+    "it_802E3588",
+    "GALE01 no changes",
+    "Unlicense"
+  ],
+  "follow_up_queries": [
+    "Find future PRs that extend tools/table-typer beyond ItemStateTable.",
+    "Search for remaining `extern ItemStateTable` declarations whose callback functions still use `UNK_RET` or `UNK_PARAMS`.",
+    "Search item source files for table-derived callbacks still declared as `void fn(void)` or `bool fn(void)`.",
+    "Check whether table-typer include warnings caused later follow-up fixes for missing `Item_GObj` includes.",
+    "Compare PR #1776 with PR #1784 to understand the original script workflow that was rewritten."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,121 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1897",
+  "pr": {
+    "number": 1897,
+    "title": "Match remaining robj code",
+    "url": "https://github.com/doldecomp/melee/pull/1897",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2025-09-02T19:43:52Z",
+    "merged_at": "2025-09-02T19:56:33Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Finished matching the remaining sysdolphin baselib RObj code by rewriting resolveCnsOrientation and then marking sysdolphin/baselib/robj.c as Matching in configure.py. The decomp.dev bot reported one new match: main/sysdolphin/baselib/robj resolveCnsOrientation improved from 98.95% to 100.00%, with matched code +1492 bytes and linked code +8012 bytes for GALE01. The PR also cleaned up symbol scopes/names for many robj-local functions and data objects in config/GALE01/symbols.txt.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "function-match",
+      "symbol-scope-cleanup",
+      "build-config-update"
+    ],
+    "systems": [
+      "sysdolphin/baselib/robj",
+      "GALE01 symbols",
+      "configure.py matching configuration"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/robj.c",
+    "config/GALE01/symbols.txt",
+    "configure.py"
+  ],
+  "what_changed": [
+    "Reworked src/sysdolphin/baselib/robj.c around resolveCnsOrientation, replacing a direct inline search loop with a new static inline helper named inlined_HSD_RObjGetByType.",
+    "resolveCnsOrientation now calls inlined_HSD_RObjGetByType(robj, 0x10000000, 4) before processing orientation constraints.",
+    "Renamed the callback parameter from arg2 to update_func, making its role clearer while preserving the callback signature void (*)(void*, int, HSD_ObjData*).",
+    "Changed local variables and stack layout in resolveCnsOrientation: examples include mtx0/mtx1 instead of sp80/sp40, sval instead of var_f1, Vec3 v reused directly, and an explicit u8 _[4] pad-like local.",
+    "Replaced manual matrix-column Vec3 construction and manual sqrtf(SQ(...)) column magnitude calculation with helper calls such as HSD_MtxColVec and HSD_MtxColMagFloat where the diff shows this matched better.",
+    "Retained the same high-level orientation update behavior: normalize matrix columns, scale by the target JObj matrix column magnitudes, walk parent JObjs when needed, concatenate matrices, then call update_func for HSD_RObj_80406E74[i] and finally for 0x37 with NULL.",
+    "Changed configure.py so Object(NonMatching, \"sysdolphin/baselib/robj.c\") became Object(Matching, \"sysdolphin/baselib/robj.c\").",
+    "Updated config/GALE01/symbols.txt to mark several robj helper functions local instead of global, including set_dirup_matrix, resolveCnsDirUp, resolveCnsOrientation, resolveLimits, expEvaluate, expLoadDesc, and bcexpLoadDesc.",
+    "Renamed many local data/rodata/sdata/sdata2 symbols from HSD_RObj_* or lbl_/jumptable-style names to compiler-style @NNN local symbols, and adjusted scopes for arg_buf and arg_buf_size from global to local."
+  ],
+  "smart_moves": [
+    "Factored the RObj type/subtype search into a static inline helper rather than leaving a bulky hand-written loop inside resolveCnsOrientation; this appears to have been useful for matching without creating a new externally visible symbol.",
+    "Used existing matrix helpers, especially HSD_MtxColVec and HSD_MtxColMagFloat, to express column extraction and magnitude behavior in a way that matched the original codegen better than manual field assignments and SQ/sqrtf expressions.",
+    "Preserved a small explicit padding local, u8 _[4], in resolveCnsOrientation, suggesting attention to stack layout rather than only semantic cleanup.",
+    "Kept local-only helper functions and anonymous constants local in symbols.txt, reducing unnecessary global symbol exposure once the translation unit matched.",
+    "Only promoted robj.c to Matching after the bot confirmed resolveCnsOrientation reached 100.00%, tying the configure.py status change to measurable matching evidence."
+  ],
+  "decomp_lessons": [
+    "For matching matrix-heavy HSD code, helper functions can produce more faithful codegen than equivalent-looking manual Vec3 and sqrt expressions.",
+    "If an inlined library-like helper is needed for code shape, name it explicitly as inlined_* and keep it static inline so the match does not introduce a new symbol boundary.",
+    "Stack layout details still matter after a function is semantically close; small dummy/padding locals may be required when taking a function from near-match to exact match.",
+    "When a file becomes fully matching, update both the build matching classification and the symbol table scopes/names so the repository metadata reflects the decomp state.",
+    "Local static strings, constants, jump tables, and private helper functions should be represented as local symbols or compiler-style @NNN labels when there is no evidence they are exported API.",
+    "Bot match reports are useful evidence for small finalization PRs: here the only reported new match was resolveCnsOrientation, and that justified flipping robj.c from NonMatching to Matching."
+  ],
+  "naming_conventions": [
+    "Use HSD_RObj* exported API names for actual global functions, but keep internal helpers such as resolveCnsOrientation, resolveLimits, expEvaluate, expLoadDesc, and bcexpLoadDesc as local symbols in symbols.txt.",
+    "Use inlined_HSD_RObjGetByType for a static inline helper that mimics or specializes HSD_RObjGetByType behavior without creating an external symbol.",
+    "Prefer descriptive callback names like update_func over placeholders like arg2 when the argument is used to apply object updates.",
+    "Use mtx0/mtx1 and sval for temporary matrix and scalar locals when those names help communicate matrix normalization code and maintain match shape.",
+    "Represent anonymous local constants/data in symbols.txt with @NNN local names instead of speculative HSD_RObj_address globals when the data is not exported."
+  ],
+  "assembly_or_matching_tactics": [
+    "Introduced a static inline RObj traversal helper whose control flow checks the high type bit, masks with ROBJ_TYPE_MASK, and optionally matches subtype using curr->flags & 0xFFFFFFF.",
+    "Matched resolveCnsOrientation by reshaping equivalent math: extract matrix columns into Vec3, compute VECMag, guard against very small magnitudes with 1e-10F, invert magnitude, multiply by HSD_MtxColMagFloat, and write normalized/scaled columns back into matrices.",
+    "Used HSD_MtxInverseConcat, PSMTXCopy, and PSMTXConcat in the parent-JObj path while normalizing columns at each step, preserving the original hierarchy traversal structure.",
+    "Added/kept u8 _[4] in the local variable block, likely to influence stack layout; evidence is the diff only, not a reviewer explanation.",
+    "Adjusted symbols from global to local so linker/symbol metadata aligned with static/internal code and anonymous data after matching."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided PR slice.",
+    "The only visible feedback was the decomp.dev bot report for GALE01, which confirmed one new match: resolveCnsOrientation reached 100.00% from 98.95%."
+  ],
+  "searchable_terms": [
+    "PR1897",
+    "PsiLupan",
+    "Match remaining robj code",
+    "robj.c Matching",
+    "sysdolphin baselib robj",
+    "resolveCnsOrientation",
+    "inlined_HSD_RObjGetByType",
+    "HSD_RObjGetByType",
+    "HSD_RObj_80406E74",
+    "HSD_MtxColVec",
+    "HSD_MtxColMagFloat",
+    "HSD_MtxInverseConcat",
+    "PSMTXCopy",
+    "PSMTXConcat",
+    "VECMag",
+    "ROBJ_TYPE_MASK",
+    "configure.py Object Matching robj.c",
+    "GALE01 symbols scope local",
+    "set_dirup_matrix",
+    "resolveCnsDirUp",
+    "resolveLimits",
+    "expEvaluate",
+    "expLoadDesc",
+    "bcexpLoadDesc",
+    "arg_buf",
+    "arg_buf_size"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs touching src/sysdolphin/baselib/robj.c to see whether inlined_HSD_RObjGetByType was reused or renamed.",
+    "Search for HSD_MtxColMagFloat and HSD_MtxColVec in other matrix-heavy matches to reuse this matching tactic.",
+    "Check whether remaining HSD_RObj_* data symbols around 0x80406E74 and 0x80406F14 were later given semantic names.",
+    "Compare other baselib files flipped from NonMatching to Matching in configure.py for similar symbol-scope cleanup patterns."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

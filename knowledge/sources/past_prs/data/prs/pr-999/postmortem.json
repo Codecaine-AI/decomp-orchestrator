@@ -1,0 +1,141 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-999",
+  "pr": {
+    "number": 999,
+    "title": "Partially match `ftcolanim`",
+    "url": "https://github.com/doldecomp/melee/pull/999",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-10-31T02:38:24Z",
+    "merged_at": "2023-10-31T02:50:04Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Partially decompiled the fighter color-animation module by adding `src/melee/ft/ftcolanim.c`, wiring it into the build, and shrinking the old assembly file from a full text implementation to a small data/literal residue. The C translation introduced function-pointer dispatch tables, simple wrapper callbacks into `ftAction_*`, lb color-animation helper calls, inline-ASM fallbacks for still-hard functions, and supporting Fighter struct/header declarations.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "struct-layout",
+      "build-system"
+    ],
+    "systems": [
+      "fighter",
+      "ftcolanim",
+      "ftdata",
+      "lb",
+      "asm",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/ftcolanim.c",
+    "asm/melee/ft/ftcolanim.s",
+    "src/melee/ft/types.h",
+    "src/melee/ft/ftcolanim.h",
+    "src/melee/lb/lb_00F9.h",
+    "src/melee/ft/ftdata.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Added `src/melee/ft/ftcolanim.c` with 650 lines of C/inline-ASM content for the `ftcolanim` module.",
+    "Removed most of `asm/melee/ft/ftcolanim.s` text implementation, deleting 607 lines and leaving only a small amount of assembly/data residue including exported literal/data labels such as `ftCo_803C6AE8`, `ftCo_803C6B08`, and `ftCo_804D3C10`.",
+    "Added `$(BUILD_DIR)/src/melee/ft/ftcolanim.c.o` to `obj_files.mk` so the new C file participates in the build.",
+    "Introduced `FtCmd` dispatch tables `ftCo_803C6AD0` and `ftCo_803C6ADC`, mapping command cases to small static wrappers around `ftAction_80071028`, `ftAction_800711DC`, `ftAction_80071B50`, `ftAction_80071CA4`, `ftAction_800730B8`, and `ftAction_80073108`.",
+    "Converted trivial public functions such as `ftCo_Sleep_Anim`, `ftCo_Sleep_IASA`, `ftCo_800BFFAC`, and `ftCo_800C0074` into C bodies, with the latter two forwarding to `lb_80014498` on Fighter subfields.",
+    "Kept harder routines as `ASM` functions guarded by `#if !defined(MUST_MATCH) || defined(WIP)` with `NOT_IMPLEMENTED` stubs outside matching mode, preserving exact assembly under `MUST_MATCH` for functions including `ft_800BFF34`, `ftCo_800BFFD0`, `ft_800C0098`, `ftCo_800C0134`, `ftCo_800C0200`, `ftCo_800C0358`, and `ftCo_800C0408`.",
+    "Expanded `struct Fighter` in `src/melee/ft/types.h` by replacing broad filler around offsets `0x3F8` through `0x584` with individual `UNK_T xNNN` fields so code can address color-animation-related subregions such as `x408`, `x488`, and `x508` directly.",
+    "Added declarations for `lb_80014498`, `lb_800144C8`, and `lb_80014258` to `src/melee/lb/lb_00F9.h`.",
+    "Added `extern HSD_GObjEvent ftData_UnkMotionStates4[FTKIND_MAX];` to `src/melee/ft/ftdata.h`.",
+    "Adjusted `ftcolanim.h` prototypes, removing exported declarations for static/internal dispatch helpers and adding more specific parameter names/types where known, including `ftCo_800C0408(Fighter_GObj* gobj)`."
+  ],
+  "smart_moves": [
+    "Split obviously simple callback wrappers into real C while isolating the harder control-flow-heavy routines behind `ASM`/`MUST_MATCH` blocks, allowing incremental progress without blocking the whole file on difficult matches.",
+    "Preserved dispatch-table structure explicitly with `FtCmd ftCo_803C6AD0[3]` and `ftCo_803C6ADC[3]`, matching the original indirect `mtlr`/`blrl` behavior instead of flattening the logic prematurely.",
+    "Used exact Fighter offset fields (`x408`, `x488`, `x508`) rather than pointer arithmetic on filler arrays, making later cleanup and semantic naming easier.",
+    "Moved build ownership from the `.s` text body to the new `.c.o` while leaving residual literals/data in asm, a practical hybrid step for partial decompilation.",
+    "Added lb and ftdata prototypes needed by the new C file instead of relying entirely on `UNK_PARAMS` call sites."
+  ],
+  "decomp_lessons": [
+    "For partial file matches, it is acceptable to land a hybrid C file with exact inline-ASM fallbacks when it removes a large assembly blob and exposes structure/prototype information for future work.",
+    "Function-pointer tables are often the cleanest C representation for PowerPC dispatch sequences that load a function pointer, move it to LR, and `blrl`; preserve the table order and index arithmetic exactly.",
+    "When code repeatedly addresses fixed object offsets, expanding struct filler into individual `UNK_T` fields can unlock C expressions like `&fp->x488` while still avoiding premature semantic guesses.",
+    "Keep hard-matching functions behind `#if !defined(MUST_MATCH) || defined(WIP)` plus exact assembly to preserve build modes during incremental decompilation.",
+    "Adding header declarations for newly called helper functions is part of decomp progress; avoid hiding calls behind unknown signatures when a minimal prototype is known.",
+    "Evidence for semantic names in this PR is limited; most new Fighter fields remain offset-based `xNNN` names, which is appropriate until their purpose is proven."
+  ],
+  "naming_conventions": [
+    "Common fighter functions use the `ftCo_` prefix for common fighter code and retain address-based suffixes such as `ftCo_800BFFD0` when no semantic name is known.",
+    "Static local wrappers are named by address, e.g. `ftCo_800BFE74`, and declared `static` when only used by local dispatch tables.",
+    "Global data/literal labels use address-style names such as `ftCo_803C6AD0`, `ftCo_803C6ADC`, `ftCo_803C6AE8`, `ftCo_803C6B08`, and `ftCo_804D3C10`.",
+    "Unknown Fighter fields are represented as offset names like `x408`, `x488`, and `x508` rather than invented semantic names.",
+    "Header prototypes were refined with parameter names like `Fighter* fp` and `Fighter_GObj* gobj` where the role was evident."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `ASM` functions with `nofralloc` exact assembly blocks for routines not yet converted to matching C.",
+    "Guarded fallback source with `#if !defined(MUST_MATCH) || defined(WIP)` and `NOT_IMPLEMENTED`, while keeping exact assembly in the `#else` matching path.",
+    "Included `#pragma peephole on` after inline assembly blocks, preserving compiler behavior around hand-written assembly.",
+    "Represented command dispatch in C with arrays of `FtCmd` and `ftCo_803C6ADC[arg0 - 0x15](gobj, cmd)` for at least one non-MUST/WIP body.",
+    "Used `#pragma force_active on` under `WIP`, likely to retain otherwise-unused data/literals during work-in-progress builds.",
+    "Kept literal/data labels in `asm/melee/ft/ftcolanim.s` while moving text routines into `src/melee/ft/ftcolanim.c`."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-999",
+    "ftcolanim",
+    "Partially match ftcolanim",
+    "ribbanya",
+    "ftCo_Sleep_Anim",
+    "ftCo_Sleep_IASA",
+    "ftCo_800BFE74",
+    "ftCo_800BFE94",
+    "ftCo_800BFEB4",
+    "ftCo_800BFED4",
+    "ftCo_800BFEF4",
+    "ftCo_800BFF14",
+    "ft_800BFF34",
+    "ft_800BFF70",
+    "ftCo_800BFFAC",
+    "ftCo_800BFFD0",
+    "ftCo_800C0074",
+    "ft_800C0098",
+    "ftCo_800C0134",
+    "ftCo_800C0200",
+    "ftCo_800C0358",
+    "ftCo_800C0408",
+    "ftCo_803C6AD0",
+    "ftCo_803C6ADC",
+    "ftCo_803C6AE8",
+    "ftCo_803C6B08",
+    "ftCo_804D3C10",
+    "ftData_UnkMotionStates4",
+    "lb_80014498",
+    "lb_800144C8",
+    "lb_80014258",
+    "Fighter x408",
+    "Fighter x488",
+    "Fighter x508",
+    "MUST_MATCH",
+    "WIP",
+    "nofralloc",
+    "FtCmd"
+  ],
+  "follow_up_queries": [
+    "Can the inline-ASM routines in `src/melee/ft/ftcolanim.c` be replaced with matching C now that the dispatch tables and Fighter offset fields are exposed?",
+    "What are the semantic meanings of Fighter fields `x408`, `x488`, and `x508` used by color-animation helper calls?",
+    "Can `lb_80014498`, `lb_800144C8`, and `lb_80014258` receive stronger types now that `ftcolanim` call sites identify likely argument shapes?",
+    "Can the residual literals/data in `asm/melee/ft/ftcolanim.s` be moved into C once string/data placement is understood?",
+    "Can `ftData_UnkMotionStates4` be renamed after more call sites establish its role?"
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

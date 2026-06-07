@@ -1,0 +1,174 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1425",
+  "pr": {
+    "number": 1425,
+    "title": "Update `dtk-template`",
+    "url": "https://github.com/doldecomp/melee/pull/1425",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-08-11T23:58:16Z",
+    "merged_at": "2024-08-12T00:28:38Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Updated the project’s dtk-template-derived tooling to decomp-toolkit v0.9.3 and synchronized configure/build generation support with newer template features. The PR touched Nix packaging, configure.py, and tools/project.py: it bumped DTK hashes and tags, added a --non-matching build mode, added custom Ninja rule/step hooks, improved rebuild dependencies, adjusted default targets for non-matching builds, expanded objdiff scratch compiler mappings, and propagated extra_cflags into objdiff scratch config. There were no PR body notes or review comments in the provided slice, so rationale is inferred from the diff rather than reviewer discussion.",
+  "change_classification": {
+    "primary_type": "tooling_update",
+    "categories": [
+      "tooling",
+      "build_system",
+      "configuration",
+      "nix",
+      "objdiff_config"
+    ],
+    "systems": [
+      ".nix",
+      "configure.py",
+      "tools/project.py",
+      "decomp-toolkit",
+      "ninja_build_generation",
+      "objdiff"
+    ]
+  },
+  "key_files": [
+    {
+      "path": ".nix/decomp-toolkit.nix",
+      "role": "Bumped Nix package for decomp-toolkit from 0.7.5 to 0.9.3 and updated source/cargo dependency hashes."
+    },
+    {
+      "path": "configure.py",
+      "role": "Updated dtk_tag to v0.9.3, added -v short option for --version, added --non-matching config plumbing, initialized reconfig_deps, and changed one object status."
+    },
+    {
+      "path": "tools/project.py",
+      "role": "Pulled in newer dtk-template build-system features: non_matching config, reconfig_deps, custom build rules/steps, altered DOL generation flow, default target behavior, objdiff compiler mappings, and extra_cflags handling."
+    }
+  ],
+  "what_changed": [
+    "Bumped decomp-toolkit version in .nix/decomp-toolkit.nix from 0.7.5 to 0.9.3.",
+    "Updated the Nix fetchFromGitHub source hash and cargoLock output hashes for the new DTK dependency graph, replacing older dol/objdiff-core hashes with nod, objdiff-core 2.0.0-alpha.3, and ppc750cl entries.",
+    "Changed configure.py tool tag config.dtk_tag from v0.7.5 to v0.9.3.",
+    "Added a short -v alias for configure.py --version while preserving choices=VERSIONS and str.upper parsing.",
+    "Added configure.py --non-matching, stored as config.non_matching, described as building equivalent but non-matching or modded objects.",
+    "Added ProjectConfig.non_matching with default False.",
+    "Introduced Matching, NonMatching, and Equivalent naming comments in configure.py; Equivalent is tied to config.non_matching so selected objects can link only in non-matching builds.",
+    "Changed melee/ft/ftwaitanim.c from Matching to NonMatching in the object list, meaning it should not be linked in the normal matching build according to this diff.",
+    "Added ProjectConfig.reconfig_deps for extra files that should trigger regeneration of build.ninja.",
+    "Added ProjectConfig.custom_build_rules and custom_build_steps for project-specific Ninja rules and pre/post build hooks.",
+    "Added generation of custom Ninja rules and a write_custom_step helper supporting step buckets named pre-compile, post-compile, post-link, and post-build.",
+    "Inserted pre-compile outputs as implicit dependencies of link steps, post-compile outputs before link, post-link outputs before DOL generation, and post-build outputs before final check.",
+    "Moved DOL generation out of LinkStep.write and into a separate Generate DOL section after post-link custom steps.",
+    "Tracked link_outputs explicitly and used them in the check rule and, when --non-matching is active, as the default Ninja targets.",
+    "Added config.reconfig_deps to the configure rule implicit dependencies so changes to listed files cause reconfiguration.",
+    "Expanded objdiff scratch compiler mappings by enabling previously commented Metrowerks versions such as GC/3.0a3, GC/3.0a3.3, GC/3.0a3.4, GC/3.0a5, Wii/1.0RC1, Wii/1.0, and Wii/1.5.",
+    "Changed objdiff scratch c_flags generation so options['extra_cflags'] are appended when present.",
+    "Adjusted progress fancy-output wording from 'of' to 'out of' in the shown diff excerpt."
+  ],
+  "smart_moves": [
+    "Kept the DTK version bump consistent across both Nix packaging and configure.py's config.dtk_tag, avoiding a split between developer shell tooling and generated project tooling.",
+    "Added --non-matching as an explicit configuration flag instead of overloading Matching/NonMatching, making equivalent or modded object linking opt-in.",
+    "Represented Equivalent as config.non_matching, which lets object lists express conditional linkability directly using the same boolean field consumed by Object.",
+    "Made non-matching builds default to link outputs rather than progress output, which fits the likely use case of building a runnable or linked artifact even when the normal matching progress/check target is not appropriate.",
+    "Added reconfig_deps as first-class ProjectConfig state and wired it into the configure rule, a reusable pattern for generated files or config fragments that must invalidate build.ninja.",
+    "Centralized custom pre/post processing through custom_build_rules and custom_build_steps rather than hardcoding project-specific asset/archive steps into the build generator.",
+    "Inserted custom steps as implicit dependencies at phase boundaries, preserving Ninja's dependency model while allowing projects to hook before compile, after compile, after link, and after build.",
+    "Propagated extra_cflags into objdiff scratch configuration, improving parity between the actual build and objdiff's scratch compile environment.",
+    "Expanded compiler version mappings instead of leaving valid toolchain versions commented out, improving objdiff support for more MWCC/MWLD variants."
+  ],
+  "decomp_lessons": [
+    "When updating dtk-template or decomp-toolkit, check all version pins together: Nix package version, Nix source hash, cargoLock output hashes, and configure.py's dtk_tag.",
+    "A decomp project benefits from separate object states for matching, nonmatching, and conditionally equivalent files; this lets the normal build stay strict while still supporting modded or equivalent builds.",
+    "Build-generator extensions should be represented as generic configuration fields, such as custom_build_rules and custom_build_steps, so future project-specific steps do not fork the template logic unnecessarily.",
+    "If generated assets, scripts, or config fragments affect build generation, add them to reconfig_deps so Ninja reruns configure when they change.",
+    "Objdiff scratch settings must include the same relevant flags as the real compile; missing extra_cflags can make scratch comparisons misleading.",
+    "After DTK/tooling upgrades, audit object status changes carefully: this PR marks ftwaitanim.c NonMatching, which affects what is linked in the strict matching build.",
+    "Phase-specific dependency hooks are safer than ad hoc command ordering; model pre-compile, post-compile, post-link, and post-build artifacts as implicit dependencies of the correct downstream target."
+  ],
+  "naming_conventions": [
+    {
+      "term": "Matching",
+      "meaning": "Boolean alias True; object matches and should be linked."
+    },
+    {
+      "term": "NonMatching",
+      "meaning": "Boolean alias False; object does not match and should not be linked in the normal matching build."
+    },
+    {
+      "term": "Equivalent",
+      "meaning": "Alias for config.non_matching; object should be linked only when configure.py is run with --non-matching."
+    },
+    {
+      "term": "custom_build_steps",
+      "meaning": "ProjectConfig dictionary keyed by phase names such as pre-compile, post-compile, post-link, and post-build."
+    },
+    {
+      "term": "reconfig_deps",
+      "meaning": "ProjectConfig list of extra dependency paths that should cause reconfiguration when modified."
+    }
+  ],
+  "assembly_or_matching_tactics": [
+    "Introduced an opt-in --non-matching path for building equivalent or modded objects without weakening the default matching/progress workflow.",
+    "Kept NonMatching objects excluded from the normal link by default, while enabling future objects to use Equivalent for conditional linking under --non-matching.",
+    "Changed ftwaitanim.c from Matching to NonMatching in the configure object list, implying it should not currently be treated as a strict matching linked object.",
+    "Improved objdiff scratch accuracy by appending extra_cflags to c_flags in generated objdiff config.",
+    "Expanded supported scratch compiler mappings, which can help compare code built with more Metrowerks compiler versions."
+  ],
+  "review_feedback": [
+    {
+      "source": "provided_pr_slice",
+      "feedback": "No issue comments, review comments, reviews, or PR body text were present in the supplied context."
+    }
+  ],
+  "searchable_terms": [
+    "PR 1425",
+    "Update dtk-template",
+    "dtk-template",
+    "decomp-toolkit v0.9.3",
+    "decomp-toolkit 0.9.3",
+    "decomp-toolkit.nix",
+    "configure.py",
+    "tools/project.py",
+    "ProjectConfig.non_matching",
+    "--non-matching",
+    "Equivalent",
+    "Matching",
+    "NonMatching",
+    "custom_build_rules",
+    "custom_build_steps",
+    "pre-compile",
+    "post-compile",
+    "post-link",
+    "post-build",
+    "reconfig_deps",
+    "objdiff scratch",
+    "extra_cflags",
+    "scratch compiler mapping",
+    "mwcc_41_51213",
+    "mwcc_41_60209",
+    "mwcc_42_60308",
+    "mwcc_42_60422",
+    "mwcc_42_140",
+    "mwcc_43_145",
+    "mwcc_43_188",
+    "ftwaitanim.c",
+    "elf2dol",
+    "ninja build rules",
+    "Nix cargoLock outputHashes"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that use Equivalent in configure.py object lists after --non-matching was introduced.",
+    "Find PRs that add custom_build_rules or custom_build_steps for asset processing or archive rebuilding.",
+    "Find follow-up changes to ftwaitanim.c status after it was marked NonMatching in PR 1425.",
+    "Find later dtk-template or decomp-toolkit version bumps to compare required Nix and configure.py update steps.",
+    "Find objdiff config fixes involving extra_cflags or scratch compiler mappings."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

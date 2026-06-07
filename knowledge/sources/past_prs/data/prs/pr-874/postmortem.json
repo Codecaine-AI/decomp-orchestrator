@@ -1,0 +1,130 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-874",
+  "pr": {
+    "number": 874,
+    "title": "Match `ftCo_Passive`",
+    "url": "https://github.com/doldecomp/melee/pull/874",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-27T09:52:18Z",
+    "merged_at": "2023-05-27T10:05:03Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common fighter passive/tech action code by moving ftCo_800987D0 and the ftCo_Passive Anim/IASA/Phys/Coll callbacks out of asm/melee/ft/ft_08A4.s into a new src/melee/ft/chara/ftCommon/ftCo_Passive.c file, with a dedicated header and build registration. The PR report shows the new file and all five functions at 100% match. It also refined FtCollisionData by naming the x24 field used as collision data input, and relocated passive prototypes from broader ft_0877.h/ft_08A4.h declarations into ftCo_Passive.h.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-field-identification",
+      "asm-to-c"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "passive-action",
+      "effects",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/chara/ftCommon/ftCo_Passive.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Passive.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/ft_0877.h",
+    "src/melee/ft/ft_08A4.h",
+    "src/melee/ft/chara/ftCommon/ftCo_DownAttack.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Init.c",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted the matched assembly for ftCo_800987D0, ftCo_Passive_Anim, ftCo_Passive_IASA, ftCo_Passive_Phys, and ftCo_Passive_Coll from asm/melee/ft/ft_08A4.s.",
+    "Added src/melee/ft/chara/ftCommon/ftCo_Passive.c implementing the passive action transition and callbacks in C.",
+    "Added src/melee/ft/chara/ftCommon/ftCo_Passive.h with address-commented prototypes for ftCo_800987D0 and the passive callbacks.",
+    "Added ftCo_Passive.c.o to TEXT_O_FILES in obj_files.mk before the remaining ft_08A4 assembly object.",
+    "Updated ftCo_DownAttack.c and ftCo_Init.c to include ftCo_Passive.h.",
+    "Removed passive-related declarations from ft_0877.h and ft_08A4.h now that a dedicated ftCo_Passive header exists.",
+    "Split FtCollisionData padding in src/melee/ft/types.h from u8 x0[0x28] into u8 x0[0x24] plus u32 x24, matching use of fp->ft_data->x4C_collisionData->x24 in ftCo_800987D0.",
+    "Removed the sdata2 constants formerly used by the assembly for NULL and 1.0 because the C implementation expresses them as arguments to Fighter_ChangeMotionState."
+  ],
+  "smart_moves": [
+    "Isolated the passive action into its own ftCommon source/header pair instead of leaving declarations in generic ft_0877.h and ft_08A4.h buckets.",
+    "Used a small static inline helper, inlineA0, around efAsync_Spawn to reproduce the effect-spawn call shape while keeping ftCo_800987D0 readable.",
+    "Preserved a MUST_MATCH-only unused stack allocation in inlineA0, with a todo comment, to satisfy codegen without polluting non-matching builds.",
+    "Promoted the previously opaque FtCollisionData offset 0x24 into a named struct field once the matched C needed to access it.",
+    "Kept simple callbacks minimal: IASA is an empty function, Phys delegates to ft_80084F3C, Coll delegates to ft_80083F88, and Anim exits via ft_8008A2BC when no animation frames remain."
+  ],
+  "decomp_lessons": [
+    "When moving a matched action cluster from assembly to C, remove only the matched assembly range and leave following labels such as ftCo_80098928 in place.",
+    "Dedicated action headers reduce prototype sprawl in catch-all fighter headers and make later ftCommon work easier to include locally.",
+    "MUST_MATCH guards are useful for documenting and containing artifacts such as unused stack bytes required only for matching.",
+    "Struct progress can be driven by matched callsites: replacing padding with a field at the exact accessed offset is acceptable when the diff shows concrete use.",
+    "For common fighter state callbacks, exact wrappers around existing engine helpers can match cleanly and should not be overcomplicated."
+  ],
+  "naming_conventions": [
+    "New common fighter action files follow the ftCo_<Action>.c and ftCo_<Action>.h pattern, here ftCo_Passive.c and ftCo_Passive.h.",
+    "Passive callbacks use the established ftCo_Passive_Anim, ftCo_Passive_IASA, ftCo_Passive_Phys, and ftCo_Passive_Coll names.",
+    "The transition/setup function remains address-based as ftCo_800987D0, indicating its semantic name was not established in this PR.",
+    "The header guard used the address-style identifier GALE01_098430, matching the first named callback address in the new header.",
+    "Fighter common object typedefs appear in signatures as ftCo_GObj/Fighter_GObj/HSD_GObj depending on existing local convention and included forward declarations."
+  ],
+  "assembly_or_matching_tactics": [
+    "Matched Fighter_ChangeMotionState(gobj, 199, Ft_MF_None, NULL, 0, 1, 0) corresponding to motion state 0xC7 and float constants 0.0/1.0 in the removed assembly.",
+    "Matched the airborne precondition by checking fp->ground_or_air == GA_Air before calling ftCommon_8007D7FC(fp).",
+    "Matched the collision setup call by exposing fp->ft_data->x4C_collisionData->x24 and passing it to ft_800881D8(fp, ..., 127, 64).",
+    "Matched the effect spawn by passing gobj, &fp->x60C, 1U, effect id 1053, and fp->parts[FtPart_TopN].joint to efAsync_Spawn through an inline helper.",
+    "Used a MUST_MATCH local u8 _[8] = { 0 } in the inline helper to account for an unused stack difference.",
+    "Matched simple tail-like action callbacks as thin calls to ft_80084F3C, ft_80083F88, ftAnim_IsFramesRemaining, and ft_8008A2BC."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-874",
+    "ftCo_Passive",
+    "ftCo_800987D0",
+    "ftCo_Passive_Anim",
+    "ftCo_Passive_IASA",
+    "ftCo_Passive_Phys",
+    "ftCo_Passive_Coll",
+    "ft_08A4.s",
+    "ftCo_Passive.c",
+    "ftCo_Passive.h",
+    "Fighter_ChangeMotionState",
+    "Ft_MF_None",
+    "GA_Air",
+    "ftCommon_8007D7FC",
+    "ft_800881D8",
+    "ft_80088148",
+    "ftCommon_8007CCE8",
+    "efAsync_Spawn",
+    "ft_800BFFD0",
+    "ftAnim_IsFramesRemaining",
+    "ft_8008A2BC",
+    "ft_80084F3C",
+    "ft_80083F88",
+    "FtCollisionData",
+    "x4C_collisionData",
+    "x24",
+    "FtPart_TopN",
+    "MUST_MATCH",
+    "unused stack",
+    "inlineA0",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename ftCo_800987D0 to a semantic passive action start/change-state name.",
+    "Check whether FtCollisionData::x24 receives a more descriptive name after more collision-data callsites are matched.",
+    "Search for other ftCommon action PRs using MUST_MATCH unused stack arrays around efAsync_Spawn or similar vararg/effect helpers.",
+    "Review subsequent cleanup of ft_0877.h and ft_08A4.h as more action-specific headers are introduced."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

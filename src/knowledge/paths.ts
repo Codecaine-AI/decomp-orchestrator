@@ -13,14 +13,50 @@ export function knowledgeRoot(): string {
   return resolve(packageRoot(), "knowledge");
 }
 
-export function knowledgeManifestPath(): string {
-  return resolve(knowledgeRoot(), "manifest.json");
-}
-
 export function pastPrsRoot(): string {
-  return resolve(knowledgeRoot(), "past_prs");
+  return resolve(knowledgeSourcesRoot(), "past_prs", "data");
 }
 
 export function decompResourcesRoot(): string {
-  return resolve(knowledgeRoot(), "decomp_resources");
+  return resolve(knowledgeSourcesRoot(), "resource_guides", "data");
+}
+
+export function sourceDataRoot(sourceId: string): string {
+  return resolve(knowledgeSourcesRoot(), sourceId, "data");
+}
+
+export function knowledgeSourcesRoot(): string {
+  return resolve(knowledgeRoot(), "sources");
+}
+
+export function knowledgeSourceRegistryPath(): string {
+  return resolve(knowledgeSourcesRoot(), "registry.json");
+}
+
+export function knowledgeToolsRoot(): string {
+  return resolve(knowledgeRoot(), "tools");
+}
+
+export function knowledgeToolRegistryPath(): string {
+  return resolve(knowledgeToolsRoot(), "registry.json");
+}
+
+export function resourceGraphRoot(): string {
+  return resolve(knowledgeRoot(), "resource_graph");
+}
+
+export function resourceGraphEnrichmentsRoot(): string {
+  return resolve(resourceGraphRoot(), "enrichments");
+}
+
+export function agentSharedStateEnrichmentPath(): string {
+  return resolve(resourceGraphEnrichmentsRoot(), "agent_shared_state_lessons.jsonl");
+}
+
+export function knowledgeCuratorEnrichmentPath(): string {
+  return resolve(resourceGraphEnrichmentsRoot(), "knowledge_curator_updates.jsonl");
+}
+
+export function resourceGraphDbPath(): string {
+  return resolve(resourceGraphRoot(), "graph.sqlite");
 }

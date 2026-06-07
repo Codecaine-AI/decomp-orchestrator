@@ -1,0 +1,194 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-658",
+  "pr": {
+    "number": 658,
+    "title": "Fix `implicit-function-declaration` warnings, pass 7",
+    "url": "https://github.com/doldecomp/melee/pull/658",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-11T03:35:56Z",
+    "merged_at": "2023-01-11T04:48:55Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large warning-cleanup/header pass aimed at eliminating implicit function declaration warnings while tightening type signatures across baselib, Dolphin math, fighter, stage, item, interface, and player code. The PR enabled stricter compile behavior by replacing `-Wno-unused-variable` with `-Werror`, added many missing prototypes, propagated more precise vector and allocation types, and performed a substantial `ground.c` cleanup. Review discussion captured useful decomp conventions around temporary marker types, padding arrays, macro style, and signed allocator size typedefs.",
+  "change_classification": {
+    "primary_type": "headers-warning-cleanup",
+    "categories": [
+      "cleanup",
+      "fix",
+      "headers",
+      "decomp-matching",
+      "naming",
+      "types-structs",
+      "compiler-warnings"
+    ],
+    "systems": [
+      "include",
+      "dolphin",
+      "sysdolphin-baselib",
+      "stage",
+      "ground",
+      "fighter",
+      "item",
+      "interface",
+      "player",
+      "game-mode",
+      "library"
+    ]
+  },
+  "key_files": [
+    "compile_flags.txt",
+    "include/Runtime/platform.h",
+    "include/dolphin/mtx/mtxtypes.h",
+    "include/dolphin/mtx.h",
+    "include/dolphin/os/OSAlloc.h",
+    "include/dolphin/types.h",
+    "include/common_structs.h",
+    "include/sysdolphin/baselib/cobj.h",
+    "include/sysdolphin/baselib/jobj.h",
+    "include/sysdolphin/baselib/memory.h",
+    "include/sysdolphin/baselib/mtx.h",
+    "include/sysdolphin/baselib/tobj.h",
+    "include/sysdolphin/baselib/wobj.h",
+    "src/sysdolphin/baselib/memory.c",
+    "src/sysdolphin/baselib/jobj.c",
+    "src/sysdolphin/baselib/lobj.h",
+    "src/melee/gr/ground.c",
+    "src/melee/gr/stage.h",
+    "src/melee/if/ifstatus.c",
+    "src/melee/lb/lbvector.c",
+    "src/melee/lb/lbvector.h"
+  ],
+  "what_changed": [
+    "Changed `compile_flags.txt` to use `-Werror`, making warning cleanup enforcement stricter.",
+    "Reworked Dolphin matrix/vector typedefs in `include/dolphin/mtx/mtxtypes.h`, replacing broad aliases such as `Vec`, `VecPtr`, `S8Vec`, `S16Vec`, `S32Vec`, and `Point3d` with explicit named structs including `Vec3`, `Vec4`, `S8Vec3`, `S16Vec3`, `S32Vec2`, and `S32Vec3`.",
+    "Propagated `Vec3` through many math and baselib APIs, including matrix functions, JObj scale/translate fields, WObj positions, CObj vectors, FObj vector data, shadow viewing rects, TObj transforms, GX light position/direction, and PS vector operations.",
+    "Added or corrected function prototypes across baselib and game headers to avoid implicit declarations, including examples in `cobj.h`, `fog.h`, `gobj.h`, `jobj.h`, `ifall.h`, `ifstock.h`, several ground stage headers, text headers, and game-mode headers.",
+    "Adjusted allocation-related types: `OSAlloc.h` changed heap cell size to `size_t`, `OSAllocFromHeap` to return `any_t`, and `HSD_MemAlloc` to accept a signed size typedef (`ssize_t`) in the final diff excerpt.",
+    "Renamed the platform typedef from `ptrdiff_t` to `ssize_t` in `include/Runtime/platform.h` to better describe signed byte counts for allocator sizes.",
+    "Updated `assert_line` in `include/dolphin/types.h` so non-`MUST_MATCH` builds use `__LINE__` while matching builds preserve the supplied line number.",
+    "Performed a large `src/melee/gr/ground.c` pass, with hundreds of changed lines and many hunks, including non-MWERKS fallback stubs and prototype/include-related fixes; the PR body specifically notes that `ground.c` took significant effort.",
+    "Made widespread source edits in fighter, stage, item, player, lbvector, and baselib implementation files to align call sites with newly declared prototypes and types."
+  ],
+  "smart_moves": [
+    "Turning warning cleanup into a stricter build setting with `-Werror` made future implicit declaration regressions easier to catch immediately.",
+    "Rather than only adding local externs, the PR moved many declarations into headers, improving cross-file type checking and making future decomp work less dependent on implicit C behavior.",
+    "The `Vec` to `Vec3` propagation made vector intent explicit and reduced ambiguous typedef aliases, while preserving layout-compatible three-float structs.",
+    "Using `any_t` was accepted as a temporary decomp marker for places where `void*` currently causes problematic matching or type propagation, with a plan to convert back once problematic uses are resolved.",
+    "Introducing `ssize_t` instead of using `ptrdiff_t` for signed allocation sizes followed review guidance that signed byte counts are semantically different from pointer differences.",
+    "The non-`MUST_MATCH` `assert_line` behavior allows assertions to report real source lines outside matching builds without disturbing matching-sensitive builds."
+  ],
+  "decomp_lessons": [
+    "Implicit-function-declaration cleanup should be done by finding the owning header and adding a real prototype whenever possible, not by relying on C89 implicit int behavior or scattered local declarations.",
+    "Broad alias typedefs such as `Vec`, `VecPtr`, and `S32Vec` can obscure whether a field is 2D, 3D, pointer, or quaternion-like; explicit names such as `Vec3`, `Vec4`, `S32Vec2`, and `S32Vec3` are easier to search and review.",
+    "Do not use `char unused[...]` for unknown padding unless evidence shows it is actually character/string data; reviewers prefer `u8` for undecomped padding because `char` suggests known textual semantics.",
+    "String literals stored in arrays really should remain `char[]`; the review called out `static char unused[] = \"pix_fmt != GX_PF_RGB565_Z16\";` as a case where `char` is correct.",
+    "Temporary marker typedefs like `any_t` can be useful during decomp, but they should be documented as transitional and eventually converted back to ordinary C library-like signatures such as `void*` where appropriate.",
+    "For allocator signatures, prefer semantic size typedefs: `size_t` for unsigned byte counts, `ssize_t` for signed byte counts needed for matching; avoid `ptrdiff_t` unless the value is truly a pointer difference.",
+    "Header cleanup may expose naming or alias mistakes that slipped through prior renames; record these for later focused header cleanup rather than silently proliferating inconsistent names.",
+    "Matching-only line-number macros can be guarded by `MUST_MATCH` so developer builds can retain better diagnostics without compromising decomp matching."
+  ],
+  "naming_conventions": [
+    "Prefer `Vec3` over legacy `Vec` for three-component float vectors.",
+    "Prefer dimensioned integer vector names such as `S8Vec3`, `S16Vec3`, `S32Vec2`, and `S32Vec3` over ambiguous names like `S8Vec`, `S16Vec`, and `S32Vec`.",
+    "Use `Vec4` as the base four-component type while retaining `Quaternion` as a compatible alias where the data is semantically a quaternion.",
+    "Avoid pointer typedef aliases such as `VecPtr` in new declarations; the diff moves APIs toward explicit `Vec3*`.",
+    "Use `any_t` only as a temporary marker for unknown pointer-return or pointer-argument types during decomp; review notes say these should eventually become `void*` again.",
+    "Use `ssize_t` for signed sizes passed to allocation functions when matching requires a signed type.",
+    "Unknown padding should generally remain `u8 unused[...]`; use `char[]` when the data is a real string or character array."
+  ],
+  "assembly_or_matching_tactics": [
+    "The PR preserved matching-sensitive behavior by keeping `assert_line(line, cond)` dependent on the passed line value under `MUST_MATCH`, while allowing `__LINE__` outside matching builds.",
+    "Review discussion noted that an attempted `u8` to `char` change for an unused array was motivated by m2c special handling; the reviewer preferred teaching m2c to recognize the `u8` pattern instead of changing padding semantics.",
+    "Non-MWERKS fallback stubs using `NOT_IMPLEMENTED` appeared in `ground.c`, but review caught a duplicated `#ifdef MWERKS_GEKKO`, showing that preprocessor guards around asm/non-asm paths need careful review.",
+    "The final allocation signature used a signed size typedef to satisfy matching constraints while making the type name more semantically appropriate than `ptrdiff_t`."
+  ],
+  "review_feedback": [
+    {
+      "file": "include/sysdolphin/baselib/memory.h",
+      "feedback": "Reviewer questioned propagating `any_t` because `void*` already semantically means any object pointer, but later resolved that `any_t` could remain as a temporary marker during decomp and be converted back to `void*` once problematic uses are gone."
+    },
+    {
+      "file": "src/sysdolphin/baselib/memory.c",
+      "feedback": "Reviewer suggested `any_t HSD_MemAlloc(ssize_t size)`, explaining that `size_t` would be semantically ideal but matching needed a signed type; `ssize_t` was preferred over `ptrdiff_t` because allocator sizes are byte counts, not pointer differences."
+    },
+    {
+      "file": "src/melee/ft/chara/ftMario/ftMario_SpecialHi.c",
+      "feedback": "Reviewer objected to changing unknown padding from `u8 unused[4]` to `char unused[4]`, because `char` implies known decompiled character data; discussion noted the change was motivated by m2c handling, and the better path was to improve m2c recognition of the `u8` pattern."
+    },
+    {
+      "file": "src/sysdolphin/baselib/initialize.c",
+      "feedback": "Reviewer noted that a string literal array `\"pix_fmt != GX_PF_RGB565_Z16\"` really is a `char[]`, so it should not be converted to `u8[]`."
+    },
+    {
+      "file": "src/sysdolphin/baselib/lobj.h",
+      "feedback": "Reviewer objected to adding more parenthesized numeric macro definitions such as `#define HSD_A_L_LITC_R (9)`, saying not to keep adding these even if previously merged examples exist."
+    },
+    {
+      "file": "include/common_structs.h",
+      "feedback": "Author noted that a `typedef Vec3 Vec3;` rename issue slipped through and would be handled during later header cleanup."
+    },
+    {
+      "file": "src/melee/gr/ground.c",
+      "feedback": "Author acknowledged and planned to fix a duplicated `#ifdef MWERKS_GEKKO` around a non-MWERKS `NOT_IMPLEMENTED` fallback."
+    }
+  ],
+  "searchable_terms": [
+    "implicit-function-declaration",
+    "Werror",
+    "compile_flags.txt",
+    "Vec to Vec3",
+    "Vec3",
+    "Vec4",
+    "S8Vec3",
+    "S16Vec3",
+    "S32Vec2",
+    "S32Vec3",
+    "Quaternion",
+    "mtxtypes.h",
+    "dolphin mtx",
+    "PSVEC",
+    "PSMTX",
+    "HSD_MemAlloc",
+    "HSD_Free",
+    "OSAllocFromHeap",
+    "any_t",
+    "void pointer marker",
+    "ssize_t",
+    "ptrdiff_t",
+    "size_t",
+    "assert_line",
+    "MUST_MATCH",
+    "ground.c",
+    "stage.h",
+    "ground headers",
+    "HSD_JObj",
+    "HSD_WObj",
+    "HSD_CObj",
+    "HSD_TObj",
+    "GXLightObj",
+    "padding u8 unused",
+    "char unused string",
+    "m2c padding handling",
+    "MWERKS_GEKKO",
+    "NOT_IMPLEMENTED fallback"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that complete the header cleanup mentioned for `typedef Vec3 Vec3` or old `Vec` aliases.",
+    "Search for subsequent conversion of `any_t` back to `void*` in baselib memory and OS allocation APIs.",
+    "Check whether m2c gained support for recognizing `u8 unused[...]` padding patterns after this review discussion.",
+    "Audit remaining parenthesized numeric `#define` constants in baselib headers after the `lobj.h` review feedback.",
+    "Search for later `ground.c` PRs that fix or remove the duplicated `#ifdef MWERKS_GEKKO` and non-MWERKS fallback stubs.",
+    "Look for follow-up PRs that continue passes on `implicit-function-declaration` warnings after pass 7."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

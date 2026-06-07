@@ -1,0 +1,137 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2175",
+  "pr": {
+    "number": 2175,
+    "title": "Match fixes to grInishie1/2",
+    "url": "https://github.com/doldecomp/melee/pull/2175",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2026-02-12T19:17:34Z",
+    "merged_at": "2026-02-12T19:22:57Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched and cleaned up several Super Mario Bros. stage ground routines in grInishie1 and grInishie2. The PR replaced direct gobj->user_data and hsd_obj access with GET_GROUND/GET_JOBJ helpers, corrected several inishie bitfield selections, fixed type details such as grInishie2_thing.unk2C becoming f32 and grInishie1_801FCAAC returning bool, added missing ground vars padding/fields, and introduced small helper/inline routines to improve codegen for DObj flag clearing and blast-zone checks.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "fix",
+      "headers",
+      "struct-layout",
+      "stage-behavior"
+    ],
+    "systems": [
+      "stage",
+      "ground",
+      "grInishie1",
+      "grInishie2"
+    ]
+  },
+  "key_files": [
+    "src/melee/gr/grinishie1.c",
+    "src/melee/gr/grinishie1.h",
+    "src/melee/gr/grinishie2.c",
+    "src/melee/gr/types.h"
+  ],
+  "what_changed": [
+    "Added includes needed for matching/typing, including gr/forward.h in grinishie1.c, placeholder.h and baselib/forward.h in grinishie2.c, while removing gr/grlib.h from grinishie2.c.",
+    "Added a DOBJ_CLEAR_LOOP macro in grinishie1.c that walks HSD_DObj entries from HSD_JObjGetDObj and clears flag 1U with HSD_DObjClearFlags; grInishie1_801FBC4C now uses this instead of the previous DOBJ_LOOP macro.",
+    "Changed grInishie1_801FAADC and grInishie2_801FD198 to obtain an HSD_JObj via GET_JOBJ before calling Ground_801C2ED0, instead of passing gobj->hsd_obj directly.",
+    "Implemented grInishie1_801FCAAC, checking that the current internal stage is INISHIE1, the line id is not -1, and mpJointFromLine(line_id) - 20 is in range 0..1; the function and header prototype now use bool grInishie1_801FCAAC(int).",
+    "Adjusted timer code in grInishie1_801FCB10 and grInishie2_801FCF2C to use u32 time_remaining and cast to int* for GetMatchTimer.",
+    "Changed many Ground* loads in grinishie2.c from gobj->user_data to GET_GROUND(gobj), and similarly used GET_JOBJ where a joint object was needed.",
+    "Changed grInishie2_thing.unk2C from s32 to f32 and used it as a y-offset in grInishie2_801FD654 when positioning an object relative to it_802ECD1C output.",
+    "Corrected multiple grInishie2 xC4_flags bit accesses, including b7 to b0, b1 to b0, b6 to b1, b5 to b2 or b3 depending on context, and b3 to b4 in grInishie2_801FD744.",
+    "Corrected inishie23 xC8_flags bit accesses in grInishie2_801FD824, using b3 for spawn side/animation selection and b1/b0/b2 for state flags instead of the previous b4/b6/b7/b5 pattern.",
+    "Added explicit casts to int for test_random calls using s16/floating-looking struct fields such as grI2_804D6A00->unk2, unk6, and unkE.",
+    "Refactored grInishie2_801FCE04 to inline Ground_801C3FA4 calls directly into Ground_801C4E70 instead of storing temp_r27 through temp_r31 locals.",
+    "Split grInishie2_801FDED8 logic into a static inline checkBlastZone(Vec3*) helper and static inline grInishie2_801FDED8_inline, preserving the top-level routine as Ground_801C2FE0, grInishie2_801FD9EC, then inline check/update behavior.",
+    "Extended struct grInishie2_GroundVars in types.h with u32 xD0 and u32 xD4 before Vec3 xD8, likely to correct layout offsets."
+  ],
+  "smart_moves": [
+    "Using GET_GROUND and GET_JOBJ clarifies intended object types and often produces better-matching code than raw user_data or hsd_obj field access.",
+    "Changing grInishie1_801FCAAC to bool in both implementation and header captures the function's actual predicate behavior and avoids misleading s32 semantics.",
+    "The DOBJ_CLEAR_LOOP macro localizes a DObj traversal/codegen pattern and avoids relying on a broader macro that apparently did not match this call site.",
+    "Adding xD0 and xD4 to grInishie2_GroundVars before xD8 is a minimal struct-layout correction that preserves later field offsets without over-renaming unknown fields.",
+    "Introducing small static inline helpers for blast-zone testing and the inner grInishie2_801FDED8 body gives the compiler clearer structure while retaining the public function shape.",
+    "Keeping unknown field names such as unk2C while correcting their type to f32 avoids inventing semantics but still improves data layout and arithmetic correctness."
+  ],
+  "decomp_lessons": [
+    "For Ground_GObj routines, prefer GET_GROUND(gobj) and GET_JOBJ(gobj) over direct gobj->user_data and gobj->hsd_obj when the diff indicates the helper form matches.",
+    "Bitfield numbering in ground variable unions is especially fragile; matching fixes may require auditing each flag access against observed behavior/codegen rather than assuming nearby bit names are correct.",
+    "If a value is only used as a predicate, matching may improve by declaring the function bool and simplifying returns to true/false, but the header must be updated at the same time.",
+    "Struct padding or unknown u32 fields should be added when later Vec3/field accesses need correct offsets; this is preferable to forcing mismatched field names or casts.",
+    "When passing narrower or differently typed config fields into random helpers, explicit casts to int can be necessary for matching.",
+    "Inlining small helper routines can improve generated control flow for repeated tests such as blast-zone checks, while keeping the externally visible function unchanged.",
+    "Animation and stage setup calls may be sensitive to whether an HSD_JObj pointer is stored in a local before use; explicit GET_JOBJ locals can be a matching tactic."
+  ],
+  "naming_conventions": [
+    "Ground object helper macros are written in all caps: GET_GROUND, GET_JOBJ.",
+    "The new DObj traversal macro follows existing macro style with an all-caps name: DOBJ_CLEAR_LOOP.",
+    "Unknown data fields remain conservative, using unk-prefixed names such as unk2C and unk30 when semantics are not established.",
+    "Stage-specific symbols keep the grInishie1_/grInishie2_ prefix and address suffix naming convention.",
+    "New helper checkBlastZone uses camelCase despite surrounding address-based names; evidence only shows it as a static inline local helper, not a public naming convention."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use GET_GROUND(gobj) instead of gobj->user_data to influence load/cast shape while expressing Ground* intent.",
+    "Use GET_JOBJ(gobj) and pass that local to Ground_801C2ED0 rather than directly passing gobj->hsd_obj.",
+    "Replace temporaries for a variadic/ordered call pattern with direct nested Ground_801C3FA4 calls when that better matches register/order behavior, as in Ground_801C4E70.",
+    "Introduce PAD_STACK(4) and PAD_STACK(0x10) in grInishie2 routines where stack layout needed adjustment.",
+    "Cast config fields to int before test_random to match call signatures and generated conversions.",
+    "Break a larger function into static inline helper functions to control branch structure without changing exported symbols.",
+    "Use bool return types and explicit true/false returns for predicate-style functions to match compare/result code."
+  ],
+  "review_feedback": [
+    "No review comments were included in the provided PR slice. The context reports one issue comment but the human_text_excerpt and review_comments_excerpt are empty, so no specific reviewer feedback can be extracted."
+  ],
+  "searchable_terms": [
+    "pr2175",
+    "PsiLupan",
+    "Match fixes to grInishie1/2",
+    "grInishie1",
+    "grInishie2",
+    "src/melee/gr/grinishie1.c",
+    "src/melee/gr/grinishie2.c",
+    "src/melee/gr/grinishie1.h",
+    "src/melee/gr/types.h",
+    "DOBJ_CLEAR_LOOP",
+    "HSD_DObjClearFlags",
+    "HSD_JObjGetDObj",
+    "GET_GROUND",
+    "GET_JOBJ",
+    "Ground_801C2ED0",
+    "grInishie1_801FCAAC",
+    "mpJointFromLine",
+    "INISHIE1",
+    "GetMatchTimer",
+    "grInishie2_thing",
+    "unk2C",
+    "xC4_flags",
+    "xC8_flags",
+    "test_random",
+    "PAD_STACK",
+    "checkBlastZone",
+    "Stage_GetBlastZoneRightOffset",
+    "Stage_GetBlastZoneLeftOffset",
+    "grInishie2_GroundVars",
+    "xD0",
+    "xD4"
+  ],
+  "follow_up_queries": [
+    "Find other stage files still using gobj->user_data where GET_GROUND would match or improve readability.",
+    "Audit grInishie2 xC4_flags and inishie23 xC8_flags names now that several bit indices were corrected.",
+    "Search for other DOBJ_LOOP uses that may need DOBJ_CLEAR_LOOP-style behavior with HSD_DObjClearFlags.",
+    "Check whether grInishie2_thing.unk2C can be semantically named based on its use as a Y offset in grInishie2_801FD654.",
+    "Verify whether added grInishie2_GroundVars fields xD0 and xD4 have known semantics from adjacent routines or data."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,143 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1484",
+  "pr": {
+    "number": 1484,
+    "title": "Decompile some camera functions",
+    "url": "https://github.com/doldecomp/melee/pull/1484",
+    "state": "MERGED",
+    "author": "eperdew",
+    "created_at": "2024-10-22T01:55:19Z",
+    "merged_at": "2024-10-22T02:00:53Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Decompiled several functions in src/melee/cm/camera.c and improved camera-related type information in cm/types.h and cm/camera.h. The PR replaced placeholder markers for functions such as Camera_80029124, Camera_800293E0, Camera_80029C88, Camera_8002A28C, Camera_800310A0, Camera_800310B8, and Camera_800310E8 with C implementations, while the author explicitly noted that some functions were only partial matches. The main structural value was refining the Camera layout around offsets 0x08C through 0x2B0 and adding an internal 0x10-byte struct used in two 2x8 arrays.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "camera-system"
+    ],
+    "systems": [
+      "melee-core",
+      "camera"
+    ]
+  },
+  "key_files": [
+    "src/melee/cm/camera.c",
+    "src/melee/cm/types.h",
+    "src/melee/cm/camera.h"
+  ],
+  "what_changed": [
+    "Added camera.c includes needed by the new implementations: cm/forward.h, cm/types.h, gr/ground.h, and baselib/gobjplink.h.",
+    "Declared static HSD_CObj* cm_804D6464 in camera.c and used it in Camera_800310B8 to mark the CObj matrix dirty, set up the viewing matrix, and return the CObj.",
+    "Implemented Camera_80029124(Vec3* arg0, s32 distance) as a bounds check returning a u32 bitmask for top, bottom, left, and right camera-bound violations. It uses Ground_801C4368 plus Stage_GetCamBounds*Offset functions.",
+    "Implemented Camera_800293E0 as an update loop over CameraBox entries linked through cm_804D6468, gradually moving current x2C/x34 vector components toward target x40/x48 values in 0.5f steps.",
+    "Implemented Camera_80029C88(CameraMovement* movement, f32 arg_scale) as interpolation toward movement->target_position using cm_803BCCA0.x3C * arg_scale clamped to 1.0f. The diff comment says this was not a clean match and that a natural lbVector_Lerp formulation produced code far from target.",
+    "Implemented Camera_8002A28C as a mostly matching routine that copies Camera unk_B0 arrays into unk_1B0 arrays, clears src[j].xC, decrements entries in unk_8C, and unlinks/free-links unk_A0 with HSD_GObjPLink_80390228 when the counter state allows.",
+    "Implemented small camera flag/accessor functions: Camera_800310A0 sets cm_80452C68.unk_399_b0_b1; Camera_800310E8 clears several bitfield-like fields unk_398_b0 through unk_398_b5.",
+    "Changed Camera_80029124 callers from comparing against NULL to comparing against 0, reflecting its new u32 return type.",
+    "Updated camera.h prototypes for Camera_80029124 and Camera_80029C88 from unknown signatures to typed signatures.",
+    "Annotated CameraMovement field offsets in types.h.",
+    "Added struct UnkInternalCameraStruct with four s32 fields at offsets 0x0, 0x4, 0x8, and 0xC.",
+    "Refined Camera layout in types.h: replaced pad_8C with s32 unk_8C[5], added HSD_GObj* unk_A0 at 0x0A0, replaced pad_B0 with unk_B0[2][8] and unk_1B0[2][8], and added explicit pad_2B0 to preserve later offsets."
+  ],
+  "smart_moves": [
+    "Converted Camera_80029124 from UNK_T to u32 and updated NULL comparisons to integer comparisons, making the return semantics clearer as a bitmask rather than a pointer-like unknown.",
+    "Used stage and ground APIs directly in Camera_80029124, grounding the inferred behavior in known camera bounds and collision/ground data rather than leaving opaque arithmetic.",
+    "Preserved exact Camera struct offsets while replacing padding with typed fields and arrays, which is useful for incremental decomp without destabilizing later known offsets.",
+    "Added field-offset comments to CameraMovement, improving auditability of struct layout and making future matching work less error-prone.",
+    "Documented matching limitations inline with @todo comments rather than hiding them, especially for Camera_80029C88 register/order issues and Camera_8002A28C register allocation issues.",
+    "Avoided forcing the more obvious lbVector_Lerp abstraction when it did not match target code, and instead wrote explicit component-wise interpolation to stay closer to the assembly."
+  ],
+  "decomp_lessons": [
+    "When a function returns a bitmask, update its prototype and callers together; replacing UNK_T/NULL-style checks with u32/0-style checks clarifies intent and avoids pointer-shaped ambiguity.",
+    "Struct layout progress can be valuable even when some functions remain partial matches; replacing padding with typed fields can unlock later functions.",
+    "For matching, the most semantically elegant helper call may not be correct if it changes register allocation or generated code too much. In this PR, a natural lbVector_Lerp form was rejected in favor of manual Vec3 arithmetic.",
+    "Keep explicit padding after newly identified fields so downstream offsets remain stable while the middle of a struct is gradually recovered.",
+    "Inline @todo notes about register allocation and argument ordering are useful breadcrumbs for future decompilers revisiting partial matches.",
+    "Small accessors and state-clearing functions are good opportunities to name or expose bitfield-like struct members, even if the final semantic names are not known yet."
+  ],
+  "naming_conventions": [
+    "Unknown camera fields retained offset-based names such as unk_8C, unk_A0, unk_B0, unk_1B0, unk_398_b0, and unk_399_b0_b1.",
+    "New internal structs used a descriptive-but-unknown placeholder name, struct UnkInternalCameraStruct, with offset-like field names x0, x4, x8, and xC.",
+    "CameraMovement fields use semantic names where known: interest, target_interest, position, target_position, fov, and target_fov.",
+    "Function names remained address-based Camera_800xxxxx names, consistent with incomplete symbol recovery in the project.",
+    "Local variables in decompiled functions used descriptive names when behavior was understood, such as bounds_left, bounds_right, bounds_top, bounds_bottom, distance, scale, camera_speed, target_position, src, dst, and camera."
+  ],
+  "assembly_or_matching_tactics": [
+    "Camera_80029C88 was written with explicit Vec3 difference and per-component position updates because the apparently natural lbVector_Lerp call generated code too far from the target.",
+    "The Camera_80029C88 inline note says r3 and r4 would need to be swapped to get a match, indicating argument/register ordering was a blocker.",
+    "Camera_8002A28C was marked as mostly blocked by register allocation rather than by unknown high-level behavior.",
+    "Camera_800293E0 uses repeated explicit scalar comparisons against 0.5f and -0.5f for each component, likely to mirror target control flow rather than abstracting to a helper.",
+    "Camera struct arrays at unk_B0 and unk_1B0 were modeled as [2][8] arrays of a 0x10-byte internal struct, matching the nested loop copy pattern in Camera_8002A28C.",
+    "Added explicit u8 pad_2B0[0x2BC - 0x2B0] to maintain known alignment and offset continuity after introducing the two internal arrays."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "comment": "Looks good, thank you!",
+      "impact": "No requested changes were recorded in the provided excerpt."
+    }
+  ],
+  "searchable_terms": [
+    "PR 1484",
+    "Decompile some camera functions",
+    "eperdew",
+    "camera.c",
+    "cm/types.h",
+    "camera.h",
+    "Camera_80029124",
+    "Camera_800293E0",
+    "Camera_80029C88",
+    "Camera_8002A28C",
+    "Camera_800310A0",
+    "Camera_800310B8",
+    "Camera_800310E8",
+    "CameraBox",
+    "CameraMovement",
+    "CameraBounds",
+    "Camera",
+    "UnkInternalCameraStruct",
+    "cm_804D6464",
+    "cm_80452C68",
+    "cm_804D6468",
+    "cm_803BCCA0",
+    "Ground_801C4368",
+    "Stage_GetCamBoundsLeftOffset",
+    "Stage_GetCamBoundsRightOffset",
+    "Stage_GetCamBoundsTopOffset",
+    "Stage_GetCamBoundsBottomOffset",
+    "HSD_CObjSetMtxDirty",
+    "HSD_CObjSetupViewingMtx",
+    "HSD_GObjPLink_80390228",
+    "lbVector_Lerp",
+    "register allocation",
+    "partial match",
+    "camera bounds bitmask",
+    "unk_B0",
+    "unk_1B0",
+    "unk_8C",
+    "unk_A0",
+    "unk_398_b0",
+    "unk_399_b0_b1"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or further type Camera unk_8C, unk_A0, unk_B0, or unk_1B0.",
+    "Search for later work that completes matching for Camera_80029C88 or resolves the r3/r4 argument order issue.",
+    "Search for later work that replaces UnkInternalCameraStruct with a semantic camera effect or transition struct name.",
+    "Check whether Camera_8002A28C eventually became a full match after register allocation improvements.",
+    "Search for uses of Camera_80029124 bitmask values 1, 2, 4, and 8 to recover named camera-bound flags."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

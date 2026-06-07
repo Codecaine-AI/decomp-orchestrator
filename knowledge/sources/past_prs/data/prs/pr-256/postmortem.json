@@ -1,0 +1,182 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-256",
+  "pr": {
+    "number": 256,
+    "title": "TObj Matching Continuation",
+    "url": "https://github.com/doldecomp/melee/pull/256",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2022-02-07T19:15:25Z",
+    "merged_at": "2022-02-07T19:15:30Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Continued SysDolphin baselib TObj decompilation by matching several early TObj helper routines in C, moving associated data out of assembly where possible, and replacing many anonymous TObj-related symbols across assembly callsites with HSD_* names. The PR body explicitly says it matched up to MakeTextureMtx and labeled all remaining TObj functions. It also added GX texture map and post-transform texture matrix enums needed for typed TObj work.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "symbol-labeling",
+      "headers",
+      "data-migration",
+      "baselib"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "tobj",
+      "gx",
+      "asm",
+      "include",
+      "src"
+    ]
+  },
+  "key_files": [
+    {
+      "file": "src/sysdolphin/baselib/tobj.c",
+      "reason": "Added C implementations for HSD_TlutLoadDesc, HSD_TObjTevLoadDesc, _HSD_TObjGetCurrentByType, and static HSD_TexMapID2PTTexMtx, plus an extern for tobj_head and moved the unexpected-texmap panic string into C."
+    },
+    {
+      "file": "asm/sysdolphin/baselib/tobj.s",
+      "reason": "Removed matched assembly for the newly decompiled functions, renamed many remaining labels/functions, renamed lbl_804D75AC to tobj_head, and connected internal references to the new symbol names."
+    },
+    {
+      "file": "src/sysdolphin/baselib/tobj.h",
+      "reason": "Adjusted TObj header declarations, including HSD_TObjTevLoadDesc and _HSD_TObjGetCurrentByType placement."
+    },
+    {
+      "file": "include/dolphin/gx/gxtypes.h",
+      "reason": "Added GXTexMapID and GXPTTexMtx enums, including GX_TEXMAP_NULL, GX_TEX_DISABLE, and GX_PTTEXMTX0 through GX_PTIDENTITY values."
+    },
+    {
+      "file": "include/functions.h",
+      "reason": "Replaced anonymous func_8035xxxx comments with named TObj/ImageDesc helper names for project-wide symbol tracking."
+    },
+    {
+      "file": "include/variables.h",
+      "reason": "Renamed the global variable comment lbl_804D75AC to tobj_head."
+    },
+    {
+      "file": "asm/melee/ft/ftparts.s",
+      "reason": "Updated callsites to named TObj helpers such as _HSD_TObjGetCurrentByType, HSD_Index2TexMtx, and HSD_TObjGetNext."
+    },
+    {
+      "file": "asm/sysdolphin/baselib/mobj.s",
+      "reason": "Updated MObj callsites to named TObj setup/resource/free helpers."
+    },
+    {
+      "file": "asm/sysdolphin/baselib/pobj.s",
+      "reason": "Updated PObj callsites to named TObj current-by-type and texture matrix helpers."
+    },
+    {
+      "file": "asm/sysdolphin/baselib/shadow.s",
+      "reason": "Updated shadow cleanup callsites to HSD_ImageDescFree and HSD_TObjFree."
+    }
+  ],
+  "what_changed": [
+    "Matched HSD_TlutLoadDesc in C: NULL input returns NULL; otherwise allocates HSD_Tlut via HSD_TlutAlloc, memcpy copies sizeof(HSD_Tlut), and returns the new object.",
+    "Matched HSD_TObjTevLoadDesc in C with the same allocate/copy/NULL pattern using HSD_TObjTevAlloc and sizeof(HSD_TObjTev).",
+    "Matched _HSD_TObjGetCurrentByType in C: starts from global tobj_head when from is NULL, otherwise from->next, then walks next pointers until tobj_coord(tp) equals the requested mapping.",
+    "Added static HSD_TexMapID2PTTexMtx in C with cases GX_TEXMAP0 through GX_TEXMAP7 mapping to GX_PTTEXMTX0 through GX_PTTEXMTX7, and an HSD_Panic fallback using the string \"unexpected texmap id.\\n\".",
+    "Used #pragma push / #pragma force_active on / #pragma pop around HSD_TexMapID2PTTexMtx, indicating an intentional data/code retention tactic for matching.",
+    "Renamed the TObj global lbl_804D75AC to tobj_head in assembly and variables.h references.",
+    "Renamed many remaining TObj assembly functions from anonymous func_8035xxxx/func_8036xxxx names to semantic names such as TObjSetupMtx, HSD_TObjSetupTextureCoordGen, HSD_TObjSetupVolatileTev, MakeColorGenTExp, HSD_TObjAssignResources, HSD_TObjSetup, HSD_TexCoordID2TexGenSrc, HSD_Index2TexCoord, HSD_Index2TexMtx, HSD_Index2TexMap, HSD_TObjRemoveAll, HSD_TObjGetNext, HSD_TObjFree, HSD_TlutAlloc, HSD_TObjTevAlloc, HSD_ImageDescFree, and HSD_ImageDescCopyFromEFB.",
+    "Renamed internal local labels for class hooks and helpers, including MakeTextureMtx, TObjRelease, and TObjAmnesia, and updated TObjInfoInit to refer to those names.",
+    "Updated many external assembly callsites in ft, gm, it, lb, text_2, mobj, pobj, and shadow files to call the new symbol names instead of anonymous func_* names.",
+    "Added GXTexMapID and GXPTTexMtx enum definitions to include/dolphin/gx/gxtypes.h to support named texture-map and post-transform texture-matrix constants."
+  ],
+  "smart_moves": [
+    "Started the C migration with small, structurally simple allocation/load helpers, which are easy to match because their behavior is mostly NULL checks, allocator calls, memcpy size constants, and return flow.",
+    "Renamed callsites across unrelated systems in the same PR, making the new TObj semantics immediately searchable from fighter, item, game, text, MObj, PObj, and shadow assembly.",
+    "Introduced GX enum names before/while using them in TObj code, avoiding unexplained magic constants for texture-map and PTTEXMTX IDs.",
+    "Converted the global current TObj list head from lbl_804D75AC to tobj_head, clarifying the role of the global used by HSD_TObjSetup, _HSD_TObjGetCurrentByType, and TObjAmnesia.",
+    "Moved the panic string and texmap-to-PTTexMtx helper data into C with force_active, preserving required emitted data while reducing assembly burden.",
+    "Kept unmatched larger routines in assembly but gave them meaningful names, which improves later matching without requiring all logic to be decompiled at once."
+  ],
+  "decomp_lessons": [
+    "For baselib object loaders, look for the pattern: if descriptor is non-NULL, allocate the runtime object, memcpy the descriptor into it using the exact struct size, and return it; otherwise return NULL.",
+    "When a function traverses an intrusive linked list and accepts an optional starting node, NULL often means start at a global head while non-NULL means continue at from->next.",
+    "Renaming a global variable is especially valuable when multiple not-yet-matched assembly routines share it; here tobj_head documents the current TObj list state across setup and amnesia/release logic.",
+    "Header enum work can be a matching enabler: GX_TEXMAP* and GX_PTTEXMTX* names encode the exact constants used by TObj texture-matrix helpers.",
+    "Function naming can precede full decompilation. Even when bodies remain in asm, updating labels and callsites establishes semantic anchors for future work.",
+    "For small static helpers with switch statements and associated jump/data tables, #pragma force_active can be necessary to keep emitted code/data aligned with the original binary.",
+    "Project-wide callsite relabeling after a match is not just cleanup; it validates that the same address is used consistently across gameplay, rendering, and baselib systems."
+  ],
+  "naming_conventions": [
+    "Public HAL/SysDolphin texture-object APIs use the HSD_TObj* prefix, for example HSD_TObjSetup, HSD_TObjFree, HSD_TObjRemoveAll, and HSD_TObjGetNext.",
+    "Internal or lower-level TObj helpers may retain non-HSD names such as TObjSetupMtx, MakeTextureMtx, MakeColorGenTExp, TObjRelease, and TObjAmnesia.",
+    "The current-by-type helper was named _HSD_TObjGetCurrentByType with a leading underscore, suggesting an internal/private HSD-style function.",
+    "Image descriptor helpers use HSD_ImageDesc* names, such as HSD_ImageDescFree and HSD_ImageDescCopyFromEFB.",
+    "Texture index conversion helpers use HSD_Index2* and HSD_TexCoordID2* patterns: HSD_Index2TexCoord, HSD_Index2TexMtx, HSD_Index2TexMap, HSD_TexCoordID2TexGenSrc.",
+    "The former global lbl_804D75AC was renamed to the descriptive lower_snake_case tobj_head.",
+    "GX enum types follow Dolphin SDK style names: GXTexMapID and GXPTTexMtx, with values such as GX_TEXMAP0, GX_TEXMAP_NULL, GX_TEX_DISABLE, GX_PTTEXMTX0, and GX_PTIDENTITY."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed the assembly bodies for HSD_TlutLoadDesc, HSD_TObjTevLoadDesc, and _HSD_TObjGetCurrentByType after matching them in C.",
+    "Left MakeTextureMtx and many larger TObj routines in assembly but renamed their global labels, reducing future ambiguity without overextending the match.",
+    "Updated assembly branches/calls across many files from func_* to the new names while preserving addresses and instruction bytes in comments.",
+    "Used exact sizeof-based memcpy patterns in C for descriptor loaders: sizeof(HSD_Tlut) and sizeof(HSD_TObjTev), corresponding to the old assembly copy sizes 0x10 and 0x20.",
+    "Represented texmap-to-PTTexMtx mapping as a switch over GXTexMapID values; this matches the old branch-table style code and allows the associated panic path to be expressed in C.",
+    "Used #pragma force_active around the static HSD_TexMapID2PTTexMtx helper, likely to force emission of otherwise unreferenced code/data needed for binary layout.",
+    "Moved the string \"unexpected texmap id.\\n\" out of tobj.s data into C near the helper that uses it.",
+    "Repointed tobj.s references from lbl_804D75AC@sda21 to tobj_head@sda21, keeping the small-data access pattern intact while improving symbol naming."
+  ],
+  "review_feedback": [
+    {
+      "type": "none",
+      "note": "No issue comments, review comments, or reviews were present in the provided PR slice."
+    }
+  ],
+  "searchable_terms": [
+    "PR256",
+    "TObj Matching Continuation",
+    "PsiLupan",
+    "sysdolphin baselib tobj",
+    "HSD_TObjSetup",
+    "HSD_TObjSetupTextureCoordGen",
+    "HSD_TObjSetupVolatileTev",
+    "HSD_TObjAssignResources",
+    "HSD_TObjGetNext",
+    "HSD_TObjRemoveAll",
+    "HSD_TObjFree",
+    "HSD_TlutLoadDesc",
+    "HSD_TObjTevLoadDesc",
+    "_HSD_TObjGetCurrentByType",
+    "HSD_TexMapID2PTTexMtx",
+    "MakeTextureMtx",
+    "TObjSetupMtx",
+    "MakeColorGenTExp",
+    "TObjRelease",
+    "TObjAmnesia",
+    "tobj_head",
+    "HSD_Index2TexCoord",
+    "HSD_Index2TexMtx",
+    "HSD_Index2TexMap",
+    "HSD_TexCoordID2TexGenSrc",
+    "HSD_ImageDescFree",
+    "HSD_ImageDescCopyFromEFB",
+    "GXTexMapID",
+    "GXPTTexMtx",
+    "GX_TEXMAP_NULL",
+    "GX_TEX_DISABLE",
+    "GX_PTIDENTITY",
+    "unexpected texmap id"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that decompile MakeTextureMtx or TObjSetupMtx after PR #256.",
+    "Find PRs touching tobj_head or _HSD_TObjGetCurrentByType to see whether the global list model was refined.",
+    "Search for later updates to GXTexMapID or GXPTTexMtx definitions to confirm enum completeness and SDK naming accuracy.",
+    "Look for follow-up matches of HSD_Index2TexCoord, HSD_Index2TexMtx, HSD_Index2TexMap, and HSD_TexCoordID2TexGenSrc.",
+    "Search for PRs that replace remaining TObj assembly in asm/sysdolphin/baselib/tobj.s with C.",
+    "Find uses of #pragma force_active in later SysDolphin matches to compare data-retention tactics."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

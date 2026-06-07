@@ -1,0 +1,143 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2109",
+  "pr": {
+    "number": 2109,
+    "title": "Assorted gr* matches",
+    "url": "https://github.com/doldecomp/melee/pull/2109",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2026-01-19T12:12:34Z",
+    "merged_at": "2026-01-19T12:19:52Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched a small batch of stage/ground functions across Castle, Fourside, and Mute City, promoted several anonymous fn_* symbols to stage-prefixed names, and tightened headers/ground variable structs to expose the types needed for those matches. The PR also refined ifhazard dynamic model helper signatures from void* to DynamicModelDesc*. There were no PR body comments or review comments in the provided slice, so intent is inferred from the diff.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-renaming",
+      "struct-typing",
+      "stage"
+    ],
+    "systems": [
+      "config",
+      "melee-core",
+      "stage",
+      "ground",
+      "ifhazard"
+    ]
+  },
+  "key_files": [
+    "config/GALE01/symbols.txt",
+    "src/melee/gr/grcastle.c",
+    "src/melee/gr/grcastle.h",
+    "src/melee/gr/grfourside.c",
+    "src/melee/gr/grfourside.h",
+    "src/melee/gr/grmutecity.c",
+    "src/melee/gr/grmutecity.h",
+    "src/melee/gr/types.h",
+    "src/melee/if/ifhazard.c",
+    "src/melee/if/ifhazard.h"
+  ],
+  "what_changed": [
+    "Renamed matched stage-local symbols in config/GALE01/symbols.txt from generic fn_* names to stage-prefixed names: grCastle_801CD610, grCastle_801CD9B4, grCastle_801CF750, grCastle_801D0520, grCastle_801D09B8, grMuteCity_801F1A0C, and grFourside_801F30A0.",
+    "Implemented grCastle_801CD610 as a Ground_GObj callback that calls ftCo_800C06E8(gobj, 6, grCastle_801D09B8), then grCastle_801CF7B0(gobj), then grCastle_801CDFD8(gobj).",
+    "Implemented grCastle_801CD9B4 by retrieving Ground with GET_GROUND and registering grCastle_801CF750 through mpJointSetCb1 for joints 4 and 5.",
+    "Implemented grCastle_801CDF54(Vec3*) as a Castle helper that, only when stage_info.internal_stage_id == 0x2, searches ground objects 8 through 16, extracts JObj 0, writes a world position via lb_8000B1CC, and returns whether a position was found.",
+    "Implemented grCastle_801D0520(Ground_GObj*, int) as a render-pass wrapper that calls grDisplay_801C5DB0 only when gp->gv.castle.xC8 == 0.",
+    "Implemented grFourside_801F30A0(void*, void*, void*) using M2C_FIELD on offset 0x34 of the third argument, extracting ((val >> 3) & 0xF), and incrementing gp->gv.fourside.x8 on ground object 5 when the extracted value is 1.",
+    "Implemented grFourside_801F3C40 to hide the JObj, set ground flags, initialize Fourside ground vars, and compute a randomized timer/value from grFs_804D69D8->x0 plus optional HSD_Randi(grFs_804D69D8->x4).",
+    "Implemented grMuteCity_801EFC6C stage initialization: loads grMc_804D69D0 from Ground_801C49F8, clears stage_info.unk8C bits b4 and b5, creates/initializes ground with grMuteCity_801EFD0C, calls Ground_801C39C0 and Ground_801C3BB4, registers a dynamic model with un_802FD8C4(grMuteCity_801F28A8()), and calls un_802FD65C.",
+    "Implemented grMuteCity_801F1A0C as a small wrapper around Ground_801C53EC(0x5CC60).",
+    "Updated grcastle.h, grfourside.h, and grmutecity.h prototypes from UNK_RET/UNK_PARAMS or fn_* to typed signatures where evidence from the matched code supported it.",
+    "Added grCastle_GroundVars to the Ground gv union with xC4 and xC8 fields, added x8 to grFourside_GroundVars, and corrected comments/offset annotations for Pura ground vars.",
+    "Changed un_802FD8A0 and un_802FD8C4 signatures in ifhazard.c/.h from void* to DynamicModelDesc*, matching their use through un_802FD708 and the Mute City dynamic model registration."
+  ],
+  "smart_moves": [
+    "Used stage-prefixed symbol names once functions were matched, keeping symbols.txt, C definitions, and headers aligned instead of leaving matched functions under generic fn_* names.",
+    "Introduced narrowly scoped ground variable structs/fields only where the new matches needed them, such as grCastle_GroundVars.xC8 and grFourside_GroundVars.x8.",
+    "Replaced placeholder-style prototypes with concrete callback signatures, which made call sites such as mpJointSetCb1 and grDisplay_801C5DB0 type-check against more accurate declarations.",
+    "Typed ifhazard dynamic model wrappers as DynamicModelDesc* rather than void*, enabling grMuteCity_801EFC6C to call un_802FD8C4(grMuteCity_801F28A8()) without obscuring the data flow.",
+    "Used M2C_FIELD and PAD_STACK in grFourside_801F30A0, suggesting a pragmatic partial-match tactic for a callback argument layout that was not yet fully typed."
+  ],
+  "decomp_lessons": [
+    "For stage files, once a function is matched, propagate the stage prefix through symbols.txt, headers, and C comments to avoid stale fn_* names.",
+    "Small stage matches often depend on improving the Ground union: adding a precise gv sub-struct can unlock cleaner code and remove raw offsets.",
+    "Callback signatures can often be recovered from registration functions. Here, mpJointSetCb1 informed the grCastle_801CF750 prototype, and render/display call sites informed grCastle_801D0520.",
+    "When a callback payload type is still unknown, M2C_FIELD can preserve the exact byte/bit extraction pattern while limiting the amount of invented structure.",
+    "Dynamic model APIs should be typed consistently across wrapper functions and callers; replacing void* with DynamicModelDesc* clarified Mute City hazard setup.",
+    "Include cleanup can be part of matching work: this PR removed broad placeholder/platform includes in grcastle.c and added specific dependencies such as ftdevice, grdisplay, mplib, psstructs, random, and ifhazard where required."
+  ],
+  "naming_conventions": [
+    "Matched ground/stage functions use the module prefix plus address pattern, e.g. grCastle_801CD610, grMuteCity_801F1A0C, and grFourside_801F30A0.",
+    "Generic fn_801xxxxx names remain only where the function is still not identified or not matched in this slice; matched functions are promoted away from fn_*.",
+    "Stage-local globals follow the existing two-letter stage abbreviation style, such as grCs_803B7F28, grFs_804D69D8, and grMc_804D69D0.",
+    "Ground variable structs are named by stage/module with a _GroundVars suffix, e.g. grCastle_GroundVars and grFourside_GroundVars."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used PAD_STACK(20) in grFourside_801F30A0, indicating stack-shape preservation was needed for the match.",
+    "Used M2C_FIELD(r5, u8*, 0x34) to read a byte from an otherwise untyped callback argument, then matched bit extraction with ((val >> 3) & 0xF).",
+    "Matched simple wrapper/thunk-like functions by preserving exact constants and call order, such as Ground_801C53EC(0x5CC60) in grMuteCity_801F1A0C and the ordered setup sequence in grMuteCity_801EFC6C.",
+    "Preserved explicit loop initialization and increment form in grCastle_801CDF54 while searching ground objects 8 through 16, likely to maintain codegen.",
+    "Moved from raw UNK_RET/UNK_PARAMS to typed prototypes only where the implementation or call site evidence supported the types."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "Assorted gr* matches",
+    "PsiLupan",
+    "grCastle_801CD610",
+    "grCastle_801CD9B4",
+    "grCastle_801CDF54",
+    "grCastle_801CF750",
+    "grCastle_801D0520",
+    "grCastle_801D09B8",
+    "grFourside_801F30A0",
+    "grFourside_801F3C40",
+    "grMuteCity_801EFC6C",
+    "grMuteCity_801F1A0C",
+    "grMuteCity_801F28A8",
+    "fn_801CD610",
+    "fn_801CD9B4",
+    "fn_801CF750",
+    "fn_801D0520",
+    "fn_801D09B8",
+    "fn_801F1A0C",
+    "fn_801F30A0",
+    "Ground_GObj",
+    "GET_GROUND",
+    "GET_JOBJ",
+    "Ground_801C2BA4",
+    "Ground_801C49F8",
+    "Ground_801C53EC",
+    "mpJointSetCb1",
+    "grDisplay_801C5DB0",
+    "lb_8000B1CC",
+    "HSD_Randi",
+    "M2C_FIELD",
+    "PAD_STACK",
+    "DynamicModelDesc",
+    "un_802FD8C4",
+    "ifhazard",
+    "grCastle_GroundVars",
+    "grFourside_GroundVars",
+    "stage_info.internal_stage_id"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully type grFourside_801F30A0 callback argument instead of using M2C_FIELD.",
+    "Find later PRs that match grCastle_801CF750 or grCastle_801D09B8 after this rename.",
+    "Find PRs modifying grCastle_GroundVars fields xC4/xC8 for more descriptive names.",
+    "Find PRs that further type grMuteCity_801F28A8 and DynamicModelDesc hazard setup.",
+    "Find PRs replacing UNK_RET/UNK_PARAMS in grCastle_801CDFD8, grCastle_801CF868, or grMuteCity_801F1A34."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

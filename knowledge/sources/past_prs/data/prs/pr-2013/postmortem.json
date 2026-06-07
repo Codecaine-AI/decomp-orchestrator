@@ -1,0 +1,164 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2013",
+  "pr": {
+    "number": 2013,
+    "title": "lb: Match lbbgflash functions, ft: Implement ftColl_8007BE3C",
+    "url": "https://github.com/doldecomp/melee/pull/2013",
+    "state": "MERGED",
+    "author": "itsgrimetime",
+    "created_at": "2025-12-27T23:19:10Z",
+    "merged_at": "2025-12-30T00:23:15Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched two lbbgflash functions and partially implemented fighter collision damage handling in ftColl. The lb work replaced placeholders for lbBgFlash_8002063C and fn_80021C80, including a small bitfield struct to reproduce codegen for a bitfield write. The fighter work added concrete signatures and implementation for ftColl_80077464 and ftColl_8007BE3C, refined Fighter damage-field types, and wired damage processing to stale-move updates, player logging, assertions, and effect spawning. The PR summary claims lbBgFlash_8002063C and fn_80021C80 reached 100%, while ftColl_8007BE3C reached 89.2%.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "partial-implementation",
+      "headers",
+      "types-structs",
+      "collision",
+      "damage-processing"
+    ],
+    "systems": [
+      "fighter",
+      "library",
+      "background-flash",
+      "items",
+      "effects",
+      "player-stats"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/lb/lbbgflash.c",
+      "reason": "Implemented lbBgFlash_8002063C and fn_80021C80; added includes, typed callback signature, externs, and bitfield helper struct."
+    },
+    {
+      "path": "src/melee/lb/lbbgflash.h",
+      "reason": "Updated prototypes for lbBgFlash_800206D4, lbBgFlash_80021A10, and fn_80021C80; added baselib gobj include."
+    },
+    {
+      "path": "src/melee/ft/ftcoll.c",
+      "reason": "Implemented ftColl_80077464 and ftColl_8007BE3C; added dependencies for item types, item collision, stale moves, runtime assert/reporting, and effect/damage behavior."
+    },
+    {
+      "path": "src/melee/ft/ftcoll.h",
+      "reason": "Replaced UNK_RET/UNK_PARAMS prototypes with concrete signatures for ftColl_80077464 and ftColl_80078538."
+    },
+    {
+      "path": "src/melee/ft/types.h",
+      "reason": "Refined Fighter damage struct fields: x1880 became Vec3 and x1898 became float."
+    }
+  ],
+  "what_changed": [
+    "lbBgFlash_8002063C now clamps count to at least 1, calls lbBgFlash_800206D4(&lbl_804D3844, &lbl_804D3840, count), and clears lbl_80433658.field.",
+    "lbbgflash.c introduced lbl_80433658_t with a 1-bit padding field and 7-bit field member, apparently to match the required rlwimi instruction for bitfield assignment according to the PR summary.",
+    "fn_80021C80 now walks a ColorOverlay in gobj user_data by repeatedly calling lb_80014258(gobj, &user_data->x4, fn_80021C18), then lb_80014498(&user_data->x4) while the callback iteration continues.",
+    "fn_80021C18 was typed as a static callback taking HSD_GObj*, CommandInfo*, and int, though its body remains empty in the excerpt.",
+    "ftColl_80077464 was changed from NOT_IMPLEMENTED with no typed parameters to void ftColl_80077464(Item* item, HitCapsule* hit, Fighter* fp), with reflect/damage bookkeeping against item and fighter fields.",
+    "ftColl_80077464 calls it_8026FAC4(item, hit, 7, fp, 0), derives a minimum nonzero damage value, compares it to fp->ReflectAttr.x1A30_maxDamage, and updates item reflect fields or fighter reflect-overdamage fields depending on the branch.",
+    "ftColl_8007BE3C was changed from NOT_IMPLEMENTED to an 89.2% implementation handling environmental damage conversion, delayed damage bookkeeping via x221C_b4, percent temp accumulation, applied damage count, over-500 damage assertion/reporting, stale move updates, player damage logging, and effect spawning.",
+    "ftColl_8007BE3C distinguishes damage source classifiers HSD_GOBJ_CLASS_FIGHTER and HSD_GOBJ_CLASS_ITEM, calling plStale_UpdateStaleMovesFromFighter or plStale_UpdateStaleMovesFromItem and ftColl_80076444 or ftColl_8007646C respectively.",
+    "For fighter damage sources, ftColl_8007BE3C logs via pl_8003EB30 using source and victim fighter player metadata.",
+    "For item damage sources, ftColl_8007BE3C logs via pl_8003EB30 only if ftLib_80086960(ip->owner) succeeds, using owner fighter metadata and ip->xD90.x2073.",
+    "Effect dispatch in ftColl_8007BE3C indexes ftColl_803C0C40 at 27 + fp->dmg.x188c and handles special effect IDs 1000, 1001, 1002, 1046, 1145, 1255, and 1005.",
+    "ftColl_80078538 remains NOT_IMPLEMENTED, but its prototype was made concrete and wrapped with #pragma dont_inline on/off in ftcoll.c.",
+    "Fighter damage field x1880 was retyped from three separate ints to Vec3, enabling direct position use for effect spawning and ftColl_80078538.",
+    "Fighter damage field x1898 was retyped from int to float, matching damage arithmetic, OSReport formatting, getEnvDmg input, and percent accumulation use."
+  ],
+  "smart_moves": [
+    "Used a narrow bitfield struct in lbbgflash to force the correct bitfield write codegen for lbBgFlash_8002063C, specifically noted in the PR summary as producing the desired rlwimi instruction.",
+    "Converted unknown function prototypes to typed signatures before or alongside implementation, reducing reliance on UNK_PARAMS and making downstream callsites more informative.",
+    "Retyped Fighter damage data based on observed use rather than leaving scalar placeholders: x1880 as Vec3 for hit/effect position and x1898 as float for damage amount.",
+    "Preserved a known nonmatching or sensitive function boundary by marking ftColl_80078538 with #pragma dont_inline while giving it a concrete signature.",
+    "Kept ftColl_8007BE3C source-specific behavior separated by HSD_GObj classifier, which mirrors the runtime distinction between fighter-sourced and item-sourced damage.",
+    "Added the necessary subsystem includes near the implementation instead of relying on placeholder declarations: item types/collision, plstale, runtime assert/reporting, and baselib gobj support."
+  ],
+  "decomp_lessons": [
+    "For bitfield-heavy library code, matching may require modeling the global data as a bitfield struct with the exact bit widths needed to trigger rlwimi-style codegen.",
+    "Replacing int triplets with Vec3 in structs can unlock cleaner matches when the fields are passed directly to effect or collision APIs as positions.",
+    "Damage fields that participate in float comparisons, OSReport %f output, percent accumulation, and effect scaling should be typed as float even if previously represented as int placeholders.",
+    "When implementing collision/damage functions, concrete signatures in headers are part of the decomp progress because they propagate better types to neighboring unresolved functions.",
+    "Classifier switches on HSD_GObj are a useful pattern for reconstructing shared fighter/item collision paths without conflating owner, source, and victim objects.",
+    "Partial matches can still be valuable if they anchor data flow, types, and side effects, but the match percentage should be recorded; here ftColl_8007BE3C was only claimed at 89.2%."
+  ],
+  "naming_conventions": [
+    "Existing address-style symbol names were retained for unknown or not-yet-renamed functions, such as ftColl_8007BE3C, ftColl_80077464, fn_80021C80, and lbBgFlash_8002063C.",
+    "Struct field names remain offset-based when semantics are uncertain, e.g. fp->dmg.x188c, fp->dmg.x1898, item->xC68, and fp->x221C_b4.",
+    "Where semantics were clearer, existing descriptive field names were reused, such as ReflectAttr.x1A30_maxDamage, x1A3C_damageOver, x1A2C_reflectHitDirection, x1A34_damageMul, and x1A38_speedMul.",
+    "Temporary local names in the new implementation describe roles rather than offsets, e.g. source, victim_gobj, src_fp, victim_fp, owner_fp, should_process, effect_idx, and dmg_amount.",
+    "The lbbgflash bitfield helper was named after the global symbol, lbl_80433658_t, keeping the decomp convention for anonymous data until better semantic names are known."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used a one-byte bitfield layout with u8 _0 : 1 and u8 field : 7 to drive assignment to lbl_80433658.field and match a desired rlwimi instruction.",
+    "Added PAD_STACK(8) in ftColl_80077464 and PAD_STACK(30) in ftColl_8007BE3C, indicating stack-shape padding was needed for closer matching.",
+    "Applied #pragma dont_inline around ftColl_80078538, likely to prevent compiler inlining from perturbing surrounding codegen while the function remains unresolved.",
+    "Introduced scoped blocks around switch cases in ftColl_8007BE3C so local temporaries such as dmg_amount can have lifetimes closer to the target code.",
+    "Used explicit casts and type choices, such as u32 dmg_unsigned = fp->dmg.x1898 and HSD_GObj* source = (HSD_GObj*) fp->dmg.x1894, to satisfy current struct typing and codegen constraints."
+  ],
+  "review_feedback": [
+    {
+      "source": "available PR context",
+      "feedback": "No review comments were included in the slice; only one review is counted, with no review comment excerpt.",
+      "resolution": "No specific reviewer-requested changes can be inferred from the provided data."
+    }
+  ],
+  "searchable_terms": [
+    "pr-2013",
+    "itsgrimetime",
+    "lbbgflash",
+    "lbBgFlash_8002063C",
+    "fn_80021C80",
+    "fn_80021C18",
+    "ColorOverlay",
+    "lb_80014258",
+    "lb_80014498",
+    "rlwimi",
+    "bitfield struct",
+    "lbl_80433658",
+    "lbl_804D3840",
+    "lbl_804D3844",
+    "ftcoll",
+    "ftColl_8007BE3C",
+    "ftColl_80077464",
+    "ftColl_80078538",
+    "Fighter damage",
+    "ReflectAttr",
+    "x1A30_maxDamage",
+    "x1A3C_damageOver",
+    "x1A2C_reflectHitDirection",
+    "x1880 Vec3",
+    "x1898 float",
+    "plStale_UpdateStaleMovesFromFighter",
+    "plStale_UpdateStaleMovesFromItem",
+    "pl_8003EB30",
+    "getEnvDmg",
+    "efSync_Spawn",
+    "HSD_GOBJ_CLASS_FIGHTER",
+    "HSD_GOBJ_CLASS_ITEM",
+    "it_8026FAC4",
+    "PAD_STACK",
+    "dont_inline",
+    "OSReport",
+    "__assert"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that finish matching ftColl_8007BE3C beyond the claimed 89.2%.",
+    "Search for subsequent renames or type refinements of Fighter dmg fields x187c, x1880, x188c, x1894, and x1898.",
+    "Search for later implementation of ftColl_80078538 now that its concrete signature was introduced here.",
+    "Look for PRs touching lbl_80433658 or lbbgflash bitfields to see whether the temporary lbl_80433658_t name was replaced with a semantic type.",
+    "Search for review or merge discussion outside this slice if reviewer rationale for accepting the partial ftColl_8007BE3C implementation is needed."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

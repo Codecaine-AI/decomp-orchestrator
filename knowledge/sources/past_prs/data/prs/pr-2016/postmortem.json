@@ -1,0 +1,142 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2016",
+  "pr": {
+    "number": 2016,
+    "title": "lb: Match 3 functions (lbaudio_ax, lbrefract, lbbgflash)",
+    "url": "https://github.com/doldecomp/melee/pull/2016",
+    "state": "CLOSED",
+    "author": "itsgrimetime",
+    "created_at": "2025-12-28T07:35:37Z",
+    "merged_at": null
+  },
+  "agent_status": "agent_completed",
+  "summary": "Attempted to match three library functions: fn_800263B4 in lbaudio_ax.c, fn_80022608 in lbrefract.c, and lbBgFlash_80021C48 in lbbgflash.c. The PR also flipped lbrefract.c and lbaudio_ax.c to Matching in configure.py, adjusted a lbbgflash.h prototype, and changed ftCo_8009DB50 in ftdynamics.c. It was closed unmerged because the batched worktree commits had build issues; the diff excerpt shows unresolved conflict markers in lbbgflash.c, so the matching claims should not be treated as accepted.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "fix",
+      "headers",
+      "build-breakage",
+      "closed-unmerged"
+    ],
+    "systems": [
+      "library",
+      "fighter",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "configure.py",
+    "src/melee/lb/lbaudio_ax.c",
+    "src/melee/lb/lbrefract.c",
+    "src/melee/lb/lbbgflash.c",
+    "src/melee/lb/lbbgflash.h",
+    "src/melee/ft/ftdynamics.c"
+  ],
+  "what_changed": [
+    "Added an implementation of fn_800263B4 in src/melee/lb/lbaudio_ax.c: null-checks a pointer and calls HSD_ObjFree(&lbl_80433710, p).",
+    "Added lbRefract_800225D4 and fn_80022608 in src/melee/lb/lbrefract.c. fn_80022608 dispatches through hsdDObj.disp(dobj, vmtx, pmtx, rendermode), then resets GX indirect/TEV state via GXSetTevDirect(0), GXSetNumIndStages(0), and HSD_StateInvalidate(-1).",
+    "Added baselib/dobj.h and baselib/state.h includes in lbrefract.c and declared extern HSD_DObjInfo hsdDObj.",
+    "Attempted to implement lbBgFlash_80021C48 in src/melee/lb/lbbgflash.c by deriving a ColorOverlay pointer from lbl_804D63E0->x2C + 4 and passing it with lbl_804D63DC and two u32 args to lb_800144C8.",
+    "Introduced a local BgFlashGlobal struct with char pad[0x2C] and void* x2C plus externs for lbl_804D63E0 and lbl_804D63DC in lbbgflash.c.",
+    "Changed the lbbgflash.h prototype for lbBgFlash_800205F0 from void lbBgFlash_800205F0(void) to void lbBgFlash_800205F0(int).",
+    "Changed configure.py so lbrefract.c and lbaudio_ax.c were marked Matching instead of NonMatching; lbbgflash.c remained NonMatching in the shown excerpt despite the PR title claiming a lbbgflash match.",
+    "Refactored ftCo_8009DB50 in ftdynamics.c by replacing PAD_STACK and an inner scoped loop variable with ssize_t i and j declarations, caching bone_id in an int, and indexing hat->hat_dynamics[4]->ftDynamicBones->array[i] directly."
+  ],
+  "smart_moves": [
+    "For fn_800263B4, the implementation kept the simple object-freeing pattern explicit: preserve the null guard and call HSD_ObjFree with the known object heap/list symbol lbl_80433710.",
+    "For fn_80022608, the added code pairs the DObj display callback with explicit GX/HSD state cleanup, a reusable pattern for display wrappers that temporarily alter render state.",
+    "The lbrefract work included the headers needed to express real HSD_DObj and state APIs instead of relying only on placeholders.",
+    "The lbbgflash attempt modeled an unknown global with a minimal padded struct to access a known field offset, which can be a useful interim matching tactic when a full global struct is not yet recovered."
+  ],
+  "decomp_lessons": [
+    "Do not batch or submit generated matching work with unresolved merge conflict markers; the lbbgflash.c diff contains <<<<<<<, =======, and >>>>>>> markers and the PR was closed for build issues.",
+    "Only flip objects to Matching in configure.py after the entire object builds and verifies; this PR marked lbrefract.c and lbaudio_ax.c Matching but was still closed for source/build problems.",
+    "When matching wrappers around HSD/GX display code, include the correct baselib headers and express calls through known dispatch tables like hsdDObj.disp where evidence supports it.",
+    "Offset-based temporary structs such as BgFlashGlobal with pad fields can unblock matching, but should be treated as provisional until the real global type is understood and headerized.",
+    "Header prototype fixes can be part of matching work; here lbBgFlash_800205F0 was changed to take an int, but such signature changes must be validated across call sites.",
+    "Non-target file edits, like the ftdynamics.c refactor, increase risk in a small matching PR unless they are necessary for the match or build."
+  ],
+  "naming_conventions": [
+    "Library functions use subsystem prefixes such as lbAudioAx_, lbRefract_, and lbBgFlash_ followed by the original address, e.g. lbBgFlash_80021C48.",
+    "Unidentified local/static functions retain fn_XXXXXXXX address names, e.g. fn_800263B4 and fn_80022608.",
+    "Unknown globals retain lbl_XXXXXXXX names, e.g. lbl_80433710, lbl_804D63E0, lbl_804D63DC, and lbl_804D63D8.",
+    "Temporary recovered structs may be named after the subsystem/global role, as with BgFlashGlobal, but the evidence here is limited to a single accessed offset.",
+    "Fighter common functions use ftCo_ address names, e.g. ftCo_8009DB50."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use an explicit null check before HSD_ObjFree to match simple allocator/free helper control flow.",
+    "Introduce a temporary local pointer variable before HSD_ObjFree when needed to reproduce register allocation or code shape.",
+    "Call through hsdDObj.disp rather than a direct display function when matching DObj render dispatch behavior.",
+    "Reset render state after drawing with GXSetTevDirect(0), GXSetNumIndStages(0), and HSD_StateInvalidate(-1), matching a common post-render cleanup sequence.",
+    "Use padded structs and byte-pointer arithmetic to represent known offsets into unresolved globals, e.g. casting lbl_804D63E0->x2C plus 4 to ColorOverlay*.",
+    "Loop reshaping in ftdynamics.c replaced a descriptor pointer with repeated indexed accesses and cached bone_id, likely aiming to alter generated code shape, but the PR evidence does not show whether this was required for a match."
+  ],
+  "review_feedback": [
+    {
+      "source": "issue comment",
+      "feedback": "PR was closed because the worktree commits had build issues that needed to be fixed at the source before batching."
+    },
+    {
+      "source": "diff evidence",
+      "feedback": "lbbgflash.c contains unresolved conflict markers, directly explaining or contributing to the build issues."
+    }
+  ],
+  "searchable_terms": [
+    "pr-2016",
+    "itsgrimetime",
+    "lb",
+    "lbaudio_ax",
+    "lbrefract",
+    "lbbgflash",
+    "fn_800263B4",
+    "fn_80022608",
+    "lbBgFlash_80021C48",
+    "lbRefract_800225D4",
+    "lbRefract_8002219C",
+    "lbAudioAx_800263E8",
+    "HSD_ObjFree",
+    "lbl_80433710",
+    "hsdDObj",
+    "HSD_DObjInfo",
+    "HSD_DObj",
+    "HSD_StateInvalidate",
+    "GXSetTevDirect",
+    "GXSetNumIndStages",
+    "ColorOverlay",
+    "lb_800144C8",
+    "BgFlashGlobal",
+    "lbl_804D63E0",
+    "lbl_804D63DC",
+    "lbBgFlash_800205F0",
+    "ftCo_8009DB50",
+    "ftdynamics",
+    "KirbyHatStruct",
+    "Ft_Dynamics_NumMax",
+    "PAD_STACK",
+    "MatchingFor",
+    "Object Matching",
+    "Object NonMatching",
+    "closed unmerged",
+    "build issues",
+    "conflict markers"
+  ],
+  "follow_up_queries": [
+    "Find the later PR or commit that successfully matched fn_800263B4 in lbaudio_ax.c after this closed batch.",
+    "Find the accepted implementation of fn_80022608 and lbRefract_800225D4 to confirm the HSD/GX state cleanup pattern.",
+    "Search for the final resolved lbBgFlash_80021C48 implementation and whether BgFlashGlobal was replaced by a real global struct.",
+    "Check whether lbBgFlash_800205F0(int) became the accepted prototype across all call sites.",
+    "Investigate why ftdynamics.c was modified in this batch and whether those changes were retained elsewhere."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

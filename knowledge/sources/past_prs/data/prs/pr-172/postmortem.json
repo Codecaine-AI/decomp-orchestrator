@@ -1,0 +1,139 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-172",
+  "pr": {
+    "number": 172,
+    "title": "Move some of .sdata out to files, split up ef code",
+    "url": "https://github.com/doldecomp/melee/pull/172",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-11T01:01:20Z",
+    "merged_at": "2021-12-11T01:01:31Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Mechanical assembly/data organization PR. It removed the large monolithic effects asm file asm/melee/ef/code_8005B4B8.s and replaced it with smaller effect-region files, notably eflib.s, efsync.s, code_80061D70.s, and efasync.s, then updated obj_files.mk to build those objects in place of the old one. It also removed most entries from global asm/sdata.s and relocated .sdata labels into their apparent owning asm files across effects, lb, cm, ft, mp, and pl. There were no PR body notes or review comments in the slice, so intent beyond the title and diff is inferred only from file movement and section placement.",
+  "change_classification": {
+    "primary_type": "asm-reorganization",
+    "categories": [
+      "code-change",
+      "data-migration",
+      "build-system-update",
+      "section-splitting"
+    ],
+    "systems": [
+      "asm",
+      "effects",
+      "sdata",
+      "lb",
+      "cm",
+      "ft",
+      "mp",
+      "pl",
+      "build"
+    ]
+  },
+  "key_files": [
+    "asm/melee/ef/code_8005B4B8.s",
+    "asm/melee/ef/eflib.s",
+    "asm/melee/ef/efsync.s",
+    "asm/melee/ef/efasync.s",
+    "asm/melee/ef/code_80061D70.s",
+    "asm/sdata.s",
+    "obj_files.mk",
+    "asm/melee/lb/code_8001E2F8.s",
+    "asm/melee/lb/lbtime.s",
+    "asm/melee/cm/code_80028B9C.s",
+    "asm/melee/ft/fighter.s",
+    "asm/melee/mp/code_80041C78.s",
+    "asm/melee/pl/player.s"
+  ],
+  "what_changed": [
+    "Deleted asm/melee/ef/code_8005B4B8.s, a 15518-line monolithic effects assembly file covering the 0x8005B4B8-0x800679AC range.",
+    "Added new effects asm files: asm/melee/ef/eflib.s with 5401 lines, asm/melee/ef/efsync.s with 2524 lines, asm/melee/ef/code_80061D70.s with 2200 lines, and asm/melee/ef/efasync.s with 5508 lines.",
+    "Updated obj_files.mk to replace $(BUILD_DIR)/asm/melee/ef/code_8005B4B8.o with eflib.o, efsync.o, code_80061D70.o, and efasync.o.",
+    "Removed 371 lines from asm/sdata.s, leaving later data such as lbl_804D3A18 visible after the deletion hunk.",
+    "Added .section .sdata blocks to multiple owning asm files, including cm/code_80028B9C.s, ef/code_80061D70.s, ef/efasync.s, ef/eflib.s, ef/efsync.s, lb/code_80016A54.s, lb/code_8001E2F8.s, lb/lbfile.s, ft/fighter.s, mp/code_80041C78.s, lbsnap.s, and player.s.",
+    "Moved small data labels such as lbl_804D3938, lbl_804D39A0, lbl_804D39C8, lbl_804D39D8, lbl_804D39E8, and related NULL/string-aligned entries out of the global sdata file and into files closer to the code that references them.",
+    "Preserved existing raw symbol names and assembly labels, including efLib_DestroyAll, efLib_PauseAll, efLib_ResumeAll, efAsync_Spawn, lbl_804D782C, lbl_804D7849, and many lbl_80xxxxxx labels."
+  ],
+  "smart_moves": [
+    "Kept the transformation mostly mechanical: the old effects range was split into new asm files without evidence of semantic rewrites, reducing risk while improving navigability.",
+    "Used source-name hints already present in the assembly, such as comments naming eflib.c and efasync.c and symbols like efLib_* and efAsync_*, to choose more meaningful file names where evidence existed.",
+    "Retained an address-based fallback file name, code_80061D70.s, for the chunk that did not have enough identified source naming evidence in the excerpt.",
+    "Moved .sdata entries into the asm files that likely own them instead of leaving all small data centralized in asm/sdata.s, making future C migration and symbol ownership easier.",
+    "Updated object ordering explicitly in obj_files.mk, which is important because splitting a linked assembly object into several objects can affect section layout if the order is wrong."
+  ],
+  "decomp_lessons": [
+    "When splitting a monolithic asm file, preserve link order by replacing one object with multiple objects in the build file at the same location rather than appending them elsewhere.",
+    "Small data cleanup can be staged before full C decompilation: move .sdata labels near their owning asm/C region while preserving labels, alignment, and NULL padding.",
+    "Use known source-file strings and function prefixes as evidence for naming split asm files; keep address-based names when the evidence is weak.",
+    "Relocating .sdata is not just cosmetic in a matching project: .section placement, .global labels, .balign 4, and trailing .4byte NULL entries must remain exact to preserve layout.",
+    "Large assembly files become more tractable when split along inferred original source boundaries such as eflib, efsync, and efasync."
+  ],
+  "naming_conventions": [
+    "Effect library functions use the efLib_* prefix, as shown by efLib_DestroyAll, efLib_PauseAll, and efLib_ResumeAll.",
+    "Effect async functions use the efAsync_* prefix, as shown by efAsync_Spawn.",
+    "New asm file names mirror inferred original source names when known: eflib.s, efsync.s, and efasync.s.",
+    "Unknown or less confidently identified asm regions remain address-named, as in code_80061D70.s.",
+    "Raw linker labels such as lbl_804D39A0 and lbl_803C04DC were preserved rather than renamed without stronger evidence."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted a single large asm object and reintroduced its contents as several smaller asm objects.",
+    "Inserted .section .sdata blocks into individual asm files alongside their related text/data sections.",
+    "Preserved .global declarations for moved small-data symbols.",
+    "Preserved string directives such as .asciz \"eflib.c\", .asciz \"efasync.c\", .asciz \"EfSsData.dat\", and .asciz \"[EfASync] unknown type %d\\n\" in the relocated files.",
+    "Maintained .balign 4 and .4byte NULL patterns for small-data/string layout.",
+    "Adjusted obj_files.mk so the split effect objects are built in the sequence eflib.o, efsync.o, code_80061D70.o, efasync.o."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review records were present in the provided PR slice.",
+    "No explicit reviewer rationale or requested changes were available; conclusions are based on the title, changed file list, and diff excerpt."
+  ],
+  "searchable_terms": [
+    "PR172",
+    "PsiLupan",
+    "Move some of .sdata out to files",
+    "split up ef code",
+    "asm/sdata.s",
+    "code_8005B4B8.s",
+    "eflib.s",
+    "efsync.s",
+    "efasync.s",
+    "code_80061D70.s",
+    "obj_files.mk",
+    "efLib_DestroyAll",
+    "efLib_PauseAll",
+    "efLib_ResumeAll",
+    "efAsync_Spawn",
+    "lbl_804D3938",
+    "lbl_804D39A0",
+    "lbl_804D39C8",
+    "lbl_804D39D8",
+    "lbl_804D39E8",
+    ".section .sdata",
+    ".balign 4",
+    ".4byte NULL",
+    "EfSsData.dat",
+    "effSamusDataTable",
+    "effNessDataTable",
+    "effMarsDataTable",
+    "eflib.c",
+    "efasync.c"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that convert eflib.s, efsync.s, or efasync.s into C.",
+    "Search for additional PRs that remove labels from asm/sdata.s and move them into owning files.",
+    "Check whether code_80061D70.s later receives a source-derived name.",
+    "Look for build-order fixes involving split asm objects in obj_files.mk.",
+    "Search for follow-up symbol renames for efLib_* and efAsync_* functions."
+  ],
+  "confidence": 0.82,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

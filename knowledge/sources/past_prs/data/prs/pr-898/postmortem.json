@@ -1,0 +1,128 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-898",
+  "pr": {
+    "number": 898,
+    "title": "Match `ftCo_CargoFall`",
+    "url": "https://github.com/doldecomp/melee/pull/898",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-29T11:45:10Z",
+    "merged_at": "2023-05-29T11:53:22Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common fighter CargoFall action by moving ftCo_8009BC58 and the CargoFall Anim/IASA/Phys/Coll callbacks out of asm/melee/ft/ft_08A4.s into new C/header files. The PR also introduced a CargoLanding file/header for the ftCo_8009BD4C collision landing callback, but kept that callback as inline ASM under MUST_MATCH/WIP guards with NOT_IMPLEMENTED in the non-matching path. Build wiring in obj_files.mk was updated and ftCo_8009BC58's declaration moved from CargoJump to CargoFall. The report showed src/melee/ft/chara/ftCommon/ftCo_CargoFall.c at 100% with all listed functions matched.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "build-system",
+      "asm-removal",
+      "fighter-action"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "cargo",
+      "asm",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/chara/ftCommon/ftCo_CargoFall.c",
+    "src/melee/ft/chara/ftCommon/ftCo_CargoFall.h",
+    "src/melee/ft/chara/ftCommon/ftCo_CargoLanding.c",
+    "src/melee/ft/chara/ftCommon/ftCo_CargoLanding.h",
+    "src/melee/ft/chara/ftCommon/ftCo_CargoJump.h",
+    "src/melee/ft/chara/ftCommon/ftCo_CargoWait.c",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Removed the ftCo_8009BC58, ftCo_CargoFall_Anim, ftCo_CargoFall_IASA, ftCo_CargoFall_Phys, ftCo_CargoFall_Coll, and local ftCo_8009BD4C assembly block from asm/melee/ft/ft_08A4.s.",
+    "Added src/melee/ft/chara/ftCommon/ftCo_CargoFall.c implementing the CargoFall entry/action callbacks in C.",
+    "Added src/melee/ft/chara/ftCommon/ftCo_CargoFall.h with prototypes and address comments for ftCo_8009BC58 and the four CargoFall callbacks.",
+    "Added src/melee/ft/chara/ftCommon/ftCo_CargoLanding.c and ftCo_CargoLanding.h for ftCo_8009BD4C, including constants ftCo_804D8738 = 0 and ftCo_804D873C = 1.",
+    "Kept ftCo_8009BD4C as an ASM function when MUST_MATCH is enabled, with a NOT_IMPLEMENTED stub for the non-MUST_MATCH or WIP path.",
+    "Updated obj_files.mk to build ftCo_CargoFall.c.o and ftCo_CargoLanding.c.o before the remaining ft_08A4.s object.",
+    "Moved the ftCo_8009BC58 declaration out of ftCo_CargoJump.h and included ftCo_CargoFall.h from ftCo_CargoWait.c."
+  ],
+  "smart_moves": [
+    "Split CargoFall declarations into their own header instead of leaving ftCo_8009BC58 declared in CargoJump, improving action-file ownership and discoverability.",
+    "Used existing fighter action helpers directly: Fighter_ChangeMotionState, ftAnim_SetAnimRate, ftCommon_8007D5D4, ft_80084DB0, ft_80082C74, and ftCo_8009C5A4.",
+    "Preserved the harder collision transition callback ftCo_8009BD4C as inline ASM while still relocating it into a thematically named CargoLanding unit, allowing the CargoFall file itself to reach a full match without forcing all neighboring logic to be decompiled at once.",
+    "Captured small float constants formerly in sdata2 as C constants in the new CargoLanding file.",
+    "Used a MUST_MATCH-only dummy stack array in ftCo_8009BC58 to satisfy matching constraints for unused stack behavior without polluting normal builds."
+  ],
+  "decomp_lessons": [
+    "When an action's main callbacks are matchable but a related callback is not, it is acceptable to peel the matched action into C and carry the remaining callback as guarded inline ASM in a more appropriate source file.",
+    "Headers should follow action ownership: ftCo_8009BC58 belongs with CargoFall rather than CargoJump once the code is split out.",
+    "Action callback patterns can be very small wrappers: an empty Anim callback, an IASA callback that only RETURN_IFs a helper, a Phys callback that delegates to ft_80084DB0, and a Coll callback that delegates to ft_80082C74 with a landing callback.",
+    "For common fighter cargo state transitions, x2CC->x4_motion_state offsets are used to select related motion states; this PR used +6 for CargoFall and the landing ASM used +8.",
+    "MUST_MATCH stack padding can be isolated with preprocessor guards and documented as an unused-stack TODO."
+  ],
+  "naming_conventions": [
+    "Cargo action files follow ftCo_Cargo<Action>.c and ftCo_Cargo<Action>.h, e.g. ftCo_CargoFall and ftCo_CargoLanding.",
+    "Common fighter symbols use the ftCo_ prefix, with named callbacks formatted as ftCo_CargoFall_Anim, ftCo_CargoFall_IASA, ftCo_CargoFall_Phys, and ftCo_CargoFall_Coll.",
+    "Unidentified functions keep address-based names such as ftCo_8009BC58 and ftCo_8009BD4C, with address comments in headers.",
+    "Header include guards in this slice used GALE01_<address>, e.g. GALE01_09BC58 and GALE01_09BD4C.",
+    "Motion state enum naming seen in the implementation includes ftCo_MS_ShoulderedWait."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted the matched CargoFall assembly from ft_08A4.s after adding the C object files to obj_files.mk.",
+    "Used `#ifdef MUST_MATCH` with `u8 _[16] = { 0 };` in ftCo_8009BC58 to reproduce unused stack layout.",
+    "Used `ASM void ... { nofralloc ... }` plus `#pragma peephole on` for ftCo_8009BD4C, preserving exact assembly while moving it out of the monolithic asm file.",
+    "Provided a non-matching fallback body with NOT_IMPLEMENTED for the ASM-only ftCo_8009BD4C path.",
+    "Represented former sdata2 zero/one constants as `float const` definitions in C so the relocated inline ASM could reference ftCo_804D8738 and ftCo_804D873C."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review records were present in the provided PR slice."
+  ],
+  "searchable_terms": [
+    "pr-898",
+    "ftCo_CargoFall",
+    "ftCo_CargoLanding",
+    "ftCo_8009BC58",
+    "ftCo_8009BD4C",
+    "ftCo_CargoFall_Anim",
+    "ftCo_CargoFall_IASA",
+    "ftCo_CargoFall_Phys",
+    "ftCo_CargoFall_Coll",
+    "Fighter_ChangeMotionState",
+    "ftAnim_SetAnimRate",
+    "ftCommon_8007D5D4",
+    "ft_80084DB0",
+    "ft_80082C74",
+    "ftCo_8009C5A4",
+    "ftCo_800D5AEC",
+    "Ft_MF_KeepFastFall",
+    "GA_Ground",
+    "ftCo_MS_ShoulderedWait",
+    "x2CC",
+    "x4_motion_state",
+    "x1A58_interactedFighter",
+    "MUST_MATCH",
+    "unused stack",
+    "RETURN_IF",
+    "NOT_IMPLEMENTED",
+    "ASM nofralloc",
+    "obj_files.mk",
+    "asm/melee/ft/ft_08A4.s"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully decompile ftCo_8009BD4C or remove its inline ASM from ftCo_CargoLanding.c.",
+    "Search for other Cargo action PRs that use x2CC->x4_motion_state offsets for motion state transitions.",
+    "Look for additional uses of MUST_MATCH-only unused stack arrays in fighter action matching.",
+    "Compare ftCo_CargoJump, ftCo_CargoFall, and ftCo_CargoLanding callback patterns for reusable common cargo-state structure."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

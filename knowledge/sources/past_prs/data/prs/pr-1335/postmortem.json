@@ -1,0 +1,158 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1335",
+  "pr": {
+    "number": 1335,
+    "title": "Support Nix environment",
+    "url": "https://github.com/doldecomp/melee/pull/1335",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2024-02-27T03:39:47Z",
+    "merged_at": "2024-02-28T02:45:17Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added first-class Nix support for building Melee's main.dol and entering a development shell. The PR introduced pinned Nix sources, package derivations for decomp-toolkit, devkitPPC, mwcc compilers, wibo, and the project build itself, plus GitHub Actions coverage that runs nix-build and validates nix-shell. A small build-system change allowed --build-dtk to point directly at an existing dtk binary, which is important for hermetic Nix builds that provide tools from store paths instead of building them from source in-tree.",
+  "change_classification": {
+    "primary_type": "tooling",
+    "categories": [
+      "tooling",
+      "build-system",
+      "ci",
+      "nix-environment",
+      "decomp-matching-support"
+    ],
+    "systems": [
+      ".github/workflows",
+      ".nix",
+      "repo-root",
+      "configure.py",
+      "tools/project.py"
+    ]
+  },
+  "key_files": [
+    ".github/workflows/build.yml",
+    ".nix/default.nix",
+    ".nix/shell.nix",
+    ".nix/melee.nix",
+    ".nix/decomp-toolkit.nix",
+    ".nix/devkitppc.nix",
+    ".nix/mwcc.nix",
+    ".nix/wibo.nix",
+    ".nix/sources.json",
+    ".nix/sources.nix",
+    ".nix/.editorconfig",
+    "default.nix",
+    "shell.nix",
+    "configure.py",
+    "tools/project.py"
+  ],
+  "what_changed": [
+    "Added a GitHub Actions job named \"Nix\" that checks out the repo, pulls the original DOL from the existing ghcr.io/doldecomp/build-melee:main container, installs Nix, enables a Nix cache action, runs nix-build, and verifies nix-shell with a simple command.",
+    "Added `.nix/default.nix` to import pinned nixpkgs from `.nix/sources.nix` and define overlays for decomp-toolkit, devkitppc, mwcc, and wibo before calling `.nix/melee.nix`.",
+    "Added `.nix/melee.nix` as a Nix derivation for `doldecomp-melee`; it cleans the source tree, provides native build inputs, runs configure.py with explicit Nix store paths for wibo, dtk, sjiswrap, and mwcc, enables parallel building, and installs `build/GALE01/main.dol`.",
+    "Added `.nix/shell.nix` to derive a development shell from the Melee derivation and append clang tooling, including clang-tools using llvmPackages_15 and `pkgs.clang.cc.python`.",
+    "Added Nix package definitions for decomp-toolkit v0.7.3, devkitPPC r43 wrapper binaries, the GC/Wii compiler bundle, and wibo v0.6.12.",
+    "Pinned nixpkgs with `.nix/sources.json` and added a generated `.nix/sources.nix` from Niv.",
+    "Added root-level `default.nix` and `shell.nix` as one-line shims importing `.nix` and `.nix/shell.nix` respectively.",
+    "Updated `configure.py` help text for `--build-dtk` from \"path to decomp-toolkit source\" to \"path to decomp-toolkit source or binary\".",
+    "Updated `tools/project.py` so `config.build_dtk_path` can be an existing file path; if it is a file, that path is used as the `dtk` tool directly, otherwise the old source-build path behavior remains."
+  ],
+  "smart_moves": [
+    "Made the Nix build hermetic enough to pass explicit tool paths to configure.py instead of relying on environment variables; the PR body notes configure.py does not pick up environment variables the same way the Makefile build does.",
+    "Kept decomp-specific external tools as separate Nix derivations, making versions and hashes searchable and reproducible: decomp-toolkit v0.7.3, devkitPPC r43, wibo v0.6.12, sjiswrap v1.1.1, and the 20230715 compiler bundle.",
+    "Used overlays in `.nix/default.nix` and `.nix/shell.nix` so project-specific tool packages can be referred to consistently by name in the Melee derivation.",
+    "Allowed `--build-dtk` to accept a binary path, which avoids forcing Cargo builds inside the project build when Nix already provides `decomp-toolkit}/bin/dtk`.",
+    "Patched the MW linker byte in the Nix compiler derivation with a comment explaining it avoids random crashes under wibo.",
+    "Used `lib.cleanSourceWith` in `.nix/melee.nix` to exclude build outputs, expected outputs, `.nix` files, dump files, and object files from the derivation source.",
+    "Added CI coverage for both `nix-build` and `nix-shell`, reducing the chance that the Nix environment silently rots."
+  ],
+  "decomp_lessons": [
+    "Hermetic build environments should pass exact tool paths into configure scripts rather than depending on host environment discovery, especially for decomp projects where compiler, wrapper, and toolkit versions affect matching.",
+    "When packaging decomp toolchains, support both source-tree tool builds and prebuilt/provided tool binaries; `tools/project.py` now treats an existing `--build-dtk` file as the dtk executable.",
+    "Keep environment-specific tooling in hidden directories when reviewers request it; here review feedback preferred `.nix` over `nix` for environment utilities.",
+    "CI for alternative build environments should still source required game inputs in a legally/operationally consistent way; this job obtains `/orig` from the existing build container before running Nix.",
+    "Pinning nixpkgs and fixed-output hashes for external decomp tools makes later matching failures easier to rule out as dependency drift.",
+    "A dev shell can reuse the main derivation and override attributes for editor/analysis tooling, reducing divergence between build and development environments."
+  ],
+  "naming_conventions": [
+    "Nix environment utilities were placed under a hidden `.nix` directory after review feedback requested `.nix` instead of `nix`.",
+    "Nix package files use direct tool names: `.nix/decomp-toolkit.nix`, `.nix/devkitppc.nix`, `.nix/mwcc.nix`, `.nix/wibo.nix`, `.nix/melee.nix`.",
+    "The project derivation is named `doldecomp-melee`.",
+    "The root shims use standard Nix filenames `default.nix` and `shell.nix` for convenient `nix-build` and `nix-shell` entrypoints.",
+    "The `.nix/.editorconfig` sets `indent_size = 2` for `*.nix` files."
+  ],
+  "assembly_or_matching_tactics": [
+    "No direct C/assembly matching changes were present.",
+    "The PR indirectly supports matching work by making the exact build toolchain reproducible under Nix.",
+    "The mwcc derivation includes a binary patch to `GC/1.1/mwldeppc.exe` to avoid reading garbage from stack and to fix random crashes under wibo; this is a toolchain stability tactic, not a source matching tactic.",
+    "The Nix build passes `--wrapper ${wibo}/bin/wibo`, `--build-dtk ${decomp-toolkit}/bin/dtk`, `--sjiswrap ${sjiswrap}`, and `--compilers ${mwcc}` to configure.py so the generated Ninja build uses the packaged tools."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "file": "nix/default.nix",
+      "feedback": "Please move everything to `.nix` instead of `nix`; environment-related utilities should be in hidden directories.",
+      "outcome": "Changed files in the final slice are under `.nix`, indicating the directory naming feedback was applied."
+    },
+    {
+      "author": "ribbanya",
+      "file": "default.nix",
+      "feedback": "Questioned whether the root `default.nix` shim needed to exist and suggested possibly removing it and updating local commands instead.",
+      "outcome": "The final diff still includes root `default.nix` importing `./.nix`; evidence does not show whether further discussion resolved this."
+    },
+    {
+      "author": "ribbanya",
+      "file": "tools/project.py",
+      "feedback": "Accepted the basic idea of handling a direct build_dtk path and said they would clean it up a little.",
+      "outcome": "Final code uses `config.build_dtk_path.is_file()` to use the path directly, otherwise falling back to the old source-build path."
+    }
+  ],
+  "searchable_terms": [
+    "Nix",
+    "nix-build",
+    "nix-shell",
+    ".nix",
+    "default.nix",
+    "shell.nix",
+    "Niv",
+    "sources.nix",
+    "sources.json",
+    "nixpkgs",
+    "decomp-toolkit",
+    "dtk",
+    "devkitPPC",
+    "devkitppc",
+    "mwcc",
+    "GC_WII_COMPILERS",
+    "wibo",
+    "sjiswrap",
+    "configure.py --build-dtk",
+    "tools/project.py build_dtk_path",
+    "is_file",
+    "main.dol",
+    "GALE01",
+    "DeterminateSystems magic-nix-cache-action",
+    "cachix install-nix-action",
+    "doldecomp-melee",
+    "lib.cleanSourceWith",
+    "nativeBuildInputs",
+    "mwldeppc.exe patch",
+    "hidden environment utilities"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify `.nix/melee.nix` or update pinned Nix tool versions.",
+    "Search for later changes to `configure.py --build-dtk` handling or `tools/project.py` dtk path logic.",
+    "Check whether root-level `default.nix` and `shell.nix` shims remained accepted convention after PR 1335.",
+    "Look for CI failures or fixes involving the Nix GitHub Actions job.",
+    "Search for later comments or issues about the mwldeppc.exe wibo crash patch."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

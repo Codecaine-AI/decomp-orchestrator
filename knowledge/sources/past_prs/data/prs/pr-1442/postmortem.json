@@ -1,0 +1,132 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1442",
+  "pr": {
+    "number": 1442,
+    "title": "Match mem_funcs from cam's work",
+    "url": "https://github.com/doldecomp/melee/pull/1442",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-09-04T22:12:37Z",
+    "merged_at": "2024-09-17T18:07:15Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Replaced the hand-written assembly object for MSL mem_funcs with a matching C implementation derived from cam's work, moving MSL/mem_funcs.c from NonMatching to Matching in configure.py and switching obj_files.mk from asm/MSL/mem_funcs.s.o to src/MSL/mem_funcs.c.o. The matched code implements the four low-level copy helpers for aligned, reverse-aligned, unaligned, and reverse-unaligned long copies using MWERKS-only code, pointer auto-increment/decrement idioms, word-copy unrolling, and shift/or reconstruction for unaligned source data.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "runtime-library",
+      "build-configuration"
+    ],
+    "systems": [
+      "MSL",
+      "runtime library",
+      "asm",
+      "configure.py",
+      "obj_files.mk"
+    ]
+  },
+  "key_files": [
+    "src/MSL/mem_funcs.c",
+    "asm/MSL/mem_funcs.s",
+    "configure.py",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Added a 238-line C implementation in src/MSL/mem_funcs.c for __copy_longs_aligned, __copy_longs_rev_aligned, __copy_longs_unaligned, and __copy_longs_rev_unaligned.",
+    "Deleted asm/MSL/mem_funcs.s, which previously contained the assembly implementations for the same four mem_funcs helpers.",
+    "Changed RuntimeLib configuration in configure.py so Object(NonMatching, \"MSL/mem_funcs.c\") became Object(Matching, \"MSL/mem_funcs.c\").",
+    "Changed obj_files.mk so the build uses $(BUILD_DIR)/src/MSL/mem_funcs.c.o instead of $(BUILD_DIR)/asm/MSL/mem_funcs.s.o.",
+    "The C implementation is guarded with #if defined(__MWERKS__), uses #pragma ANSI_strict off and #pragma defer_codegen on, and relies on macros that cast the dst/src variables through byte and long pointer views."
+  ],
+  "smart_moves": [
+    "Kept the C close to the assembly structure: initial byte alignment fixup, bulk long-copy loops, remainder long-copy loops, and final byte tail copies are all explicit.",
+    "Used a deref_auto_inc(p) macro expanding to *++(p) to express PowerPC update-form load/store patterns such as lbzu, lwzu, stbu, and stwu in C-friendly form.",
+    "For aligned paths, expressed the 32-byte bulk copy as eight repeated long assignments inside a do/while loop, matching the assembly's unrolled eight-word transfer pattern.",
+    "For unaligned paths, reconstructed words with paired shifted long loads using left_shift, right_shift, v1, and v2, mirroring the assembly's slw/srw/or sequence.",
+    "Separated forward, reverse, aligned, and unaligned behavior into the same symbol boundaries as the original assembly, allowing the asm file to be removed cleanly once the C object matched."
+  ],
+  "decomp_lessons": [
+    "MSL runtime routines may require non-idiomatic C that mirrors CodeWarrior codegen rather than modern valid-looking C style.",
+    "Pointer aliases implemented as macros over src and dst can be a practical matching tactic when the original codegen repeatedly reinterprets the same arguments as unsigned char* and unsigned long*.",
+    "For low-level memory-copy code, matching often depends on preserving pre-increment/pre-decrement pointer expressions and do/while loops rather than refactoring into clearer index-based loops.",
+    "Build metadata must be updated alongside asm-to-C conversions: configure.py matching status and obj_files.mk object paths both need to point at the C object.",
+    "Evidence from the PR comment indicates clang/compile_flags checking had trouble with this file: refactoring to more standard C was attempted but did not match, and the compile_flags issue was described as a clang error rather than an ignorable warning."
+  ],
+  "naming_conventions": [
+    "Preserved original MSL helper symbol names with double-underscore prefixes: __copy_longs_aligned, __copy_longs_rev_aligned, __copy_longs_unaligned, and __copy_longs_rev_unaligned.",
+    "Used compact local names that reflect the assembly/dataflow roles: i for loop counts, v1/v2 for adjacent loaded words, src_offset for byte misalignment, and left_shift/right_shift for unaligned word reconstruction.",
+    "Defined short pointer-view macros cps, cpd, lps, and lpd for char-pointer source/destination and long-pointer source/destination."
+  ],
+  "assembly_or_matching_tactics": [
+    "#pragma ANSI_strict off was used, indicating the implementation intentionally relies on compiler extensions or non-strict C behavior for matching.",
+    "#pragma defer_codegen on was used, a CodeWarrior-specific matching lever present in the new file.",
+    "#if defined(__MWERKS__) wraps the actual implementation body, limiting the matching-specific code to the Metrowerks compiler path.",
+    "Alignment fixups are computed with expressions equivalent to the assembly clrlwi/neg patterns, e.g. (-(unsigned long) dst) & 3 and ((unsigned long) cpd) & 3.",
+    "Forward aligned copying starts byte pointers at src - 1 and dst - 1, then uses pre-increment dereferences to produce update-form instructions.",
+    "Reverse copying starts byte pointers at src + n and dst + n, then uses *--pointer forms to match reverse update loads/stores.",
+    "Bulk aligned copies use n >> 5 for groups of 32 bytes and (n & 31) >> 2 for remaining words, matching the assembly's 8-word unroll and residual word loop.",
+    "Unaligned copies compute src_offset, left_shift = src_offset << 3, and right_shift = 32 - left_shift, then combine adjacent loaded longs with shifts and bitwise OR.",
+    "The tail byte copy for unaligned paths adjusts cps by 4 - src_offset or src_offset before copying the final n & 3 bytes, preserving the assembly's source pointer correction behavior."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "type": "issue_comment",
+      "summary": "Reported that compile_flags.txt issues could not simply be ignored because they produced an actual clang error, not a warning; also did not know how to exclude the file from the check at that moment."
+    },
+    {
+      "author": "ribbanya",
+      "type": "issue_comment",
+      "summary": "Tried refactoring the code to be valid C but was not able to keep it matching that way."
+    }
+  ],
+  "searchable_terms": [
+    "PR1442",
+    "mem_funcs",
+    "MSL/mem_funcs.c",
+    "asm/MSL/mem_funcs.s",
+    "__copy_longs_aligned",
+    "__copy_longs_rev_aligned",
+    "__copy_longs_unaligned",
+    "__copy_longs_rev_unaligned",
+    "ANSI_strict off",
+    "defer_codegen on",
+    "__MWERKS__",
+    "deref_auto_inc",
+    "cps",
+    "cpd",
+    "lps",
+    "lpd",
+    "src_offset",
+    "left_shift",
+    "right_shift",
+    "unaligned copy",
+    "reverse copy",
+    "aligned copy",
+    "RuntimeLib",
+    "Object Matching",
+    "obj_files.mk",
+    "compile_flags.txt",
+    "clang error",
+    "cam's work",
+    "PsiLupan"
+  ],
+  "follow_up_queries": [
+    "Find other MSL runtime PRs that use #pragma ANSI_strict off or #pragma defer_codegen on for matching.",
+    "Search for deref_auto_inc or similar pointer auto-increment macros in matched runtime code.",
+    "Inspect later PRs touching compile_flags.txt or clang checks for src/MSL/mem_funcs.c.",
+    "Compare this mem_funcs.c against other CodeWarrior/MSL source reconstructions for canonical naming and pointer idioms."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

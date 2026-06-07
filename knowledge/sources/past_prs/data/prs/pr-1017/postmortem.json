@@ -1,0 +1,126 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1017",
+  "pr": {
+    "number": 1017,
+    "title": "Create `SDATA` macro to force section",
+    "url": "https://github.com/doldecomp/melee/pull/1017",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-11-19T15:30:55Z",
+    "merged_at": "2023-11-19T15:41:29Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added a portable `SDATA` macro in `src/placeholder.h` so C declarations can force placement into the `.sdata` section under Metrowerks, enabling small string literals previously kept in assembly stubs to move into C. The PR migrated `.sdata` strings for `ftCo_09CB`, `ftafterimage`, and `ftcolanim` from deleted asm files into their corresponding C files, removed those asm objects from `obj_files.mk`, and adjusted an `OSThread_data.s` `.skip` size. The stated motivation was that this allows small strings to be migrated to C and should make it possible to migrate anything from asm to C.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "asm-to-c-migration",
+      "section-placement",
+      "literal-data"
+    ],
+    "systems": [
+      "src",
+      "asm",
+      "fighter",
+      "ftCommon",
+      "ftafterimage",
+      "ftcolanim",
+      "dolphin-os",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "src/placeholder.h",
+    "src/melee/ft/chara/ftCommon/ftCo_09CB.c",
+    "src/melee/ft/ftafterimage.c",
+    "src/melee/ft/ftafterimage.h",
+    "src/melee/ft/ftcolanim.c",
+    "obj_files.mk",
+    "asm/melee/ft/chara/ftCommon/ftCo_09CB.s",
+    "asm/melee/ft/ftafterimage.s",
+    "asm/melee/ft/ftcolanim.s",
+    "asm/dolphin/os/OSThread_data.s"
+  ],
+  "what_changed": [
+    "Introduced `SDATA` in `src/placeholder.h`, expanding to `__declspec(section \".sdata\")` when building with `__MWERKS__` and not `M2CTX`, and to nothing otherwise.",
+    "Changed C string declarations that needed small-data placement from `extern char*` placeholders to real arrays annotated with `SDATA`, such as `ftCo_804D3B28[] = \"jobj.h\"`, `ftCo_804D3B30[] = \"jobj\"`, `ftCo_804D3B38[] = \"scale\"`, and `ftCo_804D3B40[] = \"0\"` in `ftCo_09CB.c`.",
+    "Moved `ftCo_804D3C30[] = \"0\"` into `src/melee/ft/ftafterimage.c` as an `SDATA` string and removed its extern declaration from `ftafterimage.h`.",
+    "Moved `ftCo_803C6AE8[] = \"don't reset spycloak colanim!\\n\"`, `ftCo_803C6B08[] = \"ftcolanimlist.c\"`, and `SDATA char ftCo_804D3C10[] = \"0\"` into `src/melee/ft/ftcolanim.c`.",
+    "Deleted the former asm-only data files `asm/melee/ft/chara/ftCommon/ftCo_09CB.s`, `asm/melee/ft/ftafterimage.s`, and `asm/melee/ft/ftcolanim.s` after their data was represented in C.",
+    "Removed the corresponding deleted asm object files from `TEXT_O_FILES` in `obj_files.mk`.",
+    "Adjusted `asm/dolphin/os/OSThread_data.s` so `Reschedule` reserves `.skip 0x4` instead of `.skip 0x8`."
+  ],
+  "smart_moves": [
+    "Used a macro rather than sprinkling raw Metrowerks-specific `__declspec(section \".sdata\")` attributes across source files, keeping section-forcing readable and centralized.",
+    "Made `SDATA` compile away outside the relevant Metrowerks non-`M2CTX` configuration, preserving compatibility for analysis/context tooling and nonmatching builds.",
+    "Converted asm string labels into named C arrays with the same symbol names, preserving symbol identity while allowing object files to be removed from the assembly side.",
+    "Kept the existing `/* literal */` annotation style while adding `SDATA`, making the intent clear: these are literal data symbols whose exact section matters.",
+    "Removed obsolete extern declarations once the literal storage lived in the C translation unit, reducing header clutter and avoiding misleading pointer declarations for array-backed strings."
+  ],
+  "decomp_lessons": [
+    "When small strings must land in `.sdata`, represent them in C as arrays annotated with a section-forcing macro instead of leaving a tiny companion `.s` file behind.",
+    "For decomp cleanup, a section macro can unlock migration of data-only asm stubs without changing call sites or symbol names.",
+    "Prefer `char symbol[] = \"...\"` for migrated string storage rather than `extern char*`, because the assembly labels represented storage for bytes, not pointer variables.",
+    "Centralize compiler-specific attributes in shared headers such as `placeholder.h` so future migrations can reuse the same mechanism safely.",
+    "After migrating asm data into C, update `obj_files.mk` in the same change to remove the old asm object and prevent duplicate symbols or stale build inputs.",
+    "Guard decomp-only matching helpers against `M2CTX` or non-Metrowerks contexts when the syntax is compiler-specific."
+  ],
+  "naming_conventions": [
+    "The new macro is named `SDATA`, all caps like other low-level decomp helper macros such as `LITERAL`.",
+    "Migrated anonymous data labels kept their existing address-style names, for example `ftCo_804D3B28`, `ftCo_804D3C30`, and `ftCo_804D3C10`.",
+    "String literals retained the `/* literal */` source comment convention already used in the surrounding files.",
+    "The PR used `SDATA char name[] = \"...\"` for small-data strings rather than changing symbols to more semantic names."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use `__declspec(section \".sdata\")` under Metrowerks to force a C object into the `.sdata` section when natural compiler placement is insufficient.",
+    "Define the section-forcing macro as empty outside the exact compiler context to avoid breaking m2ctx or other tooling.",
+    "Replace small `.sdata` asm blocks containing `.asciz` strings and `.balign` directives with C `char[]` definitions annotated by `SDATA` when symbol names and section placement are enough to preserve layout.",
+    "Deleting asm data files and their `obj_files.mk` entries can be a safe matching step once equivalent C symbols occupy the required section.",
+    "The diff suggests `.sdata` string migration may require auditing nearby small-data reservation sizes, as shown by the `Reschedule` `.skip` adjustment from `0x8` to `0x4`; the exact rationale is not explained in the PR text."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "SDATA",
+    "__declspec(section \".sdata\")",
+    "small strings",
+    "sdata macro",
+    "force section",
+    "placeholder.h",
+    "asm to C",
+    "literal strings",
+    "ftCo_09CB",
+    "ftafterimage",
+    "ftcolanim",
+    "obj_files.mk",
+    "MWERKS",
+    "M2CTX",
+    "ftCo_804D3B28",
+    "ftCo_804D3B30",
+    "ftCo_804D3B38",
+    "ftCo_804D3B40",
+    "ftCo_804D3C30",
+    "ftCo_804D3C10",
+    "ftCo_803C6AE8",
+    "ftCo_803C6B08",
+    "OSThread_data",
+    "Reschedule"
+  ],
+  "follow_up_queries": [
+    "Find later uses of `SDATA` to see which asm data stubs were unlocked by this macro.",
+    "Search for remaining `.sdata` asm files containing only `.asciz` strings that could be migrated to C with `SDATA`.",
+    "Audit `extern char*` declarations for literal labels that should be `char[]` definitions or `extern char[]` declarations.",
+    "Investigate why `Reschedule` in `OSThread_data.s` changed from `.skip 0x8` to `.skip 0x4` in the same PR."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

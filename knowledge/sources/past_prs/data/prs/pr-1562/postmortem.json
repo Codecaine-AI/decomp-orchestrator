@@ -1,0 +1,153 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1562",
+  "pr": {
+    "number": 1562,
+    "title": "Various match, attempt to fix m2ctx.py",
+    "url": "https://github.com/doldecomp/melee/pull/1562",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2025-06-03T21:49:39Z",
+    "merged_at": "2025-06-03T21:56:50Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched several small stage and VI routines, improved symbol names around vi0401 and grTest, added missing includes/prototypes needed by those matches, adjusted an HSD controller queue copy to match codegen, and tried to make m2ctx.py see Dolphin headers by adding extern/dolphin/include to include paths. The PR also removed a local INT_MAX definition from Dolphin types, likely to avoid context/header conflicts, though the exact motivation is not documented in comments.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "tooling",
+      "headers",
+      "symbol-rename",
+      "codegen-fix"
+    ],
+    "systems": [
+      "melee-core",
+      "stage",
+      "vi",
+      "sysdolphin",
+      "baselib",
+      "external-sdk",
+      "tooling",
+      "config",
+      "asm"
+    ]
+  },
+  "key_files": [
+    "src/melee/vi/vi0401.c",
+    "src/melee/vi/vi0401.h",
+    "asm/melee/vi/vi0401.s",
+    "asm/melee/un/un_2FC9.s",
+    "config/GALE01/symbols.txt",
+    "src/melee/gr/grtest.c",
+    "src/melee/gr/grtest.h",
+    "src/melee/gr/groldyoshi.c",
+    "src/melee/gr/groldyoshi.h",
+    "src/sysdolphin/baselib/controller.c",
+    "extern/dolphin/include/dolphin/types.h",
+    "tools/m2ctx/m2ctx.py"
+  ],
+  "what_changed": [
+    "Implemented vi0401 helper routines in C: vi0401_8031D18C animates all JObjs on a GObj, vi0401_8031D1B0 sets the current camera object, applies erase color, erases the screen, runs vi_8031CA04, updates gxlink priority fields, and ends the current CObj, and vi0401_8031D23C animates a CObj and calls lb_800145F4/gm_801A4B60 at animation end.",
+    "Renamed vi0401 assembly/symbol entries from generic fn_8031D18C, fn_8031D1B0, and fn_8031D23C to module-prefixed vi0401_8031D18C, vi0401_8031D1B0, and vi0401_8031D23C.",
+    "Renamed sbss symbol un_804D6F5C to erase_colors_vi0401 in asm and symbols.txt, matching its use as a GXColor passed to HSD_SetEraseColor.",
+    "Matched several grTest functions in C, including simple Zako generator disable calls, animation setup callbacks using GET_GROUND and grAnime_801C8138, a Ground_801C2ED0 setup plus animation call, and a Ground_801C2FE0 callback.",
+    "Renamed grTest symbol fn_802073B0 to grTest_802073B0 in symbols.txt and header declarations.",
+    "Matched small grOldYoshi routines mirroring the grTest patterns: grOldYoshi_8020E828 disables Zako generation and grOldYoshi_8020E93C runs grAnime_801C8138 using the ground map_id.",
+    "Improved headers for grTest and grOldYoshi by replacing several UNK_RET/UNK_PARAMS placeholders with concrete void/bool and HSD_GObj* signatures where evidence from matched C allowed it.",
+    "Changed HSD_PadRenewRawStatus in controller.c from a loop copying four PADStatus entries to a local struct wrapper assignment over PADStatus[4], a codegen-oriented tactic for matching a block copy.",
+    "Added extern/dolphin/include to both lowercase -i and uppercase -I include argument lists in tools/m2ctx/m2ctx.py.",
+    "Removed the INT_MAX macro definition from extern/dolphin/include/dolphin/types.h."
+  ],
+  "smart_moves": [
+    "Used module-prefixed fallback names such as vi0401_8031D1B0 and grTest_802073B0 instead of generic fn_* names, improving searchability without overclaiming semantic names.",
+    "Promoted un_804D6F5C to erase_colors_vi0401 only after the C implementation showed the object is used as a GXColor source for HSD_SetEraseColor.",
+    "Kept vi0401 helper routines static in C while updating assembly and symbol names, preserving local helper intent where the C translation does not require exporting them.",
+    "Reused common ground-stage idioms: GET_GROUND(gobj), gp->map_id, grAnime_801C8138(gobj, gp->map_id, 0), and Ground_801C2ED0/Ground_801C2FE0 callbacks.",
+    "Used a struct containing PADStatus[4] to force a single aggregate copy for the controller raw status queue rather than relying on a for-loop that likely produced different codegen.",
+    "Fixed m2ctx include coverage in both compiler-style include lists present in the script, not just one path list."
+  ],
+  "decomp_lessons": [
+    "When matching small stage callbacks, many routines reduce to standard patterns: disable Zako generation with grZakoGenerator_801CAE04(false), fetch Ground via GET_GROUND, use map_id, then call grAnime_801C8138.",
+    "For unknown but module-local functions, prefer file/module-prefixed address names over fn_* once the owning source file is understood; this improves consistency while staying conservative.",
+    "Data symbols should be renamed when usage reveals type/role. Here, an sbss 4-byte object became erase_colors_vi0401 because it is read bytewise as RGBA for HSD_SetEraseColor.",
+    "Header cleanup can safely follow matching evidence: replace UNK_RET/UNK_PARAMS with concrete bool, void, and HSD_GObj* signatures only where the matched implementation proves them.",
+    "Aggregate-copy structs are a useful matching tactic when a compiler-generated fixed-size copy differs from a handwritten element loop.",
+    "m2ctx context generation depends on complete include paths; external SDK headers such as extern/dolphin/include may need to be visible to both include-option variants used by the tool.",
+    "Avoid redefining standard-looking macros such as INT_MAX in SDK context headers when they can conflict with parser/toolchain context, but this PR does not document the exact conflict."
+  ],
+  "naming_conventions": [
+    "Use module/address fallback names like vi0401_8031D18C for unnamed functions owned by vi0401.",
+    "Use stage module prefixes such as grTest_802073B0 instead of generic fn_802073B0 once ownership is clear.",
+    "Use descriptive data names when a variable's role is clear, as with erase_colors_vi0401 for a GXColor erase-screen color backing object.",
+    "Preserve existing address-suffixed naming style for still-unknown decomp functions rather than inventing high-level semantic names."
+  ],
+  "assembly_or_matching_tactics": [
+    "Renamed assembly labels and all internal references consistently when moving from fn_* to vi0401_* labels.",
+    "Kept the vi0401 assembly file synchronized with config/GALE01/symbols.txt and the new C names.",
+    "Used a local struct with PADStatus _[4] and assignment through casts to match a four-entry queue copy in HSD_PadRenewRawStatus.",
+    "Matched VI camera logic using exact HSD calls: HSD_CObjSetCurrent, HSD_SetEraseColor, HSD_CObjEraseScreen, vi_8031CA04, HSD_GObj_80390ED0, and HSD_CObjEndCurrent.",
+    "Matched animation-end logic by comparing aobj->curr_frame to aobj->end_frame before calling lb_800145F4 and gm_801A4B60.",
+    "Added required includes such as baselib/gobj.h, gr/inlines.h, gr/granime.h, and gr/grzakogenerator.h to expose macros/types/functions needed for clean C matches."
+  ],
+  "review_feedback": [
+    "No explicit human review comments were present in the provided PR slice.",
+    "There was one issue comment counted in metadata, but no body excerpt was available, so reviewer intent cannot be inferred."
+  ],
+  "searchable_terms": [
+    "PR1562",
+    "PsiLupan",
+    "Various match",
+    "m2ctx.py",
+    "extern/dolphin/include",
+    "vi0401",
+    "vi0401_8031D18C",
+    "vi0401_8031D1B0",
+    "vi0401_8031D23C",
+    "erase_colors_vi0401",
+    "GXColor",
+    "HSD_SetEraseColor",
+    "HSD_CObjEraseScreen",
+    "HSD_CObjSetCurrent",
+    "HSD_CObjEndCurrent",
+    "HSD_AObj",
+    "gm_801A4B60",
+    "lb_800145F4",
+    "grTest",
+    "grTest_80207018",
+    "grTest_80207130",
+    "grTest_8020716C",
+    "grTest_802073B0",
+    "grTest_802073D0",
+    "grOldYoshi",
+    "grOldYoshi_8020E828",
+    "grOldYoshi_8020E93C",
+    "grZakoGenerator_801CAE04",
+    "grAnime_801C8138",
+    "Ground_801C2ED0",
+    "Ground_801C2FE0",
+    "GET_GROUND",
+    "GET_JOBJ",
+    "GET_COBJ",
+    "PADStatus",
+    "HSD_PadRenewRawStatus",
+    "INT_MAX",
+    "symbols.txt"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that further fix m2ctx.py include handling or explain the INT_MAX removal from dolphin/types.h.",
+    "Search for additional vi0401 matches around un_8031D288, un_8031D698, and un_8031D6E4 to see how these helpers are integrated.",
+    "Find similar grTest and grOldYoshi stage callback matches to reuse the GET_GROUND/map_id/grAnime_801C8138 pattern.",
+    "Check whether erase_colors_vi0401 receives a stronger semantic name in later PRs.",
+    "Search controller.c history for other aggregate-copy or struct-wrapper codegen matching tactics."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

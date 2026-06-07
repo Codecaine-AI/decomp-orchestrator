@@ -1,0 +1,197 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-615",
+  "pr": {
+    "number": 615,
+    "title": "Match dolphin CARDBios",
+    "url": "https://github.com/doldecomp/melee/pull/615",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-12-18T09:03:14Z",
+    "merged_at": "2022-12-18T19:33:19Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched dolphin/card CARDBios by replacing the 1383-line assembly file with a 618-line C implementation, wiring it into obj_files.mk and the build's Frank post-processing path for src/dolphin/card objects. The PR also expanded dolphin/card.h with CARD result codes, CARDFileInfo/CARDDir/CARDControl layouts, callbacks, and internal prototypes, then updated remaining CARD asm files to reference the new C globals __CARDBlock and __CARDDiskNone instead of raw lbl_804A8B38-style labels. Supporting header/API fixes moved OSResetFunctionInfo to OSReset.h, added OSSetAlarm declaration, typed DVD ResetAlarm as OSAlarm, and exposed __CARDSetDiskID through dvd.h.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "asm-to-c",
+      "headers",
+      "struct-layout",
+      "build-system",
+      "symbol-naming"
+    ],
+    "systems": [
+      "dolphin/card",
+      "CARDBios",
+      "EXI",
+      "OSAlarm",
+      "OSReset",
+      "DVD",
+      "Makefile",
+      "obj_files.mk"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "asm/dolphin/card/CARDBios.s",
+      "role": "Deleted matched assembly source for CARDBios."
+    },
+    {
+      "path": "src/dolphin/card/CARDBios.c",
+      "role": "New matched C implementation containing __CARDBlock, __CARDDiskNone, callbacks, EXI transfer helpers, CARDInit, control-block helpers, sync, and reset handling."
+    },
+    {
+      "path": "include/dolphin/card.h",
+      "role": "Expanded CARD API/constants and introduced CARDFileInfo, CARDDir, and CARDControl layouts needed by CARDBios and existing CARD asm."
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "Swapped CARDBios from asm object to C object."
+    },
+    {
+      "path": "Makefile",
+      "role": "Added Frank rule for src/dolphin/card/%.c.o objects."
+    },
+    {
+      "path": "asm/dolphin/card/*.s",
+      "role": "Updated dependent CARD assembly files to reference named C globals such as __CARDBlock and __CARDDiskNone."
+    },
+    {
+      "path": "include/dolphin/os/OSReset.h",
+      "role": "Moved OSResetFunction and OSResetFunctionInfo declarations into the public OSReset header."
+    },
+    {
+      "path": "src/dolphin/os/OSReset.c",
+      "role": "Removed local OSResetFunctionInfo typedef now provided by the header."
+    },
+    {
+      "path": "include/dolphin/os/OSAlarm.h",
+      "role": "Declared OSSetAlarm for CARDBios/DVD alarm use."
+    },
+    {
+      "path": "src/dolphin/dvd/dvd.c",
+      "role": "Retyped ResetAlarm as OSAlarm and updated OSSetAlarm usage/signature."
+    },
+    {
+      "path": "src/dolphin/dvd/fstload.c",
+      "role": "Adjusted DVD callback parameter typing to DVDCommandBlock*."
+    }
+  ],
+  "what_changed": [
+    "Removed asm/dolphin/card/CARDBios.s and added src/dolphin/card/CARDBios.c as the matched source for CARDBios.",
+    "Implemented CARDBios globals CARDControl __CARDBlock[2] and DVDDiskID __CARDDiskNone, allowing other files to reference meaningful symbols instead of anonymous labels.",
+    "Implemented CARD internal handlers and helpers visible in the diff: __CARDDefaultApiCallback, __CARDSyncCallback, __CARDExtHandler, __CARDExiHandler, __CARDTxHandler, __CARDUnlockedHandler, __CARDEnableInterrupt, __CARDReadStatus, __CARDClearStatus, __CARDStart, __CARDReadSegment, __CARDWritePage, __CARDEraseSector, CARDInit, __CARDSetDiskID, __CARDGetControlBlock, __CARDPutControlBlock, CARDGetResultCode, CARDFreeBlocks, CARDGetSectorSize, __CARDSync, and reset callback OnReset.",
+    "Added CARD constants for result codes and structural constants such as CARD_RESULT_NOCARD, CARD_RESULT_IOERROR, CARD_RESULT_FATAL_ERROR, CARD_NUM_SYSTEM_BLOCK, CARD_FILENAME_MAX, CARD_MAX_FILE, and CARD_MAX_MOUNT_STEP.",
+    "Defined CARDCallback plus CARDFileInfo, CARDDir, and CARDControl in include/dolphin/card.h, including callback fields, thread queue, command buffer, retry state, OSAlarm, and DVDDiskID pointer.",
+    "Changed dependent CARD assembly to load __CARDBlock@ha/__CARDBlock@l and __CARDDiskNone@ha/__CARDDiskNone@l instead of lbl_804A8B38/raw addresses.",
+    "Added a Makefile Frank rule for src/dolphin/card/%.c.o and switched obj_files.mk from asm/dolphin/card/CARDBios.s.o to src/dolphin/card/CARDBios.c.o.",
+    "Added OSResetFunctionInfo declarations to OSReset.h and removed the duplicate local declarations from OSReset.c.",
+    "Declared OSSetAlarm in OSAlarm.h and updated dvd.c to use OSAlarm ResetAlarm, OSCreateAlarm(&ResetAlarm), and OSSetAlarm(&ResetAlarm, OSMillisecondsToTicks(1150), AlarmHandler).",
+    "Exposed __CARDSetDiskID(const DVDDiskID* id) in dvd.h and had CARDInit set disk IDs from 0x80000000 while __CARDSetDiskID falls back to __CARDDiskNone for null IDs."
+  ],
+  "smart_moves": [
+    "Converted the main CARDBios unit first while preserving dependent CARD modules as assembly, then repaired their symbol references to the new C globals. This is a practical incremental decomp strategy for tightly coupled libraries.",
+    "Put the large CARDControl layout in the shared header so existing asm and future C ports can converge on one offset model instead of repeating raw lbl/offset knowledge.",
+    "Used named result macros instead of magic negative values in the new C, making EXI/card error flow easier to audit while still matching the underlying constants.",
+    "Moved OSResetFunctionInfo into OSReset.h rather than duplicating it in OSReset.c, enabling CARDBios reset registration without private typedef drift.",
+    "Typed ResetAlarm and callback signatures in DVD code to match the OSAlarm API, which reduced raw byte-buffer use and supported the new OSSetAlarm prototype.",
+    "Added a card-specific Frank object rule, acknowledging that newly decompiled dolphin/card C needed the same post-processing support already used for other source areas."
+  ],
+  "decomp_lessons": [
+    "When a C file introduces a global previously represented by an anonymous data label, update all remaining assembly users immediately to the new symbol name. In this PR, many CARD asm files changed lbl_804A8B38 references to __CARDBlock.",
+    "Large library matches often require header work outside the target file: CARDBios needed CARD structs, OSAlarm declarations, OSReset registration structs, DVD disk ID types, and build glue.",
+    "Preserving binary behavior for asynchronous hardware code means modeling callbacks, alarms, locks, and retry paths explicitly; CARDBios centers on EXILock/EXISelect/EXIImm/EXIDma/EXIDeselect/EXIUnlock plus OSAlarm timeout handling.",
+    "Typed structs can unlock matching progress in adjacent assembly because field offsets become named members such as CARDControl.threadQueue, alarm, cmd, mode, retry, diskID, callbacks, currentDir, and currentFat.",
+    "For old SDK-style code, matching may involve SDK idioms such as global reset-function registration, OS bus/timer clock conversions, and device command words rather than only local control flow.",
+    "Diff evidence contains no PR body or review comments explaining rationale, so lessons are inferred from file changes and code patterns rather than explicit author/reviewer discussion."
+  ],
+  "naming_conventions": [
+    "Internal CARD symbols use the double-underscore SDK style: __CARDBlock, __CARDDiskNone, __CARDStart, __CARDReadStatus, __CARDClearStatus, __CARDGetControlBlock, __CARDPutControlBlock, __CARDSync.",
+    "Public CARD APIs use CARD-prefixed names without the internal double underscore: CARDInit, CARDGetResultCode, CARDFreeBlocks, CARDGetSectorSize.",
+    "Result constants use CARD_RESULT_* names and preserve SDK numeric semantics, including CARD_RESULT_UNLOCKED = 1, CARD_RESULT_READY = 0, CARD_RESULT_BUSY = -1, CARD_RESULT_NOCARD = -3, CARD_RESULT_IOERROR = -5, and CARD_RESULT_FATAL_ERROR = -128.",
+    "CARD struct names follow SDK-style nouns: CARDFileInfo, CARDDir, CARDControl, CARDCallback.",
+    "OS reset callback metadata uses OSResetFunction and OSResetFunctionInfo in include/dolphin/os/OSReset.h.",
+    "Disk ID fallback global is named __CARDDiskNone and is referenced by remaining CARDOpen assembly."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced the assembly object in obj_files.mk with the new C object: asm/dolphin/card/CARDBios.s.o became src/dolphin/card/CARDBios.c.o.",
+    "Added Makefile support for Frank to post-process src/dolphin/card/%.c.o, matching the pattern already used for other source directories.",
+    "Kept dependent CARD modules in assembly but patched their relocations to named symbols, especially __CARDBlock and __CARDDiskNone, preserving linkability during incremental decomp.",
+    "Modeled command-word setup directly in C for EXI transactions, e.g. 0x81010000/0x81000000 for interrupt enable, 0x83000000 for read status, 0x89000000 for clear status, 0x52 for read segment, 0xF2 for write page, and 0xF1 for erase sector.",
+    "Used small address macros AD1, AD2, AD3, and BA to reproduce memory-card command-byte construction from card addresses.",
+    "Represented timeout setup with OSSetAlarm and tick conversion macros based on __OSBusClock, matching low-level timing behavior needed by card writes/erases."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "ribbanya",
+      "state": "APPROVED",
+      "submitted_at": "2022-12-18T10:09:52Z",
+      "body": ""
+    },
+    {
+      "note": "No issue comments, review comments, or review body text were present in the provided slice."
+    }
+  ],
+  "searchable_terms": [
+    "pr-615",
+    "Match dolphin CARDBios",
+    "r-burns",
+    "CARDBios",
+    "src/dolphin/card/CARDBios.c",
+    "asm/dolphin/card/CARDBios.s",
+    "__CARDBlock",
+    "__CARDDiskNone",
+    "CARDControl",
+    "CARDDir",
+    "CARDFileInfo",
+    "CARDCallback",
+    "CARD_RESULT_NOCARD",
+    "CARD_RESULT_IOERROR",
+    "CARD_RESULT_FATAL_ERROR",
+    "__CARDStart",
+    "__CARDReadStatus",
+    "__CARDClearStatus",
+    "__CARDReadSegment",
+    "__CARDWritePage",
+    "__CARDEraseSector",
+    "__CARDGetControlBlock",
+    "__CARDPutControlBlock",
+    "__CARDSync",
+    "__CARDSetDiskID",
+    "CARDInit",
+    "CARDFreeBlocks",
+    "CARDGetSectorSize",
+    "EXISelect",
+    "EXIImm",
+    "EXIImmEx",
+    "EXIDma",
+    "EXIDeselect",
+    "EXILock",
+    "EXIUnlock",
+    "EXIProbe",
+    "OSAlarm",
+    "OSSetAlarm",
+    "OSResetFunctionInfo",
+    "OSRegisterResetFunction",
+    "DVDDiskID",
+    "Frank",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that decompile CARDUnlock, CARDRdrw, CARDBlock, CARDMount, CARDOpen, CARDRead, or CARDWrite after __CARDBlock was introduced.",
+    "Search for changes to CARDControl layout fields to see whether offsets from PR 615 were corrected later.",
+    "Search for later cleanup of OSAlarm/OSSetAlarm prototypes and DVD ResetAlarm typing.",
+    "Search for __CARDDiskNone and __CARDSetDiskID usages in later DVD/CARD integration work.",
+    "Compare later CARDBios.c revisions for renamed Retry, timeout macros, or static/internal prototype cleanup."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

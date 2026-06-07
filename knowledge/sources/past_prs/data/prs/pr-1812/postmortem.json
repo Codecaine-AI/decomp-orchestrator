@@ -1,0 +1,149 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1812",
+  "pr": {
+    "number": 1812,
+    "title": "mnmain matches",
+    "url": "https://github.com/doldecomp/melee/pull/1812",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-08-08T18:47:21Z",
+    "merged_at": "2025-08-08T18:50:56Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched additional mnmain menu code by replacing placeholders with C implementations for color selection, light-object color interpolation, and menu navigation/input handling. The PR also tightened mnmain.h types so the shared menu state stores a GXColor pointer instead of an int, added the required GX/lobj includes, and adjusted data padding after new data/code was recovered.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "type-correction",
+      "menu-logic"
+    ],
+    "systems": [
+      "melee-core",
+      "mn",
+      "mnmain",
+      "sysdolphin-baselib",
+      "gx-color",
+      "lobj"
+    ]
+  },
+  "key_files": [
+    {
+      "file": "src/melee/mn/mnmain.c",
+      "role": "Main implementation changes: added static GXColor table, matched mn_8022BFBC, fn_8022C128, and mn_8022DB10, removed a dont_inline pragma around mn_8022C010, updated inline initialization to pass an argument to mn_8022BFBC, and resized data_pad."
+    },
+    {
+      "file": "src/melee/mn/mnmain.h",
+      "role": "Header/type updates: added dolphin/gx.h, changed mn_unk1.x14 from int to GXColor*, and updated mn_8022BFBC prototype from int mn_8022BFBC(void) to GXColor* mn_8022BFBC(int)."
+    }
+  ],
+  "what_changed": [
+    "Added five static GXColor objects named mn_804D4B50, mn_804D4B54, mn_804D4B58, mn_804D4B5C, and mn_804D4B60 with RGBA constants used by the menu lighting/color logic.",
+    "Implemented mn_8022BFBC(int arg0) as a switch over values 0 through 4 returning pointers to the corresponding static GXColor objects.",
+    "Removed the placeholder for fn_8022C128 and implemented an HSD_GObj callback that gets an HSD_LObj via GET_LOBJ, runs HSD_LObjAnimAll, computes the target color from mn_8022C010 and mn_8022BFBC, and interpolates an LObj color toward the target over mn_804A04F0.x12 frames.",
+    "Defined the global mn_unk1 mn_804A04F0 in mnmain.c near the newly matched code.",
+    "Implemented mn_8022DB10(HSD_GObj*) as menu input/navigation logic using mn_80229624(4U), lbAudioAx_80024030 audio feedback, mn_804D6BC8 state updates, gm_801A4B9C/gm_801A4B60 cancel handling, and wraparound selection movement that skips invalid entries via mn_80229938.",
+    "In mn_8022DB10, selecting with input bit 0x10 maps current mn_804A04F0.x2 values 0 through 4 to var_r31 values 1 through 5, resets selection state, destroys/updates GObj links, and conditionally creates a GObj process from mn_803EB6B0[var_r31].x10.",
+    "Changed data_pad size from 0xd5c - 0xc4c to 0xd5c - 0xcd4, reflecting that newly matched code/data consumed part of the previous padding area.",
+    "Updated mn_8022DDA8_inline so mn_804A04F0.x14 is initialized with mn_8022BFBC(temp_r29) instead of calling mn_8022BFBC with no arguments.",
+    "Added sysdolphin/baselib/lobj.h include to mnmain.c for LObj types/macros used by fn_8022C128.",
+    "Added dolphin/gx.h include to mnmain.h and changed mn_unk1.x14 to GXColor*, aligning the struct field with actual color pointer usage."
+  ],
+  "smart_moves": [
+    "Recovered the real type of mn_804A04F0.x14 from use sites: it is compared as a pointer and dereferenced for r/g/b channels, so changing it from int to GXColor* made fn_8022C128 and initialization code type-correct.",
+    "Modeled the color constants as static GXColor data rather than ad hoc integer constants, which matches the pointer-returning behavior of mn_8022BFBC and clarifies the data layout.",
+    "Used a switch-return helper mn_8022BFBC(int) to centralize the mapping from menu category/index to target color, then reused it both during initialization and per-frame update.",
+    "The LObj color transition logic preserves integer division behavior and guards each channel update with a nonzero delta check before adding delta / remaining_frames, which is likely important for matching generated code.",
+    "The menu navigation implementation uses do-while loops for left/right movement so invalid options are skipped until mn_80229938 reports a selectable entry.",
+    "Adjusted padding after introducing new global/static data, avoiding stale fake data layout that would conflict with recovered symbols.",
+    "Removed the previous dont_inline pragma around mn_8022C010 once surrounding code had been matched, suggesting the function could now stand on its own without artificial inlining constraints."
+  ],
+  "decomp_lessons": [
+    "When an unknown struct field is used as both a comparison target and a source for color channels, update the struct/header to the specific pointer type rather than keeping placeholder integer typing.",
+    "Matching menu visual effects may require adding the relevant baselib object header; here LObj access and animation required lobj.h in the C file, while GXColor required gx.h in the public header.",
+    "Static color tables can be recovered incrementally from code that returns addresses into .data; giving each address-backed color a symbol preserves layout and makes switch-based helpers simple.",
+    "If matching new functions reduces the amount of anonymous data padding, update the pad expression to match the new known symbol boundary.",
+    "Input-handling functions often encode state-machine behavior, audio cues, object teardown/creation, and wraparound selection in one routine; preserve branch structure and temporary variable shapes when matching.",
+    "Use precise callback signatures such as void (*)(HSD_GObj*) and HSD_GObjProc* when reconstructing process creation code, because flag assignment and proc setup depend on these types."
+  ],
+  "naming_conventions": [
+    "Unidentified menu functions and globals retain address-based names such as mn_8022BFBC, fn_8022C128, mn_8022DB10, mn_804A04F0, and mn_804D4B50.",
+    "Structs with unknown semantics continue using placeholder names mn_unk1 and mn_unk2, with fields named by offsets such as x0, x2, x12, and x14.",
+    "OnFrame callback naming remains explicit for known lifecycle roles, as in mn_8022DD38_OnFrame.",
+    "Temporary variables in matched functions use decomp-style register-derived names such as var_r31, temp_r29, temp_r28, var_r27, and temp_r3_2.",
+    "Header guard convention for this file is MELEE_MN_MAIN_H."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used PAD_STACK(8) in mn_8022DB10, indicating stack padding was required to reproduce the target stack frame/layout.",
+    "Preserved switch statements for small integer mappings in mn_8022BFBC and mn_8022DB10 rather than collapsing them into arithmetic or table lookups.",
+    "Kept explicit u8 casts when comparing or assigning menu indices against temp_r29 - 1, which may be necessary for the original instruction sequence.",
+    "Used assignment inside an if condition for temp_r28 = mn_803EB6B0[var_r31].x10 before creating a GObjProc, preserving likely original control flow.",
+    "Maintained do-while loops for selection wraparound so the generated branch shape matches the original behavior of repeatedly skipping invalid menu entries.",
+    "Called GET_LOBJ(arg0) and HSD_LObjAnimAll before color interpolation in fn_8022C128, matching the expected object animation/update order.",
+    "Changed mn_8022BFBC from a no-argument placeholder prototype to GXColor* mn_8022BFBC(int), then updated the caller to pass temp_r29, avoiding mismatched call signatures."
+  ],
+  "review_feedback": [
+    {
+      "type": "none_available",
+      "text": "The provided PR slice reports one issue comment but includes no human_text_excerpt, no review comments, and no review_feedback_examples, so no specific reviewer feedback can be extracted."
+    }
+  ],
+  "searchable_terms": [
+    "pr-1812",
+    "mnmain matches",
+    "r-burns",
+    "src/melee/mn/mnmain.c",
+    "src/melee/mn/mnmain.h",
+    "mn_8022BFBC",
+    "mn_8022C010",
+    "fn_8022C128",
+    "mn_8022DB10",
+    "mn_8022DDA8_inline",
+    "mn_8022DD38_OnFrame",
+    "mn_804A04F0",
+    "mn_804D4B50",
+    "mn_804D4B54",
+    "mn_804D4B58",
+    "mn_804D4B5C",
+    "mn_804D4B60",
+    "mn_804D6BC8",
+    "mn_803EB6B0",
+    "GXColor",
+    "HSD_LObj",
+    "GET_LOBJ",
+    "HSD_LObjAnimAll",
+    "HSD_GObj",
+    "HSD_GObjProc",
+    "GObj_Create",
+    "HSD_GObjProc_8038FD54",
+    "lbAudioAx_80024030",
+    "gm_801A4B9C",
+    "gm_801A4B60",
+    "mn_80229938",
+    "PAD_STACK",
+    "data_pad",
+    "dolphin/gx.h",
+    "sysdolphin/baselib/lobj.h",
+    "menu color interpolation",
+    "menu input navigation",
+    "LObj color"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename mn_unk1 or document the semantics of mn_804A04F0 fields x0, x1, x2, x11, x12, and x14.",
+    "Search for future matches of mn_8022C068 and mn_8022C304 to understand the full LObj/light setup around fn_8022C128.",
+    "Check whether mn_8022BFBC color constants are later given semantic names related to menu categories or player colors.",
+    "Find PRs touching mn_803EB6B0 or mn_80229938 to clarify the selectable-entry table and valid-option filtering behavior.",
+    "Investigate whether the issue comment on PR 1812 contained merge/status automation only, since no comment text was included in this slice."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,145 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1343",
+  "pr": {
+    "number": 1343,
+    "title": "Match HSD's shadow",
+    "url": "https://github.com/doldecomp/melee/pull/1343",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-02-27T19:12:29Z",
+    "merged_at": "2024-02-27T19:20:22Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the sysdolphin/baselib shadow object by replacing the 1309-line assembly fallback with the C implementation, marking shadow.c as Matching in configure.py, and switching obj_files.mk from asm/sysdolphin/baselib/shadow.s.o to src/sysdolphin/baselib/shadow.c.o. The C changes completed missing shadow/viewing-rect routines and adjusted declarations/includes so the object could build and match.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "build-configuration",
+      "baselib"
+    ],
+    "systems": [
+      "sysdolphin/baselib/shadow",
+      "HSD shadow",
+      "HSD camera",
+      "GX",
+      "MTX/vector math",
+      "configure.py",
+      "obj_files.mk"
+    ]
+  },
+  "key_files": [
+    "asm/sysdolphin/baselib/shadow.s",
+    "src/sysdolphin/baselib/shadow.c",
+    "src/sysdolphin/baselib/shadow.h",
+    "configure.py",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted asm/sysdolphin/baselib/shadow.s, removing the prior 1309-line assembly implementation for the shadow object.",
+    "Changed configure.py entry for sysdolphin/baselib/shadow.c from NonMatching to Matching.",
+    "Changed obj_files.mk to link $(BUILD_DIR)/src/sysdolphin/baselib/shadow.c.o instead of $(BUILD_DIR)/asm/sysdolphin/baselib/shadow.s.o.",
+    "In shadow.c, added includes for baselib mtx.h, dolphin/mtx/vec.h, and MSL/trigf.h, supporting vector operations and atan2f/fabsf-style math used by the new code.",
+    "Changed shadow_alloc_data from an extern declaration to a C definition in shadow.c.",
+    "Replaced raw extern assert strings and __assert use in HSD_ShadowInit with HSD_ASSERT(245, shadow).",
+    "Added HSD_ShadowSetViewingRect, which updates the shadow camera viewing rectangle differently for perspective, orthographic, and frustum projections.",
+    "Added HSD_ViewingRectInit to initialize origin, eye/right/up vectors, distance, bounds, and perspective mode for HSD_ViewingRect.",
+    "Added HSD_ViewingRectAddRect to project/add a rectangle into accumulated viewing bounds, handling perspective scaling and ignoring points behind the eye for perspective mode.",
+    "In shadow.h, changed HSD_ViewingRect.perspective from f32 to int and added prototypes for several shadow APIs, including HSD_ShadowAddObject, HSD_ShadowStartRender, HSD_ShadowEndRender, HSD_ShadowSetActive, HSD_ShadowSetSize, HSD_ShadowSetViewingRect, HSD_ViewingRectInit, and HSD_ViewingRectAddRect."
+  ],
+  "smart_moves": [
+    "The PR treated matching as an object-level cleanup: after completing/adjusting C, it removed the asm file and updated both configure.py and obj_files.mk so the build actually used the matching C object.",
+    "Using HSD_ASSERT instead of file-local extern assert string symbols reduced hand-managed string declarations while preserving the assert line evidence needed for matching.",
+    "The new HSD_ASSERT2 macro preserved a custom assertion text path where plain HSD_ASSERT was not sufficient, which is a useful compromise when exact assert string emission matters.",
+    "The viewing-rect implementation uses existing Dolphin vector helpers such as VECSubtract, VECNormalize, VECCrossProduct, VECDotProduct, VECScale, and VECMag rather than open-coding vector math, improving type alignment with SDK/baselib conventions.",
+    "Projection-specific branching in HSD_ShadowSetViewingRect mirrors the CObj abstraction: perspective updates aspect/FOV, ortho uses HSD_CObjSetOrtho, and frustum scales by near/distance before HSD_CObjSetFrustum.",
+    "Changing HSD_ViewingRect.perspective to int aligns the struct field with how the new functions consume it as a boolean/control flag, avoiding a suspicious float flag."
+  ],
+  "decomp_lessons": [
+    "When a baselib object is ready to match, update all three places together: delete the asm fallback, mark the source Object(Matching, ...) in configure.py, and switch obj_files.mk from asm .s.o to src .c.o.",
+    "Assert macro selection can be matching-critical: prefer project macros like HSD_ASSERT when they generate the right file/line/string pattern, but keep a local macro if a custom assertion text argument is required.",
+    "Header struct field types can block matching; even a boolean-like field declared as f32 instead of int should be revisited when reconstructing routines that branch on it.",
+    "Completing an object may require adding prototypes for functions that already exist in the C file or are now externally visible, not just writing the missing function bodies.",
+    "For HSD camera/shadow code, reuse HSD_CObj accessors and setters instead of directly poking projection fields unless the assembly proves direct access.",
+    "For GameCube vector math, using SDK-style VEC* functions can help recover expected call structure and avoid arithmetic ordering differences."
+  ],
+  "naming_conventions": [
+    "Public HSD shadow APIs use the HSD_Shadow* prefix, for example HSD_ShadowSetViewingRect, HSD_ShadowStartRender, HSD_ShadowEndRender, and HSD_ShadowSetActive.",
+    "Viewing rectangle helpers use the HSD_ViewingRect* prefix, for example HSD_ViewingRectInit, HSD_ViewingRectCheck, and HSD_ViewingRectAddRect.",
+    "Local assert string variables in the added area follow descriptive lower-camel names with Assert suffix, such as radiusAssert and aAssert; distAssert is referenced by HSD_ASSERT2 in the diff.",
+    "Projection enum cases used in the switch are PROJ_PERSPECTIVE, PROJ_ORTHO, and PROJ_FRUSTUM."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed the shadow.s assembly once the C source matched, rather than keeping a mixed C/asm object.",
+    "Converted the build object path from asm/sysdolphin/baselib/shadow.s.o to src/sysdolphin/baselib/shadow.c.o in obj_files.mk.",
+    "Marked sysdolphin/baselib/shadow.c as Object(Matching, ...) in configure.py.",
+    "Used explicit floating constants such as 0.0F and FLT_MAX defined as 3.4028235E38F in the added C, likely to control exact constant emission.",
+    "Used atan2f and fabsf_bitwise in the perspective viewing-rect path, preserving single-precision/math-library behavior visible in matching-sensitive code.",
+    "Kept assert line numbers explicit, including HSD_ASSERT(721, shadow), HSD_ASSERT2(725, distAssert, distance > 0.0F), HSD_ASSERT(754, scale > 0.0F), HSD_ASSERT(762, 0), HSD_ASSERT(795, rect), HSD_ASSERT(855, rect), and HSD_ASSERT(856, position)."
+  ],
+  "review_feedback": [
+    "No PR body, issue comments, review comments, or reviews were present in the provided slice, so there is no human review feedback to extract."
+  ],
+  "searchable_terms": [
+    "PR1343",
+    "Match HSD's shadow",
+    "PsiLupan",
+    "sysdolphin/baselib/shadow.c",
+    "asm/sysdolphin/baselib/shadow.s",
+    "HSD_Shadow",
+    "HSD_ShadowGetAllocData",
+    "HSD_ShadowInitAllocData",
+    "HSD_ShadowAlloc",
+    "HSD_ShadowRemove",
+    "HSD_ShadowInit",
+    "HSD_ShadowSetSize",
+    "HSD_ShadowSetViewingRect",
+    "HSD_ViewingRect",
+    "HSD_ViewingRectInit",
+    "HSD_ViewingRectCheck",
+    "HSD_ViewingRectAddRect",
+    "shadow_alloc_data",
+    "HSD_ObjAllocData",
+    "HSD_ASSERT2",
+    "distAssert",
+    "radiusAssert",
+    "aAssert",
+    "PROJ_PERSPECTIVE",
+    "PROJ_ORTHO",
+    "PROJ_FRUSTUM",
+    "HSD_CObjSetAspect",
+    "HSD_CObjSetFov",
+    "HSD_CObjSetOrtho",
+    "HSD_CObjSetFrustum",
+    "HSD_CObjGetEyeDistance",
+    "VECSubtract",
+    "VECNormalize",
+    "VECCrossProduct",
+    "VECDotProduct",
+    "VECScale",
+    "VECMag",
+    "atan2f",
+    "fabsf_bitwise",
+    "GXSetTexCopySrc",
+    "GXSetTexCopyDst",
+    "Object(Matching, \"sysdolphin/baselib/shadow.c\")"
+  ],
+  "follow_up_queries": [
+    "Check nearby shadow.c history for later cleanup of HSD_ASSERT2 or assert string variables such as distAssert/radiusAssert/aAssert.",
+    "Search for other baselib objects that still link asm .s.o in obj_files.mk while configure.py has a source file available.",
+    "Compare HSD_ViewingRect struct usage in downstream PRs to confirm the int perspective field remained stable.",
+    "Look for other HSD_CObj projection routines where PROJ_PERSPECTIVE/PROJ_ORTHO/PROJ_FRUSTUM switch patterns helped matching."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

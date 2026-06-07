@@ -1,0 +1,125 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-625",
+  "pr": {
+    "number": 625,
+    "title": "Fix fighter.c .bss section",
+    "url": "https://github.com/doldecomp/melee/pull/625",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-12-25T00:36:25Z",
+    "merged_at": "2022-12-25T01:35:09Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Moved several fighter HSD_ObjAllocData .bss objects out of asm/melee/ft/ftparts.s and into src/melee/ft/fighter.c, replacing fake pointer-arithmetic indexing from lbl_80458FD0 with explicit object allocator globals. This cleaned up Fighter_800679B0 and Fighter_Unload_8006DABC by removing a weird uninitialized-pointer fakematch helper and using the correct allocator symbols directly. The Fighter struct was padded so sizeof(Fighter) could replace a hardcoded 0x23ec allocation size, and the unload callback prototype was corrected to take void* user_data.",
+  "change_classification": {
+    "primary_type": "decomp-matching cleanup",
+    "categories": [
+      "decomp-matching",
+      "fix",
+      "bss-data-migration",
+      "headers",
+      "types-structs",
+      "allocator-cleanup"
+    ],
+    "systems": [
+      "fighter",
+      "asm",
+      "HSD object allocation"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/fighter.h",
+    "asm/melee/ft/ftparts.s"
+  ],
+  "what_changed": [
+    "Removed .bss definitions lbl_80459028, lbl_80459054, lbl_80459080, and lbl_804590AC from asm/melee/ft/ftparts.s.",
+    "Declared the same HSD_ObjAllocData globals directly in fighter.c alongside existing lbl_80458FD0 and lbl_80458FFC.",
+    "Changed Fighter_800679B0 allocator initialization from pointer arithmetic on &lbl_80458FD0, such as &lbl_80458FD0 + 2, to explicit symbols lbl_80459028, lbl_80459054, and lbl_80459080.",
+    "Changed the main fighter allocation initialization from hardcoded size 0x23ec to sizeof(Fighter).",
+    "Removed an inline sub_func fakematch that used an uninitialized Fighter* to obtain matching codegen for Fighter_Unload_8006DABC.",
+    "Rewrote Fighter_Unload_8006DABC to accept void* user_data, cast it to Fighter*, read x4_fighterKind normally, and call ft_OnUserDataRemove[kind] if present.",
+    "Changed HSD_ObjFree calls in Fighter_Unload_8006DABC from computed objAllocData indices to direct allocator globals: lbl_804590AC, lbl_80459028, lbl_80459054, lbl_80459080, lbl_80458FFC, and lbl_80458FD0.",
+    "Added filler_x23B8 padding to Fighter so the struct size reaches the allocation size boundary used by sizeof(Fighter).",
+    "Updated the fighter.h declaration of Fighter_Unload_8006DABC from Fighter* to void* user_data after review feedback."
+  ],
+  "smart_moves": [
+    "Fixed a .bss ownership problem by moving HSD_ObjAllocData objects into the C translation unit that uses them, instead of pretending they are contiguous via pointer arithmetic from lbl_80458FD0.",
+    "Replaced magic allocation size 0x23ec with sizeof(Fighter), but only after padding the Fighter struct to make that expression match the expected size.",
+    "Removed a fragile fakematch based on an uninitialized pointer and compiler warning, making Fighter_Unload_8006DABC readable while preserving allocator behavior through explicit symbols.",
+    "Used direct HSD_ObjFree allocator addresses, which documents which pool each fighter subobject belongs to better than computed offsets like objAllocData[(0xDC / 40)].",
+    "Aligned the unload callback API with a generic user_data callback shape by taking void* and casting internally."
+  ],
+  "decomp_lessons": [
+    "If a sequence of .bss objects is being accessed through pointer arithmetic only because some labels still live in asm, consider moving all related objects into C so the compiler emits the same layout and the code can name each object directly.",
+    "A matching workaround that depends on an uninitialized local is a strong signal that data layout or symbol ownership is wrong, not that the function logic needs to remain strange.",
+    "When replacing hardcoded object sizes with sizeof, first make the struct definition represent the allocated storage, including known tail padding or filler fields.",
+    "Explicit allocator globals can be preferable to array-index fakematches when the original data is a set of independent BSS symbols with 0x2C-sized HSD_ObjAllocData entries.",
+    "Callback signatures may need to use void* user_data even when the implementation immediately casts to a specific struct type; match the caller/framework contract in headers."
+  ],
+  "naming_conventions": [
+    "Kept existing lbl_80458FD0, lbl_80458FFC, lbl_80459028, lbl_80459054, lbl_80459080, and lbl_804590AC placeholder names because no semantic names were evidenced.",
+    "Used filler_x23B8 for explicit Fighter tail padding, following the offset-based filler naming style present in decomp structs.",
+    "Reviewer suggested naming the void* parameter user_data in Fighter_Unload_8006DABC; the final header uses void* user_data.",
+    "Local variable kind was introduced for fp->x4_fighterKind before indexing ft_OnUserDataRemove, improving readability without introducing an unsupported semantic rename."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted .bss labels from ftparts.s once they were represented as C globals in fighter.c.",
+    "Preserved BSS ordering by declaring HSD_ObjAllocData globals in fighter.c after lbl_80458FD0 and lbl_80458FFC.",
+    "Converted allocator initialization from &lbl_80458FD0 + N to named globals to avoid depending on implicit contiguity.",
+    "Converted HSD_ObjFree calls from objAllocData index expressions based on byte offsets divided by 40 to direct labels matching the relevant allocator pools.",
+    "Eliminated a decomp.me-style weird match involving an inline helper, an uninitialized pointer, and a compiler warning."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "file": "src/melee/ft/fighter.h",
+      "feedback": "Suggested the prototype use void Fighter_Unload_8006DABC(void* user_data); rather than void* fp; comment included 'but whatever'."
+    },
+    {
+      "author": "r-burns",
+      "file": "src/melee/ft/fighter.h",
+      "feedback": "Responded 'Fixed', and the final diff shows the parameter name as user_data."
+    }
+  ],
+  "searchable_terms": [
+    "fighter.c .bss",
+    "fighter HSD_ObjAllocData",
+    "lbl_80458FD0",
+    "lbl_80458FFC",
+    "lbl_80459028",
+    "lbl_80459054",
+    "lbl_80459080",
+    "lbl_804590AC",
+    "Fighter_800679B0",
+    "Fighter_Unload_8006DABC",
+    "HSD_ObjAllocInit",
+    "HSD_ObjFree",
+    "sizeof(Fighter)",
+    "filler_x23B8",
+    "ftparts.s bss",
+    "fakematch pointer arithmetic",
+    "uninitialized pointer match",
+    "ft_OnUserDataRemove",
+    "void* user_data",
+    "x4_fighterKind",
+    "x2D8_specialAttributes2",
+    "x5E8_fighterBones"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename lbl_80458FD0 or the other fighter HSD_ObjAllocData globals to semantic allocator names.",
+    "Check whether Fighter size and tail padding around x23B8 were later refined beyond filler_x23B8.",
+    "Search for remaining HSD_ObjAllocData pointer-arithmetic fakematches in other systems that could be cleaned up by moving BSS symbols into C.",
+    "Look for callback prototypes taking Fighter* where the engine actually passes void* user_data."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

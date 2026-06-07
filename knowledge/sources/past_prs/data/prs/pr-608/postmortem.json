@@ -1,0 +1,141 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-608",
+  "pr": {
+    "number": 608,
+    "title": "Improve lobj matches",
+    "url": "https://github.com/doldecomp/melee/pull/608",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-12-15T06:42:24Z",
+    "merged_at": "2022-12-15T06:44:33Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Improved sysdolphin baselib light-object (`lobj`) matching by replacing several inline assembly implementations with C, factoring repeated reference-count/release logic into `HSD_LObjUnrefThis`, and factoring current-light-list reset logic into small inline helpers. The PR also converted `HSD_LObjGetType` from a header macro to a real C function and adjusted small expression details such as removing explicit `u8` casts in color animation assignments and dropping an unused `HSD_LObjSetup` parameter. Evidence is strongest for decomp/matching cleanup and asm removal; there were no review comments explaining reviewer intent.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "inline-asm-removal",
+      "code-deduplication",
+      "headers",
+      "baselib-cleanup"
+    ],
+    "systems": [
+      "src/sysdolphin/baselib",
+      "lobj",
+      "HSD_LObj",
+      "lighting"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/lobj.c",
+    "src/sysdolphin/baselib/lobj.h"
+  ],
+  "what_changed": [
+    "Added `u32 HSD_LObjGetType(HSD_LObj* lobj)` in `lobj.c`, replacing the previous `#define HSD_LObjGetType(o) (o->flags & 0x3)` macro in `lobj.h`.",
+    "Changed `LObjUpdateFunc` light color channel assignments from explicit casts like `(u8)(255.0 * val->fv)` to direct assignments `255.0 * val->fv`, likely to better match compiler conversion behavior.",
+    "Changed `HSD_LObjSetup` signature from `void HSD_LObjSetup(HSD_LObj *lobj, GXColor color, f32 shininess, u32 unused)` to `void HSD_LObjSetup(HSD_LObj *lobj, GXColor color, f32 shininess)`, removing an unused argument.",
+    "Added `HSD_LObjUnrefThis(HSD_LObj* lobj)` to centralize the `ref_DEC` / release / destroy sequence previously duplicated inline in multiple functions.",
+    "Replaced duplicated manual reference decrement and virtual method release/destroy code in `HSD_LObjDeleteCurrent` and `HSD_LObjRemoveAll` with calls to `HSD_LObjUnrefThis`.",
+    "Replaced large inline assembly implementations for `HSD_LObjDeleteCurrentAll`, `HSD_LObjSetCurrentAll`, and `func_803668EC` with C implementations.",
+    "Introduced inline helper `LObjRemoveAll()` to clear `active_lights`, reset `nb_active_lights`, unref all objects in `current_lights`, and remove list nodes with `HSD_SListRemove`.",
+    "Introduced inline helper `LObjReplaceAll(HSD_LObj* lobj)` to perform the same current-light reset and then add each light in an input linked list via `HSD_LObjAddCurrent`.",
+    "Implemented `HSD_LObjDeleteCurrentAll(HSD_LObj* lobj)` in C with two paths: if `lobj` is non-null, iterate through the linked list and delete each current light; otherwise clear all current lights via `LObjRemoveAll`.",
+    "Implemented `HSD_LObjSetCurrentAll(HSD_LObj* lobj)` in C by calling `LObjRemoveAll()` then `HSD_LObjAddCurrent(lobj)`.",
+    "Implemented `func_803668EC(HSD_LObj* lobj)` in C by calling `LObjReplaceAll(lobj)`, retaining an `unused` local seen in the diff likely for matching purposes."
+  ],
+  "smart_moves": [
+    "Factored the repeated object unref/release/destroy sequence into `HSD_LObjUnrefThis`, which reduced large duplicated compiler-sensitive code blocks and made the surrounding list-manipulation functions easier to match and maintain.",
+    "Used `inline` helper functions (`LObjRemoveAll`, `LObjReplaceAll`) to preserve repeated generated-code patterns while avoiding three separate hand-written assembly bodies.",
+    "Matched former assembly behavior by keeping the two distinct reset flows: one helper only clears current lights, while the replacement helper clears then re-adds every node in the supplied `HSD_LObj` linked list.",
+    "Preserved null-check behavior in `HSD_LObjUnrefThis` and callers, including the redundant-looking second `lobj != NULL` check after `ref_DEC(lobj)`, which may help reproduce original control flow.",
+    "Removed explicit casts in color assignments, recognizing that source-level casts can alter generated conversion instructions even when the destination field is an 8-bit color channel.",
+    "Kept apparently unused locals such as `u32 unused;` in new matched C wrappers, suggesting a deliberate stack/register-shaping tactic rather than purely cosmetic cleanup."
+  ],
+  "decomp_lessons": [
+    "When several inline asm functions differ only in the final action, first extract the common generated-code sequence into an inline helper; this can unlock multiple matches while reducing copied code.",
+    "For HSD object lifetime code, prefer using shared helpers like `ref_DEC` plus `HSD_OBJECT_METHOD(...)->release/destroy` instead of manually re-expanding refcount logic in every caller, if the helper still matches.",
+    "Header macros that hide field operations may need to become real functions when the original binary has a callable symbol or when a function body improves matching elsewhere.",
+    "Do not assume explicit C casts improve matching; in this PR, assigning a floating expression directly to `GXColor` byte fields was used instead of explicit `(u8)` casts.",
+    "Unused parameters and locals are matching-sensitive. Removing an unused function parameter (`HSD_LObjSetup`) or preserving an unused local (`unused`) can both be valid depending on what the target code requires.",
+    "For current light state, the canonical reset sequence shown here is: clear all `active_lights` entries up to `GX_MAX_LIGHT`, set `nb_active_lights = 0`, then drain `current_lights` with `HSD_LObjUnrefThis(current_lights->data)` and `HSD_SListRemove`.",
+    "Linked-list operations should cache `next` before deleting/unreffing the current object when the current node/object may be destroyed, as shown in `HSD_LObjRemoveAll`."
+  ],
+  "naming_conventions": [
+    "Public HSD light-object APIs use the `HSD_LObj...` prefix, e.g. `HSD_LObjGetType`, `HSD_LObjUnrefThis`, `HSD_LObjDeleteCurrentAll`, `HSD_LObjSetCurrentAll`, `HSD_LObjRemoveAll`.",
+    "Private/static or file-local helpers use `LObj...` without the `HSD_` prefix, e.g. `LObjUpdateFunc`, `LObjRemoveAll`, `LObjReplaceAll`.",
+    "Light-object variables are consistently named `lobj`; traversal temporaries use short names such as `cur` and `next`.",
+    "Global/current light state names use descriptive snake_case: `active_lights`, `current_lights`, `nb_active_lights`, `lightmask_specular`.",
+    "Animation constants retain existing HSD attribute naming such as `HSD_A_L_LITC_R`, `HSD_A_L_LITC_G`, `HSD_A_L_LITC_B`, and `HSD_A_L_LITC_A`.",
+    "The diff preserves an unknown function name `func_803668EC`, indicating no stronger semantic name was introduced in this PR."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed inline asm for `HSD_LObjDeleteCurrentAll`, `HSD_LObjSetCurrentAll`, and `func_803668EC`, replacing them with matched C wrappers plus inline helpers.",
+    "Used `inline void LObjRemoveAll()` and `inline void LObjReplaceAll(HSD_LObj* lobj)` to reproduce repeated reset/drain code patterns previously visible in assembly.",
+    "Centralized the refcount decrement/release/destroy sequence through `HSD_LObjUnrefThis`; this turns verbose manual refcount code into a helper call while preserving behavior through `ref_DEC`.",
+    "Direct assignment from float expression to `u8` color channels was used instead of explicit casts, a small source expression change likely aimed at instruction-level matching.",
+    "The new C replacements retain small matching artifacts such as `u32 unused;` locals in `HSD_LObjSetCurrentAll` and `func_803668EC`.",
+    "The old asm showed unrolled/looped zeroing of `active_lights`; the C replacement expresses it as a `for (i = 0; i < GX_MAX_LIGHT; i++) active_lights[i] = NULL;`, relying on compiler output to match.",
+    "The PR body explicitly says it matched some inline asm functions and reduced code duplication using inlines, which aligns with the diff evidence."
+  ],
+  "review_feedback": [
+    "No issue comments or review comments were present in the supplied PR slice.",
+    "One review is counted, but the excerpt contains no review body or actionable feedback.",
+    "The PR body states: \"Match some inline asm functions\" and \"Reduce code duplication using inlines\"; no further rationale was provided."
+  ],
+  "searchable_terms": [
+    "PR608",
+    "Improve lobj matches",
+    "r-burns",
+    "lobj",
+    "HSD_LObj",
+    "HSD_LObjGetType",
+    "HSD_LObjGetNbActive",
+    "HSD_LObjSetup",
+    "HSD_LObjAddCurrent",
+    "HSD_LObjUnrefThis",
+    "HSD_LObjDeleteCurrent",
+    "HSD_LObjDeleteCurrentAll",
+    "HSD_LObjSetCurrentAll",
+    "HSD_LObjRemoveAll",
+    "LObjRemoveAll",
+    "LObjReplaceAll",
+    "LObjUpdateFunc",
+    "func_803668EC",
+    "active_lights",
+    "current_lights",
+    "nb_active_lights",
+    "lightmask_specular",
+    "GX_MAX_LIGHT",
+    "GXColor",
+    "HSD_SListRemove",
+    "ref_DEC",
+    "HSD_OBJECT_METHOD",
+    "release",
+    "destroy",
+    "HSD_A_L_LITC_R",
+    "HSD_A_L_LITC_G",
+    "HSD_A_L_LITC_B",
+    "HSD_A_L_LITC_A",
+    "inline asm removal",
+    "code duplication using inlines",
+    "baselib lobj"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs touching `src/sysdolphin/baselib/lobj.c` to see whether `func_803668EC` was eventually named semantically.",
+    "Search for other uses of `HSD_LObjSetup` to verify all call sites were updated after removing the unused parameter.",
+    "Compare later `HSD_LObjUnrefThis` usage across baselib to see whether this helper became the preferred object lifetime idiom.",
+    "Search for similar macro-to-function conversions in HSD headers where callable symbols were needed for matching.",
+    "Investigate whether the `u32 unused;` locals in `HSD_LObjSetCurrentAll` and `func_803668EC` remained necessary or were later removed after compiler/profile changes."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

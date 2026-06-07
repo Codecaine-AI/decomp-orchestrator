@@ -1,0 +1,149 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-756",
+  "pr": {
+    "number": 756,
+    "title": "Rewrite and improve `issues.sh`",
+    "url": "https://github.com/doldecomp/melee/pull/756",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-03-15T02:24:06Z",
+    "merged_at": "2023-03-19T14:26:42Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Replaced the old Bash `tools/issues.sh` clang diagnostic scraper with a Rust Cargo workspace tool at `tools/issues`. The new tool uses libclang through `clang-sys`, reads `compile_flags.txt`, scans `src/**/*.[ch]`, collects diagnostics from translation units, deduplicates them with a `HashSet`, sorts them deterministically, and prints grouped output by severity, diagnostic category, warning option, file, and source location. The PR also added Cargo/rustfmt configuration, a lockfile, ignores for Rust/Windows build artifacts, and an AGPL license for the new tool.",
+  "change_classification": {
+    "primary_type": "tooling_rewrite",
+    "categories": [
+      "tooling",
+      "rust",
+      "diagnostics",
+      "clang",
+      "developer-workflow",
+      "repository-configuration"
+    ],
+    "systems": [
+      "tools/issues",
+      "cargo-workspace",
+      "repo-root",
+      "compile_flags",
+      "clang-diagnostics"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "tools/issues.sh",
+      "role": "Deleted legacy Bash script that iterated over `src` C/H files and grepped clang warning/error lines."
+    },
+    {
+      "path": "tools/issues/src/main.rs",
+      "role": "New Rust implementation using libclang APIs to parse translation units, collect diagnostics, deduplicate, sort, and print grouped issue reports."
+    },
+    {
+      "path": "tools/issues/Cargo.toml",
+      "role": "Defines the `melee-issues` Rust package, Rust 2021 edition, AGPL-3.0-or-later license, and dependencies including `clang-sys`, `glob`, `itertools`, `string-interner`, `anyhow`, and logging crates."
+    },
+    {
+      "path": "tools/issues/LICENSE",
+      "role": "Adds the GNU Affero General Public License v3 text for the new Rust tool."
+    },
+    {
+      "path": "Cargo.toml",
+      "role": "Adds a repository-level Cargo workspace with `tools/issues` as a member."
+    },
+    {
+      "path": "Cargo.lock",
+      "role": "Pins Cargo dependencies for reproducible builds of the tooling."
+    },
+    {
+      "path": ".cargo/config.toml",
+      "role": "Sets Cargo build artifacts to `build/cargo`."
+    },
+    {
+      "path": ".rustfmt.toml",
+      "role": "Sets Rust formatting `max_width = 79`."
+    },
+    {
+      "path": ".gitignore",
+      "role": "Ignores `*.pdb` and Rust backup files `**/*.rs.bk`."
+    }
+  ],
+  "what_changed": [
+    "The previous shell script invoked `clang @compile_flags.txt -fno-color-diagnostics -fsyntax-only -ferror-limit=0` for every `.c` and `.h` file and filtered stderr with grep.",
+    "The replacement Rust tool changes directory to the project root using `CARGO_MANIFEST_DIR`, reads `compile_flags.txt`, appends `-ferror-limit=0`, and passes those flags to libclang.",
+    "The tool scans source files via the glob pattern `src/**/*.[ch]`.",
+    "Diagnostics are extracted through libclang calls such as `clang_parseTranslationUnit2`, `clang_getDiagnosticSetFromTU`, `clang_getDiagnosticLocation`, `clang_getDiagnosticSeverity`, `clang_getDiagnosticCategoryText`, `clang_getDiagnosticOption`, and `clang_getDiagnosticSpelling`.",
+    "Diagnostic strings are interned with `string-interner`, and complete diagnostic records are stored in a `HashSet<DiagnosticInfo>` for deduplication.",
+    "Output is sorted by severity, category ID, option string, path depth/lexicographic path, line, column, and spelling.",
+    "Output is grouped hierarchically with counts at each level: severity, category, option or `required`, filename, then line/column/spelling.",
+    "The command described by the PR body is `cargo run -r tools/issues`; requirements include Cargo and dynamically linked libclang."
+  ],
+  "smart_moves": [
+    "Using libclang directly avoids brittle stderr text parsing and makes category, option, severity, location, and spelling available as structured data.",
+    "Hashing full `DiagnosticInfo` records gives a simple deduplication mechanism before sorting and printing.",
+    "The deterministic sort order makes issue output stable and easier to review across decompilation changes.",
+    "Grouping diagnostics by severity, category, warning option, and file turns a flat warning stream into a navigable backlog for cleanup work.",
+    "Interning repeated strings reduces duplicated storage for filenames, diagnostic categories, options, and diagnostic messages across many source files.",
+    "Adding Cargo workspace metadata and a checked-in lockfile makes the tool more reproducible than an ad hoc script."
+  ],
+  "decomp_lessons": [
+    "For repository-wide C diagnostic tracking, prefer structured compiler APIs over grepping compiler output; it makes sorting, grouping, deduplication, and future automation more reliable.",
+    "A diagnostic report grouped by warning option is useful for decomp projects because it exposes classes of cleanup work such as typedef redefinitions, incompatible pointer types, missing prototypes, return-type problems, and uninitialized variables.",
+    "Stable issue ordering matters: when tool output is deterministic, future PRs can compare warning-count changes without noise from file traversal order.",
+    "A tool that reads the same `compile_flags.txt` used by the project keeps diagnostics aligned with the real decompilation compile environment.",
+    "When introducing Rust tooling into a C decomp repository, include workspace setup, lockfile, formatting config, artifact paths, and gitignore updates in the same PR."
+  ],
+  "naming_conventions": [
+    "`melee-issues` is used as the Cargo package name for the rewritten issues tool.",
+    "The Rust code names the core diagnostic record `DiagnosticInfo`.",
+    "The severity enum mirrors libclang diagnostic severities with variants `Ignored`, `Note`, `Warning`, `Error`, and `Fatal`.",
+    "Diagnostic output labels diagnostics without a clang option as `required`.",
+    "The new tool lives under `tools/issues/`, replacing the single-file `tools/issues.sh` script."
+  ],
+  "assembly_or_matching_tactics": [
+    "No direct assembly matching tactic is present in this PR.",
+    "The indirect decompilation tactic is to improve C/header cleanup by producing a structured diagnostic backlog from all `src/**/*.c` and `src/**/*.h` files."
+  ],
+  "review_feedback": [
+    "No review comments or issue comments were present in the provided PR slice.",
+    "The PR body explicitly states the motivation: the tool was rewritten in Rust and entries are sorted, grouped, and deduplicated.",
+    "The PR body documents external setup requirements for libclang on Fedora, Ubuntu/WSL, Arch, NixOS, and Windows, including possible `LIBCLANG_PATH` configuration on Windows."
+  ],
+  "searchable_terms": [
+    "issues.sh",
+    "tools/issues",
+    "melee-issues",
+    "Rust tooling",
+    "Cargo workspace",
+    "clang-sys",
+    "libclang",
+    "compile_flags.txt",
+    "clang_parseTranslationUnit2",
+    "clang diagnostics",
+    "diagnostic grouping",
+    "diagnostic deduplication",
+    "DiagnosticInfo",
+    "StringInterner",
+    "HashSet diagnostics",
+    "glob src/**/*.[ch]",
+    "AGPL-3.0-or-later",
+    "rustfmt max_width 79",
+    "build/cargo",
+    "LIBCLANG_PATH"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify `tools/issues/src/main.rs` or change diagnostic grouping behavior.",
+    "Search for PRs that reduce warning categories shown by `melee-issues`, especially incompatible pointer types, typedef redefinitions, return-type warnings, and uninitialized-variable warnings.",
+    "Check whether CI or developer documentation later added `cargo run -r tools/issues` as a standard health check.",
+    "Look for later changes to `compile_flags.txt` that affected the output of the issues tool."
+  ],
+  "confidence": 0.94,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

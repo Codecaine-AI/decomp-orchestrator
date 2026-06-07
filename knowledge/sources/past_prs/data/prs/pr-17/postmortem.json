@@ -1,0 +1,161 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-17",
+  "pr": {
+    "number": 17,
+    "title": "[WIP] aobj.c matching / conversions",
+    "url": "https://github.com/doldecomp/melee/pull/17",
+    "state": "CLOSED",
+    "author": "PsiLupan",
+    "created_at": "2020-07-04T05:59:02Z",
+    "merged_at": null
+  },
+  "agent_status": "agent_completed",
+  "summary": "WIP PR that began converting SysDolphin AObj and display allocation routines out of raw assembly into C, added supporting AObj/FObj/List/DisplayFunc headers, renamed residual assembly files to *_asm, and propagated newly identified HSD_* symbol names through other assembly references. It was closed unmerged, but the slice captures useful early decomp tactics for staged C conversion while preserving order and matching.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c-conversion",
+      "headers",
+      "symbol-renaming",
+      "linker-order-maintenance",
+      "formatting-cleanup"
+    ],
+    "systems": [
+      "sysdolphin",
+      "aobj",
+      "fobj",
+      "displayfunc",
+      "jobj",
+      "asm",
+      "include",
+      "ldscript"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/aobj.c",
+    "src/sysdolphin/aobj.h",
+    "src/sysdolphin/fobj.h",
+    "src/sysdolphin/displayfunc.c",
+    "src/sysdolphin/displayfunc.h",
+    "src/sysdolphin/list.h",
+    "asm/aobj_asm.s",
+    "asm/displayfunc_asm.s",
+    "asm/fobj.s",
+    "asm/jobj.s",
+    "asm/text_1.s",
+    "include/functions.h",
+    "include/global.h",
+    "ldscript.lcf"
+  ],
+  "what_changed": [
+    "Renamed asm/aobj.s to asm/aobj_asm.s and removed the initial AObj routines from the assembly body as they were replaced by src/sysdolphin/aobj.c.",
+    "Added src/sysdolphin/aobj.c with C implementations for HSD_AObjInitAllocData, HSD_AObjGetAllocData, HSD_AObjGetFlags, HSD_AObjSetFlags, HSD_AObjClearFlags, HSD_AObjInitEndCallBack, and HSD_AObjInvokeCallBacks.",
+    "Kept HSD_AObjSetFObj as a staged conversion: a readable NON_MATCHING C version plus an inline asm matching version that calls HSD_FObjRemoveAll.",
+    "Added src/sysdolphin/aobj.h with AOBJ_* flag constants and struct declarations for HSD_AObj, HSD_AObjDesc, and HSD_AnimJoint.",
+    "Added src/sysdolphin/fobj.h with HSD_FObj, HSD_FObjDesc, FObjData, animation op constants, fraction-format constants, and object type constants.",
+    "Renamed func_8036A99C to HSD_FObjRemoveAll in asm/fobj.s, updated its recursive self-call, and added a prototype in include/functions.h.",
+    "Renamed AObj-related callsites across asm/text_1.s and asm/jobj.s from raw func/lbl names to HSD_AObjGetFlags, HSD_AObjSetFlags, HSD_AObjClearFlags, HSD_AObjSetFObj, HSD_AObjInitEndCallBack, and HSD_AObjInvokeCallBacks.",
+    "Added src/sysdolphin/displayfunc.c and displayfunc.h for HSD_ZListInitAllocData, moving that allocator initialization out of renamed asm/displayfunc_asm.s.",
+    "Added src/sysdolphin/list.h with HSD_SList so callback-list traversal in HSD_AObjInvokeCallBacks could be expressed in C.",
+    "Updated ldscript.lcf to place aobj.o before aobj_asm.o and displayfunc.o before displayfunc_asm.o, preserving text layout while splitting converted C from residual assembly.",
+    "Included dolphin/mtx/mtxtypes.h from include/global.h to support Mtx/MtxPtr usage in the new displayfunc code.",
+    "Fixed missing EOF newlines in several existing files, matching the reviewer complaint."
+  ],
+  "smart_moves": [
+    "Used *_asm file renames instead of deleting assembly wholesale, making it clear which parts were converted and which text remained as raw asm.",
+    "Updated ldscript.lcf immediately after splitting files, a critical step for maintaining section order and symbol addresses during partial decompilation.",
+    "Used #pragma force_active around HSD_AObjGetAllocData with an explicit comment that the function was otherwise unused until table integration, preserving an otherwise dead function needed for matching.",
+    "Used a NON_MATCHING C block plus inline asm for HSD_AObjSetFObj, documenting intended semantics while retaining a matching emitted body.",
+    "Renamed callsites and function-pointer address loads in large assembly files, not just direct branches, so cross-file symbol identity became searchable and less error-prone.",
+    "Introduced minimal dependent structs and headers only as needed for the conversion, including HSD_SList for callback traversal and HSD_ZList for allocator sizing.",
+    "Limited HSD_AObjSetFlags and HSD_AObjClearFlags to AOBJ_LOOP | AOBJ_NO_UPDATE before mutating flags, matching the observed rlwinm mask behavior rather than accepting arbitrary bits."
+  ],
+  "decomp_lessons": [
+    "When converting only the front of an assembly file, split converted C and remaining assembly into separate objects and update the linker script in the same PR.",
+    "If a matched function is currently unreferenced by C but must remain in the binary, #pragma force_active can be used with a comment explaining the future table/reference expectation.",
+    "For stubborn functions, a useful intermediate state is to provide the NON_MATCHING C equivalent next to inline asm; future work can improve the C while keeping a known-good matching implementation.",
+    "Global symbol renames should be propagated to all assembly callsites and address materializations so later searches find semantic names instead of stale func_ addresses.",
+    "Header work often unlocks C conversion: even small support types like HSD_SList or MtxPtr dependencies can be necessary to express allocator init and callback traversal cleanly.",
+    "Reviewers cared about file hygiene in this early repo slice; missing EOF newlines were enough to trigger a changes-requested review.",
+    "Evidence is weak on why the PR was ultimately closed without merge: the dump shows one changes-requested review for EOF newlines and a later approval, but no explanatory comments."
+  ],
+  "naming_conventions": [
+    "SysDolphin library functions use HSD_* names, e.g. HSD_AObjGetFlags, HSD_AObjSetFlags, HSD_AObjClearFlags, HSD_AObjSetFObj, HSD_AObjInitEndCallBack, HSD_AObjInvokeCallBacks, HSD_FObjRemoveAll, and HSD_ZListInitAllocData.",
+    "Residual assembly files after partial conversion were named with an _asm suffix, e.g. aobj_asm.s and displayfunc_asm.s.",
+    "AObj flag macros used the AOBJ_* prefix with bit-shift definitions, including AOBJ_REWINDED, AOBJ_FIRST_PLAY, AOBJ_NO_UPDATE, AOBJ_LOOP, and AOBJ_NO_ANIM.",
+    "Struct typedefs followed the decomp style typedef struct _HSD_AObj { ... } HSD_AObj and pointer fields used forward struct names for cross-references.",
+    "The PR used the name HSD_AObjInitEndCallBack with capital B in CallBack, matching the symbol spelling shown in the diff rather than normalizing it."
+  ],
+  "assembly_or_matching_tactics": [
+    "Moved matched allocator/init and flag-accessor routines from asm/aobj_asm.s into C while leaving remaining unmatched AObj code in assembly.",
+    "Preserved text order via ldscript.lcf entries: aobj.o then aobj_asm.o, and displayfunc.o then displayfunc_asm.o.",
+    "Used inline asm with nofralloc for HSD_AObjSetFObj to keep exact prologue/epilogue and branch layout while recording the intended C under NON_MATCHING.",
+    "Applied #pragma optimization_level 2 around HSD_AObjInvokeCallBacks, indicating compiler settings were part of the matching recipe.",
+    "Kept dummy locals u32 junk1 and u32 junk2 in HSD_AObjInvokeCallBacks, likely as a stack/register-shaping tactic; the diff provides no further explanation.",
+    "Updated direct branches and lis/addi function-pointer sequences in asm/text_1.s to semantic labels such as HSD_AObjSetFlags@ha/@l.",
+    "Renamed func_8036A99C to HSD_FObjRemoveAll and updated its recursive call, avoiding mixed old/new symbol names inside the same routine."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "Cleverking2003",
+      "state": "CHANGES_REQUESTED",
+      "submitted_at": "2020-07-05T16:22:48Z",
+      "feedback": "EOF newlines!!!!"
+    },
+    {
+      "reviewer": "Cleverking2003",
+      "state": "APPROVED",
+      "submitted_at": "2020-07-07T16:05:40Z",
+      "feedback": ""
+    }
+  ],
+  "searchable_terms": [
+    "pr-17",
+    "PsiLupan",
+    "aobj.c matching conversions",
+    "HSD_AObjInitAllocData",
+    "HSD_AObjGetAllocData",
+    "HSD_AObjGetFlags",
+    "HSD_AObjSetFlags",
+    "HSD_AObjClearFlags",
+    "HSD_AObjSetFObj",
+    "HSD_AObjInitEndCallBack",
+    "HSD_AObjInvokeCallBacks",
+    "HSD_FObjRemoveAll",
+    "HSD_ZListInitAllocData",
+    "HSD_AObj",
+    "HSD_AObjDesc",
+    "HSD_AnimJoint",
+    "HSD_FObj",
+    "HSD_FObjDesc",
+    "HSD_SList",
+    "HSD_ZList",
+    "AOBJ_LOOP",
+    "AOBJ_NO_UPDATE",
+    "aobj_asm.s",
+    "displayfunc_asm.s",
+    "NON_MATCHING",
+    "force_active",
+    "optimization_level 2",
+    "ldscript.lcf",
+    "EOF newlines"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that completed or replaced the HSD_AObjSetFObj NON_MATCHING inline asm conversion.",
+    "Search for HSD_AObjInitEndCallBack spelling in later history to see whether CallBack capitalization was preserved or renamed.",
+    "Look for later commits moving HSD_FObjRemoveAll prototype from include/functions.h into src/sysdolphin/fobj.h.",
+    "Compare later aobj.h layouts against this PR's HSD_AObj, HSD_AObjDesc, and HSD_AnimJoint definitions.",
+    "Check whether HSD_ZList was later moved from displayfunc.c into a public/private header."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

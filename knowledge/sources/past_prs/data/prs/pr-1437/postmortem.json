@@ -1,0 +1,149 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1437",
+  "pr": {
+    "number": 1437,
+    "title": "Match Dolphin's hio based on changes from Dec 2001 SDK",
+    "url": "https://github.com/doldecomp/melee/pull/1437",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-08-17T19:50:33Z",
+    "merged_at": "2024-08-17T19:56:05Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Replaced the remaining Dolphin HIO assembly implementation with a matching C translation based on later SDK behavior, specifically described as closer to the Dec 2001 SDK than the Revo/May 2001 source. The PR deleted asm/dolphin/hio/hio.s, added src/dolphin/hio/hio.c and src/dolphin/hio/hio.h, and updated build metadata so hio.c is compiled as a matching object with the EPI compiler path.",
+  "change_classification": {
+    "primary_type": "assembly-to-C decompilation match",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "build-configuration",
+      "SDK-source-reconciliation"
+    ],
+    "systems": [
+      "dolphin/hio",
+      "dolphin/exi",
+      "dolphin/os",
+      "asm",
+      "Makefile",
+      "configure.py",
+      "obj_files.mk"
+    ]
+  },
+  "key_files": [
+    "asm/dolphin/hio/hio.s",
+    "src/dolphin/hio/hio.c",
+    "src/dolphin/hio/hio.h",
+    "configure.py",
+    "obj_files.mk",
+    "Makefile"
+  ],
+  "what_changed": [
+    "Deleted the 948-line hand-assembly file asm/dolphin/hio/hio.s.",
+    "Added a 335-line C implementation for Dolphin HIO in src/dolphin/hio/hio.c.",
+    "Added src/dolphin/hio/hio.h with HIOCallback and HIOEnumCallback typedefs plus public prototypes for HIOEnumDevices, HIOInit, HIOReadMailbox, HIOWriteMailbox, HIORead, HIOWrite, HIOReadAsync, HIOWriteAsync, and HIOReadStatus.",
+    "Implemented static HIO state and handlers in C: Chan, Dev, ExiCallback, TxCallback, RxCallback, ExtHandler, ExiHandler, DbgHandler, TxHandler, and RxHandler.",
+    "Rewired obj_files.mk from asm/dolphin/hio/hio.s.o to src/dolphin/hio/hio.c.o.",
+    "Changed configure.py so the hio object is marked Object(Matching, \"dolphin/hio/hio.c\") instead of Object(NonMatching, \"dolphin/hio/hio.c\"), and changed the containing entry from DolphinLib to Lib.",
+    "Added a Makefile rule to compile src/dolphin/hio/*.c with CC_EPI, matching nearby Dolphin subsystems such as card and pad."
+  ],
+  "smart_moves": [
+    "Used SDK version selection as a matching tactic: the author explicitly avoided relying on May 2001/Revo HIO because it did not come close to Melee, and instead used material closer to Dec 2001 SDK behavior.",
+    "Kept hardware-facing control flow explicit in C: EXIProbeEx polling loops, EXILock/EXISelect/EXIImm/EXISync/EXIDeselect sequences, and early failure cleanup paths mirror the deleted assembly structure.",
+    "Used an accumulated error variable with err |= !EXI... calls, which is a compact way to model the assembly's repeated booleanization of return values and final success/failure return.",
+    "Preserved callback separation between EXI, TX, and RX paths with static function pointers and small trampoline handlers, matching the original assembly organization.",
+    "Handled the debug interrupt path separately through DbgHandler using __PIRegs[0] = 0x1000, OSClearContext, OSSetCurrentContext, __OSSetInterruptHandler, and __OSUnmaskInterrupts, instead of flattening it into the regular EXI callback path.",
+    "Updated all build lists at once: compiler selection, configure object status, and obj_files.mk object routing were changed together so the new C file actually replaces the old assembly in the matching build."
+  ],
+  "decomp_lessons": [
+    "For Dolphin SDK code, the closest available SDK drop may not be the newest or most obvious source; compare SDK date behavior against Melee before porting names or structure.",
+    "When replacing an asm object, update both the object list and the configure metadata; otherwise a C file can exist without actually replacing the assembly in the linked text section.",
+    "Small SDK libraries may require the same compiler override as nearby Dolphin code. Here src/dolphin/hio/*.c was explicitly assigned CC_EPI in the Makefile.",
+    "Hardware protocol functions often match better when command constants and transfer sizes are left visible: examples in this PR include 0x60000000 for mailbox read, 0xC0000000 for mailbox write, 0x20000000 for HIO read, 0xA0000000 for HIO write, and 0x40000000 for status read.",
+    "Empty do-while polling loops can be necessary to recover assembly shape for EXI readiness checks, as shown by repeated `do { } while (EXIProbeEx(...) == 0);` patterns.",
+    "Callback typedefs in the local header made the HIO public API readable while keeping the handler globals static to the C file."
+  ],
+  "naming_conventions": [
+    "Public HIO APIs use the Dolphin SDK-style HIO prefix and UpperCamelCase function names: HIOInit, HIOReadMailbox, HIOWriteMailbox, HIOReadAsync, HIOWriteAsync.",
+    "Internal interrupt and transfer handlers use short descriptive UpperCamelCase names matching the old assembly symbols: ExtHandler, ExiHandler, DbgHandler, TxHandler, RxHandler.",
+    "Static state names mirror the assembly globals and SDK style rather than project-local snake_case: Chan, Dev, ExiCallback, TxCallback, RxCallback.",
+    "The header typedef names are SDK-style: HIOCallback for void callbacks and HIOEnumCallback for enumeration callbacks taking an s32 channel.",
+    "The new header uses the guard token _DOLPHIN_HIO_H_ and exposes a macro `HIO_DEV Dev`; the dump does not show review discussion explaining this macro."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted branch-heavy assembly into straightforward early returns and cleanup blocks while preserving EXI call order.",
+    "Used boolean returns as 0/1 rather than C99 true/false literals, consistent with the generated code style in the diff.",
+    "Used explicit unsigned comparisons/constants such as `__OSGetDIConfig() == 0xFFU`, `id != 0x1010000`, and `(u32)(id + 0xFEFF0000) == 0U` to model original compare/addis behavior.",
+    "Used `err |= !function_call` accumulation to match repeated failure aggregation across EXIImm, EXISync, EXIDma, EXIDeselect, and final `return !err` patterns.",
+    "Preserved asynchronous transfer shape by leaving EXIDeselect and EXIUnlock to TxHandler/RxHandler after EXIDma callbacks rather than doing synchronous cleanup.",
+    "Marked hio.c as Matching in configure.py only after replacing the assembly object, providing evidence the new source matched sufficiently for the project."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "ribbanya",
+      "state": "APPROVED",
+      "feedback": "Reviewer approved and said: 'Not saying it needs to be done in this PR, but I just wanted to make sure you're aware of #1409. Nice work.'"
+    },
+    {
+      "author": "PsiLupan",
+      "response": "Author replied they were aware of #1409 and chose existing Revo-provided material cautiously because Revo HIO was May 2001 and did not come close to matching; Melee appeared closer to Dec 2001, possibly an intermediate Nov 2001 SDK."
+    }
+  ],
+  "searchable_terms": [
+    "PR1437",
+    "PsiLupan",
+    "ribbanya",
+    "Dolphin HIO",
+    "hio.c",
+    "hio.h",
+    "asm/dolphin/hio/hio.s",
+    "Dec 2001 SDK",
+    "May 2001 SDK",
+    "Revo",
+    "HIOEnumDevices",
+    "HIOInit",
+    "HIOReadMailbox",
+    "HIOWriteMailbox",
+    "HIORead",
+    "HIOWrite",
+    "HIOReadAsync",
+    "HIOWriteAsync",
+    "HIOReadStatus",
+    "ExtHandler",
+    "ExiHandler",
+    "DbgHandler",
+    "TxHandler",
+    "RxHandler",
+    "EXIProbeEx",
+    "EXIGetID",
+    "EXIAttach",
+    "EXILock",
+    "EXISelect",
+    "EXIImm",
+    "EXISync",
+    "EXIDma",
+    "EXIDeselect",
+    "EXIUnlock",
+    "__OSGetDIConfig",
+    "__OSSetInterruptHandler",
+    "__OSUnmaskInterrupts",
+    "CC_EPI",
+    "Object Matching",
+    "DolphinLib to Lib"
+  ],
+  "follow_up_queries": [
+    "Compare PR #1409 against PR #1437 to understand overlapping Dolphin HIO or SDK-source work.",
+    "Search for other Dolphin SDK files where May 2001 source does not match Melee but Dec 2001 or intermediate SDK behavior does.",
+    "Check whether other src/dolphin subdirectories require CC_EPI overrides when assembly is replaced with matching C.",
+    "Audit HIO header conventions, especially the _DOLPHIN_HIO_H_ guard and HIO_DEV macro, if later HIO work touches public includes."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

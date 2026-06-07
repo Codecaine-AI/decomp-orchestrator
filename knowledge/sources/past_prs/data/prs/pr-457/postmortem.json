@@ -1,0 +1,151 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-457",
+  "pr": {
+    "number": 457,
+    "title": "Match `mpcoll`, ongoing",
+    "url": "https://github.com/doldecomp/melee/pull/457",
+    "state": "MERGED",
+    "author": "BR-",
+    "created_at": "2022-08-12T19:26:21Z",
+    "merged_at": "2022-08-23T10:51:04Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Moved a substantial first slice of map/platform collision (`mpcoll`) from assembly into C by adding `src/melee/mp/mpcoll.c` and `src/melee/mp/mpcoll.h`, wiring the new C object into `obj_files.mk`, and deleting a large chunk of matching text from `asm/melee/mp/mpcoll.s`. The PR also promoted `CollData` from a sparse placeholder in `include/common_structs.h` to a more structured definition in `src/melee/ft/fighter.h`, then updated fighter, item, walljump, Ness PK Thunder/Yo-Yo, and other callers to use the new nested ECB and surface-field names. Review evidence is light: one collaborator approval said the slice looked good and that future `mpcoll` work could continue in a new PR.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-layout",
+      "asm-to-c",
+      "collision"
+    ],
+    "systems": [
+      "mp",
+      "fighter",
+      "item",
+      "include",
+      "asm",
+      "build"
+    ]
+  },
+  "key_files": [
+    "src/melee/mp/mpcoll.c",
+    "src/melee/mp/mpcoll.h",
+    "asm/melee/mp/mpcoll.s",
+    "src/melee/ft/fighter.h",
+    "include/common_structs.h",
+    "obj_files.mk",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/chara/ftNess/ftNess_AttackHi4.c",
+    "src/melee/ft/chara/ftNess/ftNess_SpecialHi.c",
+    "src/melee/ft/ftwalljump.c",
+    "src/melee/it/item.c",
+    "src/melee/it/item2.c"
+  ],
+  "what_changed": [
+    "Added `src/melee/mp/mpcoll.c` with 1204 lines of C for the early `mpcoll` function range, including `func_80041C78`, `func_80041C8C`, `func_80041DD0`, `func_80041EE4`, `func_80042078`, `func_8004220C`, and later helpers through the visible `func_80043C6C` range.",
+    "Removed about 2674 lines from `asm/melee/mp/mpcoll.s`, leaving the C object to provide the matched functions while keeping remaining unmatched assembly in the build.",
+    "Added `$(BUILD_DIR)/src/melee/mp/mpcoll.c.o` before `asm/melee/mp/mpcoll.s.o` in `obj_files.mk`.",
+    "Added a minimal `src/melee/mp/mpcoll.h` that includes `global.h`, `types.h`, and `melee/ft/fighter.h`.",
+    "Deleted the old sparse `CollData` placeholder from `include/common_structs.h` and introduced a richer `CollData` layout in `src/melee/ft/fighter.h` with `ftECB`, `ECBFlagStruct`, and `SurfaceData` helper structs.",
+    "Renamed many direct collision offsets to structured fields, for example `x154_groundNormal` became `x14C_ground.normal`, `x160_rightwall_index` became `x160_rightwall.index`, `x174_leftwall_index` became `x174_leftwall.index`, and old ECB point offsets became `xA4_ecbCurrCorrect.left/right/top/bottom`.",
+    "Updated consumers in fighter, item, walljump, Ness, Fox, Mario, Luigi, Mewtwo, Zelda, and common fighter code to compile against the new `CollData` shape.",
+    "Added or preserved matching-oriented comments in new C, including decomp.me scratch links and notes such as `TODO: proper signatures, mplib.h`, `TODO: float order hack`, and uncertainty about a likely substruct at `CollData.x104`."
+  ],
+  "smart_moves": [
+    "Kept the PR as an incremental `mpcoll` slice: only part of `mpcoll.s` was removed, and the reviewer explicitly suggested future `mpcoll` work continue in a new PR.",
+    "Introduced named helper structs (`ftECB`, `ECBFlagStruct`, `SurfaceData`) instead of continuing to spread raw `CollData` offsets through every caller.",
+    "Grouped related surface data as `index`, `unk`, and `normal`, which made call sites more self-documenting without pretending all fields were fully understood.",
+    "Used nested ECB names like `xA4_ecbCurrCorrect.left.x` and `x14C_ground.normal.y`, preserving offset-based prefixes while improving semantic readability.",
+    "Kept uncertainty visible in comments rather than over-naming unknown fields, e.g. marking `x104` as a suspected substruct and leaving several external `mplib` signatures as TODOs.",
+    "Used small inline helpers in matching-sensitive code, such as `clamp_above`, `clamp_below`, `update_min_max`, `Vec2_Interpolate`, and Ness Yo-Yo `push_ecb`, to express repeated assembly patterns while preserving match behavior.",
+    "Carried original debug strings and assertion behavior into C for `mpCollPrev`, including `OSReport` paths, line numbers, and `__assert(\"mpcoll.c\", 228, \"0\")`."
+  ],
+  "decomp_lessons": [
+    "For large shared structs, moving from filler fields to nested semantic substructures can unlock many downstream matches, but should retain offset prefixes until names are certain.",
+    "When a collision struct is used across fighter, item, and map systems, expect a decomp slice to require broad call-site churn even if the primary target is one assembly file.",
+    "Partially known fields should be named by observed role (`ground`, `rightwall`, `leftwall`, `ceiling`, `normal`, `index`) and left as `unk` where evidence is insufficient.",
+    "Matching `mpcoll` required preserving low-level float constants and ordering, evidenced by comments like `TODO: float order hack` and constants such as `lbl_804D7F9C = -FLT_MAX` and `lbl_804D7FA0 = FLT_MAX`.",
+    "Inline helper functions are useful for matching repeated min/max and state-push logic, but comments should document when an inline is inferred rather than confirmed.",
+    "Adding the C object before the remaining asm object in `obj_files.mk` is the standard pattern for gradually replacing assembly functions with matched C."
+  ],
+  "naming_conventions": [
+    "Struct fields keep offset-prefixed names while adding semantics: `x14C_ground`, `x160_rightwall`, `x174_leftwall`, `x188_ceiling`.",
+    "Surface data fields use `.index`, `.unk`, and `.normal` under a `SurfaceData` wrapper.",
+    "ECB point data is expressed as `ftECB` with `.top`, `.bottom`, `.right`, and `.left` `Vec2` members.",
+    "Collision ECB snapshots are named by offset and role, including `x64_ecb`, `x84_ecb`, `xA4_ecbCurrCorrect`, `xC4_ecb`, and `xE4_ecb`.",
+    "Bitfield wrapper `ECBFlagStruct` exposes both `.bits` and `.raw`, with bit names still provisional (`b0`, `b1234`, `b5`, `b6`, `b7`).",
+    "Function symbols remain address-style `func_8004xxxx` names because this PR did not establish final names for most `mpcoll` routines."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced matched assembly functions by adding C implementations and deleting corresponding blocks from `asm/melee/mp/mpcoll.s` rather than rewriting the whole file at once.",
+    "Preserved decomp.me scratch URLs beside many new functions to document match provenance.",
+    "Used explicit constants and globals (`lbl_804D64A0`, `lbl_804D64A4`, `lbl_804D64A8`, `lbl_804D64AC`, `lbl_804D7F9C`, `lbl_804D7FA0`) when final variable names or placement were not yet known.",
+    "Used inlines for clamp/min/max behavior and vector interpolation to steer generated code toward the original assembly.",
+    "Matched debug/error paths in `func_80041C8C` with original `OSReport` strings, `g_debugLevel` checks, and `__assert` calls.",
+    "Left unknown external `mplib` calls as provisional declarations in `mpcoll.c` with a TODO for proper signatures."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "type": "issue_comment",
+      "text": "Up to date in BR-#1.",
+      "impact": "Indicates the PR was synchronized with the author's upstream/work-in-progress branch, but gives no technical review details."
+    },
+    {
+      "author": "ribbanya",
+      "type": "approval",
+      "text": "Looks good to me. Future work on `mpcoll` can be done in a new PR imo.",
+      "impact": "Approved the incremental slice and explicitly encouraged splitting additional `mpcoll` work into later PRs."
+    }
+  ],
+  "searchable_terms": [
+    "mpcoll",
+    "mpcoll.c",
+    "mpcoll.s",
+    "CollData",
+    "ftECB",
+    "ECBFlagStruct",
+    "SurfaceData",
+    "x14C_ground",
+    "x160_rightwall",
+    "x174_leftwall",
+    "x188_ceiling",
+    "xA4_ecbCurrCorrect",
+    "x154_groundNormal",
+    "x160_rightwall_index",
+    "x174_leftwall_index",
+    "func_80041C78",
+    "func_80041C8C",
+    "func_80041DD0",
+    "func_80041EE4",
+    "func_80042078",
+    "func_8004220C",
+    "func_800424DC",
+    "func_8004293C",
+    "func_80043C6C",
+    "mpCollPrev",
+    "Ness Yo-Yo",
+    "ftNess_YoyoCheckEnvColl",
+    "ftwalljump",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that continue `mpcoll` after PR #457.",
+    "Search for subsequent renames of `CollData` fields such as `x104`, `x34_flags`, `x35_flags`, and `SurfaceData.unk`.",
+    "Look for PRs that move `CollData` out of `fighter.h` or add a dedicated collision header.",
+    "Compare later `mpcoll.c` revisions for final names of `func_80041EE4`, `func_80042078`, and `func_8004730C`.",
+    "Search for future review comments mentioning `TODO: float order hack` or the `-FLT_MAX` / `FLT_MAX` constants."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

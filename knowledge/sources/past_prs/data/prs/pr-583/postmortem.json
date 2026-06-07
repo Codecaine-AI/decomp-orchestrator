@@ -1,0 +1,143 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-583",
+  "pr": {
+    "number": 583,
+    "title": "Fix context generation and support Linux in `m2ctx`",
+    "url": "https://github.com/doldecomp/melee/pull/583",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2022-10-28T18:18:42Z",
+    "merged_at": "2022-11-01T12:23:37Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Fixed several header/context-generation problems and added Linux support to tools/m2ctx by running the mwcc preprocessing command through wine on Linux. The PR mostly removed duplicate or misplaced declarations, moved toward canonical includes, fixed a global symbol type, made enum values explicit after removing shared AS_FTCOMMON entries from fighter action enums, and corrected a missing return type in mplib.h.",
+  "change_classification": {
+    "primary_type": "tooling_context_fix",
+    "categories": [
+      "fix",
+      "headers",
+      "tooling",
+      "context-generation",
+      "linux-support"
+    ],
+    "systems": [
+      "tooling",
+      "include",
+      "dolphin",
+      "gx",
+      "fighter",
+      "game-mode",
+      "melee-core"
+    ]
+  },
+  "key_files": [
+    "tools/m2ctx/m2ctx.py",
+    "include/MSL.h",
+    "include/stdio.h",
+    "include/string.h",
+    "include/dolphin/os/OSThread.h",
+    "src/dolphin/gx/GXInit.c",
+    "src/dolphin/gx/GX_unknown_001.h",
+    "src/melee/gm/gmmain_lib.h",
+    "src/melee/mp/mplib.h",
+    "src/melee/ft/chara/ftCaptain/ftCaptain.h",
+    "src/melee/ft/chara/ftFox/ftfox.h",
+    "src/melee/ft/chara/ftGameWatch/ftgamewatch.h",
+    "src/melee/ft/chara/ftLuigi/ftluigi.h",
+    "src/melee/ft/chara/ftMario/ftmario.h",
+    "src/melee/ft/chara/ftMewtwo/ftmewtwo.h",
+    "src/melee/ft/chara/ftNess/ftNess.h",
+    "src/melee/ft/chara/ftZelda/ftzelda.h"
+  ],
+  "what_changed": [
+    "Added platform detection to tools/m2ctx/m2ctx.py and prepended `wine` to the mwcc preprocessing command when `platform.system() == 'Linux'`.",
+    "Removed a duplicate or incorrect `sprintf` declaration from include/MSL.h, leaving the typed declaration in include/stdio.h.",
+    "Removed the local `FILE` typedef from include/stdio.h.",
+    "Removed `memcpy` and `memset` declarations from include/string.h.",
+    "Changed `OS_THREAD_QUEUE` in include/dolphin/os/OSThread.h from `OSThreadQueue` to `OSThreadQueue*` while preserving the non-M2CTX address annotation at 0x800000DC.",
+    "Added `#include <dolphin/gx/GXTev.h>` to src/dolphin/gx/GXInit.c.",
+    "Removed many GX TEV-related extern declarations from src/dolphin/gx/GX_unknown_001.h, apparently because they belong in GXTev.h instead of the unknown GX header.",
+    "Changed multiple character-specific fighter action enums so their first character-specific action is explicitly assigned 341, removing the local `AS_FTCOMMON = 340` entry from those enums.",
+    "Converted src/melee/ft/chara/ftZelda/ftzelda.h from `#pragma once` to a conventional include guard `MELEE_FT_CHARA_FTZELDA_FTZELDA_H`.",
+    "In src/melee/gm/gmmain_lib.h, added `#include <common_structs.h>` and removed a local `UnkFlagStruct` definition, implying reuse of a shared definition.",
+    "In src/melee/mp/mplib.h, added the missing `BOOL` return type to the `func_800509B8` declaration."
+  ],
+  "smart_moves": [
+    "The Linux support is minimal and targeted: it only wraps the existing mwcc command with `wine` on Linux instead of changing the compiler flags or context-generation pipeline.",
+    "Removing duplicated standard-library declarations from MSL.h, stdio.h, and string.h reduces conflicts during preprocessing and makes generated context more dependent on the intended canonical headers.",
+    "Moving TEV declarations out of GX_unknown_001.h and including GXTev.h in GXInit.c improves header ownership: GX_unknown_001.h stays narrower while GXInit.c still sees the needed TEV declarations.",
+    "Assigning the first character-specific fighter action to 341 preserves numeric action IDs after removing `AS_FTCOMMON = 340` from individual character enums.",
+    "Replacing a local flag union definition in gmmain_lib.h with an include of common_structs.h avoids duplicate struct/union definitions in generated context."
+  ],
+  "decomp_lessons": [
+    "For m2ctx-generated context, duplicate declarations across project headers can be as harmful as missing declarations; prefer one canonical declaration site and include it where needed.",
+    "When removing shared enum sentinel values such as `AS_FTCOMMON`, explicitly pin the next value if downstream code depends on exact numeric IDs.",
+    "Headers used by context generation should avoid compiler-specific conveniences when they can confuse tooling; conventional include guards are safer than relying on `#pragma once` in some contexts.",
+    "Global address annotations under `#ifndef M2CTX` can coexist with context generation, but the declared type still needs to match the actual symbol shape, as shown by changing `OS_THREAD_QUEUE` to a pointer.",
+    "If a header function prototype lacks a return type, context generation and C parsing can fail or infer the wrong type; fix prototypes even when the underlying function body is not part of the PR."
+  ],
+  "naming_conventions": [
+    "Fighter action enum names use the `AS_<CHARACTER>_<ACTION>` pattern, e.g. `AS_FOX_SPECIALN_START`, `AS_MARIO_UNK1`, and `AS_NESS_ATTACKS4`.",
+    "The removed shared fighter action enum entry was named `AS_FTCOMMON`; this PR avoided redefining it inside character-specific enums.",
+    "Zelda's include guard was named from the path in uppercase: `MELEE_FT_CHARA_FTZELDA_FTZELDA_H`.",
+    "Dolphin GX headers are split by subsystem names such as `GXAttr.h`, `GXGeometry.h`, `GXLight.h`, `GXTev.h`, `GXTransform.h`, and `GX_unknown_001.h`."
+  ],
+  "assembly_or_matching_tactics": [
+    "No direct assembly matching tactic is documented in comments, but the header fixes are context-generation tactics: remove duplicate prototypes, include the correct subsystem header, and make enum values explicit to keep numeric constants stable.",
+    "The `OS_THREAD_QUEUE` declaration retains the fixed address annotation outside M2CTX while hiding it from M2CTX, a useful pattern for symbols that need real addresses in source but valid parseable declarations in generated context.",
+    "Linux support for context generation uses `wine mwcc ... -E` rather than requiring a native mwcc executable."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "m2ctx",
+    "Linux",
+    "wine",
+    "mwcc",
+    "context generation",
+    "platform.system",
+    "M2CTX",
+    "OS_THREAD_QUEUE",
+    "OSThreadQueue",
+    "MSL.h",
+    "stdio.h",
+    "string.h",
+    "sprintf",
+    "FILE",
+    "memcpy",
+    "memset",
+    "GXInit.c",
+    "GXTev.h",
+    "GX_unknown_001.h",
+    "GXSetTevOrder",
+    "GXSetTevOp",
+    "GXSetTevIndirect",
+    "gmmain_lib.h",
+    "common_structs.h",
+    "UnkFlagStruct",
+    "mplib.h",
+    "func_800509B8",
+    "BOOL",
+    "AS_FTCOMMON",
+    "AS_FOX_SPECIALN_START",
+    "AS_MARIO_UNK1",
+    "AS_NESS_ATTACKS4",
+    "ftZelda",
+    "include guard"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that further refactor GX_unknown_001.h into named GX subsystem headers.",
+    "Find PRs that standardize fighter action enum numbering around AS_FTCOMMON and character-specific actions starting at 341.",
+    "Find PRs modifying tools/m2ctx/m2ctx.py for cross-platform preprocessing or mwcc invocation.",
+    "Find PRs that centralize standard-library declarations in include/MSL.h, include/stdio.h, or include/string.h."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

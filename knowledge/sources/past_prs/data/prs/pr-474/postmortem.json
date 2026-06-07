@@ -1,0 +1,117 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-474",
+  "pr": {
+    "number": 474,
+    "title": "Update `frank.py`",
+    "url": "https://github.com/doldecomp/melee/pull/474",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2022-08-21T19:12:00Z",
+    "merged_at": "2022-08-21T19:33:28Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Updated the `tools/frank.py` binary post-processing tool by merging changes from `projectPiki/pikmin#5`. The change replaced a simple removal of the profiling epilogue byte sequence with a peephole rescheduling pass that detects specific instruction reorderings around inserted `bl`/`nop` profiling bytes and restores vanilla instruction ordering before stripping those extra bytes.",
+  "change_classification": {
+    "primary_type": "tooling",
+    "categories": [
+      "tooling",
+      "binary_postprocessing",
+      "matching_support"
+    ],
+    "systems": [
+      "tools",
+      "frank.py"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "tools/frank.py",
+      "role": "updated binary transformation tool; added profile extra byte constant and peephole instruction rescheduling before stripping profiling bytes"
+    }
+  ],
+  "what_changed": [
+    "Added `PROFILE_EXTRA_BYTES` as a named constant for the byte sequence `48 00 00 01 60 00 00 00`, replacing the previous inline literal used by `replace`.",
+    "Inserted a peephole rescheduling loop that scans `profile_bytes` for the profiling byte sequence on 4-byte-aligned boundaries.",
+    "Tracked `shift`, the accumulated size difference between vanilla and profiled code due to inserted profiling bytes, to map profile offsets back to vanilla offsets.",
+    "Compared nearby vanilla and profiled instructions around each profiling sequence to detect schedule swaps involving `lwz`, `li`/`lfs`, and unchanged following instructions.",
+    "When a recognized swap is detected, rewrote `profile_bytes` to use the vanilla instruction order around the profiling bytes.",
+    "Added a second special case for `lwz`/`lmw` reordering where both instructions follow the inserted profiling bytes.",
+    "Changed final stripping to remove `PROFILE_EXTRA_BYTES` after any detected rescheduling has been corrected."
+  ],
+  "smart_moves": [
+    "Named the profiling byte sequence as `PROFILE_EXTRA_BYTES`, making the later scanning and stripping logic less error-prone than duplicating a raw byte literal.",
+    "Performed peephole correction before removing the extra profiling bytes, preserving enough positional context to identify schedule differences around the inserted `bl`/`nop` sequence.",
+    "Used opcode-level checks derived from the first instruction byte shifted by two, avoiding the need for a full PowerPC disassembler while still recognizing relevant instruction classes.",
+    "Required exact byte equality between paired vanilla/profile instructions before rewriting, which limits the transformation to strongly evidenced reorderings.",
+    "Included a 4-byte-alignment check before treating a byte sequence as a profiling marker, reducing the risk of acting on accidental byte matches.",
+    "Maintained a `shift` counter so vanilla/profile offsets remain comparable as each profiling byte sequence accounts for an 8-byte difference.",
+    "Avoided reordering at the apparent end of an epilogue by excluding cases where the following opcode is `ADDI`."
+  ],
+  "decomp_lessons": [
+    "For decompilation support tools that compare vanilla and instrumented binaries, removing injected bytes may not be enough; inserted calls/nops can perturb local instruction scheduling and require targeted normalization.",
+    "Peephole binary rewriting can be sufficient for narrow compiler-scheduling artifacts when the transformation is guarded by exact byte comparisons against the vanilla binary.",
+    "When handling profiled or otherwise modified binaries, explicitly model the byte delta introduced by instrumentation so offsets can be mapped back to the original binary.",
+    "Small, local binary normalization passes should run before destructive stripping steps if the inserted bytes help identify the affected region.",
+    "A narrowly scoped opcode classifier can be an effective compromise between raw byte replacement and full instruction decoding for matching tools."
+  ],
+  "naming_conventions": [
+    "`PROFILE_EXTRA_BYTES` follows the existing uppercase constant style used by `CODESIZE_MAGIC`, `BLR_BYTE_SEQ`, and `MTLR_BYTE_SEQ`.",
+    "Local variables use descriptive snake_case names such as `profile_bytes`, `stripped_bytes`, `epi_pos`, `v_pos`, `vanilla_inst_a`, and `profile_inst_a`.",
+    "Temporary instruction labels `vanilla_inst_a`, `vanilla_inst_b`, and `vanilla_inst_c` mirror the explanatory comment's `(A)`, `(B)`, and following-instruction notation."
+  ],
+  "assembly_or_matching_tactics": [
+    "Detect the inserted profiling epilogue marker with `profile_bytes.find(PROFILE_EXTRA_BYTES, idx)` and require `epi_pos % 4 == 0` for instruction alignment.",
+    "Map profile positions to vanilla positions using `v_pos = epi_pos - shift`, then increment `shift` by 8 for each profiling byte sequence.",
+    "Extract 4-byte PowerPC instructions around the marker from both vanilla and profiled byte arrays and compare them directly.",
+    "Classify opcodes from the first instruction byte using `inst[0] >> 2`; constants include `LWZ`, `LFS`, `ADDI`, `LI`, and `LMW`.",
+    "Recognize a schedule swap where vanilla has `lwz` then `li`/`lfs`, while the profiled code has those two instructions swapped around the inserted profiling bytes.",
+    "Restore vanilla ordering by splicing `profile_bytes` so the `lwz` precedes `PROFILE_EXTRA_BYTES` and the `li`/`lfs` follows it.",
+    "Handle a similar `lwz`/`lmw` reorder case where both affected instructions appear after the inserted profiling bytes.",
+    "Only after peephole correction, strip all occurrences of `PROFILE_EXTRA_BYTES` from `profile_bytes`."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-474",
+    "Update frank.py",
+    "ribbanya",
+    "tools/frank.py",
+    "frank.py",
+    "projectPiki/pikmin#5",
+    "PROFILE_EXTRA_BYTES",
+    "CODESIZE_MAGIC",
+    "BLR_BYTE_SEQ",
+    "MTLR_BYTE_SEQ",
+    "profile_bytes",
+    "stripped_bytes",
+    "peephole rescheduling",
+    "profile epilogue",
+    "bl nop",
+    "lwz",
+    "li",
+    "lfs",
+    "lmw",
+    "addi",
+    "opcode_a",
+    "opcode_b",
+    "opcode_c",
+    "instruction scheduling",
+    "binary normalization",
+    "matching tool"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify `tools/frank.py` peephole rescheduling or `PROFILE_EXTRA_BYTES` handling.",
+    "Search for references to `projectPiki/pikmin#5` to understand the upstream source of the matching workaround.",
+    "Look for PRs discussing profiled binary stripping, `bl`/`nop` insertion, or instruction schedule normalization.",
+    "Check whether later tooling replaced this raw-byte peephole logic with a more general PowerPC instruction decoder."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

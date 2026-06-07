@@ -1,0 +1,148 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-49",
+  "pr": {
+    "number": 49,
+    "title": "Convert some simple .s files to .c, match more of FObj, remove some incbin to deal with pointers",
+    "url": "https://github.com/doldecomp/melee/pull/49",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2020-08-11T11:29:30Z",
+    "merged_at": "2020-08-11T11:45:38Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Converted several small runtime/MSL assembly files into C, moved __mem into src/runtime, expanded source/include search paths, matched or partially integrated more SysDolphin FObj code, and replaced selected data incbins with explicit pointer/data declarations so symbols could be referenced directly. The PR also renamed formerly address-based calls in assembly to known symbols such as srand, rand, HSD_FObjSetState, and HSD_FObjGetState.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c-conversion",
+      "headers",
+      "build-system",
+      "data-symbolization",
+      "symbol-renaming"
+    ],
+    "systems": [
+      "MSL",
+      "runtime",
+      "PPC_EABI",
+      "SysDolphin FObj",
+      "asm",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/fobj.c",
+    "asm/fobj_asm.s",
+    "src/MSL/rand.c",
+    "src/MSL/rand.h",
+    "src/MSL/PPC_EABI/critical_regions.gamecube.c",
+    "src/runtime/__init_cpp_exceptions.c",
+    "src/runtime/__mem.c",
+    "src/runtime/__mem.h",
+    "asm/data.s",
+    "asm/CARD.s",
+    "obj_files.mk",
+    "Makefile"
+  ],
+  "what_changed": [
+    "Deleted asm/rand.s and replaced it with src/MSL/rand.c plus src/MSL/rand.h. The implementation exposes srand(u32 seed) and rand(void), using lbl_804D5B50 as the global seed and the standard linear congruential update seed * 1103515245 + 12345, returning (seed >> 16) & 0x7FFF.",
+    "Deleted asm/critical_regions.gamecube.s and replaced it with src/MSL/PPC_EABI/critical_regions.gamecube.c containing a no-op __kill_critical_regions function.",
+    "Deleted asm/__init_cpp_exceptions.s and replaced it with src/runtime/__init_cpp_exceptions.c. GetR2 and __init_cpp_exceptions remained inline asm, while __fini_cpp_exceptions was expressed in C. A comment notes __init_cpp_exceptions was left as asm because lbl_80005918 is in extabindex and caused an incompatible-section error.",
+    "Renamed src/__mem.c and src/__mem.h into src/runtime/__mem.c and src/runtime/__mem.h with 100% similarity, and updated obj_files.mk linker paths accordingly.",
+    "Updated Makefile SRC_DIRS from only src and src/sysdolphin to include src/msl, src/msl/ppc_eabi, src/runtime, and src/sysdolphin. INCLUDES was similarly expanded for new source subdirectories.",
+    "Updated obj_files.mk to link new C object paths instead of assembly objects for __init_cpp_exceptions, critical_regions.gamecube, rand, and the moved __mem object.",
+    "In asm/CARD.s, changed calls from func_803257BC and func_803257C4 to the newly identified srand and rand symbols.",
+    "In asm/fobj_asm.s, removed the assembly bodies for HSD_FObjRemoveAll, func_8036AA44, and func_8036AA64 from the standalone asm file, and relabeled remaining calls to func_8036AA44/func_8036AA64 as HSD_FObjSetState/HSD_FObjGetState.",
+    "In src/sysdolphin/fobj.c, added HSD_FObjRemoveAll with a NON_MATCHING C version and a matching inline-asm fallback. Also simplified HSD_FObjRemove's null check from fobj == NULL to !fobj.",
+    "Expanded asm/data.s by replacing incbin ranges near lbl_804003A0/lbl_80400430 with explicit .4byte, .byte, .balign, and global label declarations, including references to __read_console, __write_console, func_80325F18, and self-referential labels such as lbl_8040043C, lbl_80400484, and lbl_804004CC."
+  ],
+  "smart_moves": [
+    "Kept linker order stable by replacing object paths in obj_files.mk rather than only adding new source files. This is important for decomp work where matching depends on exact section/object ordering.",
+    "Moved small, simple library/runtime routines out of raw assembly first. rand, srand, and __kill_critical_regions were straightforward wins that reduced asm surface area with low matching risk.",
+    "Used explicit data declarations in asm/data.s instead of opaque incbins so pointer references to runtime console I/O functions and self-referential structures could resolve by symbol.",
+    "Preserved hard-to-match or section-sensitive routines as inline asm inside C files. __init_cpp_exceptions stayed inline asm due to the extabindex section issue, and HSD_FObjRemoveAll had a NON_MATCHING C attempt guarded by a matching asm fallback.",
+    "Renamed call sites in existing assembly to meaningful symbols once C replacements existed, making later decompilation and cross-reference work easier without changing behavior."
+  ],
+  "decomp_lessons": [
+    "When an asm function is simple and has known library semantics, convert it to C and immediately update assembly call sites to the canonical function names; this improves symbol knowledge across the project.",
+    "Removing incbins is not just cleanup: explicit .4byte pointer entries allow the linker and future C code to refer to actual symbols rather than anonymous blob offsets.",
+    "For section-sensitive runtime code, partial C conversion is acceptable. A file can contain C functions plus inline asm for routines blocked by extab/extabindex or small-data relocation constraints.",
+    "Build-system updates must accompany directory reorganizations. Adding src/msl, src/msl/ppc_eabi, and src/runtime to SRC_DIRS/INCLUDES and updating obj_files.mk kept the new source layout linkable.",
+    "NON_MATCHING blocks can document the intended C structure while retaining an inline asm implementation for the matching build."
+  ],
+  "naming_conventions": [
+    "MSL random functions were promoted from func_803257BC/func_803257C4 to standard names srand and rand.",
+    "FObj state helpers were promoted from func_8036AA44 and func_8036AA64 to HSD_FObjSetState and HSD_FObjGetState.",
+    "Runtime source files were grouped under src/runtime, while MSL/PPC_EABI files used src/MSL and src/MSL/PPC_EABI paths in the diff; the Makefile excerpt added lowercase src/msl and src/msl/ppc_eabi search paths, reflecting a case/path convention issue worth checking on case-sensitive systems.",
+    "Remaining unknown data labels stayed address-style, such as lbl_8040043C, lbl_80400484, lbl_804004CC, and lbl_804D5B50, rather than being over-named without strong evidence.",
+    "SysDolphin object functions use HSD_FObj-prefixed names, e.g. HSD_FObjRemoveAll, HSD_FObjRemove, HSD_FObjFree, HSD_FObjSetState, and HSD_FObjGetState."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted leaf/no-op assembly __kill_critical_regions to a trivial C function returning immediately.",
+    "Converted rand.s to C by preserving the exact LCG constants 1103515245 and 12345 and the return mask 0x7FFF, matching the original rlwinm-based behavior.",
+    "Used inline asm with nofralloc for GetR2 and __init_cpp_exceptions to preserve exact prologue/epilogue and small-data/register behavior.",
+    "Kept HSD_FObjRemoveAll's exact assembly under the matching path while retaining a NON_MATCHING C reconstruction for readability and future matching attempts.",
+    "Replaced anonymous incbin bytes with aligned scalar directives and symbol pointers, including explicit NULL entries, .byte fields, self-pointers, and function pointers.",
+    "Updated assembly branch comments/call operands to known function names without otherwise decompiling the surrounding CARD.s and fobj_asm.s code."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR context.",
+    "The only explicit rationale in the diff is a source comment explaining that __init_cpp_exceptions was left as asm because lbl_80005918 is in extabindex and caused an incompatible-section error."
+  ],
+  "searchable_terms": [
+    "PR49",
+    "PsiLupan",
+    "matching_and_pointering",
+    "FObj",
+    "HSD_FObjRemoveAll",
+    "HSD_FObjRemove",
+    "HSD_FObjFree",
+    "HSD_FObjSetState",
+    "HSD_FObjGetState",
+    "func_8036AA44",
+    "func_8036AA64",
+    "rand",
+    "srand",
+    "func_803257BC",
+    "func_803257C4",
+    "lbl_804D5B50",
+    "__init_cpp_exceptions",
+    "__fini_cpp_exceptions",
+    "GetR2",
+    "__register_fragment",
+    "__unregister_fragment",
+    "lbl_80005918",
+    "extabindex",
+    "__kill_critical_regions",
+    "critical_regions.gamecube",
+    "__mem",
+    "src/runtime",
+    "src/MSL",
+    "PPC_EABI",
+    "asm/data.s",
+    "incbin",
+    "__read_console",
+    "__write_console",
+    "func_80325F18",
+    "CARD.s",
+    "obj_files.mk",
+    "Makefile"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match HSD_FObjRemoveAll without inline asm or NON_MATCHING.",
+    "Search for later cleanup of src/MSL versus src/msl path casing in Makefile and obj_files.mk.",
+    "Find PRs that name the lbl_8040043C/lbl_80400484/lbl_804004CC data structures around console I/O.",
+    "Search for later handling of extabindex symbols and __init_cpp_exceptions without inline asm.",
+    "Find later PRs that replace more MSL assembly files with C implementations."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

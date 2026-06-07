@@ -1,0 +1,132 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1013",
+  "pr": {
+    "number": 1013,
+    "title": "Match `grTPeach`",
+    "url": "https://github.com/doldecomp/melee/pull/1013",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-11-19T09:57:04Z",
+    "merged_at": "2023-11-19T10:12:28Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Tournament Peach ground/stage module by replacing `asm/melee/gr/grtpeach.s` with `src/melee/gr/grtpeach.c`, wiring the object list to compile the new C file, adding the public `grtpeach.h` StageData export, and making small header/tooling adjustments needed for matching and context generation. The PR report shows `src/melee/gr/grtpeach.c` at 100.00% with all listed functions matched.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "stage-module",
+      "headers",
+      "build-system",
+      "tooling"
+    ],
+    "systems": [
+      "stage",
+      "ground",
+      "asm",
+      "repo-root",
+      "tooling"
+    ]
+  },
+  "key_files": [
+    "asm/melee/gr/grtpeach.s",
+    "src/melee/gr/grtpeach.c",
+    "src/melee/gr/grtpeach.h",
+    "src/melee/gr/forward.h",
+    "src/melee/gr/types.h",
+    "obj_files.mk",
+    "tools/convert_data.py"
+  ],
+  "what_changed": [
+    "Deleted the 292-line assembly implementation `asm/melee/gr/grtpeach.s`.",
+    "Added a 202-line C implementation `src/melee/gr/grtpeach.c` containing the `grTPeach_802228B4` through `grTPeach_80222B90` functions, the `grTPe_803E90F0` StageCallbacks table, and the `grTPe_803E914C` StageData table.",
+    "Switched `obj_files.mk` from building `$(BUILD_DIR)/asm/melee/gr/grtpeach.s.o` to `$(BUILD_DIR)/src/melee/gr/grtpeach.c.o`.",
+    "Added `src/melee/gr/grtpeach.h` with an extern declaration for `StageData grTPe_803E914C`.",
+    "Expanded `src/melee/gr/forward.h` to include `<baselib/forward.h>` and to define a full `Ground_GObj` layout under `M2CTX`, while typedefing `Ground_GObj` to `HSD_GObj` for normal builds.",
+    "Added explicit field-offset comments to `StageCallbacks` in `src/melee/gr/types.h` without changing its member order or types.",
+    "Changed `tools/convert_data.py`'s `input_glob` from `**/it/items/itsword.s` to `**/grtpeach.s`, apparently to target this module's data conversion workflow."
+  ],
+  "smart_moves": [
+    "Kept the matched C close to the assembly structure: static address-named functions, address comments, direct callback table reconstruction, and simple wrappers for empty/constant-return functions.",
+    "Represented raw data constants as meaningful C initializers where evidence allowed, such as `\"/GrTPe.dat\"`, callback tables, `StageData`, and flag expressions like `(1 << 0) | (1 << 1) | (1 << 2) | (1 << 4) | (1 << 5)`.",
+    "Used existing ground/stage helpers and macros rather than open-coded offsets in the C implementation: `GET_GROUND`, `GET_JOBJ`, `Ground_801C14D0`, `GObj_SetupGXLink`, `grAnime_801C8138`, `Ground_801C2ED0`, and `Ground_801C2FE0`.",
+    "Introduced `Ground_GObj` as an M2CTX-only concrete struct so context generation can see field layout while normal compilation continues using the existing `HSD_GObj` typedef.",
+    "Preserved a matching-sensitive local declaration/order issue with an explicit note in `grTPeach_80222958`: `@todo Can't move below @c callbacks.`"
+  ],
+  "decomp_lessons": [
+    "Stage modules often match cleanly by first reconstructing `StageCallbacks` and `StageData`; their data tables reveal the init callbacks, per-map callbacks, file path string, and function pointer order.",
+    "For ground object code, introducing a context-only typedef/struct can unblock m2ctx and type propagation without forcing a broad runtime type migration.",
+    "Do not assume empty assembly functions are mistakes; in this module several functions intentionally compile to `blr` or constant `return false`/`return true` stubs and are part of the callback table ABI.",
+    "When matching small stage setup functions, bitfield writes can become readable `stage_info` flag assignments if the surrounding struct fields are already known.",
+    "Local declaration placement can affect matching even when semantically equivalent; keep comments documenting such fragile ordering constraints for future cleanup."
+  ],
+  "naming_conventions": [
+    "Functions retained address-based names with the module prefix: `grTPeach_802228B4`, `grTPeach_80222958`, `grTPeach_80222B90`.",
+    "Data symbols use the shorter data prefix seen in the assembly: `grTPe_803E90F0` for the callbacks table and `grTPe_803E914C` for the StageData object.",
+    "The new header uses an address-based include guard, `GALE01_2228B4`, matching common decomp header-guard style in this repository.",
+    "Stage callback fields remain generic `callback0` through `callback3`, with offset comments documenting layout instead of inventing more specific names.",
+    "The context-only ground object alias is named `Ground_GObj`, distinguishing ground-specific use from the underlying `HSD_GObj` type."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted the assembly `.data` callback array into `StageCallbacks grTPe_803E90F0[4]`, preserving NULL entries and the `0xC0000000` flags as `(1 << 30) | (1 << 31)`.",
+    "Converted the stage data block into `StageData grTPe_803E914C`, including the `/GrTPe.dat` string and the callback function pointer order from the assembly.",
+    "Matched `grTPeach_80222958` by indexing the callbacks table, calling `Ground_801C14D0(index)`, clearing `Ground` callbacks at `x8`/`xC`, setting the GX link, conditionally installing callback3, invoking callback0, and registering callback2 as an HSD process.",
+    "Recreated the OSReport failure path with the string `\"%s:%d: couldn t get gobj(id=%d)\\n\"`, source file `\"grtpeach.c\"`, line `195`, and the failed index.",
+    "Used `Ground_GObj*` signatures for stage callbacks while relying on the normal-build typedef to `HSD_GObj` for ABI compatibility.",
+    "Left several no-op and boolean callback functions as minimal C bodies to match `blr`, `li r3,0; blr`, or `li r3,1; blr` assembly patterns."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or formal reviews were present in the PR slice.",
+    "The automated report in the PR body lists `src/melee/gr/grtpeach.c` as 100.00% matched, with every listed function at 100.00%."
+  ],
+  "searchable_terms": [
+    "pr-1013",
+    "Match grTPeach",
+    "ribbanya",
+    "grtpeach",
+    "grTPeach_802228B4",
+    "grTPeach_802228B8",
+    "grTPeach_80222958",
+    "grTPeach_80222A7C",
+    "grTPeach_80222B0C",
+    "grTPeach_80222B90",
+    "grTPe_803E90F0",
+    "grTPe_803E914C",
+    "StageCallbacks",
+    "StageData",
+    "Ground_GObj",
+    "M2CTX",
+    "GET_GROUND",
+    "GET_JOBJ",
+    "Ground_801C14D0",
+    "GObj_SetupGXLink",
+    "grDisplay_801C5DB0",
+    "HSD_GObjProc_8038FD54",
+    "grAnime_801C8138",
+    "Ground_801C2ED0",
+    "Ground_801C2FE0",
+    "grZakoGenerator_801CAE04",
+    "lb_800115F4",
+    "obj_files.mk",
+    "convert_data.py",
+    "asm-to-c",
+    "Tournament Peach"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that reuse `Ground_GObj` or modify the M2CTX definition in `src/melee/gr/forward.h`.",
+    "Check whether `tools/convert_data.py`'s `input_glob` was intentionally committed for `grtpeach.s` or later reverted for another data conversion target.",
+    "Search for other `grT*` stage module matches that use the same `StageCallbacks`/`StageData` reconstruction pattern.",
+    "Look for later renames of `StageCallbacks.callback0` through `callback3` or `Ground` callback fields such as `x8_callback`, `xC_callback`, and `x1C_callback`."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,161 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-444",
+  "pr": {
+    "number": 444,
+    "title": "Match `gx`, pass 13",
+    "url": "https://github.com/doldecomp/melee/pull/444",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2022-08-09T14:13:58Z",
+    "merged_at": "2022-08-09T14:23:15Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Mapped the remaining GX assembly/data declarations across GX*.s to C/header ownership, especially GX.c and gxprivate.h, as part of a broad GX matching pass. The PR body says this completed mapping all GX*.s files to *.c files for both text and data sections, added DOL offsets in declaration margins, used reverse DOL order to clarify dependencies, and prepared headers for m2c context generation. The code changes also cleaned GX private types/prototypes, moved or removed GXMisc.h declarations, added decomp.me scratch links in asm, converted several ignored padding skips into explicit zero data words, and updated obj_files.mk/functions.h formatting or ordering to support matching.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c mapping",
+      "headers",
+      "naming",
+      "tooling",
+      "data-section mapping"
+    ],
+    "systems": [
+      "dolphin/gx",
+      "asm",
+      "include",
+      "src",
+      "build"
+    ]
+  },
+  "key_files": [
+    "asm/dolphin/gx/GX.s",
+    "src/dolphin/gx/GX.c",
+    "asm/dolphin/gx/GXMisc.s",
+    "src/dolphin/gx/GXMisc.c",
+    "asm/dolphin/gx/GXInit.s",
+    "src/dolphin/gx/GXInit.c",
+    "asm/dolphin/gx/GXAttr.s",
+    "src/dolphin/gx/GXAttr.c",
+    "asm/dolphin/gx/GXFifo.s",
+    "src/dolphin/gx/GXFifo.c",
+    "include/dolphin/gx/gxprivate.h",
+    "include/dolphin/gx/GXMisc.h",
+    "include/functions.h",
+    "include/variables.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Completed a GX-wide mapping pass that assigned GX*.s text and data declarations to corresponding *.c files, according to the PR body.",
+    "Added declaration ownership comments in assembly such as `# decl GX.c`, `# decl GXMisc.c`, `# decl gxprivate.h`, and `# decl ignored` around data symbols, jump tables, sbss, sdata, and sdata2 labels.",
+    "Added decomp.me scratch links above selected assembly functions, including `func_80341710`, `GXSetMisc`, `GXSetDrawDone`, `GXWaitDrawDone`, and `GXPixModeSync`.",
+    "Moved or consolidated GX miscellaneous declarations: `include/dolphin/gx/GXMisc.h` was reduced to an empty include guard, while `src/dolphin/gx/GXMisc.c` gained source-side content.",
+    "Updated `gxprivate.h` private GX declarations: several pointer-like fields and prototypes changed from `void *` to `unk_t`, `WGPIPE.ptr` changed to `unk_t`, `GXInitFifoBase` now takes `unk_t` base/end arguments, and `lbl_804D72F0` was declared.",
+    "Adjusted data representation in asm by replacing ignored `.skip 0x4` padding after declared constants with explicit `.4byte 0x00000000` in examples from GXAttr.s and GXInit.s.",
+    "Cleaned global/export handling for some local data labels by removing `.global` on many GX.c-owned constants while retaining it where needed, such as `__GXContexts`.",
+    "Touched `obj_files.mk` heavily, likely to reflect object ordering or source/asm split changes, though the excerpt does not show the exact semantic differences.",
+    "Mass-formatted many prototypes in `include/functions.h` to the style `Type *name` / `Type *param` rather than `Type*`, while preserving existing unknown function declarations."
+  ],
+  "smart_moves": [
+    "The PR separated declaration ownership from matching itself: marking asm labels with `# decl <file>` makes future decomp work searchable and lets contributors identify where each data symbol belongs before all functions are matched.",
+    "Reverse DOL ordering of declarations was explicitly chosen to better illustrate dependencies, which is useful when many unknown GX globals and constants depend on earlier/later sections.",
+    "Keeping scratch decomp.me links directly above assembly functions creates a low-friction handoff for future contributors to continue matching individual functions.",
+    "Optimizing headers for m2c context generation was a practical tactic: it lets automated decompilation start from a context that avoids symbols known to break m2c, then regenerate a more accurate context later.",
+    "Using `unk_t` instead of over-specific `void *` in private GX structures/prototypes avoids falsely asserting pointer semantics while still enabling compilation and m2c context generation.",
+    "Replacing `.skip 0x4` with `.4byte 0x00000000` where the bytes are part of declared data clarifies data shape and helps avoid treating real zero words as anonymous padding."
+  ],
+  "decomp_lessons": [
+    "For large SDK modules like GX, a useful intermediate milestone is full text/data ownership mapping even before all functions are matched.",
+    "Annotate asm with declaration destination comments (`# decl GX.c`, `# decl gxprivate.h`, `# decl ignored`) so later source splits and data migrations are less error-prone.",
+    "Do not over-type unknown private fields too early; `unk_t` can be safer than `void *` when the exact object or pointer provenance is still uncertain.",
+    "Headers used for decomp.me/m2c should sometimes be tuned for context generation separately from final public API cleanliness.",
+    "Real zero data should be modeled as explicit data (`.4byte 0x00000000`) rather than ignored skip padding when it participates in a C declaration or constant layout.",
+    "Jump tables can be intentionally marked ignored in declaration-mapping passes when they are compiler artifacts rather than C-level data declarations.",
+    "Public-looking headers may need to be temporarily emptied or reduced if their declarations are misleading, duplicated, or hostile to matching context generation."
+  ],
+  "naming_conventions": [
+    "Assembly declaration comments used the format `# decl <owner>`, for example `# decl GX.c`, `# decl GXMisc.c`, `# decl gxprivate.h`, and `# decl ignored`.",
+    "Unknown data labels remained address-derived names such as `lbl_804011A4`, `lbl_804D5BC0`, and `lbl_804DE220` when no semantic name was evidenced.",
+    "Unknown functions remained address-derived names such as `func_80341710`, while known SDK functions retained names like `GXSetMisc`, `GXSetDrawDone`, `GXWaitDrawDone`, and `GXPixModeSync`.",
+    "Private GX struct names use double-underscore/internal style such as `__GXFifoObj`, `__GXGPFifo`, and `__GXFifoUnknown`.",
+    "Pointer style in shared prototypes was normalized toward `Type *name` rather than `Type* name`, as shown throughout `include/functions.h`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Added decomp.me scratch URLs immediately above assembly functions to preserve matching work-in-progress and enable contributors to resume from known scratch attempts.",
+    "Used asm-side `# decl` tags to map data labels to source/header owners without necessarily moving all bytes out of asm in the same pass.",
+    "Marked compiler-generated jump tables with `# decl ignored` rather than trying to expose them as source-level globals.",
+    "Converted ambiguous `.skip 0x4` padding into explicit zero words when the bytes aligned with declared data, improving source-data fidelity.",
+    "The PR body provided an msys2 `mwcceppc.exe -EP` preprocessing script for m2c context generation with flags such as `-proc gekko`, `-fp hard`, `-O4,p`, include paths for `include`, `include/dolphin`, `include/dolphin/mtx`, and `src`, plus an optional `-DM2C_CONTEXT` mode.",
+    "The context-generation workflow included postprocessing `char x0[];` into `char x0[0];` and appending definitions for `TRUE`, `FALSE`, `NULL`, `FLT_MAX`, and `assert_line` to make decomp.me/m2c happier.",
+    "The PR body recommended first generating an m2c-friendly context with the extra define, then regenerating a normal context when symbols that break m2c, such as `WGPIPE`, are needed."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The PR body notes that the GX module can be further split and that some existing splits are not on the correct boundary, which is self-identified follow-up rather than reviewer feedback.",
+    "The PR body invited contributors to match individual functions and pointed them to scratch links above functions in the `.s` files."
+  ],
+  "searchable_terms": [
+    "gx",
+    "GX",
+    "Match gx pass 13",
+    "ribbanya",
+    "GX.c",
+    "GX.s",
+    "GXMisc.c",
+    "GXMisc.s",
+    "GXInit.c",
+    "GXInit.s",
+    "GXAttr.c",
+    "GXAttr.s",
+    "GXFifo.c",
+    "GXFifo.s",
+    "gxprivate.h",
+    "GXMisc.h",
+    "WGPIPE",
+    "__GXContexts",
+    "__GXContext",
+    "__GXFifoObj",
+    "GXInitFifoBase",
+    "GXSetMisc",
+    "GXSetDrawDone",
+    "GXWaitDrawDone",
+    "GXPixModeSync",
+    "__GXPEInit",
+    "func_80341710",
+    "lbl_804011A4",
+    "lbl_8040121C",
+    "lbl_804D72F0",
+    "lbl_804D7320",
+    "lbl_804DE220",
+    "jtbl_80401298",
+    "decl GX.c",
+    "decl gxprivate.h",
+    "decl ignored",
+    "m2c context",
+    "decomp.me scratch",
+    "mwcceppc",
+    "M2C_CONTEXT",
+    "unk_t",
+    "data sections",
+    "reverse DOL order",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that split the GX module on more accurate boundaries after PR #444.",
+    "Find later PRs that matched functions with scratch links introduced here, especially GXSetMisc, GXSetDrawDone, GXWaitDrawDone, GXPixModeSync, and func_80341710.",
+    "Search for subsequent replacements of `lbl_804011A4`, `lbl_804D5BC0`, `lbl_804DE220`, and other GX data labels with semantic names.",
+    "Check later changes to `gxprivate.h` to see whether `unk_t` fields in `__GXFifoObj`, `WGPIPE`, and GX FIFO prototypes became concrete pointer or struct types.",
+    "Search for PRs that moved `GXMisc.h` declarations back into a public header or redistributed them after this temporary cleanup."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

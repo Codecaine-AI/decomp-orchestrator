@@ -1,0 +1,159 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-837",
+  "pr": {
+    "number": 837,
+    "title": "Match `ftLk_AttackAir`",
+    "url": "https://github.com/doldecomp/melee/pull/837",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-08T15:06:48Z",
+    "merged_at": "2023-05-08T15:14:08Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched Link's aerial attack helper block by adding `ftLk_AttackAir.c/.h`, naming the down-air callbacks and setup routines, wiring previous assembly callsites to the new symbols, and introducing Link-specific data/motion-var types needed by the C. The PR also split Link down-special assembly into its own `ftLk_SpecialLw.c` object and updated data-conversion output across fighter asm files from raw `.4byte` constants to typed `.float`/`.double` directives. There were no PR body comments or review comments in the slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "fighter-action",
+      "headers",
+      "asm-split",
+      "tooling-data-directives"
+    ],
+    "systems": [
+      "fighter",
+      "ftLink",
+      "ftCommon",
+      "ftcoll",
+      "ftparts",
+      "item",
+      "asm",
+      "tooling"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftLink/ftLk_AttackAir.c",
+    "src/melee/ft/chara/ftLink/ftLk_AttackAir.h",
+    "src/melee/ft/chara/ftLink/ftLk_SpecialLw.c",
+    "src/melee/ft/chara/ftLink/ftLk_SpecialLw.h",
+    "src/melee/ft/chara/ftLink/ftLk_Init.c",
+    "src/melee/ft/chara/ftLink/ftLk_Init.h",
+    "src/melee/ft/chara/ftLink/types.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/ftcoll.c",
+    "src/melee/ft/ftcoll.h",
+    "src/melee/ft/ftparts.c",
+    "src/melee/ft/ftparts.h",
+    "src/melee/it/it_27CF.h",
+    "obj_files.mk",
+    "tools/convert_data.py",
+    "asm/melee/ft/chara/ftLk_Init.s",
+    "asm/melee/ft/ft_0877.s",
+    "asm/melee/it/it_27CF.s"
+  ],
+  "what_changed": [
+    "Added matched C for `ftLk_AttackAir_800EB3BC`, `ftLk_AttackAir_Enter`, and `ftLk_AttackAir_SetupParts`.",
+    "Named and localized Link down-air callbacks as static helpers `lwOnHit`, `lwOnAnim`, and `lwDoAnimHitCapsule` inside `ftLk_AttackAir.c`.",
+    "Replaced old generic Link init header declarations `ftLk_800EB3BC`, `ftLk_800EB42C`, and `ftLk_800EB618` with a dedicated `ftLk_AttackAir.h` interface.",
+    "Updated assembly callsites in `ft_0877.s` and `it_27CF.s` to call the newly named `ftLk_AttackAir_*` symbols.",
+    "Added `ftLk_DatAttrs` with named down-air fields: `attackairlw_hit_vel_y`, `attackairlw_hit_anim_frame_start`, `attackairlw_hit_anim_frame_end`, and `attackairlw_anim_flags[3]`.",
+    "Renamed Link's attribute type usage from `ftLinkAttributes` to `ftLk_DatAttrs` in Link init code and updated the CLink todo comment to reference `ftLk_DatAttrs`.",
+    "Added `union ftLk_MotionVars` with `attackair.lw_frame_start` and inserted it into `struct Fighter` at the `fp+2340` motion-vars union.",
+    "Changed Link on-load logic to populate `attackairlw_hit_anim_frame_end` from `lbMthp_8001E8F8(ftData_80085E50(fp, 72))` before `PUSH_ATTRS(fp, ftLk_DatAttrs)`.",
+    "Moved Link down-special assembly out of `ftLk_Init.s` into a new `ftLk_SpecialLw.c` object, preserving it as MWERKS inline asm rather than fully decompiling it in this PR.",
+    "Added `ftLk_AttackAir.c.o` and `ftLk_SpecialLw.c.o` to `obj_files.mk`.",
+    "Tightened prototypes for helpers used by the matched code, including `ftColl_8007B064(HSD_GObj*, enum_t)`, `ftParts_80074A4C(HSD_GObj*, enum_t, enum_t)`, and declaration of `it_8029DD58`.",
+    "Changed `tools/convert_data.py` input glob from `**/ftPe_*.s` to `**/ft/chara/*.s`, producing many typed `.float` and `.double` replacements in fighter asm data sections."
+  ],
+  "smart_moves": [
+    "Kept the matched attack-air code small and focused while moving still-unmatched down-special code to a separate file; this reduced `ftLk_Init.s` without forcing an unrelated full decomp.",
+    "Introduced Link-specific dat attributes and motion vars before writing behavior code, avoiding magic offsets for the important down-air timing, velocity, and hitbox flag fields.",
+    "Used static local callback names (`lwOnHit`, `lwOnAnim`) for file-private behavior instead of exporting more address-style symbols.",
+    "Preserved matching-sensitive unused stack padding under `#ifdef MUST_MATCH` in the decompiled functions, making the matching tactic explicit without polluting non-matching builds.",
+    "Updated all known callsites to use semantic names (`ftLk_AttackAir_Enter`, `ftLk_AttackAir_SetupParts`) so future callers no longer depend on anonymous `ftLk_800EB...` identifiers.",
+    "Factored repeated hit-capsule restoration into `lwDoAnimHitCapsule`, expressing the three-hitbox loop unrolled as the original required while centralizing the shared `ftColl_8007B064` and `ftColl_8007ABD0` calls.",
+    "Used typed asm data directives (`.float`, `.double`) across fighter data to expose constant intent and support decompilation work that depends on rodata interpretation."
+  ],
+  "decomp_lessons": [
+    "When matching fighter action code, add the corresponding fighter-specific `dat_attrs` and `mv` union fields first; this lets code use names like `fp->mv.lk.attackair.lw_frame_start` instead of brittle offsets.",
+    "A PR can productively combine one matched C file with an object split for adjacent unmatched asm, as long as the build graph and headers clearly reflect which parts are matched and which are still inline asm.",
+    "For action callbacks, semantic local names are useful even when exported entry points retain address suffixes for unknown behavior, e.g. `ftLk_AttackAir_800EB3BC` plus static `lwOnHit`/`lwOnAnim`.",
+    "If a matched function needs non-source-level stack artifacts, guard them with `#ifdef MUST_MATCH` and leave a clear `@todo Unused stack` marker.",
+    "Header cleanup matters for matching: moving declarations from broad init headers into action-specific headers reduces accidental dependencies and makes callsite renames easier to search.",
+    "Typed function prototypes for shared helpers can be required by a match; replacing `UNK_PARAMS` with `HSD_GObj*` and `enum_t` arguments documents what the new C actually passes.",
+    "Changing data conversion scope can create large asm-data churn; future reviewers should distinguish semantic decomp changes from generated `.float`/`.double` directive normalization."
+  ],
+  "naming_conventions": [
+    "`ftLk_AttackAir_*` is used as the module prefix for Link aerial-attack routines.",
+    "Entry-point names may combine a semantic module prefix with an address suffix when behavior is still partially unknown, as in `ftLk_AttackAir_800EB3BC`.",
+    "Fully understood public routines receive semantic names like `ftLk_AttackAir_Enter` and `ftLk_AttackAir_SetupParts`.",
+    "File-local callback helpers use short semantic static names: `lwOnHit`, `lwOnAnim`, `lwDoAnimHitCapsule`.",
+    "Link dat attributes are named `ftLk_DatAttrs`, replacing the older `ftLinkAttributes` typedef.",
+    "Action-specific dat fields use an `attackairlw_` prefix for Link down-air values.",
+    "Link motion vars are exposed through `fp->mv.lk.attackair`, with `lw_frame_start` for the down-air timer."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed the matched `ftLk_AttackAir` assembly from `asm/melee/ft/chara/ftLk_Init.s` and added C object files to `obj_files.mk`.",
+    "Kept `ftLk_SpecialLw` functions as MWERKS inline `asm void` in a new C file, preserving labels/instructions while separating that code from Link init assembly.",
+    "Used `#ifdef MUST_MATCH` dummy stack arrays of 8 and 40 bytes in matched C functions to satisfy stack layout requirements.",
+    "Updated assembly call instructions to reference renamed C symbols without changing call flow, e.g. `bl ftLk_AttackAir_Enter` and `bl ftLk_AttackAir_SetupParts`.",
+    "Converted raw `.4byte` rodata constants in fighter asm to `.float` and `.double` directives, including common constants like `0.0`, `1.0`, `0.5`, `3.0`, and `4503601774854144.0`.",
+    "Adjusted `tools/convert_data.py` to process `**/ft/chara/*.s`, broadening data conversion beyond the previous `**/ftPe_*.s` scope."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review bodies were present in the provided PR slice.",
+    "Because there was no human discussion in the slice, reviewer intent and rationale beyond the diff cannot be inferred."
+  ],
+  "searchable_terms": [
+    "pr-837",
+    "ftLk_AttackAir",
+    "ftLk_AttackAir_800EB3BC",
+    "ftLk_AttackAir_Enter",
+    "ftLk_AttackAir_SetupParts",
+    "ftLk_SpecialLw",
+    "ftLk_DatAttrs",
+    "ftLinkAttributes",
+    "attackairlw_hit_vel_y",
+    "attackairlw_hit_anim_frame_start",
+    "attackairlw_hit_anim_frame_end",
+    "attackairlw_anim_flags",
+    "ftLk_MotionVars",
+    "lw_frame_start",
+    "lwOnHit",
+    "lwOnAnim",
+    "lwDoAnimHitCapsule",
+    "ftColl_8007B1B8",
+    "ftColl_8007AFF8",
+    "ftColl_8007B064",
+    "ftColl_8007ABD0",
+    "ftParts_80074A4C",
+    "ftParts_80074B0C",
+    "it_8029DD58",
+    "it_27CF",
+    "convert_data.py",
+    ".float",
+    ".double",
+    "MUST_MATCH",
+    "PUSH_ATTRS",
+    "COPY_ATTRS",
+    "Fighter_ChangeMotionState",
+    "ftCo_MS_AttackAirLw"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully decompile `ftLk_SpecialLw.c` after this PR's inline-asm split.",
+    "Search for later renames or field refinements of `ftLk_DatAttrs` offsets `xC`, `x10`, `x2C`, `x48`, `xBC`, `xC4`, and `xD8`.",
+    "Check whether `ftColl_8007B064` and `ftParts_80074A4C` prototypes were further typed after this match.",
+    "Look for PRs that reuse `fp->mv.lk.attackair.lw_frame_start` or expand `union ftLk_MotionVars` for other Link actions.",
+    "Audit other PRs around `tools/convert_data.py` to see whether broad `**/ft/chara/*.s` conversion caused or fixed additional rodata matching issues."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

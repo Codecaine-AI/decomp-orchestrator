@@ -1,0 +1,145 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-850",
+  "pr": {
+    "number": 850,
+    "title": "Match `ftCo_AttackLw3`",
+    "url": "https://github.com/doldecomp/melee/pull/850",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-13T22:40:55Z",
+    "merged_at": "2023-05-13T22:47:39Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common fighter down-tilt state `ftCo_AttackLw3` by moving the 0x8008BB44-0x8008BFA4 assembly range into a new C file and wiring it into the build. The PR also renamed several adjacent input-check functions from address-style names to semantic `ftCo_*_CheckInput` names, added shared motion-var/common-data fields needed by the match, introduced a `GUARD(cond)` macro to express early-return IASA chains, and propagated the new names through common attack, wait, Game & Watch, Link, Fox, Samus, and header code. There were no PR body comments or review comments in the slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-renaming",
+      "fighter-state",
+      "build-system"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "attack-input",
+      "GameWatch",
+      "Samus",
+      "asm",
+      "runtime-platform",
+      "obj_files"
+    ]
+  },
+  "key_files": [
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c",
+    "src/melee/ft/chara/ftCommon/ftCo_AttackLw3.h",
+    "src/melee/ft/chara/ftCommon/ftCo_Attack1.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Wait.c",
+    "src/melee/ft/chara/ftCommon/types.h",
+    "src/melee/ft/chara/ftGameWatch/ftGw_AttackLw3.c",
+    "src/melee/ft/ft_0877.h",
+    "src/melee/ft/types.h",
+    "src/Runtime/platform.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Added `src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c` implementing `ftCo_AttackLw3_CheckInput`, `ftCo_AttackLw3_Anim`, `ftCo_AttackLw3_IASA`, `ftCo_AttackLw3_Phys`, and `ftCo_AttackLw3_Coll`.",
+    "Added `src/melee/ft/chara/ftCommon/ftCo_AttackLw3.h` declaring the new down-tilt common action callbacks and check function.",
+    "Removed most of the corresponding assembly from `asm/melee/ft/ft_08A4.s`; the excerpt shows deletion of `ft_8008BB44` through the common AttackLw3 callbacks and retention/renaming of later smash attack input routines.",
+    "Added the new C object to `obj_files.mk` before the remaining `ft_08A4.s.o`, preserving the mixed C/asm object order.",
+    "Renamed address-based prototypes/calls for smash and movement input checks, including `ft_8008BFC4` to `ftCo_AttackS4_CheckInput`, `ft_8008C830` to `ftCo_AttackHi4_CheckInput`, `ft_8008CB44` to `ftCo_AttackLw4_CheckInput`, `ft_800CAED0` to `ftCo_Jump_CheckInput`, `ft_800CA094` to `ftCo_Dash_CheckInput`, `ft_800D5F58` to `ftCo_Squat_CheckInput`, `ft_800C97DC` to `ftCo_Turn_CheckInput`, and `ft_800C9468` to `ftCo_Walk_CheckInput`.",
+    "Rewrote several IASA callback chains to use the new `GUARD(cond)` macro for immediate early returns when an input check succeeds.",
+    "Special-cased Game & Watch in the common down-tilt path: `decideFighter` calls `ftGw_AttackLw3_Enter` for `FTKIND_GAMEWATCH`, otherwise the common `doEnter` path is used.",
+    "Added `ftCommon_MotionVars.attacklw3.x0` at `fp+2340` and expanded `ftCommonData` fields around offsets `+B0` through `+E8`, including `xB0` used as the down-stick threshold.",
+    "Renamed Samus data attributes from `ftSamusAttributes` to `ftSs_DatAttrs` across multiple Samus special files and `ftSamus/types.h`, likely as cleanup required by touched headers/types."
+  ],
+  "smart_moves": [
+    "Kept the new common action in its own `ftCo_AttackLw3.c`/`.h` pair instead of continuing to grow the catch-all `ft_08A4.s`, making future common attack work easier to search and isolate.",
+    "Used semantic names for nearby still-asm input functions, so newly decompiled C could read like behavior (`ftCo_AttackLw4_CheckInput`, `ftCo_Jump_CheckInput`) rather than address plumbing.",
+    "Introduced `GUARD(cond)` to preserve the common decomp pattern of ordered input checks with early exits while reducing deeply nested or long negated boolean expressions.",
+    "Modeled the Game & Watch exception in a small dispatcher (`decideFighter`) rather than duplicating the down-tilt entry logic everywhere.",
+    "Represented the `fp+2340` motion variable as a named union member `mv.co.attacklw3.x0`, improving type locality for a state-specific variable while preserving the offset evidence.",
+    "Used `MUST_MATCH` stack-padding blocks for functions with noted unused stack requirements, showing a matching tactic without forcing fake live logic into normal builds.",
+    "Kept residual unmatched code in asm and renamed labels/functions there where possible, allowing incremental decomp without requiring the whole `ft_08A4` translation unit to match at once."
+  ],
+  "decomp_lessons": [
+    "For common fighter IASA code, preserving input-check order is essential; this PR’s attack IASA chains keep smash attacks, tilts, jab, jump/dash/squat/turn/walk in explicit ordered guard sequences.",
+    "When matching fighter state entry functions, state-specific `cmd_vars`, `mv.co.*` fields, callbacks such as `fp->cb.x21EC_callback`, and `Fighter_ChangeMotionState` flags often need to be named together to make the code line up.",
+    "Character-specific common-action overrides can be handled by switching on `GET_FIGHTER(gobj)->kind`; here Game & Watch down tilt enters `ftGw_AttackLw3_Enter` instead of the generic state.",
+    "Down-tilt input detection used both raw A-button state (`fp->input.x668 & HSD_Pad_A`) and vertical stick thresholds (`fp->input.lstick.y <= p_ftCommonData->xB0` plus `ftCommon_8007D964(fp) < -p_ftCommonData->x20`).",
+    "Light item throw down (`ftCo_MS_LightThrowLw`) is part of the same input path when `fp->item_gobj != NULL` and `ft_80094E54(fp)` succeeds, so attack matching must account for held-item branches.",
+    "Adding common-data field names for offsets consumed by a matched function can be preferable to leaving a filler array, because it reduces casts/magic offsets in the new C.",
+    "Build ordering matters for partial decomp: add the new C object before the remaining assembly object when carving a function range out of an asm file."
+  ],
+  "naming_conventions": [
+    "Common fighter action files follow `ftCo_<Action>.c` and headers follow `ftCo_<Action>.h`, e.g. `ftCo_AttackLw3.c` and `ftCo_AttackLw3.h`.",
+    "Input test helpers are named `ftCo_<Action>_CheckInput`, e.g. `ftCo_AttackLw3_CheckInput`, `ftCo_AttackS4_CheckInput`, `ftCo_Jump_CheckInput`, and `ftCo_Walk_CheckInput`.",
+    "Common action callbacks use suffixes `_Anim`, `_IASA`, `_Phys`, and `_Coll`.",
+    "Fighter kind enum evidence uses `FTKIND_GAMEWATCH` for character-specific dispatch.",
+    "Common motion-state enum evidence includes `ftCo_MS_AttackLw3` and `ftCo_MS_LightThrowLw`.",
+    "Samus data attributes were standardized from `ftSamusAttributes` to `ftSs_DatAttrs` in touched files.",
+    "Unknown but state-local command variable enum used `cmd_var_idx` with `cmd_unk0_bool`; unknown private helpers stayed conservative (`callUnk`, `doEnter`) rather than inventing precise behavior."
+  ],
+  "assembly_or_matching_tactics": [
+    "Carved matched functions out of `asm/melee/ft/ft_08A4.s` while leaving later functions in assembly, a standard partial-translation tactic.",
+    "Used `#ifdef MUST_MATCH` local byte arrays to reproduce unused stack allocation in selected functions without affecting normal non-matching builds.",
+    "Introduced a small fake wrapper marked `/// @todo This is fake.` around `decideFighter(gobj)` to satisfy codegen/control-flow needs in `ftCo_AttackLw3_Anim`.",
+    "Preserved exact early-return behavior with `GUARD(cond)` instead of converting the logic into large combined boolean expressions that are harder to match.",
+    "Kept comments with original addresses in the new header declarations (`/* 08BB44 */`, `/* 08BCFC */`, etc.) for traceability from asm to C.",
+    "Replaced hardcoded float constants from assembly with `NULL`, `0`, and `1` arguments in `Fighter_ChangeMotionState`, relying on platform/types to emit the matching call shape."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review records were present in the provided PR slice.",
+    "No explicit reviewer rationale was available; conclusions are based on title, changed files, and diff evidence only."
+  ],
+  "searchable_terms": [
+    "pr-850",
+    "ftCo_AttackLw3",
+    "ftCo_AttackLw3_CheckInput",
+    "ftCo_AttackLw3_Anim",
+    "ftCo_AttackLw3_IASA",
+    "ftCo_AttackLw3_Phys",
+    "ftCo_AttackLw3_Coll",
+    "ft_8008BB44",
+    "ft_08A4.s",
+    "ftCo_AttackS4_CheckInput",
+    "ftCo_AttackHi4_CheckInput",
+    "ftCo_AttackLw4_CheckInput",
+    "ftCo_Jump_CheckInput",
+    "ftCo_Dash_CheckInput",
+    "ftCo_Squat_CheckInput",
+    "ftCo_Turn_CheckInput",
+    "ftCo_Walk_CheckInput",
+    "ftGw_AttackLw3_Enter",
+    "FTKIND_GAMEWATCH",
+    "ftCo_MS_AttackLw3",
+    "ftCo_MS_LightThrowLw",
+    "Ft_MF_SkipAttackCount",
+    "cmd_vars",
+    "mv.co.attacklw3.x0",
+    "p_ftCommonData->xB0",
+    "GUARD macro",
+    "MUST_MATCH unused stack",
+    "ftSs_DatAttrs",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that remove the fake `wrapper` or rename `callUnk`/`cmd_unk0_bool` in `ftCo_AttackLw3.c`.",
+    "Search for subsequent decomp of remaining `ft_08A4.s` functions after `ftCo_AttackLw3` was carved out.",
+    "Look for PRs that refine `ftCommonData` field names around offsets `xB0` through `xE8`.",
+    "Check whether later reviews standardized use of the global `GUARD(cond)` macro in IASA callbacks.",
+    "Search for follow-up renames of Samus `ftSs_DatAttrs` fields and cleanup of related special-move files."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

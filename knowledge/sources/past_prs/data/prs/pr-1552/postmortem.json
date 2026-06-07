@@ -1,0 +1,123 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1552",
+  "pr": {
+    "number": 1552,
+    "title": "Finish matching run/dash phys functions",
+    "url": "https://github.com/doldecomp/melee/pull/1552",
+    "state": "MERGED",
+    "author": "Giga-Bowser",
+    "created_at": "2025-05-31T19:54:08Z",
+    "merged_at": "2025-06-01T16:32:47Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the remaining common fighter run/dash physics routines in src/melee/ft/ft_0C88.c, adding implementations for ftCo_Dash_Phys, ftCo_Run_Phys, ftCo_RunDirect_Phys, and ftCo_RunBrake_Phys. The PR also refined shared motion-variable layout for dash/run in ftCommon_MotionVars and typed/renamed ftCommonData fields used by the acceleration/friction logic. The decomp.dev report confirmed 4 new matches totaling +460 bytes.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "fighter-physics",
+      "headers",
+      "struct-typing"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "run-dash-movement"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/ft_0C88.c",
+    "src/melee/ft/chara/ftCommon/types.h",
+    "src/melee/ft/types.h"
+  ],
+  "what_changed": [
+    "Added a static inline helper getAccelAndTarget(Fighter* fp, float* accel, float* target_vel) to compute dash/run acceleration and terminal target velocity from input.lstick.x and ftCo_DatAttrs fields dash_run_acceleration_a, dash_run_acceleration_b, and dash_run_terminal_velocity.",
+    "Updated ftCo_TurnRun_Phys to use getAccelAndTarget and the target_vel naming instead of local max_vel calculation; its friction multiplier use changed from p_ftCommonData->x60_turnrunFrictionMul to p_ftCommonData->x60_someFrictionMul.",
+    "Implemented ftCo_Dash_Phys. It checks fp->mv.co.dash.x0 as a one-frame flag, clears it when set, otherwise computes accel/target_vel and calls ftCommon_8007C98C with ground friction scaled by p_ftCommonData->x60_someFrictionMul, then calls ftCommon_8007CB74.",
+    "Implemented ftCo_Run_Phys. It computes accel/target_vel, scales acceleration when current ground velocity is between 0 and target velocity, stores target_vel * p_ftCommonData->x440 into fp->mv.co.run.x4, applies ftCommon_8007C98C, and then calls ftCommon_8007CB74.",
+    "Implemented ftCo_RunDirect_Phys as a non-inlined wrapper around ftCo_Run_Phys using #pragma push, #pragma dont_inline on, and #pragma pop.",
+    "Implemented ftCo_RunBrake_Phys as friction-only ground deceleration via ftCommon_8007C930(fp, p_ftCommonData->x60_someFrictionMul * fp->co_attrs.gr_friction), followed by ftCommon_8007CB74.",
+    "Added ftCommon_MotionVars union members for dash and run: dash.x0 at fp+2340, and run.x4 at fp+2344 with padding.",
+    "Changed ftCommonData field +5C from UNK_T x5C to float x5C, and renamed/retained +60 as float x60_someFrictionMul instead of x60_turnrunFrictionMul."
+  ],
+  "smart_moves": [
+    "Factored the repeated dash/run acceleration and target velocity formula into getAccelAndTarget, reducing duplication across TurnRun, Dash, and Run physics while preserving matching behavior.",
+    "Used pointer out-parameters in the static inline helper, a common decomp tactic when the original compiler's register/stack behavior needs to be shaped without introducing a standalone symbol.",
+    "Kept ftCo_RunDirect_Phys as a tiny wrapper around ftCo_Run_Phys but explicitly prevented inlining, matching the separate 32-byte function reported by decomp.dev.",
+    "Added precise motion-variable union members only where the physics implementations needed them, preserving offsets with padding rather than over-expanding the struct.",
+    "Improved type information for ftCommonData +5C from unknown to float because ftCo_Run_Phys multiplies it into a floating-point acceleration scale."
+  ],
+  "decomp_lessons": [
+    "When several related physics states share the same acceleration formula, a static inline helper can make the C clearer and still match if its call pattern and out-parameter behavior align with the original codegen.",
+    "MotionVars union additions should be anchored to observed fp offsets. Here dash.x0 maps to fp+2340 and run.x4 maps to fp+2344 with explicit padding.",
+    "A function that appears behaviorally identical to another state handler may still need to exist as a separate non-inlined wrapper to match the original binary's function boundaries.",
+    "Renaming a common-data field too narrowly can become misleading as more call sites are matched. The +0x60 multiplier was broadened from turnrun-specific x60_turnrunFrictionMul to x60_someFrictionMul after it was used by Dash, Run, RunBrake, and TurnRun physics.",
+    "Bot match reports are useful evidence for scope: this PR moved ftCo_Run_Phys, ftCo_Dash_Phys, ftCo_RunBrake_Phys, and ftCo_RunDirect_Phys from 0% to 100% in main/melee/ft/ft_0C88."
+  ],
+  "naming_conventions": [
+    "Helper name used lower camel case: getAccelAndTarget.",
+    "Local physics variables use descriptive float names accel and target_vel instead of less precise max_vel.",
+    "Common data unknowns remain offset-based when semantics are incomplete, e.g. x5C and x440; a slightly semantic but still cautious name was used for x60_someFrictionMul.",
+    "ftCommon_MotionVars state-specific fields are nested under state names matching action state terminology: mv.co.dash.x0, mv.co.run.x4, mv.co.turnrun.accel_mul.",
+    "Matched common fighter action-state functions keep the ftCo_<State>_<Callback> pattern, such as ftCo_Dash_Phys, ftCo_Run_Phys, ftCo_RunDirect_Phys, and ftCo_RunBrake_Phys."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used PAD_STACK(1) in ftCo_Dash_Phys, indicating stack-shape padding was needed for matching.",
+    "Used #pragma dont_inline around ftCo_RunDirect_Phys to force a separate wrapper function rather than allowing the compiler to inline ftCo_Run_Phys.",
+    "Introduced a static inline helper rather than a normal helper symbol, likely to share source logic while avoiding an emitted function.",
+    "Preserved branch-sensitive acceleration clamping in ftCo_TurnRun_Phys and sign-sensitive terminal-velocity comparisons using target_vel.",
+    "Used float typing for ftCommonData x5C so arithmetic in ftCo_Run_Phys emits floating-point operations."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided slice.",
+    "decomp-dev[bot] reported GALE01 matched code increased to 27.64% (+0.01%, +460 bytes) with 4 new matches: ftCo_Run_Phys (+208), ftCo_Dash_Phys (+148), ftCo_RunBrake_Phys (+72), and ftCo_RunDirect_Phys (+32), all from 0.00% to 100.00%."
+  ],
+  "searchable_terms": [
+    "PR1552",
+    "Finish matching run/dash phys functions",
+    "Giga-Bowser",
+    "ft_0C88.c",
+    "ftCo_Dash_Phys",
+    "ftCo_Run_Phys",
+    "ftCo_RunDirect_Phys",
+    "ftCo_RunBrake_Phys",
+    "ftCo_TurnRun_Phys",
+    "getAccelAndTarget",
+    "dash_run_acceleration_a",
+    "dash_run_acceleration_b",
+    "dash_run_terminal_velocity",
+    "ftCommon_8007C98C",
+    "ftCommon_8007C930",
+    "ftCommon_8007CB74",
+    "ftCommon_MotionVars",
+    "mv.co.dash.x0",
+    "mv.co.run.x4",
+    "x60_someFrictionMul",
+    "x60_turnrunFrictionMul",
+    "x5C",
+    "x440",
+    "PAD_STACK",
+    "dont_inline",
+    "fighter physics",
+    "run dash physics",
+    "GALE01",
+    "460 bytes"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename ftCommonData x5C, x60_someFrictionMul, or x440 with stronger semantic names.",
+    "Search for other ftCommon_MotionVars dash/run fields to confirm whether dash.x0 and run.x4 were later documented.",
+    "Look for subsequent matches of ftCo_Dash_IASA, ftCo_Run_IASA, ftCo_RunDirect_IASA, or related collision callbacks in ft_0C88.c.",
+    "Search for other uses of getAccelAndTarget or equivalent dash_run_acceleration_a/b formulas in fighter movement code.",
+    "Compare future PRs using #pragma dont_inline wrappers for action-state aliases to reuse the RunDirect matching tactic."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

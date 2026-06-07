@@ -1,0 +1,136 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-200",
+  "pr": {
+    "number": 200,
+    "title": "Split sdata up through fobj",
+    "url": "https://github.com/doldecomp/melee/pull/200",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-17T22:13:04Z",
+    "merged_at": "2021-12-17T22:13:13Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Moved a large monolithic asm/sdata.s block into module-local .sdata sections across many asm files, covering MSL, Dolphin SDK, Melee stage/menu/item/debug text, and sysdolphin baselib files through fobj-related data. The PR also converted a few C-side references from extern small-data labels into real static definitions, notably MSL rand's seed as static next, baselib aobj/dobj string literals, and Runtime fragmentID initialization.",
+  "change_classification": {
+    "primary_type": "small_data_section_split",
+    "categories": [
+      "asm data relocation",
+      "sdata split",
+      "headers",
+      "C static data cleanup",
+      "decompilation infrastructure"
+    ],
+    "systems": [
+      "MSL",
+      "Runtime",
+      "Dolphin SDK",
+      "Melee stage",
+      "Melee menu",
+      "Melee item",
+      "Melee debug",
+      "sysdolphin baselib",
+      "include"
+    ]
+  },
+  "key_files": [
+    "asm/sdata.s",
+    "asm/MSL/printf.s",
+    "asm/MSL/string.s",
+    "asm/dolphin/gx/GXFifo.s",
+    "asm/dolphin/os/OSAlloc.s",
+    "asm/dolphin/os/OSArena.s",
+    "asm/melee/db/code_80225374.s",
+    "asm/melee/it/code_8027CF30.s",
+    "asm/melee/mn/code_8023B0F8.s",
+    "asm/melee/text_4.s",
+    "asm/sysdolphin/baselib/fobj.s",
+    "src/MSL/rand.c",
+    "src/MSL/rand.h",
+    "src/Runtime/__init_cpp_exceptions.c",
+    "src/sysdolphin/baselib/aobj.c",
+    "src/sysdolphin/baselib/dobj.c",
+    "include/variables.h"
+  ],
+  "what_changed": [
+    "Deleted the 3196-line monolithic asm/sdata.s and reintroduced its contents as per-module .section .sdata blocks in 70+ asm files.",
+    "Added module-local small-data labels such as lbl_804D5B48 in asm/MSL/printf.s, lbl_804D5B58 and lbl_804D5B5C in asm/MSL/string.s, and many Dolphin SDK and Melee labels in their owning asm files.",
+    "Preserved named SDK globals where known, including __OSCurrHeap in asm/dolphin/os/OSAlloc.s and __OSArenaLo in asm/dolphin/os/OSArena.s, instead of treating them only as anonymous lbl_ symbols.",
+    "Updated include/variables.h to refer to the rand seed as next instead of lbl_804D5B50.",
+    "Changed src/MSL/rand.c from using an extern u32 lbl_804D5B50 to defining static unsigned long int next = 1, and updated srand/rand signatures to unsigned int and int.",
+    "Removed dolphin/types.h from src/MSL/rand.h because the rand prototypes no longer depend on u32/s32 typedefs.",
+    "Changed src/Runtime/__init_cpp_exceptions.c from extern s32 fragmentID to defining s32 fragmentID = -2.",
+    "Converted baselib aobj.c string label externs into static char arrays for \"aobj.c\", \"new\", and \"obj\".",
+    "Converted baselib dobj.c string label externs into static char arrays for \"dobj.c\", empty string, and \"dobj\", and replaced several uses with string literals or NULL where the diff showed that matched."
+  ],
+  "smart_moves": [
+    "Splitting .sdata into the same asm file as the code/data that references it makes future decompilation units easier to reason about and avoids one giant address-ordered catch-all file.",
+    "The split preserves exact small-data layout details using explicit labels, .4byte values, .byte/.2byte where needed, .asciz strings, .balign 4, and NULL padding.",
+    "Known semantic globals were retained or introduced where evidence was strong, such as __OSCurrHeap, __OSArenaLo, fragmentID, and rand's next seed.",
+    "MSL rand was made more standard-library-like by using a static internal seed named next and standard C-style prototypes, reducing dependence on project typedefs.",
+    "Moving aobj/dobj strings into static definitions reduces unnecessary extern label plumbing and brings C files closer to owning their local string data."
+  ],
+  "decomp_lessons": [
+    "When splitting a monolithic data section, keep the original order and padding exact; small .sdata symbols are sensitive to alignment and SDA addressing.",
+    "Prefer giving real names to small-data globals only when the identity is supported by SDK/library convention or clear source behavior; otherwise keep lbl_804Dxxxx labels.",
+    "String constants that are local to one C translation unit can often be represented as static char arrays or literals rather than extern labels, but size and NUL padding must still match.",
+    "Header cleanup can follow data ownership cleanup: removing dolphin/types.h from rand.h was possible once u32/s32 were replaced by standard int types.",
+    "Splitting sdata by owning module creates better future matching surfaces because each asm or C file carries its own small constants, assertion strings, function pointers, and flags."
+  ],
+  "naming_conventions": [
+    "Unidentified small-data symbols retained address-based names of the form lbl_804Dxxxx.",
+    "Known Dolphin OS globals used SDK-style names with double underscores, e.g. __OSCurrHeap and __OSArenaLo.",
+    "The MSL rand state variable was named next, matching the conventional static seed name for a linear congruential rand implementation.",
+    "Baselib local assertion strings in aobj.c and dobj.c stayed address-label-named as static char arrays where the diff did not introduce more descriptive names."
+  ],
+  "assembly_or_matching_tactics": [
+    "Added .section .sdata blocks directly after existing text/data blocks and before .sbss in many asm files.",
+    "Used .global before labels that must be referenced across translation units or by existing asm.",
+    "Used .asciz plus .balign 4 for short strings such as \"jobj.h\", \"jobj\", \"gobj\", \"dvdfs.c\", \"Pad.c\", and format strings.",
+    "Used explicit NULL padding and zero .4byte entries to preserve layout after strings and pointer slots.",
+    "Represented packed constants directly with .4byte hex values, including byte-pattern tables in GXFifo.s and constants in MSL/string.s.",
+    "Used smaller directives where layout demanded it, e.g. .byte and .2byte in asm/dolphin/mcc/fio.s.",
+    "For C matching, replaced extern small-data labels with static data definitions where the variable/string clearly belonged to the C file."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "sdata",
+    "asm/sdata.s",
+    ".section .sdata",
+    "small data split",
+    "SDA",
+    "lbl_804D5B50",
+    "next",
+    "rand",
+    "srand",
+    "__OSCurrHeap",
+    "__OSArenaLo",
+    "fragmentID",
+    "aobj.c",
+    "dobj.c",
+    "fobj",
+    "GXFifo",
+    "Pad.c",
+    "jobj.h",
+    "jobj",
+    "gobj",
+    "baselib",
+    "MSL",
+    "Dolphin SDK"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that continue splitting .sdata after sysdolphin/baselib/fobj.s.",
+    "Search for remaining extern lbl_804Dxxxx declarations in C files that could become static local data.",
+    "Check whether rand's static next = 1 and fragmentID = -2 matched the final linked .sdata ordering after this split.",
+    "Audit short assertion strings in baselib modules for opportunities to replace extern labels with static arrays or literals."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

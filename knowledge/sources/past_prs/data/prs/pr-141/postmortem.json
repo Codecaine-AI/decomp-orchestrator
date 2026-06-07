@@ -1,0 +1,109 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-141",
+  "pr": {
+    "number": 141,
+    "title": "Handle a bad epilogue case discovered in lbvector",
+    "url": "https://github.com/doldecomp/melee/pull/141",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-03T17:51:03Z",
+    "merged_at": "2021-12-03T19:01:13Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Updated the ELF postprocess tool to recognize and patch an additional bad epilogue scheduling case found while working on lbvector. The existing postprocess logic already repaired separated mtlr/blr and old-stack addi/blr epilogues; this PR adds detection of an lwz followed immediately by an mr before blr and swaps the lwz/mr instructions back into the expected order.",
+  "change_classification": {
+    "primary_type": "tooling",
+    "categories": [
+      "tooling",
+      "postprocess",
+      "binary patching",
+      "matching support"
+    ],
+    "systems": [
+      "tools/postprocess.py",
+      "ELF postprocessing",
+      "lbvector"
+    ]
+  },
+  "key_files": [
+    "tools/postprocess.py"
+  ],
+  "what_changed": [
+    "In impl_postprocess_elf, added tracking variables lwz_pos and mr_pos alongside existing mtlr_pos and addi_pos epilogue tracking.",
+    "Added a new mr_epilogues list storing detected bad epilogue cases as position pairs.",
+    "Extended instruction scanning to detect lwz r0, N(r1) patterns using mask 0xFFFFFF00 == 0x80010000 with a positive immediate byte.",
+    "Added detection for opcode 0x7FE3FB78 immediately after the recorded lwz position, labeled in the diff comment as an mr instruction.",
+    "When a blr is encountered, the postprocess now records lwz/mr epilogue candidates if both lwz_pos and mr_pos were seen.",
+    "Added a patch loop that reads the lwz and mr instructions and writes them back swapped, printing a diagnostic message: \"Patching old lwz/mr epilogue\".",
+    "Removed the previous final assert requiring mtlr_pos to be zero after scanning, likely because the epilogue state handling was broadened and reset at blr boundaries."
+  ],
+  "smart_moves": [
+    "Kept the fix localized to tools/postprocess.py instead of changing generated C or hand-editing assembly, preserving the project workflow where known compiler/codegen quirks are normalized during postprocessing.",
+    "Reused the existing epilogue-detection style: scan instructions, record byte offsets, then apply targeted binary rewrites after detection.",
+    "Restricted the new mr detection to the instruction immediately after lwz via it == lwz_pos + 4, reducing the chance of patching unrelated instruction sequences.",
+    "Used opcode masking for lwz r0, N(r1), allowing the stack offset to vary while still matching the intended instruction family.",
+    "Reset lwz_pos and mr_pos at blr along with mtlr_pos/addi_pos, keeping epilogue candidate state scoped to a single return sequence."
+  ],
+  "decomp_lessons": [
+    "Postprocess tooling may need to handle multiple distinct compiler scheduling artifacts, not just the first discovered mtlr/blr pattern.",
+    "When a bad epilogue pattern appears in one source area such as lbvector, it can be useful to encode the fix as a general binary pattern in tooling so later decompilation work can reuse it.",
+    "Instruction-order fixes can often be implemented as offset-based swaps after a conservative scan, avoiding broader changes to matching code.",
+    "For epilogue matching, tracking positions until blr gives a simple way to identify return-sequence patterns without building a full disassembler.",
+    "Evidence is limited to the title and diff; there were no PR body notes, issue comments, review comments, or reviews in the provided context."
+  ],
+  "naming_conventions": [
+    "New position-tracking locals follow the existing *_pos convention: lwz_pos, mr_pos, mtlr_pos, addi_pos.",
+    "The new list name mr_epilogues mirrors the existing epilogues collection while distinguishing the lwz/mr repair case.",
+    "Patch diagnostics follow the existing imperative style, e.g. \"Patching old lwz/mr epilogue\"."
+  ],
+  "assembly_or_matching_tactics": [
+    "Recognized mtlr via exact opcode 0x7C0803A6 and blr via exact opcode 0x4E800020, preserving existing epilogue reunification behavior.",
+    "Recognized addi r1, r1, 0x18 via exact opcode 0x38210018 for the existing old-stack epilogue path.",
+    "Recognized lwz r0, N(r1) using instr & 0xFFFFFF00 == 0x80010000 and instr & 0xFF > 0, allowing nonzero stack offsets.",
+    "Recognized the target mr instruction by exact opcode 0x7FE3FB78 and required it to appear immediately after the lwz candidate.",
+    "Patched the bad lwz/mr case by reading both instructions from their recorded offsets and writing them back in swapped order.",
+    "The tactic is a narrow post-link binary rewrite, useful for matching compiler output when instruction scheduling differs from desired decompilation output."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-141",
+    "PsiLupan",
+    "bad epilogue",
+    "lbvector",
+    "tools/postprocess.py",
+    "impl_postprocess_elf",
+    "postprocess_elf",
+    "lwz_pos",
+    "mr_pos",
+    "mr_epilogues",
+    "mtlr_pos",
+    "addi_pos",
+    "blr",
+    "lwz/mr epilogue",
+    "Patching old lwz/mr epilogue",
+    "0x7FE3FB78",
+    "0x80010000",
+    "0x4E800020",
+    "0x7C0803A6",
+    "binary patching",
+    "instruction swap",
+    "old stack",
+    "matching tool"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching tools/postprocess.py to see whether the lwz/mr epilogue patch was generalized or corrected.",
+    "Search for lbvector matching PRs around this date to identify the exact function that exposed the bad epilogue case.",
+    "Check whether opcode 0x7FE3FB78 is commented correctly in the final repository and whether future reviewers refined the instruction description.",
+    "Look for other postprocess epilogue patches involving mtlr, blr, lwz, mr, or stack restore patterns."
+  ],
+  "confidence": 0.82,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

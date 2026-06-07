@@ -1,0 +1,119 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1695",
+  "pr": {
+    "number": 1695,
+    "title": "Match lbArchive_80017340, cleanup HSD archive",
+    "url": "https://github.com/doldecomp/melee/pull/1695",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2025-07-16T18:07:12Z",
+    "merged_at": "2025-07-16T18:10:48Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched `lbArchive_80017340` while cleaning up HSD archive parsing/relocation code. The PR changed the relocate routine to take a raw `u8* src` archive buffer instead of an `HSD_ArchiveHeader*`, copied the header from that buffer, computed section pointers using `sizeof(HSD_ArchiveHeader)` and typed archive-info struct sizes, and split relocation application into an inline `Locate` helper. It also replaced magic archive layout constants in `HSD_ArchiveParse` with `sizeof(...)` expressions and adjusted headers/prototypes accordingly.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "cleanup",
+      "decomp-matching",
+      "headers",
+      "archive-layout",
+      "pointer-arithmetic"
+    ],
+    "systems": [
+      "melee/lb",
+      "sysdolphin/baselib",
+      "HSD archive"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/lbarchive.c",
+    "src/melee/lb/lbarchive.h",
+    "src/sysdolphin/baselib/archive.c"
+  ],
+  "what_changed": [
+    "Updated `lbArchive_80017340` signature from `HSD_ArchiveHeader* header` to `u8* src`, reflecting that the function parses from a raw archive byte buffer rather than a header-only pointer.",
+    "Changed header copy in `lbArchive_80017340` from `memcpy(archive, header, sizeof(HSD_ArchiveHeader))` to `memcpy(archive, src, sizeof(HSD_ArchiveHeader))`.",
+    "Recomputed archive section offsets from `src` using `sizeof(HSD_ArchiveHeader)` and typed table sizes for relocation, public, and extern info.",
+    "Changed `archive->symbols` assignment in `lbArchive_80017340` to cast to `char*` from the raw `src` buffer.",
+    "Extracted the relocation loop from `lbArchive_80017340` into an inline helper named `Locate(HSD_Archive* archive, intptr_t base_addr)`.",
+    "Updated `src/melee/lb/lbarchive.h` prototype for `lbArchive_80017340` to accept `u8*`.",
+    "Cleaned formatting of long vararg function declarations and definitions for `lbArchive_80017040`, `lbArchive_800171CC`, and archive section loaders.",
+    "In `HSD_ArchiveParse`, replaced magic layout constants such as `0x20`, `4`, and `8` with `sizeof(HSD_ArchiveHeader)`, `sizeof(HSD_ArchiveRelocationInfo)`, `sizeof(HSD_ArchivePublicInfo)`, and `sizeof(HSD_ArchiveExternInfo)`.",
+    "Formatted `HSD_ArchiveLocateExtern` declaration/definition across lines for style consistency."
+  ],
+  "smart_moves": [
+    "Using `u8* src` made the archive parser/relocator's byte-wise pointer arithmetic explicit and avoided treating the entire input buffer as just an `HSD_ArchiveHeader*`.",
+    "Replacing hardcoded archive layout sizes with `sizeof(...)` made the relationship between binary layout and C structs clearer while preserving the intended offsets.",
+    "Factoring relocation into an inline `Locate` helper likely helped reproduce compiler codegen for the matched `lbArchive_80017340` without changing observable behavior.",
+    "Keeping the byte-order/file-size mismatch guard intact preserved an important validation path while restructuring the parser.",
+    "Typed casts for `HSD_ArchiveRelocationInfo`, `HSD_ArchivePublicInfo`, and `HSD_ArchiveExternInfo` documented which archive table each offset points to."
+  ],
+  "decomp_lessons": [
+    "When matching archive/file parsers, model the source data as a raw byte buffer if the function walks through serialized sections after the header.",
+    "Prefer `sizeof(struct_type)` over known constants in cleanup once the struct layout is trusted; this documents intent and reduces accidental coupling to magic numbers.",
+    "Small inline helper extraction can be a valid matching tactic when the original compiler appears to isolate or reuse a loop shape in a way that affects register allocation or scheduling.",
+    "Keep public header prototypes synchronized immediately when changing parameter types used for matching; mismatched prototypes can obscure real type evidence.",
+    "For serialized binary formats, section offset progression is often the best evidence for table types: header, data body, relocation table, public/root table, extern/xref table, then symbols."
+  ],
+  "naming_conventions": [
+    "The newly introduced helper is named `Locate`, matching the archive relocation concept but notably using a bare capitalized name rather than the surrounding `lbArchive_` prefix; evidence does not show reviewer discussion about this naming choice.",
+    "Existing unresolved functions retain address-style names such as `lbArchive_80017340`, `lbArchive_80017040`, and `lbArchive_800171CC`.",
+    "HSD archive structs use descriptive names like `HSD_ArchiveHeader`, `HSD_ArchiveRelocationInfo`, `HSD_ArchivePublicInfo`, and `HSD_ArchiveExternInfo`.",
+    "Archive fields follow layout-oriented names: `data_size`, `nb_reloc`, `reloc_info`, `nb_public`, `public_info`, `nb_extern`, `extern_info`, and `symbols`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Changed `lbArchive_80017340` parameter typing to `u8* src`, which supports direct byte offsets from the archive buffer and likely better matched the target function's pointer arithmetic.",
+    "Introduced `inline void Locate(HSD_Archive* archive, intptr_t base_addr)` and called it after section pointer setup, isolating the relocation loop `*(intptr_t*) (archive->data + offset) += base_addr`.",
+    "Used local `u32 i` and `u32* ptr` in `Locate`, with `ptr = (u32*) archive->reloc_info[i].offset`, suggesting type choices were part of matching the generated code.",
+    "Replaced `sizeof(*header)` with `sizeof(HSD_ArchiveHeader)` after removing the `header` parameter.",
+    "Moved from `reloc_offset` local in the main function to the helper's pointer-based relocation calculation, which is the central matching-related structural change."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1695",
+    "PsiLupan",
+    "lbArchive_80017340",
+    "lbArchive",
+    "HSD archive",
+    "HSD_ArchiveParse",
+    "HSD_ArchiveHeader",
+    "HSD_ArchiveRelocationInfo",
+    "HSD_ArchivePublicInfo",
+    "HSD_ArchiveExternInfo",
+    "HSD_ArchiveLocateExtern",
+    "lbArchive_LoadArchive",
+    "lbArchive_vLoadSectionsFatal",
+    "lbArchive_vLoadSections",
+    "Locate",
+    "archive relocation",
+    "reloc_info",
+    "public_info",
+    "extern_info",
+    "symbols",
+    "file_size",
+    "data_size",
+    "base_addr",
+    "sizeof(HSD_ArchiveHeader)",
+    "magic constants",
+    "u8 src",
+    "raw archive buffer",
+    "decomp matching"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename or further type `lbArchive_80017340`.",
+    "Search whether the bare `Locate` helper is later made static, renamed, or moved to baselib archive code.",
+    "Compare `lbArchive_80017340` against `HSD_ArchiveParse` to see whether duplicate archive parsing logic can be unified after matching constraints are resolved.",
+    "Audit other HSD archive parsing code for remaining magic constants `0x20`, `4`, or `8` that should become `sizeof(...)`."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

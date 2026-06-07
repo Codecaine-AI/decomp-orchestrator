@@ -1,0 +1,121 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-82",
+  "pr": {
+    "number": 82,
+    "title": "Further incbin cleanup, Pointer fixing",
+    "url": "https://github.com/doldecomp/melee/pull/82",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-09-17T07:06:33Z",
+    "merged_at": "2021-09-17T07:06:41Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Cleaned up assembly data sections by replacing many small 4-byte incbins with explicit values, mostly NULL pointers, and fixed at least one raw pointer to use a relocatable label reference. The PR touched asm/data.s, asm/sdata.s, and asm/sdata2.s, with the main practical value being less opaque data, clearer pointer intent, and easier future extraction of structs/tables from remaining incbins.",
+  "change_classification": {
+    "primary_type": "asm_data_cleanup",
+    "categories": [
+      "cleanup",
+      "pointer_fix",
+      "incbin_reduction",
+      "data_annotation"
+    ],
+    "systems": [
+      "asm",
+      "data",
+      "sdata",
+      "sdata2"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "asm/data.s",
+      "role": "Replaced many 4-byte baserom incbins after strings with .4byte NULL, changed one raw address 0x803C7120 to lbl_803C7120, and split larger incbins to expose labels, constants, and function pointer entries."
+    },
+    {
+      "path": "asm/sdata.s",
+      "role": "Added macros.inc and converted many small-data incbins into explicit .4byte NULL or literal word values such as 0xFFFFFFFF, color-like constants, and .long 3."
+    },
+    {
+      "path": "asm/sdata2.s",
+      "role": "Added macros.inc, apparently to make shared macros such as NULL available in small read-only data assembly."
+    }
+  ],
+  "what_changed": [
+    "Added `.include \"macros.inc\"` to asm/sdata.s and asm/sdata2.s.",
+    "Replaced many `.incbin \"baserom.dol\", offset, 0x4` entries with `.4byte NULL`, especially padding or null-pointer words following `.asciz` strings and `.balign 4` directives.",
+    "Converted several opaque 4-byte sdata incbins into explicit literal words, including `0xFFFFFFFF`, `0x000000FF`, `0xFF0000FF`, `0xFF000040`, and `0xFFFF00FF`.",
+    "Changed `lbl_803C12E0` from `.4byte 0x803C7120` to `.4byte lbl_803C7120`, replacing a hardcoded address with a symbol reference.",
+    "Split an incbin around `lbl_803C7120`, adding a global label and making the first word `.4byte 0xFFFFFFFF` before continuing the remaining incbin.",
+    "Partially decoded a larger data block near `lbl_803C72A0`, exposing a NULL word, numeric constants, and function pointers including `func_800CD390`, `func_800CD3B0`, `func_800CD3D0`, `func_800CD3F0`, `func_800761C8`, `func_800CD458`, `func_800CD478`, `func_800CD498`, and `func_800CD4B8` before resuming the incbin."
+  ],
+  "smart_moves": [
+    "Used the existing `NULL` macro instead of spelling zero-valued pointer slots as raw hex, making intent clearer without requiring full struct recovery.",
+    "Converted a raw absolute address to a label reference, which is safer for relocation and makes data relationships searchable by symbol name.",
+    "Reduced incbin scope incrementally rather than trying to decode entire large tables at once; the diff exposes confirmed words and leaves the uncertain remainder as incbin.",
+    "Preserved alignment around strings while replacing the following opaque four-byte words with explicit pointer/null data."
+  ],
+  "decomp_lessons": [
+    "A common incbin cleanup pattern is to inspect 4-byte chunks after aligned strings; if they are zero, prefer `.4byte NULL` over a tiny incbin.",
+    "When a word is a pointer into another data block, use the target label instead of the numeric address once the target label exists or can be split out safely.",
+    "Large unknown data blocks can be chipped away by exposing only verified leading fields, function pointers, or sentinels, then continuing the original incbin at the adjusted offset.",
+    "If assembly files begin using shared macro names such as `NULL`, add `macros.inc` at the top of the section file.",
+    "Even without naming full structs, replacing raw bytes with `.4byte` words improves later struct/table reconstruction because boundaries and pointer fields become visible."
+  ],
+  "naming_conventions": [
+    "Unidentified data labels remained in the project’s address-derived style, e.g. `lbl_803C7120`, `lbl_803C72A0`, and `lbl_804D3760`.",
+    "Existing jump table naming such as `jtbl_803C0E90` and `jtbl_803C7030` was preserved.",
+    "Function pointer entries used existing decomp symbol names such as `func_800CD390` rather than raw addresses.",
+    "The PR did not introduce new semantic names for the exposed data; evidence only shows raw lbl_/func_ symbols and macro usage."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replace exact 4-byte zero incbins with `.4byte NULL` after confirming the value is pointer-like or null padding.",
+    "Replace raw pointer constants like `.4byte 0x803C7120` with `.4byte lbl_803C7120` when the pointed-to location is represented by a label.",
+    "Split `.incbin` ranges at meaningful boundaries by emitting the known word(s), updating the resumed baserom offset and size to preserve byte-for-byte output.",
+    "Expose function pointer tables as `.4byte func_...` entries to create relocations and improve call/data reference tracking.",
+    "Keep uncertain remaining bytes as `.incbin` rather than guessing full table layouts."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "incbin cleanup",
+    "pointer fixing",
+    "asm/data.s",
+    "asm/sdata.s",
+    "asm/sdata2.s",
+    "macros.inc",
+    "NULL",
+    ".4byte NULL",
+    "lbl_803C7120",
+    "lbl_803C12E0",
+    "lbl_803C72A0",
+    "func_800CD390",
+    "func_800CD3B0",
+    "func_800CD3D0",
+    "func_800CD3F0",
+    "func_800761C8",
+    "func_800CD458",
+    "func_800CD478",
+    "func_800CD498",
+    "func_800CD4B8",
+    "sdata",
+    "sdata2",
+    "data section",
+    "raw address to label",
+    "baserom.dol"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that replace remaining raw `.4byte 0x803C7788` or similar addresses in the same table with labels.",
+    "Search for later struct recovery around `lbl_803C72A0` and the exposed `func_800CD390`/`func_800CD458` table entries.",
+    "Check whether later cleanup removes more 4-byte incbins following `.asciz` strings in asm/data.s and asm/sdata.s.",
+    "Look for conventions around when to use `.4byte NULL` versus `.4byte 0` in assembly data files."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

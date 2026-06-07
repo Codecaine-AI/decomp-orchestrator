@@ -1,0 +1,145 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-846",
+  "pr": {
+    "number": 846,
+    "title": "Match `ftCo_Attack1`",
+    "url": "https://github.com/doldecomp/melee/pull/846",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-13T04:25:52Z",
+    "merged_at": "2023-05-13T04:30:53Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common fighter jab/Attack1 path by moving the Attack11/12/13 logic out of the large ft_08A4 assembly blob into new ftCommon C sources and headers, while retaining several hard-to-match adjacent helpers as MWERKS inline asm in ftCo_08A6.c. The PR also updated motion-state wiring, renamed the old ft_8008A9F8 entry point to ftCo_Attack1_DecideMotion at callsites, added attack1 motion vars, and tightened related fighter/item types.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-renaming",
+      "struct-typing",
+      "motion-state-wiring"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "attack",
+      "item",
+      "asm",
+      "build"
+    ]
+  },
+  "key_files": [
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/chara/ftCommon/ftCo_Attack1.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Attack1.h",
+    "src/melee/ft/chara/ftCommon/ftCo_08A6.c",
+    "src/melee/ft/chara/ftCommon/ftCo_08A6.h",
+    "src/melee/ft/chara/ftCommon/ftCo_Init.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Wait.c",
+    "src/melee/ft/chara/ftCommon/types.h",
+    "src/melee/ft/types.h",
+    "src/melee/it/it_26B1.c",
+    "src/melee/it/it_26B1.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted roughly 976 lines from asm/melee/ft/ft_08A4.s and replaced the Attack1/Jab region with new C sources under src/melee/ft/chara/ftCommon.",
+    "Added src/melee/ft/chara/ftCommon/ftCo_Attack1.c implementing ftCo_Attack1_DecideMotion plus Attack11, Attack12, and Attack13 Anim/IASA/Phys/Coll-related behavior.",
+    "Renamed and propagated the former ft_8008A9F8 attack-decision routine as ftCo_Attack1_DecideMotion in wait, squat, walk, turn, landing, appeal, Game & Watch, Samus, and other IASA call paths.",
+    "Added ftCo_Attack1.h for the public Attack1/Jab callbacks and removed those declarations from the broader ft_0877.h header.",
+    "Added ftCo_08A6.c and ftCo_08A6.h to hold still-assembly-backed helpers around 8008A698, 8008A6D8, and ft_8008A7A8, plus declarations for ftCo_Attack_800CCF58, ftCo_Attack_800CDD14, and ftCo_Attack_800D6A50.",
+    "Updated ftCo_Init.c motion-state table so Attack11, Attack12, and Attack13 use ftCo_Attack11_Phys and ftCo_Attack11_Coll instead of the older ftCo_Attack1_Phys/Coll names.",
+    "Added ftCommon motion vars struct ftCo_Attack1Vars with bool x0 at fp+2340 for jab chaining state.",
+    "Renamed Fighter fields in src/melee/ft/types.h: x196C_hitlag_mult became hitlag_mul, x1970 became unk_msid, and item object fields were typed as Item_GObj*.",
+    "Adjusted ftCo_DatAttrs float fields from f32 to float and changed x190_Jab_3InputWindow from s32 to float in the struct definition.",
+    "Flattened Fighter x2218 bitfields out of an anonymous union while preserving the named x2218_b0 through x2218_b7 flags.",
+    "Added src/melee/ft/ftwaitanim.h for extern string symbols ftWaitAnim_803C54A8 and ftWaitAnim_803C54C4 used by the retained assembly helper.",
+    "Changed it_8026B30C to take Item_GObj*, return enum_t, use GET_ITEM, and removed a duplicate header declaration.",
+    "Updated obj_files.mk to build ftCo_08A6.c.o and ftCo_Attack1.c.o."
+  ],
+  "smart_moves": [
+    "Split the matched high-level Attack1 state logic from still-unmatched low-level helper code: ftCo_Attack1.c is readable C, while ftCo_08A6.c preserves exact MWERKS inline asm for difficult nearby routines.",
+    "Introduced a semantically meaningful public name, ftCo_Attack1_DecideMotion, for a heavily reused IASA input decision routine instead of keeping the address-style ft_8008A9F8 name.",
+    "Moved Attack1 declarations into focused ftCommon headers, reducing dependency on the catch-all ft_0877.h.",
+    "Kept address comments in headers and static prototypes, preserving searchability and mapping back to DOL addresses while improving names.",
+    "Used typed Item_GObj* for item-related fighter fields and it_8026B30C, making item handling in Attack1 decision logic clearer and less dependent on raw HSD_GObj pointers.",
+    "Preserved exact matching artifacts where needed, including MWERKS_GEKKO guards, nofralloc inline asm, local lbl_ labels, and MUST_MATCH unused stack padding comments."
+  ],
+  "decomp_lessons": [
+    "For large monolithic asm files, it is useful to carve out a coherent gameplay feature into a named C file while leaving adjacent problematic routines as inline asm in a companion file.",
+    "A common action decision routine should be renamed and propagated across all IASA callsites once its purpose is known; this makes future control-flow review far easier.",
+    "Motion-state callbacks should be named for the concrete state they serve when possible; this PR changed generic Attack1 Phys/Coll names to Attack11 Phys/Coll callbacks used by Attack11/12/13 entries.",
+    "Struct field naming can unlock decomp readability: hitlag_mul, unk_msid, item_gobj, and mv.co.attack1.x0 make the jab input-window code much easier to reason about than raw x196C/x1970 offsets.",
+    "Do not force all nearby assembly into C at once. Keeping hard cases as inline asm behind MWERKS_GEKKO can still allow the main feature file to match and be integrated.",
+    "When an assembly helper references data symbols from another module, add a narrow header for those externs rather than leaking them through unrelated headers."
+  ],
+  "naming_conventions": [
+    "Common fighter action files use the ftCo_ prefix and action name, e.g. ftCo_Attack1.c and ftCo_Attack1.h.",
+    "Recovered decision/check helpers were named by role: ftCo_Attack1_DecideMotion, checkAttack11, checkAttack12, checkAttack13, doAttack12, doAttack13.",
+    "Unmatched or unclear address-based helpers retained address names such as lbl_8008A698, lbl_8008A6D8, and ft_8008A7A8.",
+    "Public attack callbacks follow state suffixes: ftCo_Attack11_Anim, ftCo_Attack11_IASA, ftCo_Attack11_Phys, ftCo_Attack11_Coll, ftCo_Attack12_Anim, ftCo_Attack13_IASA.",
+    "Header guards continue the address-based GALE01 convention, e.g. GALE01_08A9F8 and GALE01_08A698.",
+    "Fighter struct fields moved from raw offset names toward behavior names where evidence was clear, such as hitlag_mul and item_gobj; uncertain state id remained conservative as unk_msid."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used MWERKS_GEKKO inline asm with #pragma push/pop and nofralloc to preserve exact codegen for lbl_8008A698, lbl_8008A6D8, and ft_8008A7A8.",
+    "Converted local assembly labels from .L_8008xxxx to C-compatible lbl_8008xxxx where branches crossed into inline asm.",
+    "Defined local constants under MWERKS_GEKKO and !WIP, including lbl_804D8448, lbl_804D844C, ftCo_804D8450, and lbl_804D3AE0, to satisfy inline asm references.",
+    "Inserted MUST_MATCH unused stack arrays in C functions where the matched code required stack layout artifacts.",
+    "Kept address comments beside function declarations and static prototypes to support verification against the original binary.",
+    "Updated remaining asm callsites in ft_08A4.s and ft_0877.s to branch to the new C/inline-asm symbol names without changing branch distances semantically."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the PR context, so no explicit reviewer feedback is available."
+  ],
+  "searchable_terms": [
+    "pr-846",
+    "ftCo_Attack1",
+    "ftCo_Attack1_DecideMotion",
+    "ftCo_Attack11_Anim",
+    "ftCo_Attack11_IASA",
+    "ftCo_Attack11_Phys",
+    "ftCo_Attack11_Coll",
+    "ftCo_Attack12_Anim",
+    "ftCo_Attack12_IASA",
+    "ftCo_Attack13_Anim",
+    "ftCo_Attack13_IASA",
+    "ftCo_08A6",
+    "lbl_8008A698",
+    "lbl_8008A6D8",
+    "ft_8008A7A8",
+    "ftCo_Attack_800CCF58",
+    "ftCo_Attack_800CDD14",
+    "ftCo_Attack_800D6A50",
+    "hitlag_mul",
+    "unk_msid",
+    "item_gobj",
+    "ftCo_Attack1Vars",
+    "x18C_Jab_2InputWindow",
+    "x190_Jab_3InputWindow",
+    "ftWaitAnim_803C54A8",
+    "ftWaitAnim_803C54C4",
+    "it_8026B30C",
+    "Item_GObj",
+    "MUST_MATCH",
+    "MWERKS_GEKKO",
+    "nofralloc"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that decompile ftCo_08A6.c inline asm helpers lbl_8008A698, lbl_8008A6D8, or ft_8008A7A8 into C.",
+    "Find follow-up renames for Fighter::unk_msid and mv.co.attack1.x0 once their semantics became clearer.",
+    "Search for later cleanup around ftCo_Attack_800CCF58, ftCo_Attack_800CDD14, and ftCo_Attack_800D6A50.",
+    "Check whether x190_Jab_3InputWindow remaining as float was confirmed by data usage in subsequent PRs."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

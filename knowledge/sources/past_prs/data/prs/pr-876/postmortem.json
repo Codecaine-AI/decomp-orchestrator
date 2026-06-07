@@ -1,0 +1,144 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-876",
+  "pr": {
+    "number": 876,
+    "title": "Match `ftCo_ShieldBreakFly`",
+    "url": "https://github.com/doldecomp/melee/pull/876",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-27T10:53:58Z",
+    "merged_at": "2023-05-27T11:05:15Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common fighter ShieldBreakFly code by moving several routines out of asm/melee/ft/ft_08A4.s into a new C source/header pair, wiring the new object into obj_files.mk, and updating includes/prototypes. The matched report shows 100% for ftCo_ShieldBreakFly.c, including ft_80098B20, ft_80098C9C, ftCo_ShieldBreakFly_Anim, IASA, Phys, and Coll. The PR also generalized an inline effect-spawn helper so both passive and shield-break code could reuse it with variable effect arguments.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "asm-to-c",
+      "inline-helper-refactor",
+      "build-system"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "shield-break",
+      "effects",
+      "asm",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/chara/ftCommon/ftCo_ShieldBreakFly.c",
+    "src/melee/ft/chara/ftCommon/ftCo_ShieldBreakFly.h",
+    "src/melee/ft/chara/ftCommon/inlines.h",
+    "src/melee/ft/chara/ftCommon/ftCo_Passive.c",
+    "src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Guard.c",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/ft_08A4.h",
+    "src/melee/ft/ft_0877.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Removed the asm implementations of ft_80098B20, ftCo_ShieldBreakFly_Anim, ftCo_ShieldBreakFly_IASA, ftCo_ShieldBreakFly_Phys, ftCo_ShieldBreakFly_Coll, and ft_80098C9C from asm/melee/ft/ft_08A4.s.",
+    "Added src/melee/ft/chara/ftCommon/ftCo_ShieldBreakFly.c implementing the shield-break fly transition, animation, IASA, physics, collision, and wrapper routines in C.",
+    "Added src/melee/ft/chara/ftCommon/ftCo_ShieldBreakFly.h with prototypes for ft_80098B20, ftCo_ShieldBreakFly_Anim, ftCo_ShieldBreakFly_IASA, ftCo_ShieldBreakFly_Phys, ftCo_ShieldBreakFly_Coll, and ft_80098C9C.",
+    "Added ftCo_ShieldBreakFly.c.o to TEXT_O_FILES in obj_files.mk so the new C translation unit participates in the build before the remaining ft_08A4.s object.",
+    "Renamed the local asm collision callback label .L_80098E3C to a global ftCo_80098E3C symbol so C code can pass it to ft_80082C74.",
+    "Removed sdata2 constants .L_804D8650 and .L_804D8654 from the asm file after the matched C code took over the routines that used them.",
+    "Generalized the inline helper ftCo_Passive_SpawnEf into ftCo_SpawnEf(gobj, joint, arg2, arg3), preserving the MUST_MATCH unused-stack workaround and passing variable efAsync_Spawn arguments.",
+    "Updated Passive and PassiveStand code to call ftCo_SpawnEf(gobj, fp->parts[FtPart_TopN].joint, 1, 1053), preserving their prior effect behavior while sharing the helper.",
+    "Added ftCo_ShieldBreakFly.h includes in ftCo_Guard.c and fighter.c, and moved ft_80098B20/ft_80098C9C declarations out of ft_0877.h into the new dedicated header.",
+    "Tightened several prototypes in ft_08A4.h, including ftCo_80098D90(ftCo_GObj*), ft_800C88D4(ftCo_GObj*, int, bool), ft_8009F834(ftCo_GObj*, ...), and a new declaration for ftCo_80098E3C(ftCo_GObj*, float lag)."
+  ],
+  "smart_moves": [
+    "Created a dedicated ftCo_ShieldBreakFly.c/.h pair instead of leaving matched code under a broad ft_08A4 bucket, improving locality for common fighter shield-break behavior.",
+    "Reused existing common fighter primitives directly: Fighter_ChangeMotionState with motion state 205 and flags 64, ftAnim_8006EBA4, ft_80084EEC for physics, ft_80082C74 for collision handoff, ft_80088148, ftCommon_8007EBAC, and ftColl_8007B62C.",
+    "Factored effect spawning into a parameterized ftCo_SpawnEf inline rather than duplicating efAsync_Spawn call shape in every matched action. This allowed shield-break fly to use effect id 1051/arg2 0 while passive actions kept effect id 1053/arg2 1.",
+    "Preserved the known MUST_MATCH unused-stack padding pattern in both ftCo_SpawnEf and ft_80098C9C, indicating matching constraints were handled explicitly rather than hidden.",
+    "Promoted the collision callback label ftCo_80098E3C to a global symbol, enabling clean C references while leaving the remaining unmatched asm intact.",
+    "Used real struct fields where evidence allowed: gobj->user_data, fp->self_vel.x/y, fp->co_attrs.shield_break_initial_velocity, fp->kind, fp->x2222_b3, fp->parts[...].joint, and fp->ft_data->x8->unk11."
+  ],
+  "decomp_lessons": [
+    "When extracting only part of an asm file, labels needed by new C code may need to become global symbols with declarations, as happened for ftCo_80098E3C.",
+    "Shared inline helpers are useful for matching repeated efAsync_Spawn patterns, but they may need parameterization once a newly matched routine uses the same call shape with different constants.",
+    "Wrapper functions with otherwise identical logic may still require explicit unused-stack padding under MUST_MATCH; ft_80098C9C calls ft_80098B20 but keeps an 8-byte dummy stack array for matching.",
+    "Header cleanup matters during asm-to-C migration: move declarations from broad legacy headers such as ft_0877.h into action-specific headers when the code gains a dedicated module.",
+    "Small prototype improvements can support matching and reduce casts. This PR replaced several HSD_GObj or unknown signatures with ftCo_GObj/Fighter_GObj-specific signatures where the diff showed stronger type evidence.",
+    "Common fighter action files should be added to obj_files.mk in the correct TEXT_O_FILES ordering so they replace removed asm without disturbing the remaining asm translation unit."
+  ],
+  "naming_conventions": [
+    "Dedicated common fighter action modules follow the ftCo_ActionName.c and ftCo_ActionName.h pattern, here ftCo_ShieldBreakFly.c and ftCo_ShieldBreakFly.h.",
+    "Action callbacks use the suffixes _Anim, _IASA, _Phys, and _Coll, as in ftCo_ShieldBreakFly_Anim, ftCo_ShieldBreakFly_IASA, ftCo_ShieldBreakFly_Phys, and ftCo_ShieldBreakFly_Coll.",
+    "Unknown or address-based functions remain in address-style names such as ft_80098B20 and ft_80098C9C until a better semantic name is evidenced.",
+    "Previously local asm labels that become callable from C can be promoted to address-style globals, as .L_80098E3C became ftCo_80098E3C.",
+    "Header include guards in this slice used address-style identifiers, here GALE01_0986A0."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted six functions from asm to C and left only the remaining unmatched ft_08A4.s code in assembly.",
+    "Matched simple callback wrappers directly: IASA is an empty function, Phys delegates to ft_80084EEC, and Coll delegates to ft_80082C74 with ftCo_80098E3C.",
+    "Used NULL, integer constants, and float arguments in Fighter_ChangeMotionState to reproduce the original register setup: motion state 205, flags 64, start frame NULL/0, rate 1, blend 0.",
+    "Matched self velocity setup by assigning fp->self_vel.x = 0 and fp->self_vel.y = fp->co_attrs.shield_break_initial_velocity.",
+    "Matched the Purin-specific bit write by checking fp->kind == FTKIND_PURIN and assigning fp->x2222_b3 = true.",
+    "Matched the effect joint selection through fp->parts[fp->ft_data->x8->unk11].joint and a generalized ftCo_SpawnEf call using arg2 0 and effect id 1051.",
+    "Kept an explicit MUST_MATCH dummy stack array in ft_80098C9C for an unused stack discrepancy.",
+    "The PR report recorded 100.00% match for the file and each listed function, giving strong evidence that the tactics were successful."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "No explicit reviewer intent or requested changes are evidenced."
+  ],
+  "searchable_terms": [
+    "pr-876",
+    "ribbanya",
+    "Match ftCo_ShieldBreakFly",
+    "ftCo_ShieldBreakFly.c",
+    "ftCo_ShieldBreakFly.h",
+    "ft_08A4.s",
+    "ft_80098B20",
+    "ft_80098C9C",
+    "ftCo_ShieldBreakFly_Anim",
+    "ftCo_ShieldBreakFly_IASA",
+    "ftCo_ShieldBreakFly_Phys",
+    "ftCo_ShieldBreakFly_Coll",
+    "ftCo_80098D90",
+    "ftCo_80098E3C",
+    "ftCo_SpawnEf",
+    "ftCo_Passive_SpawnEf",
+    "efAsync_Spawn",
+    "Fighter_ChangeMotionState",
+    "ftAnim_8006EBA4",
+    "ftAnim_IsFramesRemaining",
+    "ft_80084EEC",
+    "ft_80082C74",
+    "ft_80088148",
+    "ftCommon_8007D5D4",
+    "ftCommon_8007EBAC",
+    "ftColl_8007B62C",
+    "shield_break_initial_velocity",
+    "FTKIND_PURIN",
+    "x2222_b3",
+    "MUST_MATCH unused stack",
+    "obj_files.mk",
+    "asm-to-c"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename ft_80098B20 or ft_80098C9C to semantic shield-break function names.",
+    "Check later work around ftCo_80098D90 and ftCo_80098E3C, which remained in ft_08A4.s at this point.",
+    "Search for further uses or refinements of ftCo_SpawnEf after this helper was generalized from passive-specific effect spawning.",
+    "Inspect later header cleanup around ft_08A4.h and ft_0877.h for additional movement of common fighter action prototypes into dedicated headers."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

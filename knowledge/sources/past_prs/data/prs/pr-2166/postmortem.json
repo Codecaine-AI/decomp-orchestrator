@@ -1,0 +1,139 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2166",
+  "pr": {
+    "number": 2166,
+    "title": "match ittaru",
+    "url": "https://github.com/doldecomp/melee/pull/2166",
+    "state": "MERGED",
+    "author": "sadkellz",
+    "created_at": "2026-02-10T21:02:27Z",
+    "merged_at": "2026-02-10T21:09:19Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched a large portion of the Taru item implementation by replacing many placeholder stubs in `src/melee/it/items/ittaru.c` with real item spawn, physics, collision, animation, damage, and explosion/state-transition logic. The PR also added a Taru special-attributes struct to `itCommonItems.h`, corrected Taru item-var layout so `xDE8` is a `Vec3`, gave `it_802886C4` a typed prototype, and noted a shared float register-swap issue also present in `ittarucann.c`. Evidence is mostly from the diff; the PR body only says \"more claude work\" and there was no visible review feedback.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "item-behavior",
+      "struct-layout",
+      "prototype-cleanup"
+    ],
+    "systems": [
+      "item",
+      "Taru",
+      "Tarucann"
+    ]
+  },
+  "key_files": [
+    "src/melee/it/items/ittaru.c",
+    "src/melee/it/itCommonItems.h",
+    "src/melee/it/items/ittaru.h",
+    "src/melee/it/items/ittarucann.c"
+  ],
+  "what_changed": [
+    "Added `itTaruAttributes` in `itCommonItems.h` with two integer fields followed by float tuning fields through offset `x34`, enabling typed access to Taru article special attributes.",
+    "Updated `itTaru_ItemVars` comments and layout, changing the final item-var member at `ip+DE8` from a scalar `f32 xDE8` to `Vec3 xDE8`; the matched code uses this as a surface/up vector with `.x/.y/.z`.",
+    "Implemented `it_3F14_Logic2_Spawned`, initializing facing direction, item command variables, Taru item vars, randomized base rotation using `HSD_Randf`, and default `xDE8` vector before entering `it_80287D0C`.",
+    "Implemented helper movement/rotation routines `it_802874F0` and `it_80287690`, including ground-vs-air angular velocity behavior, speed clamping from Taru attributes, facing flips, child JObj rotation easing, and parent JObj Z rotation updates.",
+    "Implemented several Taru motion animation and collision callbacks, including `itTaru_UnkMotion0_Coll`, `itTaru_UnkMotion1_Coll`, `itTaru_UnkMotion3_Anim/Coll`, `itTaru_UnkMotion4_Anim/Phys`, and `itTaru_UnkMotion5_Anim/Coll`.",
+    "Implemented landing/bounce/rolling behaviors using item collision helpers such as `it_8026D564`, `it_8026DA08`, `it_802763E0`, `it_80276308`, `it_80276408`, `it_8027649C`, `it_802762B0`, and `it_802762BC`.",
+    "Implemented `it_802886C4` as a typed `void it_802886C4(Item_GObj* gobj)` routine that spawns/handles Taru cannon behavior: hit/camera effects, spawn check helper, hiding the JObj, zeroing velocity, setting flags/item vars, and switching animation state 7.",
+    "Implemented Taru hit-response callbacks `it_3F14_Logic2_DmgDealt`, `Clanked`, `HitShield`, `Reflected`, and `DmgReceived`, sharing an inline helper that spawns effect `0x427` and randomly chooses between `it_802886C4` and `it_802885C8`.",
+    "Updated `ittaru.h` prototype for `it_802886C4` from `UNK_RET/UNK_PARAMS` to a concrete `void`/`Item_GObj*` signature.",
+    "Added a comment in `ittarucann.c` documenting that the spawn-time float register-swap issue is the same as in `it_3F14_Logic2_Spawned`."
+  ],
+  "smart_moves": [
+    "Introduced `itTaruAttributes` rather than continuing to index opaque `x4_specialAttributes`, making physics thresholds, probabilities, fall/bounce limits, and speed clamps clearer and easier to match.",
+    "Recognized `itTaru_ItemVars.xDE8` as a `Vec3`, which aligns with calls like `it_80276408` and `lbVector_AngleXY` and avoids treating vector state as unrelated scalar fields.",
+    "Used small static inline helpers for repeated logic: `inline_fabsf`, `itTaru_RandCheck`, `it_3F14_Logic2_inline`, `itTaru_UnkMotion4_Phys_inline`, and `it_802886C4_inline`. This reduced duplicated hit/explosion code while still preserving matching-sensitive code shape.",
+    "Preserved matching-sensitive awkwardness explicitly with comments such as the float register-swap TODO and manual absolute-value expressions where normal `fabsf` caused register swaps.",
+    "Shared identical behavior among damage-dealt, clanked, hit-shield, and reflected callbacks via one inline helper while retaining the stack padding needed for matching (`PAD_STACK(24)`).",
+    "Kept motion callbacks returning `false` where appropriate, matching item callback conventions even when the routine performs state transitions internally.",
+    "Used typed engine helpers and macros (`GET_ITEM`, `GET_JOBJ`, `HSD_JObjGetChild`, `HSD_JObjSetRotationZ/X`, `HSD_Randf`, `HSD_Randi`) instead of raw pointer arithmetic where the types were understood."
+  ],
+  "decomp_lessons": [
+    "When an item-var block is used as a vector by collision and vector math helpers, update the struct layout to a `Vec3`; correct struct typing can unlock multiple matches in motion/collision code.",
+    "For item special attributes, adding a dedicated attributes struct with offset comments is preferable to repeated casts and magic offsets, even if field names remain offset-based.",
+    "Matching item physics often requires preserving manual absolute-value code instead of replacing it with `fabsf`, because libcall/intrinsic choice and register allocation can perturb matching.",
+    "Repeated item hit callbacks can often be matched with static inline shared bodies, but stack padding may still be necessary to keep each wrapper matching.",
+    "Surface interaction code commonly combines `CollData.env_flags`, `it_80276408` normal extraction, `lbVector_AngleXY`, and JObj rotation correction; this pattern is reusable for rolling or tilting ground items.",
+    "Spawn/setup routines should initialize item command variables, facing direction, custom item vars, and any derived orientation vector before entering the initial motion/state helper.",
+    "For damage/explosion item logic, guard on an item-var state flag before triggering one-shot transitions so repeated collision/hit callbacks do not retrigger effects."
+  ],
+  "naming_conventions": [
+    "Kept unknown Taru callbacks in the existing address/logic style: `it_3F14_Logic2_*` and `itTaru_UnkMotionN_{Anim,Phys,Coll}`.",
+    "Named the newly typed article attributes struct `itTaruAttributes`, matching project item-attribute naming conventions such as `itNokoNoko_DatAttrs` nearby while using offset-based field names (`x0`, `x4`, `x8`, etc.) because semantic names are not yet established.",
+    "Retained offset-based custom item-var fields in `itTaru_ItemVars` (`xDD4`, `xDD8`, `xDDC`, `xDE0`, `xDE4`, `xDE8`) and added comments tying them to `ip+DD4` style offsets.",
+    "Updated function prototype style from unknown placeholders to concrete project types once known: `void it_802886C4(Item_GObj* gobj)`.",
+    "Inline helper names were descriptive only where semantics were apparent (`itTaru_RandCheck`), otherwise they preserved address/context names (`it_3F14_Logic2_inline`, `it_802886C4_inline`)."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `PAD_STACK(24)` in several hit-response callbacks, indicating stack layout needed explicit padding for matching.",
+    "Documented a float register-swap issue in `it_3F14_Logic2_Spawned` and cross-referenced the same issue in `it_3F14_Logic5_Spawned` in `ittarucann.c`.",
+    "Avoided standard `fabsf` in key places and used manual sign checks or a local `inline_fabsf` because alternate fabs implementations caused register swaps.",
+    "Used static inline helpers to control code generation for shared repeated sequences while keeping wrappers small and matchable.",
+    "Kept unusual temporaries such as `new_var`, `new_var2`, `var_f0`, `var_f1`, and `var_f2`, suggesting register-allocation-sensitive matching rather than cleanup-oriented refactoring.",
+    "Used explicit float constants in radians (`1.5707964f`, `0.34906584f`, `1.3089969f`, `0.12217305f`, `0.10471976f`, `0.017453292f`) instead of symbolic conversions, likely to match original constants exactly.",
+    "Inserted an explicit zero-vector local in `it_802886C4_inline` and noted a `@todo 4 byte gap for these accesses`, preserving stack/access behavior despite unclear structure."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR context.",
+    "The PR body only states \"more claude work\", so there is no direct human explanation of intent beyond the title and diff."
+  ],
+  "searchable_terms": [
+    "pr-2166",
+    "match ittaru",
+    "sadkellz",
+    "Taru",
+    "Tarucann",
+    "ittaru.c",
+    "ittaru.h",
+    "ittarucann.c",
+    "itCommonItems.h",
+    "itTaruAttributes",
+    "itTaru_ItemVars",
+    "xDE8 Vec3",
+    "it_3F14_Logic2_Spawned",
+    "it_802874F0",
+    "it_80287690",
+    "itTaru_UnkMotion0_Coll",
+    "itTaru_UnkMotion1_Coll",
+    "itTaru_UnkMotion3_Anim",
+    "itTaru_UnkMotion3_Coll",
+    "itTaru_UnkMotion4_Phys",
+    "itTaru_UnkMotion5_Coll",
+    "it_802886C4",
+    "it_3F14_Logic2_DmgDealt",
+    "it_3F14_Logic2_Clanked",
+    "it_3F14_Logic2_HitShield",
+    "it_3F14_Logic2_Reflected",
+    "it_3F14_Logic2_DmgReceived",
+    "float regswap",
+    "inline_fabsf",
+    "PAD_STACK",
+    "HSD_Randf",
+    "HSD_Randi",
+    "HSD_JObjSetRotationZ",
+    "lbVector_AngleXY",
+    "CollData env_flags"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename `itTaruAttributes` fields from offset names to semantic names.",
+    "Search for follow-up fixes to the documented float register-swap TODO in `it_3F14_Logic2_Spawned` or `it_3F14_Logic5_Spawned`.",
+    "Check whether `it_802886C4_inline`'s noted 4-byte stack/access gap was later resolved with a more accurate local/struct layout.",
+    "Compare Taru and Tarucann spawn/motion code for shared patterns that could inform future item matching.",
+    "Search for later reviews or commits involving `itTaru_ItemVars.xDE8` to confirm the `Vec3` interpretation remained stable."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

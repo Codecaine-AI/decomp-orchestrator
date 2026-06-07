@@ -1,0 +1,156 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-913",
+  "pr": {
+    "number": 913,
+    "title": "Split `ftCo_0B3E`",
+    "url": "https://github.com/doldecomp/melee/pull/913",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-06-01T17:12:23Z",
+    "merged_at": "2023-06-01T17:22:24Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Split the large ftCommon assembly range beginning at ftCo_800B3E04 out of asm/melee/ft/ft_08A4.s into a new C translation unit src/melee/ft/chara/ftCommon/ftCo_0B3E.c plus header, while preserving matching/functional behavior through inline ASM, jump-table/data reconstruction, and build-flag plumbing. The PR also adjusted Makefile MUST_MATCH/WIP defines for both C and assembly, registered the new object, moved/deleted ft_08A4 header declarations, added small includes/prototypes in neighboring ftCommon files, and updated progress/reporting helper scripts.",
+  "change_classification": {
+    "primary_type": "decomp-split",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "tooling",
+      "build-system",
+      "asm-to-c-split"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "asm",
+      "melee-core",
+      "repo-root",
+      "tooling"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_0B3E.c",
+    "src/melee/ft/chara/ftCommon/ftCo_0B3E.h",
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/ft_08A4.h",
+    "Makefile",
+    "obj_files.mk",
+    "tools/report_score.py",
+    "tools/merge_double.py",
+    "tools/calcprogress/src/find_asm_functions.py",
+    "src/macros.inc",
+    "src/melee/mp/mplib.h",
+    "src/melee/ft/chara/ftCommon/ftCo_09F7.c",
+    "src/melee/ft/chara/ftCommon/ftCo_0A01.c",
+    "src/melee/ft/chara/ftCommon/ftCo_0A01.h"
+  ],
+  "what_changed": [
+    "Removed roughly 9.6k lines of ftCo_0B3E-related assembly from asm/melee/ft/ft_08A4.s and replaced that content with a new 9.4k-line C file at src/melee/ft/chara/ftCommon/ftCo_0B3E.c.",
+    "Added src/melee/ft/chara/ftCommon/ftCo_0B3E.h and removed obsolete declarations from src/melee/ft/ft_08A4.h, indicating the split now owns its own ftCommon-local interface.",
+    "The new C file contains MWERKS_GEKKO-only data definitions for doubles/floats, strings such as \"csP is bad address\\n\" and \"ftcmdscript.c\", force_active data, many local label forward declarations, and jtbl_t jump tables such as ftCo_803C5DD4, ftCo_803C6118, ftCo_803C613C, and ftCo_803C61BC.",
+    "Functions in the split include inline ASM guarded by MUST_MATCH/WIP logic; the excerpt shows ftCo_800B3E04 using an ASM function body with a NOT_IMPLEMENTED stub in non-matching/WIP configurations.",
+    "Makefile was changed so ASFLAGS receives --defsym MUST_MATCH=1 inside the same non-NON_MATCHING block that defines CFLAGS -DMUST_MATCH, and WIP now also adds --defsym WIP=1 for assembly in addition to CFLAGS -DWIP.",
+    "obj_files.mk gained the new ftCo_0B3E object so the new translation unit participates in the build.",
+    "Neighboring ftCommon files ftCo_09F7.c and ftCo_0A01.c gained small additions, and ftCo_0A01.h lost one line, likely to satisfy new cross-file references after the split; the context does not show exact symbols.",
+    "src/melee/mp/mplib.h and src/macros.inc received small support edits, likely for declarations/macros required by the split, but the excerpt does not provide exact content.",
+    "Tooling changed alongside the split: tools/report_score.py, tools/merge_double.py, tools/calcprogress/src/find_asm_functions.py, and requirements.txt were updated, suggesting the split exposed reporting/progress or double-constant handling needs."
+  ],
+  "smart_moves": [
+    "Kept the split buildable before full C decompilation by moving original assembly into ASM blocks inside the new C file rather than requiring immediate high-level matches for every large function.",
+    "Preserved local control-flow/data dependencies by explicitly declaring label targets and reconstructing jump tables as jtbl_t arrays in C, rather than leaving them stranded in the old assembly file.",
+    "Used MWERKS_GEKKO guards around compiler-specific data/constant definitions so host/tool builds are less likely to choke on target-only layout artifacts.",
+    "Used #pragma force_active for data that must stay emitted, including a string with suspicious trailing NUL padding noted by a TODO, which is a useful tactic for preserving data layout while uncertainty remains.",
+    "Updated ASFLAGS and CFLAGS together for MUST_MATCH and WIP so inline assembly and standalone assembly see the same preprocessor/build-mode intent.",
+    "Registered the new object and created a dedicated header, reducing the size and responsibility of the generic ft_08A4 assembly/header bucket."
+  ],
+  "decomp_lessons": [
+    "Large assembly ranges can be split into a C translation unit before all functions are high-level C by embedding ASM bodies under build-mode guards; this gives progress accounting and better file ownership without blocking on full decompilation.",
+    "When moving assembly into C, data layout matters as much as text: constants, strings, sdata externs, force_active regions, and jump tables must move with the code that references them.",
+    "For switch/jump-table-heavy code, keep anonymous/local labels addressable by forward-declaring label functions and building jtbl_t arrays with the exact label order and repeated default targets.",
+    "Build-mode logic must be checked for both C compiler defines and assembler defsyms; a split that mixes C and assembly can fail subtly if MUST_MATCH or WIP is only visible to one side.",
+    "A WIP configuration may intentionally choose stubs/NOT_IMPLEMENTED even when matching assembly exists, while a non-WIP non-matching target may prefer original asm for functionality; this distinction was explicitly discussed in review.",
+    "Leave uncertainty documented in-place for data oddities, such as suspected string padding/split boundaries, rather than silently normalizing them during a mechanical split."
+  ],
+  "naming_conventions": [
+    "New split file and header use the ftCommon address-range style: ftCo_0B3E.c and ftCo_0B3E.h.",
+    "Symbols in the new file use the ftCo_ prefix plus address, e.g. ftCo_800B3E04, ftCo_800B77E8, ftCo_803C5DD4, and ftCo_804D89C8.",
+    "Unidentified local branch targets remain address labels with lbl_ prefixes, e.g. lbl_800B3EDC, lbl_800B45FC, lbl_800B6414, and lbl_800B8840.",
+    "Data labels preserve address-based names grouped by section/address, such as ftCo_803C5DB0 for strings/data and ftCo_804D89C8 for floating constants.",
+    "The split moved declarations out of the broad ft_08A4.h namespace toward a dedicated ftCo_0B3E.h interface."
+  ],
+  "assembly_or_matching_tactics": [
+    "Inline ASM function pattern shown: `ASM void ftCo_800B3E04(...)` with `nofralloc` body for MUST_MATCH and a `NOT_IMPLEMENTED` stub when `!defined(MUST_MATCH) || defined(WIP)`.",
+    "Assembler build flags now mirror C build flags: MUST_MATCH becomes both `--defsym MUST_MATCH=1` and `-DMUST_MATCH`; WIP becomes both `--defsym WIP=1` and `-DWIP`.",
+    "Jump tables were expressed as `jtbl_t` arrays containing label function pointers, including repeated fallback/default labels such as lbl_800B45FC and lbl_800B8840.",
+    "Compiler-specific constants are guarded with `#ifdef MWERKS_GEKKO`, including doubles using values such as `S32_TO_F32`, trigonometric constants, and exact float/double literals.",
+    "`#pragma push`, `#pragma force_active on`, and `#pragma pop` were used to force emission of data strings/padding required for matching.",
+    "The PR added/updated tooling such as merge_double.py and report_score.py, implying double constant handling and scoring/reporting needed support for this style of split, but exact algorithms are not present in the excerpt."
+  ],
+  "review_feedback": [
+    "Reviewer r-burns questioned the interaction of MUST_MATCH and WIP in ftCo_0B3E.c: defining MUST_MATCH appeared not to always result in matching code if WIP was also defined.",
+    "The author response, as excerpted, explained that WIP is used for cases such as `todo unused stack`, and that `MWERKS_GEKKO && !MUST_MATCH && !WIP` should use original asm because that build is intended to be non-matching but as functional as possible, whereas WIP functions may be incomplete.",
+    "No other substantive review requests are visible in the provided context; issue comments were zero and only two review comments were present."
+  ],
+  "searchable_terms": [
+    "pr-913",
+    "Split ftCo_0B3E",
+    "ribbanya",
+    "r-burns",
+    "ftCo_0B3E.c",
+    "ftCo_0B3E.h",
+    "ft_08A4.s",
+    "ft_08A4.h",
+    "ftCommon",
+    "ftCo_800B3E04",
+    "ftCo_800B77E8",
+    "ftCo_800B683C",
+    "ftCo_800B52AC",
+    "ftCo_800B4AB0",
+    "ftCo_803C5DD4",
+    "ftCo_803C6118",
+    "ftCo_803C613C",
+    "ftCo_803C61BC",
+    "lbl_800B3EDC",
+    "lbl_800B45FC",
+    "jtbl_t",
+    "MUST_MATCH",
+    "WIP",
+    "NON_MATCHING",
+    "ASFLAGS",
+    "CFLAGS",
+    "--defsym WIP",
+    "--defsym MUST_MATCH",
+    "MWERKS_GEKKO",
+    "ASM nofralloc",
+    "NOT_IMPLEMENTED",
+    "force_active",
+    "S32_TO_F32",
+    "merge_double.py",
+    "report_score.py",
+    "find_asm_functions.py",
+    "obj_files.mk",
+    "mplib.h",
+    "macros.inc",
+    "ftCo_09F7.c",
+    "ftCo_0A01.c"
+  ],
+  "follow_up_queries": [
+    "How did tools/merge_double.py change in PR #913, and was it introduced specifically for extracting double constants from assembly splits?",
+    "What exact declarations were moved from src/melee/ft/ft_08A4.h into src/melee/ft/chara/ftCommon/ftCo_0B3E.h?",
+    "What small support changes were made to src/macros.inc and src/melee/mp/mplib.h for this split?",
+    "Did later PRs replace the inline ASM bodies in ftCo_0B3E.c with high-level C, especially ftCo_800B3E04, ftCo_800B77E8, and ftCo_800B683C?",
+    "Was the TODO about `command script buffer over flow!\\n\\0\\0\\0\\0` later resolved as padding or a separate split?",
+    "Did the MUST_MATCH/WIP build-mode convention established here remain stable in later decomp splits?"
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

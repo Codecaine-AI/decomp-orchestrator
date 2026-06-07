@@ -1,0 +1,163 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1930",
+  "pr": {
+    "number": 1930,
+    "title": "update types and names in `ftCommonData`",
+    "url": "https://github.com/doldecomp/melee/pull/1930",
+    "state": "MERGED",
+    "author": "Giga-Bowser",
+    "created_at": "2025-09-21T17:12:52Z",
+    "merged_at": "2025-09-24T00:39:23Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Refined `struct ftCommonData` by converting many unknown or padding-like fields to `float`, splitting several byte-array gaps into explicit fields, and renaming angle constants with a `_radians` suffix. The renamed radian fields were propagated through common fighter attack, throw, cliff, damage, down/stand, C-stick, and item knockback-angle logic. The PR body says the typing/naming was mostly determined by hex-editor inspection and intended to help automation efforts. The decomp bot reported no GALE01 changes, so these were source/type/name improvements without affecting matched output.",
+  "change_classification": {
+    "primary_type": "types-structs",
+    "categories": [
+      "headers",
+      "naming",
+      "types-structs",
+      "nonfunctional-refactor",
+      "documentation-by-types"
+    ],
+    "systems": [
+      "fighter",
+      "fighter-common",
+      "item",
+      "input",
+      "attack",
+      "throw",
+      "damage"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/types.h",
+      "reason": "Main header change: `ftCommonData` field typing, gap splitting, and `_radians` naming."
+    },
+    {
+      "path": "src/melee/ft/chara/ftCommon/ftCo_AttackAir.c",
+      "reason": "Updated C-stick aerial angle threshold uses from `x20` to `x20_radians`."
+    },
+    {
+      "path": "src/melee/ft/chara/ftCommon/ftCo_AttackS3.c",
+      "reason": "Updated side-tilt angle threshold names including `x9C_radians`, `xA0_radians`, `xA4_radians`, and `xA8_radians`."
+    },
+    {
+      "path": "src/melee/ft/chara/ftCommon/ftCo_AttackS4.c",
+      "reason": "Updated side-smash angle threshold names including `xB8_radians`, `xBC_radians`, `xC0_radians`, and `xC4_radians`."
+    },
+    {
+      "path": "src/melee/ft/chara/ftCommon/ftCo_ItemThrow.c",
+      "reason": "Propagated `x20_radians` to heavy/light item throw direction selection."
+    },
+    {
+      "path": "src/melee/ft/chara/ftCommon/ftCo_Damage.c",
+      "reason": "Renamed airborne Sakurai-angle fallback field from `x144` to `x144_radians`."
+    },
+    {
+      "path": "src/melee/it/it_2725.c",
+      "reason": "Item knockback angle logic also consumes `p_ftCommonData->x144_radians`."
+    }
+  ],
+  "what_changed": [
+    "`ftCommonData.x20` became `x20_radians` and all visible uses in L-stick/C-stick angle comparisons were updated.",
+    "Additional angle-like fields were renamed with `_radians`: `x9C`, `xA0`, `xA4`, `xA8`, `xB8`, `xBC`, `xC0`, `xC4`, `x144`, plus header-only evidence for fields such as `x1E8_radians`, `x234_radians`, `x238_radians`, `x51C_radians`, and `x560_radians`.",
+    "Many `UNK_T` members in `ftCommonData` were retyped to `float`, including ranges around offsets `+108`-`+120`, `+1A4`, `+1B4`, `+1C4`, `+1D4`, `+1D8`, `+2C0`-`+2D0`, `+34C`-`+378`, and others shown in the diff.",
+    "Several byte-array placeholder gaps were replaced with explicit fields, e.g. `x84[4]` to `float x84`, `x208[0x210 - 0x208]` to `float x208` and `float x20C`, `x3F0[0x3FC - 0x3F0]` to `x3F0`, `x3F4`, `x3F8`, `x5B8[0x5C0 - 0x5B8]` to `x5B8` and `x5BC`, and `x71C[0x760 - 0x71C]` to explicit fields through `x75C`.",
+    "Attack input and motion-decision code now documents that thresholds passed to `ftCo_GetLStickAngle`/`ftCo_GetCStickAngle` are radian values.",
+    "`ftCo_Damage_CalcAngle` and item function `it_8027B798` now use `p_ftCommonData->x144_radians` for the airborne 361-degree angle case."
+  ],
+  "smart_moves": [
+    "Used value inspection from a hex editor to improve the large data-table struct without attempting risky behavioral rewrites.",
+    "Renamed fields only where usage made the unit clear, especially angle thresholds compared directly against stick-angle helper results.",
+    "Propagated field renames across all dependent fighter and item callsites in the same PR, keeping the tree buildable and avoiding stale aliases.",
+    "Preserved offsets in `ftCommonData` comments while refining types, which is useful for data-table verification and future automation.",
+    "Split opaque padding arrays into explicit offset-named fields where individual scalar slots were identified, making future names easier to apply one field at a time."
+  ],
+  "decomp_lessons": [
+    "For large common-data structs, unit suffixes such as `_radians` are valuable even before semantic names are known; they prevent degree/radian confusion at callsites.",
+    "When a field is repeatedly compared against `ftCo_GetLStickAngle` or `ftCo_GetCStickAngle`, that use pattern is strong evidence for a radian threshold.",
+    "Header-only type refinements can still be high-value for automation if they preserve layout and produce no binary changes.",
+    "Replacing `UNK_T` or byte-array gaps with scalar fields should be done with offset comments intact so later PRs can audit struct size and alignment.",
+    "Shared common-data fields may be consumed outside the fighter system; this PR had to update item code using `p_ftCommonData->x144` as well as fighter damage code."
+  ],
+  "naming_conventions": [
+    "Use `_radians` suffix for `ftCommonData` fields known to store angles in radians, even if the semantic field name is still offset-based.",
+    "Keep offset-derived placeholder names such as `x20_radians` when the unit is known but the gameplay meaning is not.",
+    "Preserve existing semantic names where already known, e.g. `attackhi3_stick_threshold_y`, `kb_min`, `kb_squat_mul`, `x204_knockbackFrameDecay`, `escapeair_deadzone`, `grab_timer_decrement`, and shield-related decay/friction names.",
+    "Prefer explicit scalar fields over anonymous byte-array gaps once field type/slot boundaries are known."
+  ],
+  "assembly_or_matching_tactics": [
+    "The PR was effectively a type/name refactor; the decomp-dev bot reported `No changes` for GALE01, indicating matching output was preserved.",
+    "Field renames in C callsites do not affect generated code when offsets and types remain layout-compatible.",
+    "Changing `UNK_T`/padding to `float` in a data struct can aid decompilation and tooling while remaining nonfunctional if no codegen-sensitive expressions change.",
+    "Use cross-file grep-style propagation after renaming shared struct fields; `p_ftCommonData` is referenced in fighter common code and item code."
+  ],
+  "review_feedback": [
+    {
+      "source": "PR body",
+      "feedback": "Author said the updates were mostly determined by poking around in a hex editor and hoped they would help automation efforts."
+    },
+    {
+      "source": "decomp-dev bot issue comment",
+      "feedback": "GALE01 report: `No changes`, supporting that the struct/type/name update did not alter matched binary output."
+    },
+    {
+      "source": "reviews",
+      "feedback": "No human review comments were present in the provided slice."
+    }
+  ],
+  "searchable_terms": [
+    "ftCommonData",
+    "p_ftCommonData",
+    "x20_radians",
+    "x9C_radians",
+    "xA0_radians",
+    "xA4_radians",
+    "xA8_radians",
+    "xB8_radians",
+    "xBC_radians",
+    "xC0_radians",
+    "xC4_radians",
+    "x144_radians",
+    "x1E8_radians",
+    "x234_radians",
+    "x238_radians",
+    "x51C_radians",
+    "x560_radians",
+    "attackhi3_stick_threshold_y",
+    "ftCo_GetLStickAngle",
+    "ftCo_GetCStickAngle",
+    "ftCo_AttackAir_GetMsidFromCStick",
+    "ftCo_AttackS3_CheckInput",
+    "ftCo_AttackHi3_CheckInput",
+    "ftCo_AttackLw3_CheckInput",
+    "ftCo_80094EA4",
+    "ftCo_80095328",
+    "ftCo_80095A30",
+    "ftCo_Damage_CalcAngle",
+    "it_8027B798",
+    "hex editor",
+    "radians",
+    "UNK_T to float",
+    "GALE01 No changes"
+  ],
+  "follow_up_queries": [
+    "Search for remaining `p_ftCommonData->x20` or other unsuffixed angle thresholds after PR 1930.",
+    "Audit `ftCommonData` fields still typed as `UNK_T` near offsets where adjacent fields are now known floats.",
+    "Find all `deg_to_rad` or `0.0174533f` users that might identify additional `_radians` common-data fields.",
+    "Cross-check the explicit fields introduced from byte-array gaps against the source data table to confirm float/int boundaries.",
+    "Look for item or physics code using fighter common-data angle fields outside `src/melee/ft`."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

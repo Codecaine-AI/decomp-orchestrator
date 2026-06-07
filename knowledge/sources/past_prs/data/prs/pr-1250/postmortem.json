@@ -1,0 +1,136 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1250",
+  "pr": {
+    "number": 1250,
+    "title": "Clean up `publish-packages`",
+    "url": "https://github.com/doldecomp/melee/pull/1250",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-02-18T20:12:36Z",
+    "merged_at": "2024-02-18T20:14:18Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Cleaned up the GitHub package publishing workflow and container setup, with the explicit PR note: \"No more devkitPro.\" The build-linux Dockerfile stopped copying powerpc-eabi-as from devkitpro/devkitppc and instead installs a PowerPC assembler from encounter/gc-wii-binutils. Several shell scripts were made executable in git and switched to /usr/bin/env bash, removing repeated Dockerfile chmod layers. The gen-pages target now writes directly to a dedicated output tree and the workflow uploads a GitHub Pages artifact. Related assembly files were adjusted for the new assembler/toolchain syntax, especially MetroTRK SPR accesses and mftb encodings.",
+  "change_classification": {
+    "primary_type": "ci-packaging-toolchain-cleanup",
+    "categories": [
+      "ci",
+      "docker",
+      "github-actions",
+      "toolchain",
+      "shell-script-cleanup",
+      "assembly-syntax-adjustment"
+    ],
+    "systems": [
+      ".github/packages/build-linux",
+      ".github/packages/gen-pages",
+      ".github/packages/check-issues",
+      ".github/workflows/publish-packages.yml",
+      "asm/MetroTRK",
+      "asm/dolphin/os"
+    ]
+  },
+  "key_files": [
+    ".github/packages/build-linux/Dockerfile",
+    ".github/packages/build-linux/setup.sh",
+    ".github/packages/build-linux/entrypoint.sh",
+    ".github/packages/build-linux/melee-mwcc",
+    ".github/packages/gen-pages/entrypoint.sh",
+    ".github/packages/check-issues/entrypoint.sh",
+    ".github/packages/check-issues/setup.sh",
+    ".github/workflows/publish-packages.yml",
+    "asm/MetroTRK/mpc_7xx_603e.s",
+    "asm/dolphin/os/OSReset.s"
+  ],
+  "what_changed": [
+    "Removed the Dockerfile dependency on devkitpro/devkitppc:latest for powerpc-eabi-as.",
+    "Added BINUTILS_URL pointing at encounter/gc-wii-binutils release 2.42-0 linux-x86_64.zip and installed powerpc-eabi-as into $DEVKITPPC/bin during setup.sh.",
+    "Removed multiple Dockerfile RUN chmod +x layers by committing executable bits on entrypoint/setup/helper scripts, including build-linux/entrypoint.sh, build-linux/setup.sh, build-linux/melee-mwcc, check-issues scripts, and related package scripts.",
+    "Changed shell script shebangs from #!/bin/bash to #!/usr/bin/env bash.",
+    "Removed the dump-asm stage from the build-linux Dockerfile excerpt, including SHORT_SHA, TREE_URL, dump-asm/readme.py, and dump-asm/entrypoint.sh setup.",
+    "Changed gen-pages output flow: creates /output/.nojekyll, builds doxygen under build/doxygen, copies generated HTML directly to /output, emits m2ctx output as build/ctx.o, and copies ctx.html directly to /output.",
+    "Updated publish-packages.yml to define an OUTPUT env var, put build and gen-pages outputs under separate subdirectories, and upload the generated pages tree with actions/upload-pages-artifact@v3.",
+    "Reformatted asm/MetroTRK/mpc_7xx_603e.s with .file, .text, .balign 4, .fn/.endfn function wrappers, and many operand/special-register spelling changes.",
+    "Changed some assembler mnemonics that may not assemble under the selected toolchain into raw .4byte encodings, including mftb forms in MetroTRK and OSReset.",
+    "Replaced many numeric SPR operands with named aliases where available, such as HID0, HID1, IABR, GQR0-GQR7, HID2, WPAR, DMA_U, DMA_L, DABR, PMC1-PMC4, MMCR0, MMCR1, THRM1-THRM3, ICTC, and L2CR; left some unsupported/unknown SPRs as decimal immediates."
+  ],
+  "smart_moves": [
+    "Committed executable bits instead of fixing permissions inside the image, reducing Docker layers and making script intent visible in the repository.",
+    "Removed a heavyweight devkitPro image dependency when only a specific assembler binary was needed, replacing it with a pinned gc-wii-binutils release URL.",
+    "Kept DEVKITPRO/DEVKITPPC/PATH environment compatibility while changing where the assembler comes from, minimizing disruption to existing build scripts.",
+    "Added a workflow-level OUTPUT variable and target-specific subdirectories to avoid path duplication and reduce output collisions between build-linux and gen-pages test runs.",
+    "Made the gen-pages package validate a real Pages artifact path during the publish-package workflow by adding actions/upload-pages-artifact@v3.",
+    "Used raw .4byte encodings for instructions whose textual mnemonic forms were problematic for the new assembler, preserving exact machine code."
+  ],
+  "decomp_lessons": [
+    "Toolchain cleanup can require assembly-source cleanup: changing assemblers may expose unsupported aliases, different SPR naming rules, or operand-format expectations even when bytes are intended to remain identical.",
+    "For handwritten or generated assembly, prefer named SPR constants where the assembler supports them, but use numeric operands or .4byte when that is the only reliable way to preserve the original instruction encoding.",
+    "When preserving exact bytes is more important than mnemonic readability, .4byte is an acceptable escape hatch for assembler-incompatible instructions such as the mftb forms shown here.",
+    "Committing executable permissions on scripts is cleaner than repeatedly chmodding copied files in Dockerfiles.",
+    "Package CI images should avoid unnecessary external base images if a smaller pinned artifact download supplies the actual required binary.",
+    "For documentation/page generation containers, write final public artifacts directly to /output and keep intermediate build products under build/ to make workflow artifact upload simpler."
+  ],
+  "naming_conventions": [
+    "Environment variables use uppercase names such as MELEE_COMPILERS_URL, BINUTILS_URL, DEVKITPRO, DEVKITPPC, WIBO_PATH, MAKE_FLAGS, IMAGE, OUTPUT, REGISTRY, and CONTAINERFILE.",
+    "Workflow output subdirectories use descriptive lowercase/underscore names such as generate_map and gen_pages.",
+    "Shell entrypoints use /usr/bin/env bash rather than hardcoding /bin/bash.",
+    "MetroTRK assembly functions were wrapped with .fn SYMBOL, global and .endfn SYMBOL instead of bare .global plus label-only declarations.",
+    "Assembler cleanup favored canonical named SPR operands where available: GQR0-GQR7, HID0, HID1, HID2, WPAR, DMA_U, DMA_L, DABR, PMC1-PMC4, MMCR0, MMCR1, THRM1-THRM3, ICTC, L2CR.",
+    "The generated m2ctx compile artifact was renamed from build/ctx.c.o to build/ctx.o in the gen-pages script."
+  ],
+  "assembly_or_matching_tactics": [
+    "Added .file \"mpc_7xx_603e.c\", .text, .balign 4, and .fn/.endfn annotations to MetroTRK assembly while preserving addresses and byte comments.",
+    "Converted some mfsr operands from hexadecimal register numbers like 0xa through 0xf to decimal 10 through 15.",
+    "Converted many mfspr/mtspr numeric operands to assembler-recognized symbolic SPR names to improve readability without changing the encoded bytes.",
+    "Used .4byte for specific time-base reads where the assembler mnemonic form was not suitable, e.g. .4byte 0x7D4C42E6, .4byte 0x7D6D42E6 in MetroTRK and .4byte 0x7CAC42E6, .4byte 0x7CCC42E6 in OSReset.",
+    "Kept some special SPRs as decimal numbers, such as 928, 935, 944, 951, 976-982, 1014, 1015, and 1023, indicating not every register had or used a symbolic alias in the assembler.",
+    "Changed selected aliases to more specific mnemonics where supported, such as mfsrr1, mfsdr1, mfsprg, mfear, and mfdec."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1250",
+    "publish-packages",
+    "No more devkitPro",
+    "devkitPro",
+    "devkitPPC",
+    "gc-wii-binutils",
+    "encounter/gc-wii-binutils",
+    "BINUTILS_URL",
+    "powerpc-eabi-as",
+    "build-linux Dockerfile",
+    "gen-pages entrypoint",
+    "check-issues",
+    "actions/upload-pages-artifact",
+    "GitHub Pages artifact",
+    "melee-mwcc",
+    "m2ctx",
+    "ctx.o",
+    ".nojekyll",
+    "MetroTRK mpc_7xx_603e.s",
+    "TRKSaveExtended1Block",
+    "TRKRestoreExtended1Block",
+    "TRKTargetCPUMinorType",
+    "OSReset.s",
+    ".4byte mftb",
+    "HID0 HID1 HID2",
+    "GQR0 GQR7",
+    "DABR PMC MMCR THRM L2CR"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that reference gc-wii-binutils or BINUTILS_URL to see whether this toolchain replacement needed follow-up fixes.",
+    "Search for other assembly files using mftb/mftbu textual operands that may require .4byte under the same assembler.",
+    "Search for remaining Dockerfile RUN chmod +x patterns in .github/packages and workflows.",
+    "Check whether the removed dump-asm Dockerfile stage was replaced or intentionally retired elsewhere.",
+    "Search for additional MetroTRK assembly normalization using .fn/.endfn and named SPR operands."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

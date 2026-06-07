@@ -1,0 +1,157 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1652",
+  "pr": {
+    "number": 1652,
+    "title": "lbdvd matches",
+    "url": "https://github.com/doldecomp/melee/pull/1652",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-29T04:31:03Z",
+    "merged_at": "2025-06-29T04:39:56Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched several lbdvd preload/cache management routines and tightened related lb heap/file prototypes and preload structs. The PR replaced multiple placeholder declarations in src/melee/lb/lbdvd.c with C implementations for heap purge/wait helpers, preload entry allocation, path-to-entry preload registration, persistent heap scene switching, and small spin-wait wrappers. It also adjusted PreloadEntry field signedness, added lbHeap_800158E8/lbHeap_80015900 prototypes, changed lbDvd_803BA68C from a static zero initializer to an extern reset template, and included lb_0192.h for lb_800195D0 wait/yield calls.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-types",
+      "prototype-correction",
+      "library-cache-management"
+    ],
+    "systems": [
+      "library",
+      "lb",
+      "lbdvd",
+      "lbheap",
+      "lbfile"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/lbdvd.c",
+    "src/melee/lb/lbdvd.h",
+    "src/melee/lb/lbdvd.static.h",
+    "src/melee/lb/types.h",
+    "src/melee/lb/lbheap.c",
+    "src/melee/lb/lbheap.h"
+  ],
+  "what_changed": [
+    "Implemented previously unmatched lbdvd functions including lbDvd_80017644, lbDvd_80017700, lbDvd_800178E8, lbDvd_80017A80, lbDvd_800189EC, lbDvd_80018C2C, and lbDvd_80018CF4.",
+    "Reworked lbDvd_80017598 from a bool cached/preloaded-style parameter to an int heap parameter and made it scan preloadCache.entries for entries on that heap while interrupts are disabled.",
+    "Reimplemented lbDvd_80017740 as a preload entry lookup/allocation routine that scans 80 entries, finds a free slot, refreshes load_score for existing matching entries, asserts if no free slot exists, and initializes fields for a new entry.",
+    "Added lbDvd_800178E8 to convert a path through lbFile_80016204 and DVDConvertPathToEntrynum before registering the preload request with lbDvd_80017740.",
+    "Updated lbDvd_CachePreloadedFile to use clearer indexed access into preloadCache.entries, lbHeap allocation/free functions, lbFile_8001634C/lbFile_800164A4, and void* data handling.",
+    "Implemented persistent heap mode switching in lbDvd_80018CF4, including heap persistence toggles through lbHeap_800158D0, waits on lbDvd_80017598 for heaps that are no longer persistent, and final lbHeap_80015900 call.",
+    "Adjusted lbDvd_80018C6C switch cases to break rather than return, preserving matched control flow shape.",
+    "Changed PreloadEntry fields type, load_state, and entry_num to signed types and changed PreloadCache.persistent_heaps to s32.",
+    "Added a TODO noting PreloadCacheScene may need to be smaller based on struct-copy code emitted by functions such as lbDvd_80018CF4.",
+    "Updated headers with more specific signatures for lbdvd and lbheap functions, including lbHeap_800158E8 and lbHeap_80015900.",
+    "Changed lbDvd_803BA68C in lbdvd.static.h from a static zero-initialized PreloadEntry to an extern PreloadEntry, indicating it is a shared reset/template entry rather than a local definition."
+  ],
+  "smart_moves": [
+    "Used OSDisableInterrupts/OSRestoreInterrupts around preload cache mutation/scanning in lbDvd_80017598 and lbDvd_80017644, matching the expected atomicity for cache state changes.",
+    "Introduced small spin-wait wrappers that call lb_800195D0 while cache/heap cleanup predicates remain active, preserving the original polling behavior without inlining wait logic everywhere.",
+    "Added `#pragma dont_inline` around lbDvd_800174E8, suggesting inlining control was needed for a match or for stable call boundaries.",
+    "Kept a deliberately shaped `same(int a, int b)` helper and goto-style loop in lbDvd_80017740, likely to reproduce compiler control flow/register allocation for matching.",
+    "Converted several ambiguous UNK_RET/UNK_PARAMS declarations to concrete prototypes, reducing type drift across lbdvd, lbheap, and lbfile interactions.",
+    "Replaced misleading unsigned fields with signed PreloadEntry members where comparisons against negative load_score or signed entry IDs mattered.",
+    "Preserved evidence of uncertain struct layout with an explicit TODO rather than overfitting PreloadCacheScene without proof."
+  ],
+  "decomp_lessons": [
+    "For lbdvd preload cache work, the entry array size is consistently 80/0x50; loops and struct-copy behavior should be used as evidence for layout and array bounds.",
+    "PreloadEntry signedness matters: type, load_state, heap, entry_num, and especially load_score participate in signed comparisons and assignments.",
+    "Cache entry invalidation uses a shared zero/reset template entry, lbDvd_803BA68C, copied into entries after freeing archive/raw_data resources.",
+    "Heap persistence changes are coupled to waiting for pending preload work to drain; callers should not simply toggle heap flags without polling lbDvd_80017598 and yielding through lb_800195D0.",
+    "Header fixes are part of matching: correcting return types and parameter widths can unlock matches in unrelated functions using the same symbols.",
+    "When matching MWCC output, unnatural helpers, explicit gotos, and pragma-based inlining control may be acceptable if they preserve codegen.",
+    "Do not assume placeholder static initializers are correct; a zero-looking template may need to be extern if the symbol exists in data and is copied by address."
+  ],
+  "naming_conventions": [
+    "Functions retain address-based names such as lbDvd_80017740, lbDvd_80018CF4, and lbHeap_800158E8 when semantic names are not yet established.",
+    "Struct and cache concepts use CamelCase type names such as PreloadEntry, PreloadCache, PreloadCacheScene, and PreloadCacheSceneEntry.",
+    "Global/static data symbols keep address suffixes, e.g. lbDvd_803BA638, lbDvd_803BA68C, lbDvd_804D37F4, and preloadCache.",
+    "Field names are descriptive where understood, such as persistent_heaps, persistent_heap, load_state, load_score, entry_num, raw_data, archive, effect_index, and is_heap_persistent.",
+    "Temporary match-oriented locals such as var_ctr, var_r22, var_r4, temp_ret, and new_var-style names remain where exact semantics or codegen constraints are unclear."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `#pragma push`, `#pragma dont_inline on`, and `#pragma pop` around lbDvd_800174E8 to prevent inlining and preserve expected call structure.",
+    "Used an inline `same(int a, int b)` helper that returns 0/1 through an explicit local, likely for comparison/codegen shaping in lbDvd_80017740.",
+    "Used labels and gotos (`loop_1`, `block_13`) in lbDvd_80017740 to match loop/control-flow output rather than writing idiomatic structured C.",
+    "Used explicit constants such as 0x50, 0x2314, 0x270F, 9999, and heap IDs 2, 3, 4, 5 where they appear in preload scoring and heap persistence logic.",
+    "Used casts and exact prototype widths, including int versus s16/u8/s8, to influence generated loads/stores and comparisons.",
+    "Changed switch branches in lbDvd_80018C6C from early returns to breaks, which can be important for matching branch layout even when behavior is similar.",
+    "Introduced static array lbDvd_804D37F4[2] = { 4, 5 } for heap iteration in lbDvd_80018CF4 instead of open-coding both heap IDs."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "No PR body or human text excerpt was provided beyond the title, so intent is inferred from the diff and initial classification."
+  ],
+  "searchable_terms": [
+    "pr-1652",
+    "lbdvd matches",
+    "r-burns",
+    "src/melee/lb/lbdvd.c",
+    "src/melee/lb/lbdvd.h",
+    "src/melee/lb/types.h",
+    "src/melee/lb/lbheap.c",
+    "src/melee/lb/lbheap.h",
+    "lbDvd_800174E8",
+    "lbDvd_80017598",
+    "lbDvd_80017644",
+    "lbDvd_80017700",
+    "lbDvd_80017740",
+    "lbDvd_800178E8",
+    "lbDvd_80017A80",
+    "lbDvd_CachePreloadedFile",
+    "lbDvd_800189EC",
+    "lbDvd_80018C2C",
+    "lbDvd_80018CF4",
+    "lbDvd_803BA68C",
+    "lbDvd_804D37F4",
+    "preloadCache",
+    "PreloadEntry",
+    "PreloadCache",
+    "PreloadCacheScene",
+    "persistent_heaps",
+    "persistent_heap",
+    "load_score",
+    "entry_num",
+    "effect_index",
+    "OSDisableInterrupts",
+    "OSRestoreInterrupts",
+    "lb_800195D0",
+    "lbHeap_800158D0",
+    "lbHeap_800158E8",
+    "lbHeap_80015900",
+    "lbHeap_80015BB8",
+    "lbHeap_80015BD0",
+    "lbHeap_80015CA8",
+    "lbHeap_80015D6C",
+    "lbFile_80016204",
+    "lbFile_8001634C",
+    "lbFile_800164A4",
+    "DVDConvertPathToEntrynum",
+    "pragma dont_inline",
+    "PreloadEntry signedness",
+    "lbdvd preload cache",
+    "persistent heap switching"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or document lbDvd_80017740 and PreloadEntry.effect_index semantics.",
+    "Search for follow-up changes to PreloadCacheScene size or the TODO about struct-copy code emitted by lbDvd_80018CF4.",
+    "Check whether lbDvd_803BA68C is later defined in another translation unit or converted back after static data matching work.",
+    "Look for additional lbdvd matches around lbDvd_80017960, lbDvd_800187F4, and lbDvd_80018A2C.",
+    "Audit users of lbDvd_80017598 because the header parameter name remained `preloaded` while the implementation treats it as a heap ID."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

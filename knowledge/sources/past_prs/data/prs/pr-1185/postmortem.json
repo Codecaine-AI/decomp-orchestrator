@@ -1,0 +1,144 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1185",
+  "pr": {
+    "number": 1185,
+    "title": "Fully match tobj.c",
+    "url": "https://github.com/doldecomp/melee/pull/1185",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-02-02T21:03:33Z",
+    "merged_at": "2024-02-02T21:08:45Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Completed the C match for sysdolphin/baselib/tobj.c, removed the 4145-line tobj.s assembly fallback, and switched the build/configuration to compile tobj.c as Matching. The final match relied on small semantic and codegen-sensitive fixes in texture object cleanup, texture coordinate generation calls, function linkage, string literals, header prototypes, and symbol metadata.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "build-config",
+      "headers",
+      "symbol-map-cleanup"
+    ],
+    "systems": [
+      "sysdolphin/baselib",
+      "tobj",
+      "GX",
+      "config",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "asm/sysdolphin/baselib/tobj.s",
+    "src/sysdolphin/baselib/tobj.c",
+    "src/sysdolphin/baselib/tobj.h",
+    "src/dolphin/gx/GXAttr.h",
+    "config/GALE01/symbols.txt",
+    "configure.py",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted asm/sysdolphin/baselib/tobj.s, removing the prior assembly implementation for tobj.c.",
+    "Changed configure.py from Object(NonMatching, \"sysdolphin/baselib/tobj.c\") to Object(Matching, \"sysdolphin/baselib/tobj.c\").",
+    "Changed obj_files.mk to build src/sysdolphin/baselib/tobj.c.o instead of asm/sysdolphin/baselib/tobj.s.o.",
+    "In HSD_TObjAddAnim, replaced HSD_TlutFree(tobj->tluttbl[i]) with HSD_TlutRemove(tobj->tluttbl[i]) when clearing existing TLUT table entries.",
+    "Changed HSD_TlutRemove so it directly frees the HSD_Tlut memory piece with hsdFreeMemPiece(tlut, sizeof(HSD_Tlut)) instead of delegating to HSD_TlutFree.",
+    "Made TObjSetupMtx static in tobj.c, matching its local-use/linkage expectations.",
+    "Added a GXSetTexCoordGen macro in GXAttr.h that wraps GXSetTexCoordGen2 with GX_DISABLE and GX_PTIDENTITY default arguments.",
+    "Adjusted setupTextureCoordGen, setupTextureCoordGenBump, and setupTextureCoordGenToon to use GXSetTexCoordGen in selected cases, including local temporaries for src and mtxid before the call.",
+    "Removed an explicit embedded NUL from the HSD_Panic string in HSD_TexMapID2PTTexMtx: \"unexpected texmap id.\\n\\0\" became \"unexpected texmap id.\\n\".",
+    "Added missing tobj.h declarations for HSD_TObjRemove, HSD_TlutRemove, HSD_TObjTevFree, and HSD_TObjTevRemove.",
+    "Updated symbols.txt object boundaries/types around HSD_TObj_804056B8/HSD_TObj_804056D8/HSD_TObj_8040574C, string/data labels such as HSD_TObj_804058B8 and HSD_TObj_80405958, and several sdata HSD_TObj labels."
+  ],
+  "smart_moves": [
+    "Used a small SDK-style GXSetTexCoordGen wrapper macro rather than duplicating GXSetTexCoordGen2 arguments everywhere, giving the compiler a call shape closer to the original source.",
+    "Introduced local variables for GXTexGenSrc src and u32 mtxid before selected GXSetTexCoordGen calls, a common register/allocation-sensitive tactic for matching CodeWarrior output.",
+    "Distinguished HSD_TlutRemove from HSD_TlutFree: Remove now only frees the TLUT struct memory piece, while AddAnim uses Remove when disposing table-held TLUT pointers.",
+    "Cleaned up symbol sizes and string annotations after the C match so data/sdata boundaries reflect the matched object layout rather than stale assembly-era ranges.",
+    "Kept the final PR focused: only 35 additions and targeted edits were needed to retire a large assembly file."
+  ],
+  "decomp_lessons": [
+    "A final asm-removal PR may require tiny non-obvious C edits, not large rewrites: linkage, helper macro spelling, local temporaries, string literal contents, and cleanup helper selection can all affect matching.",
+    "When a Dolphin/GX SDK function has a convenience wrapper in original code, modeling that wrapper as a macro can produce better matching call sequences than always calling the expanded low-level function directly.",
+    "Free/remove pairs should not be assumed equivalent. In this PR, HSD_TlutRemove and HSD_TlutFree needed different implementations to match expected behavior/codegen.",
+    "Explicit \"\\0\" in C string literals changes emitted data; remove it when the original only had the normal terminator.",
+    "After matching a file, update both configure.py and obj_files.mk together so the build stops linking the assembly fallback.",
+    "Symbol map corrections are part of the match: fully matched C can expose previously coarse global object labels that need splitting into smaller objects or strings."
+  ],
+  "naming_conventions": [
+    "Texture-object APIs use the HSD_TObj* prefix, e.g. HSD_TObjRemove, HSD_TObjRemoveAll, HSD_TObjAlloc.",
+    "Texture lookup table APIs use the HSD_Tlut* prefix, with distinct Free and Remove functions.",
+    "Texture-object TEV APIs use HSD_TObjTev* names, e.g. HSD_TObjTevFree and HSD_TObjTevRemove.",
+    "Unidentified/global data labels in symbols.txt retain address-based names like HSD_TObj_804056B8 and HSD_TObj_804D5CA0.",
+    "Jump tables are named with the jumptable_ADDRESS convention, e.g. jumptable_804057C0.",
+    "The added GXSetTexCoordGen macro follows Dolphin SDK-style naming and delegates to GXSetTexCoordGen2."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted the entire 4145-line tobj.s once the C file became matching.",
+    "Changed object classification from NonMatching to Matching and redirected obj_files.mk from asm/tobj.s.o to src/tobj.c.o.",
+    "Used wrapper macro expansion for GXSetTexCoordGen2 default parameters to match original call patterns.",
+    "Used local temporaries before GX calls to influence argument evaluation/register placement.",
+    "Changed TObjSetupMtx to static to match local symbol/linkage expectations.",
+    "Adjusted string literal contents to align rodata/sdata layout.",
+    "Refined symbols.txt object sizes and data:string annotations to reflect the new matched data layout."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "text": "Nice!",
+      "type": "issue_comment"
+    },
+    {
+      "text": "No substantive review comments were present in the provided PR slice.",
+      "type": "absence_note"
+    }
+  ],
+  "searchable_terms": [
+    "pr-1185",
+    "Fully match tobj.c",
+    "PsiLupan",
+    "sysdolphin",
+    "baselib",
+    "tobj.c",
+    "tobj.s",
+    "HSD_TObjAddAnim",
+    "HSD_TlutRemove",
+    "HSD_TlutFree",
+    "hsdFreeMemPiece",
+    "TObjSetupMtx",
+    "setupTextureCoordGen",
+    "setupTextureCoordGenBump",
+    "setupTextureCoordGenToon",
+    "GXSetTexCoordGen",
+    "GXSetTexCoordGen2",
+    "GXAttr.h",
+    "HSD_TexMapID2PTTexMtx",
+    "HSD_Panic",
+    "symbols.txt",
+    "obj_files.mk",
+    "configure.py",
+    "Matching",
+    "NonMatching",
+    "HSD_TObj_804056B8",
+    "HSD_TObj_804056D8",
+    "HSD_TObj_8040574C",
+    "jumptable_804057C0"
+  ],
+  "follow_up_queries": [
+    "Find other PRs that add SDK-style GX wrapper macros to improve matching.",
+    "Find other baselib PRs where Remove and Free functions were separated for matching or lifecycle correctness.",
+    "Search for remaining NonMatching sysdolphin/baselib objects after tobj.c was matched.",
+    "Audit symbols.txt updates around HSD_TObj_* labels for later renames from address labels to semantic names.",
+    "Compare texture coordinate generation matching tactics in tev.c, mobj.c, and tobj.c."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

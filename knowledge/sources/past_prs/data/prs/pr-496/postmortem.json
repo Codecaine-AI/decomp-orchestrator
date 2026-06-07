@@ -1,0 +1,124 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-496",
+  "pr": {
+    "number": 496,
+    "title": "Match HSD_ShadowRemove, HSD_ShadowInit",
+    "url": "https://github.com/doldecomp/melee/pull/496",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-08-26T21:20:13Z",
+    "merged_at": "2022-08-26T21:40:25Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched two sysdolphin baselib shadow routines, HSD_ShadowRemove and HSD_ShadowInit, by replacing their hand-written assembly in asm/sysdolphin/baselib/shadow.s with C implementations in src/sysdolphin/baselib/shadow.c. The C version reconstructs shadow teardown logic, camera refcount handling, texture/image cleanup, and texture-copy initialization using GXSetTexCopySrc and GXSetTexCopyDst.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "baselib",
+      "resource-cleanup",
+      "graphics-initialization"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "shadow",
+      "GX",
+      "HSD object lifecycle"
+    ]
+  },
+  "key_files": [
+    "asm/sysdolphin/baselib/shadow.s",
+    "src/sysdolphin/baselib/shadow.c"
+  ],
+  "what_changed": [
+    "Removed the assembly bodies for HSD_ShadowRemove and HSD_ShadowInit from asm/sysdolphin/baselib/shadow.s.",
+    "Added a C implementation of HSD_ShadowRemove in src/sysdolphin/baselib/shadow.c.",
+    "Added a C implementation of HSD_ShadowInit in src/sysdolphin/baselib/shadow.c.",
+    "Introduced an inline helper named dec_refcount that operates on a u16 ref_count pointer and preserves the special HSD_OBJ_NOREF case.",
+    "HSD_ShadowRemove now handles NULL shadow input, decrements/releases the attached camera object when appropriate, deletes shadow objects, conditionally calls func_80363DC4 when shadow->active is set, frees the texture image buffer if present, frees the image descriptor, frees the texture object, and finally frees the shadow object through shadow_alloc_data.",
+    "HSD_ShadowInit now asserts on NULL shadow using lbl_80407310, line 0xF5, and lbl_804D5F78, then initializes the texture-copy source and destination from shadow->texture->imagedesc width and height."
+  ],
+  "smart_moves": [
+    "Factored the refcount decrement pattern into an inline dec_refcount helper, matching the assembly's awkward HSD_OBJ_NOREF and zero-ref behavior while keeping HSD_ShadowRemove readable.",
+    "Used explicit u16 handling and an s32 cond temporary in dec_refcount, which likely helped reproduce the original instruction sequence around refcount comparisons and boolean return values.",
+    "Kept the original redundant-looking cobj != NULL check after dec_refcount inside HSD_ShadowRemove, preserving control-flow shape from the assembly rather than over-simplifying the C.",
+    "Modeled virtual class cleanup through cobj->parent.parent.class_info->release and destroy calls, matching the indirect calls at class_info offsets rather than replacing them with higher-level guessed APIs.",
+    "Preserved direct external references to assertion string labels lbl_80407310 and lbl_804D5F78 instead of inventing more descriptive names without evidence."
+  ],
+  "decomp_lessons": [
+    "For baselib object teardown, matching may require preserving exact refcount semantics, including sentinel values such as HSD_OBJ_NOREF.",
+    "Do not remove apparently redundant NULL checks if they correspond to original branch structure and help matching.",
+    "When converting assembly with virtual dispatch, express calls through class_info function pointers if that is what the assembly does.",
+    "Resource cleanup order matters: this implementation deletes shadow objects, handles active texture state, frees image memory, frees the image descriptor, frees the texture object, then frees the owning shadow allocation.",
+    "For assert reconstruction, use the original string labels and line numbers when named source strings are not yet available.",
+    "GX texture-copy setup can often be reconstructed directly from image descriptor width and height fields when assembly passes those values to GXSetTexCopySrc and GXSetTexCopyDst."
+  ],
+  "naming_conventions": [
+    "Matched exported HSD symbols keep their original CamelCase-style baselib names: HSD_ShadowRemove and HSD_ShadowInit.",
+    "Local variables use descriptive lowercase baselib object names such as cobj, tobj, imagedesc, ref_count, and shadow.",
+    "The helper function dec_refcount uses snake_case, consistent with a small local utility rather than an exported HSD API.",
+    "Unidentified labels remain as lbl_80407310 and lbl_804D5F78, avoiding speculative renaming."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used an inline BOOL helper to reproduce a compact refcount decrement/check instruction sequence.",
+    "Used u16 casts around HSD_OBJ_NOREF and ref_count operations to match halfword loads/stores in the original assembly.",
+    "Used a temporary s32 cond for the HSD_OBJ_NOREF comparison, likely to influence boolean materialization and branch shape.",
+    "Preserved the function-pointer dispatch through class_info->release and class_info->destroy to correspond to indirect blrl calls.",
+    "Matched GXSetTexCopySrc arguments as x=0, y=0, width=imagedesc->width, height=imagedesc->height.",
+    "Matched GXSetTexCopyDst arguments as width, height, format 0x20, mipmap flag 0.",
+    "Represented the original assert call with extern char label declarations and __assert(lbl_80407310, 0xF5, lbl_804D5F78)."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-496",
+    "r-burns",
+    "HSD_ShadowRemove",
+    "HSD_ShadowInit",
+    "shadow.c",
+    "shadow.s",
+    "sysdolphin",
+    "baselib",
+    "HSD_Shadow",
+    "HSD_ShadowDeleteObject",
+    "HSD_ShadowAlloc",
+    "shadow_alloc_data",
+    "dec_refcount",
+    "HSD_OBJ_NOREF",
+    "ref_count",
+    "HSD_CObj",
+    "HSD_TObj",
+    "HSD_ImageDesc",
+    "HSD_ImageDescFree",
+    "HSD_TObjFree",
+    "HSD_ObjFree",
+    "HSD_Free",
+    "func_80363DC4",
+    "class_info",
+    "release",
+    "destroy",
+    "img_ptr",
+    "GXSetTexCopySrc",
+    "GXSetTexCopyDst",
+    "__assert",
+    "lbl_80407310",
+    "lbl_804D5F78"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename lbl_80407310 or lbl_804D5F78 to source-level assertion strings.",
+    "Search for other baselib decomp PRs that reuse or refine dec_refcount-style handling for HSD_OBJ_NOREF.",
+    "Compare HSD_ShadowRemove cleanup order against later changes to HSD_TObj, HSD_ImageDesc, and HSD_CObj lifecycle code.",
+    "Search for func_80363DC4 identification in later PRs to clarify the active texture cleanup behavior."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

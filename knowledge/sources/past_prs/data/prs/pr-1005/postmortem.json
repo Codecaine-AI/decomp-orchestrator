@@ -1,0 +1,142 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1005",
+  "pr": {
+    "number": 1005,
+    "title": "Partially match `ftdevice`",
+    "url": "https://github.com/doldecomp/melee/pull/1005",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-11-14T20:26:46Z",
+    "merged_at": "2023-11-14T20:36:43Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Started the C decompilation of `ftdevice` by adding `src/melee/ft/ftdevice.c`, moving several small `ftCo_800C06xx` routines out of `asm/melee/ft/ftdevice.s`, and leaving harder routines as inline `ASM`/`NOT_IMPLEMENTED` fallbacks. The PR also introduced temporary `ftDeviceUnk1`/`ftDeviceUnk2` struct types to replace raw Fighter offset fields, exposed literal/data labels needed by the new C file, and wired the new C object into `obj_files.mk`. The included match report shows a partial file match: 540 bytes, score 7315/13100, 44.16%, with small helpers fully matched and larger registration/assert routines still weak or asm-backed.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-typing",
+      "asm-to-c migration"
+    ],
+    "systems": [
+      "fighter",
+      "ftdevice",
+      "asm",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/ftdevice.c",
+    "asm/melee/ft/ftdevice.s",
+    "src/melee/ft/ftdevice.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/forward.h",
+    "src/melee/ft/ft_0877.c",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Added new source file `src/melee/ft/ftdevice.c` containing C implementations for `ftCo_800C0658`, `ftCo_800C0674`, `ftCo_800C0694`, `ftCo_800C06B4`, and `ftCo_800C06C0`.",
+    "Converted simple Fighter field accessors from raw assembly into typed C using `Fighter*`, `Fighter_GObj*`, `GET_FIGHTER`, `ftDeviceUnk2*`, and `enum_t`.",
+    "Kept `ftCo_800C06E8`, `ftCo_800C0764`, and `ftCo_800C07F8` as `ASM` functions with `MUST_MATCH` inline assembly paths and non-matching/WIP `NOT_IMPLEMENTED` or approximate C paths.",
+    "Removed most `.text` routines from `asm/melee/ft/ftdevice.s` while retaining BSS/data/sdata declarations such as `ft_80459A68`, `ft_804D6570`, `ft_804D6574`, and `ft_804D6578`.",
+    "Promoted local string labels in `ftdevice.s` to global names `ftDevice_803C6B18`, `ftDevice_803C6B40`, `ftDevice_803C6B4C`, and `ftDevice_803C6B78` so C/inline asm could reference OSReport/assert strings.",
+    "Added global visibility for `ftCo_804D3C18`, the sdata string used as the assert expression.",
+    "Updated `obj_files.mk` to build `src/melee/ft/ftdevice.c.o` alongside the remaining `asm/melee/ft/ftdevice.s.o`.",
+    "Added forward declarations for `ftDeviceUnk1` and `ftDeviceUnk2` in `src/melee/ft/forward.h`.",
+    "Added `ftDeviceUnk1` and `ftDeviceUnk2` definitions in `src/melee/ft/types.h`, replacing raw `Fighter` fields at `fp+0x408`, `fp+0x488`, and typing `fp+0x530` as `ftDeviceUnk1*`.",
+    "Updated `ftdevice.h` prototypes from `UNK_T`/`UNK_PARAMS` toward typed signatures for matched functions and `ftCo_800C07F8`; also typed `ft_80459A68` as `IntVec3[4]` and `ft_804D6570` as `int`.",
+    "Updated `ft_0877.c` to include `ftdevice.h` and removed its local static declaration of `ftCo_800C06B4`."
+  ],
+  "smart_moves": [
+    "Matched the easiest helpers first: the selector at `ftCo_800C0658`, the `GET_FIGHTER` wrapper at `ftCo_800C0674`, the enum accessor at `ftCo_800C0694`, the pointer-offset helper at `ftCo_800C06B4`, and the global reset loop at `ftCo_800C06C0`.",
+    "Introduced narrow unknown structs around observed offsets instead of leaving long runs of independent `UNK_T` fields; this made field access such as `fp->x408.x28`, `fp->x488`, and `fp->x530->x7B` express the assembly offsets directly.",
+    "Kept remaining data sections in assembly while compiling the new C text object, avoiding a full data migration before the code was ready.",
+    "Renamed local literal labels to stable global symbols so inline assembly and C code could refer to assert/report strings without relying on anonymous `.L_` labels.",
+    "Used build ordering in `obj_files.mk` to add the new C object without deleting the existing asm object, enabling partial migration of one file.",
+    "For harder routines, preserved exact inline assembly under `MUST_MATCH` while still allowing WIP/non-matching builds through `NOT_IMPLEMENTED` or an approximate C sketch."
+  ],
+  "decomp_lessons": [
+    "Partial file decomp can be productive when the old asm file is split: remove matched `.text` while leaving unmatched code or data in assembly until each section is ready.",
+    "When repeated raw Fighter offset blocks appear, create temporary unknown structs with exact size/offset comments; this reduces prototype noise and gives later PRs a safer place to refine field names.",
+    "Accessor functions are good early targets because they reveal struct grouping and pointer types with low matching risk.",
+    "If a function reads a GObj then immediately calls a Fighter helper, type it as `Fighter_GObj*` and route through `GET_FIGHTER` rather than duplicating the raw `lwz 0x2c` pattern.",
+    "Literal strings used by `OSReport`/`__assert` may need globally named data labels before inline asm or C can reference them cleanly.",
+    "It is acceptable to expose only the globals that the new C needs, while leaving other nearby globals as `UNK_T` until their semantics are known.",
+    "Use offset-preserving temporary names like `x408`, `x488`, `x28`, and `x7B` when behavior is not yet understood; do not invent semantic names prematurely."
+  ],
+  "naming_conventions": [
+    "Unidentified structs introduced as `ftDeviceUnk1` and `ftDeviceUnk2`, following subsystem prefix plus `Unk` numbering.",
+    "Fighter fields retained offset-style names such as `x408`, `x488`, `x530`, and struct members such as `x28` and `x7B`.",
+    "Functions kept address-based `ftCo_800Cxxxx` names, e.g. `ftCo_800C0658`, `ftCo_800C06C0`, and `ftCo_800C07F8`.",
+    "Former local string labels `.L_803C6B18`, `.L_803C6B40`, `.L_803C6B4C`, and `.L_803C6B78` became subsystem-prefixed globals `ftDevice_803C6B18`, `ftDevice_803C6B40`, `ftDevice_803C6B4C`, and `ftDevice_803C6B78`.",
+    "The assert expression string in sdata used the existing function-family prefix as `ftCo_804D3C18`.",
+    "Global data names remained address-based, including `ft_80459A68`, `ft_804D6570`, `ft_804D6574`, and `ft_804D6578`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `ASM UNK_RET ...` / `ASM void ...` declarations with inline PowerPC assembly under `#else` for `MUST_MATCH`.",
+    "Wrapped fallback bodies in `#if !defined(MUST_MATCH) || defined(WIP)` so non-matching builds can compile without exact codegen.",
+    "Used `NOT_IMPLEMENTED` for routines whose C bodies were not yet reliable, while preserving exact `nofralloc` assembly bodies for matching configurations.",
+    "Applied `/* clang-format off */` around inline assembly and `#pragma peephole on` after asm blocks.",
+    "Used `#ifdef WIP #pragma force_active on #endif` in the new source file.",
+    "Used `M2C_FIELD(ft_80459A68, u32*, 0x24)` in the approximate C for `ftCo_800C07F8` to express a hard offset access into a typed global array.",
+    "Replaced local branch labels from `.L_800C0730` style in the asm file with `lbl_800C0730` style labels inside inline assembly.",
+    "Retained data/BSS in `ftdevice.s` while compiling C text, a common incremental migration tactic for decomp files with unmigrated globals."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1005",
+    "ftdevice",
+    "Partially match ftdevice",
+    "ribbanya",
+    "ftCo_800C0658",
+    "ftCo_800C0674",
+    "ftCo_800C0694",
+    "ftCo_800C06B4",
+    "ftCo_800C06C0",
+    "ftCo_800C06E8",
+    "ftCo_800C0764",
+    "ftCo_800C07F8",
+    "ftDeviceUnk1",
+    "ftDeviceUnk2",
+    "ft_80459A68",
+    "ft_804D6570",
+    "ft_804D6574",
+    "ft_804D6578",
+    "ftDevice_803C6B18",
+    "ftDevice_803C6B40",
+    "ftDevice_803C6B4C",
+    "ftDevice_803C6B78",
+    "ftCo_804D3C18",
+    "GET_FIGHTER",
+    "Fighter_GObj",
+    "IntVec3",
+    "M2C_FIELD",
+    "OSReport",
+    "__assert",
+    "NOT_IMPLEMENTED",
+    "MUST_MATCH",
+    "WIP",
+    "nofralloc",
+    "pragma peephole",
+    "obj_files.mk",
+    "src/melee/ft/ftdevice.c",
+    "asm/melee/ft/ftdevice.s"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully convert `ftCo_800C06E8`, `ftCo_800C0764`, or `ftCo_800C07F8` from inline assembly to C.",
+    "Check whether `ftDeviceUnk1` and `ftDeviceUnk2` received semantic names or field refinements in later Fighter/type cleanup PRs.",
+    "Search for later changes to `ft_80459A68` and the counters `ft_804D6570`, `ft_804D6574`, and `ft_804D6578` to understand the device registration arrays.",
+    "Look for PRs that move `ftdevice` data labels out of assembly into C once the text is fully matched."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

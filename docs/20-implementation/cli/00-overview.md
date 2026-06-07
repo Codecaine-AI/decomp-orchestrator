@@ -1,6 +1,6 @@
 ---
 covers: D-Comp Orchestrator CLI command modules and operator command surface
-concepts: [cli, commands, init-run, tick, worker, trigger-agent, babysit, recovery, regression-check]
+concepts: [cli, commands, init-run, tick, worker, trigger-agent, babysit, recovery, regression-check, pr-split-plan]
 code-ref: decomp-orchestrator/src/cli, decomp-orchestrator/src/bin/decomp-orchestrator.ts
 ---
 
@@ -25,6 +25,8 @@ src/
         +-- babysit.ts
         +-- index.ts
         +-- init-run.ts
+        +-- kg.ts
+        +-- pr-split-plan.ts
         +-- recover-leases.ts
         +-- regression-check.ts
         +-- shared.ts
@@ -40,12 +42,21 @@ src/
 | --- | --- |
 | `init-run` | Creates run state, stores the run checkpoint goal, loads board data, queues initial candidate targets, and writes the initial board snapshot. |
 | `tick` | Handles one unhandled wake event by running one director cycle. |
-| `worker` | Leases one queued target, runs one worker session, writes report artifacts, releases the lease, and emits a wake event. |
+| `worker` | Leases one queued target, runs worker/repair sessions, gates returns on runner-owned post-return validation, writes report artifacts, releases the lease, and emits a wake event. |
 | `trigger-agent` | Resting supervisor loop that wakes the director on events, starts workers up to `desired_workers` or `--max-workers`, and sleeps when the board is quiet. |
 | `bootstrap` | Alias for `trigger-agent`. |
 | `babysit` | Guardian wrapper that launches the decomp system command, captures process-health incidents, recovers failed or expired leases, and restarts according to policy. |
 | `recover-leases` | Converts interrupted or expired active leases into durable stalled reports after operator confirmation. |
 | `regression-check` | Wraps the repo's global saved-baseline regression gate and writes run artifacts. |
+| `pr-split-plan` | Plans review-sized PR slices from the current branch/worktree by grouping changed files by Melee subsystem or top-level directory. |
+| `kg-sources` | Lists registered knowledge source slices and external tool integrations. |
+| `kg-status` | Prints graph database path, source/tool registry summaries, and graph record counts. |
+| `kg-curate` | Reduces worker reports and PR postmortems into graph-owned curator enrichment records. |
+| `kg-maintain` | Runs pending PR postmortem indexing, curator reduction, optional curator-agent proposal review, and graph rebuild. |
+| `kg-rebuild-graph` | Rebuilds the v1 SQLite graph from selected graph inputs, currently `code_graph`, `past_prs`, and graph enrichments. |
+| `kg-search` | Searches indexed graph chunks with optional source filtering. |
+| `kg-file-card` | Prints file graph context, editability, PR history, resource hits, and scheduling signals for one source path. |
+| `kg-rank-features` | Shows graph-derived ranking features for current board candidates. |
 | `status` | Prints run, queue, lease, event, and report summary data. |
 
 ## Boundaries
@@ -62,20 +73,49 @@ process runs, wakes on process exit or worker-process error, writes guardian
 artifacts under `state_dir/guardian/`, runs `recover-leases` when appropriate,
 and restarts the child when policy allows.
 
+## Worker Post-Return Gate
+
+`worker` captures the write-set diff before the first worker attempt. When the
+agent returns, the runner evaluates the structured `local_regression_check`,
+checks that validation artifacts exist, verifies edited paths stay inside the
+lease, compares the post-attempt write-set diff against the pre-worker diff,
+and optionally runs `--post-return-check-command` for accepted
+`progress`/`score_candidate` reports.
+
+If the post-return gate fails, the lease remains held and the runner sends a
+`repair_request` back to the worker. `--repair-attempts` controls how many
+repair turns are allowed before the runner records a stalled report. The
+optional command hook runs from the repo root and supports placeholders:
+`{repo_root}`, `{state_dir}`, `{worker_log_dir}`, `{lease_id}`,
+`{source_path}`, `{unit}`, `{symbol}`, and `{write_set}`.
+
 `--worker-thinking-level` lets the trigger actor launch worker Pi sessions with
 a different thinking level from the director. For example, the director can stay
 on the global default while workers run with `--worker-thinking-level low`.
 
-The trigger actor also owns queue-refill wakeups. It writes a prioritized
-`pool_below_target` event when capacity is becoming inefficient and lets the
-director decide what to enqueue next. The defaults wake the director when total
-queued work falls to 25% of `--candidate-limit`, when unlocked distinct-file
-work falls below `--max-workers`, when queued work is blocked by active file
-locks, or when a long-tail drain persists for five minutes. Operators can tune
-this with:
+The trigger actor also owns deterministic queue refill. Each loop reads the
+current board artifacts, refills queued targets toward a ready-pool target,
+starts worker subprocesses for open slots, then handles one director wake event.
+This means a slow director replan does not prevent workers from picking up
+already queued, unlocked work.
+
+Queue size and board scan width are separate. `--candidate-limit` remains the
+default ready-pool size for compatibility. `--queue-target-size` can make that
+pool size explicit, and `--candidate-window` controls how many ranked board
+candidates refill scans to find fresh work beyond the current pool.
+
+The trigger writes a prioritized `pool_below_target` event when deterministic
+refill is not enough and capacity is becoming inefficient. The defaults wake the
+director when total queued work falls to 25% of `--queue-target-size`, when
+unlocked distinct-file work falls below `--max-workers`, when queued work is
+blocked by active file locks, or when a long-tail drain persists for five
+minutes. Operators can tune this with:
 
 | Flag | Meaning |
 | --- | --- |
+| `--candidate-limit <n>` | Compatibility ready-pool size; also the queue target when `--queue-target-size` is omitted. |
+| `--queue-target-size <n>` | Maintain at least this many queued targets, subject to available fresh board candidates. |
+| `--candidate-window <n>` | Number of ranked board candidates scanned for director context and deterministic refill. |
 | `--queue-low-watermark <n>` | Wake when total queued work is at or below `n` while workers are active. |
 | `--schedulable-low-watermark <n>` | Wake when unlocked distinct-file work is at or below `n` while the run is underfilled. |
 | `--active-low-watermark <n>` | Active-worker threshold for long-tail detection; default is 75% of `--max-workers`. |
@@ -86,6 +126,57 @@ this with:
 
 The babysit wrapper forwards these trigger flags to its child `bootstrap` or
 `trigger-agent` command.
+
+## PR Split Planning
+
+`pr-split-plan` is the operator handoff command for turning a large accepted
+change bundle into smaller review units. It reads `git diff --name-status
+<base-ref>...HEAD` and dirty worktree status from `--repo-root`, merges those
+paths, and groups them into slices.
+
+The default `--group-mode melee-subsystem` treats any path containing
+`melee/<subsystem>` as part of that subsystem, so source, headers, and assembly
+for `it`, `gm`, `cm`, `ft`, and adjacent directories stay together. Support
+roots such as `sysdolphin`, `Runtime`, `MSL`, and `MetroTRK` become their own
+slices, while cross-cutting root/config files become shared slices. Use
+`--group-mode top-dir` for a simpler first-directory split.
+
+Each slice includes a suggested branch name, PR title, pathspec list, patch
+workflow, isolation-check workflow, and unverified independence disposition.
+The disposition is conservative metadata:
+
+| Disposition | Meaning |
+| --- | --- |
+| `independent` | Looks source/header-scoped to one Melee subsystem and can become an independent PR only after the isolation check passes. |
+| `shared-prep` | Touches build/config/generated/root/support-library files or other shared surfaces that should land first or be stacked intentionally. |
+| `stacked` | Looks subsystem-adjacent but may depend on shared declarations, renames, deletes, or other nonlocal effects. |
+| `needs-merge` | The split is probably artificial for review; keep it together or manually redesign the slice. |
+
+The isolation workflow applies one slice to a fresh worktree at `--base-ref` and
+runs `--slice-check-command`, which defaults to `python configure.py
+--require-protos && ninja changes_all`. Worktree and untracked files are
+included by default so the operator can see unfinished local changes, but the
+command warns that generated patch commands only replay committed `HEAD`
+changes. Use `--committed-only` after committing the source bundle,
+`--worktree-only` for a local staging preview, `--no-untracked` to suppress
+untracked paths, `--json` for automation, or `--output <path>` to save the
+rendered plan.
+
+## Knowledge Maintenance
+
+`trigger-agent` can run `kg-maintain` in the background. Live runs default to a
+five-minute maintenance interval; dry-run agents default to disabled. Use
+`--no-knowledge-maintenance` to disable it, or
+`--knowledge-maintenance-interval-ms <n>` to tune it.
+
+Maintenance does not require the main loop to inspect individual PRs. The PR
+postmortem command uses pending-only discovery to find PRs in the current dump
+that do not have `postmortem.json` yet. Live trigger maintenance queues up to
+eight pending PRs per interval through the PR-review agent by default; use
+`--no-run-pr-agent` to keep the background pass deterministic or `--pr-limit`
+to tune the batch. Direct `kg-maintain` remains deterministic unless
+`--run-pr-agent` is passed. The knowledge curator then rewrites graph-owned
+worker/PR lessons and proposal-only source updates before the graph rebuild.
 
 `init-run --goal-kind matched_code_percent --goal-value <percent>` records the
 checkpoint for this run. The checkpoint is a pause/handoff threshold for the

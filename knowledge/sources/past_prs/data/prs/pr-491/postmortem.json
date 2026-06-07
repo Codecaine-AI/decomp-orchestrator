@@ -1,0 +1,132 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-491",
+  "pr": {
+    "number": 491,
+    "title": "Create `gen.sh`",
+    "url": "https://github.com/doldecomp/melee/pull/491",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2022-08-25T03:47:10Z",
+    "merged_at": "2022-08-25T14:06:35Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added a repository-root `gen.sh` helper for generating M2C-derived C stubs from asm files. The script can regenerate `include/ctx_includes.h`, regenerate `src/ctx.c` via `tools/m2ctx/m2ctx.py`, and emit `.s.c` files under matching `src/` paths for asm inputs, with optional path filtering, console clear, and log teeing. Supporting changes made generated outputs ignored by git, changed `m2ctx.py` to print context output instead of writing `ctx.c` directly, adjusted a few headers so they work better in generated context/include aggregation, and fixed `build.sh` expected-sync by ensuring `build` and `expected/build` directories exist.",
+  "change_classification": {
+    "primary_type": "tooling",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "tooling",
+      "generated-files"
+    ],
+    "systems": [
+      "repo-root",
+      "tooling",
+      "m2c",
+      "m2ctx",
+      "headers",
+      "dolphin-gx",
+      "melee-mp",
+      "build"
+    ]
+  },
+  "key_files": [
+    "gen.sh",
+    ".gitignore",
+    "tools/m2ctx/m2ctx.py",
+    "build.sh",
+    "src/melee/mp/mpcoll.h",
+    "src/dolphin/gx/GXInit/GXInit_001.h",
+    "src/dolphin/gx/__GX_unknown_001.h"
+  ],
+  "what_changed": [
+    "Created `gen.sh`, a 95-line shell script that can generate `ctx_includes.h`, generate `ctx.c`, and run `tools/m2c/m2c.py` over asm files to produce generated C files.",
+    "`gen.sh` maps asm paths to src paths with `.c` appended, so an asm file becomes a generated `.s.c` file under the corresponding `src` directory.",
+    "`gen.sh` supports `-i` for include aggregation, `-c` for context generation, `-g` for M2C generation, `-p pattern` for restricting asm paths, `-x` for clearing the console, `-l` for teeing output to `gen.log`, and `-h` for usage help.",
+    "`gen.sh` generates `include/ctx_includes.h` by finding headers under `include/` and `src/`, converting them to angle-bracket `#include <...>` lines, excluding the generated `ctx_includes.h` itself, and appending `tools/m2c/m2c_macros.h`.",
+    "`tools/m2ctx/m2ctx.py` was changed from writing `ctx.c` at the repository root to printing generated context output to stdout, letting `gen.sh` decide the final output path `src/ctx.c`.",
+    "`.gitignore` now groups generated files and ignores `ctx.c`, `ctx_includes.h`, `*.s.c`, and `*.m2c`; `ctx.c` and `ctx_includes.h` were moved from the generic 'Other' section to the generated-file section.",
+    "`build.sh` now creates `build` and `expected/build` before rsyncing build output to expected output.",
+    "`src/melee/mp/mpcoll.h` changed includes from quoted local includes to angle-bracket project includes, replacing `global.h`, `types.h`, and `melee/ft/fighter.h` with `<dolphin/types.h>` and `<melee/ft/fighter.h>`.",
+    "Several extern declarations were removed from generated/unknown GX headers, including `__GXContext`, `__GXDefaultTlutRegionCallback`, `__GXDefaultTexRegionCallback`, `GXSetTlutRegionCallback`, and `GXSetTexRegionCallback`."
+  ],
+  "smart_moves": [
+    "Centralized a repeated decomp workflow into a single script: building include context, building M2C context, and generating candidate C from asm can now be run with one command such as `./gen.sh -cig`.",
+    "Kept generated M2C outputs out of version control by adding `*.s.c`, `ctx.c`, and `ctx_includes.h` to `.gitignore`.",
+    "Made `m2ctx.py` more composable by printing to stdout rather than hardcoding an output file, which allows callers like `gen.sh` to choose where the generated context belongs.",
+    "Added path-pattern filtering so contributors can generate all asm, a subsystem such as `gx` or `ft/`, or one specific file without editing the script.",
+    "Ensured generated C starts with `#include <ctx_includes.h>`, making each generated file use the same consolidated M2C context.",
+    "Used null-delimited `find ... -print0` with `read -r -d ''` for safer path handling during asm traversal.",
+    "Created destination directories before writing generated `.s.c` files, avoiding manual setup for nested asm/src path mirrors.",
+    "Fixed a build-sync edge case by creating `build` and `expected/build` before `rsync`."
+  ],
+  "decomp_lessons": [
+    "For M2C workflows, keep generated context and generated `.s.c` files ignored by git; they are useful local artifacts but should not pollute decomp source history.",
+    "A context-generation tool is easier to reuse when it writes to stdout and lets wrappers control file placement.",
+    "When auto-aggregating headers into a single context include file, exclude the generated aggregate itself to avoid recursive inclusion.",
+    "Generated M2C C files can be organized by mirroring the asm tree into `src/` and using a distinct `.s.c` suffix so contributors can inspect generated candidates without confusing them for matched source.",
+    "Header include style matters for generated contexts: angle-bracket project paths such as `<dolphin/types.h>` and `<melee/ft/fighter.h>` are more suitable for aggregated include generation than ambiguous quoted relative includes.",
+    "Some declarations in ad hoc or unknown headers may conflict with context generation and should be removed or normalized when building an all-header M2C context, but this PR does not document the exact conflict mechanism."
+  ],
+  "naming_conventions": [
+    "Generated M2C output files use the `.s.c` suffix.",
+    "The aggregate include file is named `ctx_includes.h` and lives under `include/` when generated by `gen.sh`.",
+    "The M2C context file is named `ctx.c` and is written under `src/` by `gen.sh`.",
+    "Generated files are grouped under a `# Generated` section in `.gitignore`.",
+    "Project includes used for context generation favor angle-bracket paths like `<dolphin/types.h>` and `<melee/ft/fighter.h>`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use `./gen.sh -cig` to regenerate `include/ctx_includes.h`, regenerate `src/ctx.c`, and generate `.s.c` files for all asm files.",
+    "Use `./gen.sh -cigl` to do the same generation while teeing output to `gen.log`.",
+    "Use `./gen.sh -cigl -p gx` to restrict generated files to paths matching `gx`.",
+    "Use `./gen.sh -cigl -p ft/` to restrict generation to the `ft` directory.",
+    "Use `./gen.sh -cigl -p code_8007C114` to generate for a specific asm file name pattern.",
+    "The M2C invocation added by the script is `python tools/m2c/m2c.py -t ppc-mwcc-c --valid-syntax --context ./src/ctx.c <asm file>`.",
+    "The script prepends `#include <ctx_includes.h>` to each generated output before appending M2C output."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "gen.sh",
+    "m2c",
+    "m2ctx",
+    "ctx_includes.h",
+    "ctx.c",
+    ".s.c",
+    "generated C files",
+    "asm to src",
+    "M2C context",
+    "ppc-mwcc-c",
+    "valid-syntax",
+    "gen.log",
+    "path pattern",
+    "include aggregation",
+    ".gitignore generated",
+    "build.sh rsync expected",
+    "mkdir -p build expected/build",
+    "mpcoll.h",
+    "dolphin/types.h",
+    "melee/ft/fighter.h",
+    "GXInit_001.h",
+    "__GX_unknown_001.h",
+    "__GXContext",
+    "GXSetTlutRegionCallback",
+    "GXSetTexRegionCallback"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify or replace `gen.sh`.",
+    "Search for changes to `tools/m2ctx/m2ctx.py` after it began printing context output to stdout.",
+    "Look for later cleanup of generated `.s.c` workflows or changes to ignored generated files.",
+    "Search for follow-up fixes involving `ctx_includes.h`, `src/ctx.c`, or M2C context-generation failures.",
+    "Inspect later header normalization PRs that convert quoted includes to angle-bracket project includes."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

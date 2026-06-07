@@ -1,0 +1,155 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1903",
+  "pr": {
+    "number": 1903,
+    "title": "HSD devcom matches",
+    "url": "https://github.com/doldecomp/melee/pull/1903",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-09-07T00:22:32Z",
+    "merged_at": "2025-09-07T00:41:17Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched several sysdolphin baselib HSD devcom routines by filling in DVD/ARAM callback and wake-up logic, moving private devcom internals into a new devcom.static.h, tightening callback/request pointer types, and renaming two devcom globals in symbols.txt to dvdDC and aramDC. The decomp.dev bot reported 6 new full matches totaling +1936 bytes and HSD_DevComARAMWakeUp improved to 95.69%. No human review comments were present in the slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "callback-signature-cleanup",
+      "static-internal-state",
+      "symbol-renaming"
+    ],
+    "systems": [
+      "sysdolphin/baselib/devcom",
+      "dolphin/ar",
+      "melee/lb",
+      "melee/gr",
+      "sysdolphin/baselib/synth",
+      "config/GALE01"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/devcom.c",
+    "src/sysdolphin/baselib/devcom.h",
+    "src/sysdolphin/baselib/devcom.static.h",
+    "src/sysdolphin/baselib/forward.h",
+    "extern/dolphin/include/dolphin/ar.h",
+    "extern/dolphin/src/dolphin/ar/arq.c",
+    "extern/dolphin/src/dolphin/ar/__ar.h",
+    "config/GALE01/symbols.txt",
+    "src/melee/lb/lbdvd.c",
+    "src/melee/lb/lbdvd.h",
+    "src/melee/lb/lbfile.c",
+    "src/melee/lb/lbfile.h",
+    "src/sysdolphin/baselib/synth.c",
+    "src/sysdolphin/baselib/synth.h",
+    "src/melee/gr/grstadium.c",
+    "src/melee/gr/grstadium.h"
+  ],
+  "what_changed": [
+    "Implemented previously stubbed/placeholder devcom functions: HSD_DevComDVDStdCallback, HSD_DevComDVDARAMEndCallback, HSD_DevComDVDMemCallback, HSD_DevComDVDCallback, HSD_DevComDVDWakeUp, and HSD_DevComCancelEx.",
+    "Substantially filled in HSD_DevComARAMWakeUp, including ARAM state checks, relay buffer allocation, cache flush/invalidate calls, ARQPostRequest paths for transfer types 3, 0xB, 0x19, 0x1A, and 0x1B, and cancellation handling.",
+    "Added devcom.static.h for private devcom implementation details: HSD_DevCom struct definition, DEVCOM_BUF_SIZE/DEVCOMDEST_SBUF constants, ARQRequest arrays, devComStatus, relay buffers, DVDFileInfo fileinfo, dvdDC, aramDC, and other static state.",
+    "Reduced devcom.h to public prototypes and removed private helper/callback prototypes and the HSD_DevCom struct definition from the public header.",
+    "Changed HSD_DevComRequest source/destination arguments from u32 to uintptr_t and the HSD_DevCom struct source/destination fields in devcom.static.h to intptr_t, better reflecting address-sized values.",
+    "Changed HSD_DevComCallback in forward.h from taking a void* first argument to taking an int request id first argument; propagated related callback signature changes in lbfile, lbdvd, grstadium, and synth.",
+    "Changed Dolphin ARQ callbacks from u32 pointerToARQRequest to struct ARQRequest* and removed casts in __ARQInterruptServiceRoutine.",
+    "Renamed sbss symbols HSD_DevCom_804D77F8 to dvdDC and HSD_DevCom_804D7808 to aramDC in config/GALE01/symbols.txt.",
+    "Made several devcom helper callbacks static in devcom.c, including HSD_DevComUnlink, HSD_DevComStdCallback, and HSD_DevComARAMCallback."
+  ],
+  "smart_moves": [
+    "Separating devcom.static.h from devcom.h kept private implementation state local while allowing devcom.c to use exact static data declarations needed for matching.",
+    "Using typed ARQRequest* callbacks instead of u32 callback payloads removed noisy casts and aligned ARQ callback call sites with the actual request pointer semantics.",
+    "Renaming dvdDC and aramDC in symbols.txt converted anonymous address-based globals into meaningful current-operation names, making the DVD/ARAM scheduler logic easier to read.",
+    "The relay-buffer helper getRelayBufIdx centralized the repeated scan/set pattern for devComRelayBufFlag and returned -1 when both 0x4000 buffers were busy.",
+    "Preserved interrupt safety around queue mutations and wake-up paths with OSDisableInterrupts/OSRestoreInterrupts, matching the asynchronous DVD/ARAM scheduling model.",
+    "Used bool literals for cancelflag/devComRelayBufFlag state where the code semantics were boolean, while keeping u8/u16 storage where required by layout."
+  ],
+  "decomp_lessons": [
+    "For callback-heavy subsystems, first correct the callback typedefs and related public prototypes; matching often depends on whether the compiler sees an int, pointer, or uintptr_t at call sites.",
+    "Do not expose every guessed helper in public headers. Private static functions and static data can live in a module-specific .static.h when matching requires exact declarations but users only need the public API.",
+    "Meaningful names for active global state such as dvdDC and aramDC can clarify control flow enough to finish complex asynchronous matching work.",
+    "ARQ/DVD bridge code needs careful cache-operation placement: DCStoreRange before memory-to-ARAM transfers and DCInvalidateRange before ARAM-to-memory or relay-buffer reads.",
+    "Chunked transfers may intentionally use different callback paths for intermediate chunks versus final chunks; this PR used HSD_DevComStdCallback for continued chunks and completion callbacks when size fit the remaining transfer.",
+    "Cancellation paths are part of matching, not just runtime behavior: pending queue entries, currently active entries, and relay-buffer-backed entries each needed distinct handling in HSD_DevComCancelEx.",
+    "Address-valued fields should use uintptr_t/intptr_t where the original code treats them as integer addresses and also performs arithmetic."
+  ],
+  "naming_conventions": [
+    "Anonymous devcom globals at fixed addresses remained as HSD_DevCom_804D77F5/HSD_DevCom_804D77F6/etc. when semantics were not fully named.",
+    "Two semantically identified globals were renamed from address names to role names: dvdDC and aramDC.",
+    "Private helper names followed subsystem prefixes such as HSD_DevComDVDStdCallback, HSD_DevComDVDARAMEndCallback, HSD_DevComDVDMemCallback, and HSD_DevComARAMCallback_inline.",
+    "Callback typedef and parameter naming favored cb over callback in HSD_DevComRequest to avoid colliding with the struct field assignment pattern."
+  ],
+  "assembly_or_matching_tactics": [
+    "Inserted PAD_STACK(8) in HSD_DevComDVDCallback, indicating a stack-shape matching adjustment.",
+    "Used an explicit nested zeroing loop over HSD_DevCom_804C6330_bufs with a 0x200 outer count and 8 stores per iteration, likely to reproduce the original clear-buffer codegen.",
+    "Kept MIN(dvdDC->size, 0x80000) for large direct DVD memory reads and MIN(dvdDC->size, DEVCOM_BUF_SIZE) for relay-buffer DVD reads to mirror original chunk sizes.",
+    "Selected callback function pointers conditionally based on whether the transfer exceeded DEVCOM_BUF_SIZE, preserving intermediate versus terminal callback behavior.",
+    "Changed relay buffer storage from u8[2][DEVCOM_BUF_SIZE] to int[2][DEVCOM_BUF_SIZE / sizeof(int)] in devcom.static.h, supporting word-wise clearing and pointer arithmetic patterns seen in the matched code.",
+    "Made internal devcom callbacks static where they were implementation-only, likely improving symbol/prototype consistency for matching."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided slice.",
+    "decomp.dev bot reported GALE01 matched code increased by +0.05% and +1936 bytes.",
+    "decomp.dev bot listed 6 new full matches in main/sysdolphin/baselib/devcom: HSD_DevComDVDCallback, HSD_DevComDVDWakeUp, HSD_DevComCancelEx, HSD_DevComDVDARAMEndCallback, HSD_DevComDVDMemCallback, and HSD_DevComDVDStdCallback.",
+    "decomp.dev bot reported HSD_DevComARAMWakeUp improved from 0.00% to 95.69% but was not a full match in this PR."
+  ],
+  "searchable_terms": [
+    "HSD devcom matches",
+    "HSD_DevCom",
+    "devcom.c",
+    "devcom.h",
+    "devcom.static.h",
+    "HSD_DevComARAMWakeUp",
+    "HSD_DevComDVDWakeUp",
+    "HSD_DevComCancelEx",
+    "HSD_DevComDVDCallback",
+    "HSD_DevComDVDStdCallback",
+    "HSD_DevComDVDARAMEndCallback",
+    "HSD_DevComDVDMemCallback",
+    "HSD_DevComStdCallback",
+    "HSD_DevComARAMCallback",
+    "HSD_DevComCallback",
+    "devComRelayBufFlag",
+    "devComARQR",
+    "dvdDC",
+    "aramDC",
+    "DEVCOM_BUF_SIZE",
+    "DEVCOMDEST_SBUF",
+    "ARQCallback",
+    "ARQRequest",
+    "__ARQCallbackHack",
+    "__ARQInterruptServiceRoutine",
+    "ARQPostRequest",
+    "DVDReadAsyncPrio",
+    "DVDFastOpen",
+    "DCStoreRange",
+    "DCInvalidateRange",
+    "PAD_STACK",
+    "uintptr_t",
+    "intptr_t",
+    "lbFile_8001615C",
+    "lbDvd_80017E64",
+    "fn_801D4220",
+    "HSD_SynthSFXHeaderLoadCallback",
+    "HSD_SynthSFXSampleLoadCallback"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that finish the remaining 4.31% of HSD_DevComARAMWakeUp.",
+    "Search for uses of devcom.static.h to see whether the private-header pattern is reused in other baselib modules.",
+    "Search for PRs changing HSD_DevComCallback call sites after the first parameter became int.",
+    "Search for subsequent renames of HSD_DevCom_804D77F5, HSD_DevCom_804D77F6, HSD_DevCom_804D77F7, HSD_DevCom_804D77FC, and HSD_DevCom_804D7804.",
+    "Compare ARQCallback typedef changes in this PR against other Dolphin SDK callback typing fixes."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

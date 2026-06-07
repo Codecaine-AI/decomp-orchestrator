@@ -1,0 +1,148 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1796",
+  "pr": {
+    "number": 1796,
+    "title": "Table typer: StageCallbacks",
+    "url": "https://github.com/doldecomp/melee/pull/1796",
+    "state": "MERGED",
+    "author": "lukechampine",
+    "created_at": "2025-08-05T22:14:04Z",
+    "merged_at": "2025-08-06T00:04:59Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Generalized and improved tools/table-typer, then applied it to StageCallbacks and related table-derived callback signatures. The main decomp-facing result was changing StageCallbacks and many stage callback functions from generic HSD_GObj* parameters to Ground_GObj*, with necessary forward includes in affected headers. The tool also gained additional table type definitions, a fixtab subcommand, an unk subcommand for finding UNK_RET functions referenced by asm tables, better asm object parsing, and documentation. A decomp.dev bot report showed no GALE01 binary changes.",
+  "change_classification": {
+    "primary_type": "tool-assisted type propagation",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "tooling",
+      "types-structs",
+      "callback-signatures"
+    ],
+    "systems": [
+      "stage",
+      "ground",
+      "item",
+      "tooling",
+      "config"
+    ]
+  },
+  "key_files": [
+    "tools/table-typer/main.go",
+    "tools/table-typer/c.go",
+    "tools/table-typer/README.md",
+    "tools/table-typer/go.mod",
+    "src/melee/gr/types.h",
+    "src/melee/gr/grbattle.c",
+    "src/melee/gr/grbattle.h",
+    "src/melee/gr/grfigure1.c",
+    "src/melee/gr/grfigure2.c",
+    "src/melee/gr/grfigure3.c",
+    "src/melee/gr/grgreatbay.c",
+    "src/melee/gr/gricemt.c",
+    "src/melee/gr/grflatzone.c",
+    "src/melee/gr/grfigureget.c",
+    "src/melee/it/items/itarwinglaser.c",
+    "src/melee/it/items/itbombhei.h",
+    "config/GALE01/symbols.txt"
+  ],
+  "what_changed": [
+    "Changed struct StageCallbacks in src/melee/gr/types.h so callback0, callback1, callback2, and callback3 take Ground_GObj* instead of HSD_GObj*.",
+    "Updated many stage implementation prototypes and definitions to match the new StageCallbacks function pointer types, replacing HSD_GObj* with Ground_GObj* in files such as grbattle.c, grfigure1.c, grfigure2.c, grfigure3.c, grgreatbay.c, gricemt.c, and many other gr*.c/gr*.h files.",
+    "Added gr/forward.h includes where public headers needed the Ground_GObj forward declaration, for example grbattle.h.",
+    "Extended table-typer's tableTypes map beyond the previous hard-coded ItemStateTable workflow: evidence in c.go shows ItemStateTable, ItemLogicTable, sdata_ItemGXLink, and the new StageCallbacks entry.",
+    "Renamed TableType.NumEntries to NumAsmEntries and modeled StageCallbacks as five asm entries: four function pointers plus a non-function u32/flags field.",
+    "Reworked table-typer CLI from positional arguments into subcommands using lukechampine.com/flagg: fixtab -type=... for applying type fixes, and unk for finding UNK_RET functions referenced from asm data tables.",
+    "Changed table-typer source/asm discovery to use a root directory and default paths under src/melee and build/GALE01/asm/melee.",
+    "Improved function signature parsing: preserves unnamed parameters in declarations, avoids treating lines with return as declarations, and assigns generated parameter names like gobj/gobj2 for definitions when needed.",
+    "Changed asm table extraction to split on .obj records and read byte/2byte/4byte/8byte entries, instead of the older section/global-oriented scan.",
+    "Updated README usage and known limitations, including documenting that the tool cannot automatically add missing #include statements.",
+    "Some item-side signatures were also adjusted from table-derived evidence, for example Item_GObj* parameters in itarwinglaser.c and int-to-bool corrections in item headers such as itbombhei.h.",
+    "Adjusted config/GALE01/symbols.txt around it_803F6CA8 by shrinking that object size from 0x158 to 0xB0 and adding lbl_803F6D58 at 0x803F6D58 with size 0xA8."
+  ],
+  "smart_moves": [
+    "Used the asm table layout as the source of truth for callback signatures, allowing broad, consistent propagation of Ground_GObj* across stage callback functions instead of hand-editing each function independently.",
+    "Represented non-function table fields as nil entries in tableTypes, which let the tool skip StageCallbacks.flags while typing the function-pointer fields.",
+    "Added an unk subcommand to quantify and locate remaining UNK_RET functions referenced from asm tables; the PR body reports the count dropped from 123 to 119 after the StageCallbacks fixes.",
+    "Made table-typer support both headers and C files when locating table declarations, which matters because not all typed tables are necessarily declared only as externs in headers.",
+    "Kept the matching risk low: the decomp.dev GALE01 report said 'No changes', indicating the type/header/tooling edits preserved binary output.",
+    "Documented a known limitation instead of hiding it: table-typer rewrites signatures but cannot add all required #include statements automatically."
+  ],
+  "decomp_lessons": [
+    "For callback tables, type the struct's function pointers first, then use tool-assisted propagation to bring all referenced function declarations/definitions into agreement.",
+    "Ground stage callbacks should use Ground_GObj* when they are invoked through StageCallbacks; retaining generic HSD_GObj* hides useful type information and leaves table signatures less precise.",
+    "When changing public prototypes from HSD_GObj* to domain-specific typedefs, add the correct forward header, such as gr/forward.h, rather than relying on baselib forward declarations.",
+    "Automated signature rewriting can be match-safe if it only changes C types/prototypes and the decomp.dev binary diff stays empty.",
+    "Do not assume every asm table entry is a function pointer; table typing needs explicit field metadata so scalar/flags fields are skipped.",
+    "Finding UNK_RET functions by scanning asm table references is a useful prioritization tactic because table layout often reveals return and parameter types."
+  ],
+  "naming_conventions": [
+    "Typed ground object parameters use Ground_GObj* rather than HSD_GObj* for StageCallbacks targets.",
+    "Typed item object parameters use Item_GObj* for item table callbacks.",
+    "Generated or preserved parameter names in rewritten function definitions favor gobj for a single object parameter and gobj2 for a second generated object parameter when needed.",
+    "The table-typer command names introduced here are fixtab for applying table-based signature fixes and unk for finding UNK_RET table references.",
+    "StageCallbacks fields remain named callback0, callback1, callback2, callback3, and flags; the PR did not rename those fields."
+  ],
+  "assembly_or_matching_tactics": [
+    "The table-typer tool extracts asm data tables by parsing .obj blocks and collecting .byte, .2byte, .4byte, and .8byte entries.",
+    "For a known table type, table-typer maps each asm table entry position to a C function type and rewrites matching source/header signatures.",
+    "StageCallbacks was modeled as five asm entries: void Ground_GObj* callback, bool Ground_GObj* callback, void Ground_GObj* callback, void Ground_GObj* callback, then a skipped u32 flags field.",
+    "The unk command builds a set of symbols referenced by asm tables and searches C/H sources for UNK_RET declarations of those symbols.",
+    "The bot report for GALE01 stated 'No changes', supporting that the type propagation was non-codegen-changing.",
+    "The symbols.txt split near it_803F6CA8 corrected object boundaries in .data, reducing it_803F6CA8 size and naming a following lbl_803F6D58 object."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided slice.",
+    "The decomp.dev bot reported: 'No changes' for GALE01, which is positive evidence that the PR preserved matching."
+  ],
+  "searchable_terms": [
+    "PR 1796",
+    "Table typer: StageCallbacks",
+    "table-typer",
+    "StageCallbacks",
+    "Ground_GObj",
+    "HSD_GObj",
+    "Item_GObj",
+    "ItemStateTable",
+    "ItemLogicTable",
+    "sdata_ItemGXLink",
+    "UNK_RET",
+    "fixtab",
+    "unk",
+    "flagg",
+    "NumAsmEntries",
+    "parseTableDecls",
+    "parseFuncSignature",
+    "extractAsmTables",
+    "gr/types.h",
+    "grbattle",
+    "grfigure1",
+    "grfigure2",
+    "grfigure3",
+    "grgreatbay",
+    "gricemt",
+    "grflatzone",
+    "grfigureget",
+    "it_803F6CA8",
+    "lbl_803F6D58",
+    "GALE01 no changes"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that run table-typer fixtab for ItemLogicTable or sdata_ItemGXLink.",
+    "Search for remaining UNK_RET functions referenced from asm tables after PR 1796.",
+    "Audit StageCallbacks users that still take HSD_GObj* instead of Ground_GObj* after this merge.",
+    "Look for follow-up fixes adding missing includes caused by table-typer rewrites.",
+    "Review object-boundary corrections around config/GALE01/symbols.txt it_803F6CA8 and lbl_803F6D58."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

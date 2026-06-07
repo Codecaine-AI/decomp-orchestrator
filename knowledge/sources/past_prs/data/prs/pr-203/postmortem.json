@@ -1,0 +1,124 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-203",
+  "pr": {
+    "number": 203,
+    "title": "Match HSD_PObjRemoveAnimAllByFlags",
+    "url": "https://github.com/doldecomp/melee/pull/203",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-18T19:28:22Z",
+    "merged_at": "2021-12-18T19:28:34Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched HSD_PObjRemoveAnimAllByFlags in src/sysdolphin/baselib/pobj.c, removed its assembly stub from asm/sysdolphin/baselib/pobj.s, and added pobj.o to the EPILOGUE_UNSCHEDULED build list. The match required correcting PObj-related header types: HSD_PObjGetFlags now returns u32, the HSD_PObj union gained an x14_unk arm, and the previous direct aobj field was replaced by an inferred struct at union offset 0x14 containing an HSD_AObj pointer at offset 0x20. The PR body notes that the structure seemed different from what the author was used to; there was no review discussion in the provided slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "build-list"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "pobj",
+      "asm",
+      "src"
+    ]
+  },
+  "key_files": [
+    "asm/sysdolphin/baselib/pobj.s",
+    "src/sysdolphin/baselib/pobj.c",
+    "src/sysdolphin/baselib/pobj.h",
+    "e_files.mk"
+  ],
+  "what_changed": [
+    "Removed the hand-written assembly listing for HSD_PObjRemoveAnimAllByFlags from asm/sysdolphin/baselib/pobj.s.",
+    "Implemented HSD_PObjRemoveAnimAllByFlags in C as a null-guarded traversal over a linked HSD_PObj list, calling HSD_PObjRemoveAnimByFlags on each node.",
+    "Added inline HSD_PObjRemoveAnimByFlags, which checks for a non-null PObj, tests flags & POBJ_ANIM, confirms pobj_type(pobj) == POBJ_SHAPEANIM, removes the associated HSD_AObj, and clears the aobj pointer.",
+    "Changed HSD_PObjGetFlags return type from u16 to u32 to match the PObj flags field usage.",
+    "Introduced struct _unk_struct_pobj with data[8] followed by struct _HSD_AObj* aobj at offset 0x20.",
+    "Changed HSD_PObj's union at offset 0x14 to include struct _unk_struct_pobj* x14_unk and changed envelope_list to use struct _HSD_SList*.",
+    "Removed the direct struct _HSD_AObj* aobj field from HSD_PObj, reflecting that the animation object pointer is reached through the offset-0x14 union payload for shape animation PObjs.",
+    "Added src/sysdolphin/baselib/pobj.o to EPILOGUE_UNSCHEDULED in e_files.mk."
+  ],
+  "smart_moves": [
+    "Modeled the observed assembly access pattern directly: the assembly loads pobj + 0x14, then loads and clears offset 0x20 from that pointee, so the C header introduced an intermediate unknown struct rather than forcing a direct HSD_PObj::aobj field.",
+    "Kept the helper HSD_PObjRemoveAnimByFlags inline, which likely helped reproduce the original control flow and avoid introducing an extra function call separate from the matched target.",
+    "Preserved the assembly's null behavior with an early return in both the all-list function and the per-PObj helper.",
+    "Encoded the bit-test behavior as flags & POBJ_ANIM and the PObj type check as pobj_type(pobj) == POBJ_SHAPEANIM, making the matched assembly more readable while staying close to the original condition sequence.",
+    "Cleared the animation pointer after calling HSD_AObjRemove, matching the assembly store of zero after the removal call."
+  ],
+  "decomp_lessons": [
+    "When matching baselib object structs, do not assume a visible pointer field belongs directly to the parent struct; assembly may show that a union member points to a secondary layout containing the field.",
+    "For PObj shape animation, the animation object pointer was accessed through pobj->u.x14_unk->aobj rather than through a direct HSD_PObj::aobj field in this slice.",
+    "Return types for flag accessors should match the width of the underlying flags field and generated code; here HSD_PObjGetFlags needed u32 rather than u16.",
+    "A small helper can be made inline to express repeated logic without changing the generated call structure for the matched function.",
+    "After removing a function from an asm file, remember to add the corresponding object to the appropriate build list so the C implementation is built."
+  ],
+  "naming_conventions": [
+    "Used HSD_PObjRemoveAnimAllByFlags for the public matched function.",
+    "Used HSD_PObjRemoveAnimByFlags for the inline per-object helper.",
+    "Used x14_unk to name an unknown union member at offset 0x14, preserving offset information in the name.",
+    "Used _unk_struct_pobj / unk_struct as placeholder names for an inferred but not fully understood PObj-related layout.",
+    "Retained HSD-style type names and casts such as HSD_PObj, HSD_AObj, HSD_POBJ, HSD_POBJ_INFO, and HSD_POBJ_METHOD."
+  ],
+  "assembly_or_matching_tactics": [
+    "Translated the top-level cmplwi r3,0 / beq into an early null return in HSD_PObjRemoveAnimAllByFlags.",
+    "Matched the linked-list traversal by initializing a local pointer to pobj and advancing through pp = pp->next until NULL.",
+    "Matched the flags mask instruction sequence by storing flags & POBJ_ANIM behavior before conditionally removing shape animation.",
+    "Matched the type check against the PObj type bits by using pobj_type(pobj) == POBJ_SHAPEANIM.",
+    "Matched the load from offset 0x14 followed by load/store at offset 0x20 by adding an inferred nested struct with aobj at 0x20.",
+    "Matched the post-removal zero store by assigning unk_struct->aobj = NULL after HSD_AObjRemove."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The only human body text noted: \"Structure seems to be different from what I'm used to.\""
+  ],
+  "searchable_terms": [
+    "pr-203",
+    "PsiLupan",
+    "HSD_PObjRemoveAnimAllByFlags",
+    "HSD_PObjRemoveAnimByFlags",
+    "HSD_PObjGetFlags",
+    "HSD_AObjRemove",
+    "HSD_PObj",
+    "HSD_AObj",
+    "POBJ_ANIM",
+    "POBJ_SHAPEANIM",
+    "pobj_type",
+    "x14_unk",
+    "_unk_struct_pobj",
+    "aobj",
+    "pobj.c",
+    "pobj.h",
+    "pobj.s",
+    "e_files.mk",
+    "EPILOGUE_UNSCHEDULED",
+    "sysdolphin",
+    "baselib",
+    "shape animation",
+    "flags",
+    "struct layout",
+    "union offset 0x14",
+    "aobj offset 0x20"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename _unk_struct_pobj or x14_unk to a known baselib type.",
+    "Search for other PObj functions that access pobj->u.x14_unk->aobj or the offset 0x14 union.",
+    "Check whether HSD_PObjRemoveAnimByFlags remains inline or becomes a public symbol in later decomp work.",
+    "Look for later corrections to HSD_PObj struct layout, especially around shape_set, envelope_list, and shape animation payloads.",
+    "Search for additional EPILOGUE_UNSCHEDULED additions for sysdolphin/baselib object files."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

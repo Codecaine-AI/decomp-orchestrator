@@ -1,0 +1,132 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1422",
+  "pr": {
+    "number": 1422,
+    "title": "Finish matching plstale",
+    "url": "https://github.com/doldecomp/melee/pull/1422",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-08-11T19:07:27Z",
+    "merged_at": "2024-08-11T19:21:08Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Finished matching the player stale-move module by replacing asm/melee/pl/plstale.s with matched C in src/melee/pl/plstale.c, marking plstale.c as Matching, and updating symbols/callsites to descriptive plStale names. The PR also clarified stale-move data names and signedness across Fighter, Item, and StaleMoveTable fields, especially attack_instance handling.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-deletion",
+      "headers",
+      "symbol-renaming",
+      "struct-field-typing"
+    ],
+    "systems": [
+      "player",
+      "fighter",
+      "item",
+      "collision",
+      "config",
+      "build"
+    ]
+  },
+  "key_files": [
+    "src/melee/pl/plstale.c",
+    "asm/melee/pl/plstale.s",
+    "src/melee/pl/plstale.h",
+    "src/melee/pl/types.h",
+    "src/melee/pl/types.dox",
+    "src/melee/ft/types.h",
+    "src/melee/it/types.h",
+    "src/melee/ft/ft_0881.c",
+    "config/GALE01/symbols.txt",
+    "configure.py",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted the 322-line asm implementation asm/melee/pl/plstale.s and switched obj_files.mk from asm/melee/pl/plstale.s.o to src/melee/pl/plstale.c.o.",
+    "Changed configure.py so melee/pl/plstale.c is built as Object(Matching) instead of Object(NonMatching).",
+    "Implemented and/or renamed plstale functions in C: plStale_InitAttackInstance, plStale_ResetStaleMoveTableForPlayer, plStale_IncrementAttackInstance, plStale_UpdateStaleMovesFromFighter, and plStale_UpdateStaleMovesFromItem.",
+    "Renamed the global u16 unk_804D6478 to staleAttackInstance and preserved the wraparound behavior that skips zero by resetting to 1.",
+    "Implemented stale table update logic for fighter and item hits: skip self/owner matches, skip attack_id 1, reject duplicate attack_id plus attack_instance pairs, write into current_index, then wrap current_index from 9 back to 0.",
+    "Updated assembly callsites in ft_0881.s, ft_0D14.s, ftcoll.s, it_2725.s, and plbonus.s to call the new descriptive plStale symbols.",
+    "Updated config/GALE01/symbols.txt to replace address-based plStale_80037xxx names with descriptive names while preserving addresses and sizes.",
+    "Clarified stale-move-related struct fields: Fighter x2068_attackID became s32 and x206C became u16 x206C_attack_instance; Item xD8C_attackInstance became xD8C_attack_instance; StaleMoveTable entries became u16 move_id and u16 attack_instance.",
+    "Adjusted ft_0881.c and ft_0881.h to use u32 move_id parameters and casts when comparing against the s32 fighter attack ID."
+  ],
+  "smart_moves": [
+    "The PR did not just match the C file; it also propagated meaningful symbol names into headers, symbols.txt, and existing assembly callsites, making future cross-module work easier to search.",
+    "The stale table fields were renamed based on observed behavior: the second halfword is treated as an attack instance, not num_action_states.",
+    "The implementation used simple for loops over the 10 stale slots and a ternary wrap for current_index, capturing the repeated assembly comparisons in readable C without preserving the unrolled asm shape.",
+    "Using GET_FIGHTER, GET_ITEM, and ftLib_80086960 made the item-owner stale update path express the real object relationships instead of leaving raw offset access in asm.",
+    "The build/config updates were complete: obj_files.mk, configure.py, and symbols.txt all moved together, avoiding a half-matched state."
+  ],
+  "decomp_lessons": [
+    "When a module becomes matching, update both build systems represented in this repo slice: configure.py's Object(Matching/NonMatching) entry and obj_files.mk's source-vs-asm object path.",
+    "Descriptive symbol names should be applied consistently to C headers, symbols.txt, and remaining asm callers so later decomp work can follow semantic names across mixed C/asm boundaries.",
+    "A repeated unrolled assembly pattern over a fixed-size table may match cleanly as a normal C for loop if the compiler settings and types line up.",
+    "Field signedness matters for matching: this PR changed stale table entries to u16 while retaining s32 for attack IDs, and used explicit casts in ft_0881.c comparisons.",
+    "Stale-move table matching depends on recognizing the pair identity of move_id plus attack_instance; storing only the move ID would not reflect the assembly behavior.",
+    "Global counters that must not become zero can be modeled directly with increment-then-if-zero-reset logic; here the stale attack instance returns the previous value and resets zero to one."
+  ],
+  "naming_conventions": [
+    "plStale_8003715C -> plStale_InitAttackInstance",
+    "plStale_80037168 -> plStale_ResetStaleMoveTableForPlayer",
+    "plStale_80037208 -> plStale_IncrementAttackInstance",
+    "plStale_8003722C -> plStale_UpdateStaleMovesFromFighter",
+    "plStale_800373CC -> plStale_UpdateStaleMovesFromItem",
+    "unk_804D6478 -> staleAttackInstance",
+    "Fighter::x206C -> x206C_attack_instance",
+    "Item::xD8C_attackInstance -> xD8C_attack_instance",
+    "StaleMoveTable::num_action_states -> attack_instance",
+    "Descriptive plStale function names use UpperCamel after the module prefix; struct fields in this area use existing offset prefixes plus snake_case semantic suffixes."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed the entire plstale.s text/sbss assembly file after matching all five functions in C.",
+    "Preserved exact public symbol addresses and sizes in config/GALE01/symbols.txt while replacing only the names.",
+    "Used a 10-iteration loop to replace unrolled stale-table duplicate checks in both fighter and item update functions.",
+    "Modeled ring-buffer wrap as current_index == 9 ? 0 : current_index + 1.",
+    "Used u16 for attack_instance storage and staleAttackInstance, matching lhz/sth behavior visible in the deleted assembly.",
+    "Used explicit casts in ft_0881.c where u32 move_id is compared to s32 x2068_attackID, likely to preserve codegen after signedness cleanup."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "plstale",
+    "stale moves",
+    "stale move table",
+    "StaleMoveTable",
+    "attack_instance",
+    "staleAttackInstance",
+    "plStale_InitAttackInstance",
+    "plStale_ResetStaleMoveTableForPlayer",
+    "plStale_IncrementAttackInstance",
+    "plStale_UpdateStaleMovesFromFighter",
+    "plStale_UpdateStaleMovesFromItem",
+    "Player_GetStaleMoveTableIndexPtr",
+    "GET_FIGHTER",
+    "GET_ITEM",
+    "ftLib_80086960",
+    "x2068_attackID",
+    "x206C_attack_instance",
+    "xD88_attackID",
+    "xD8C_attack_instance",
+    "configure.py Matching",
+    "obj_files.mk src object",
+    "asm deletion"
+  ],
+  "follow_up_queries": [
+    "Search for remaining stale-move fields or comments using old names like num_action_states or x206C.",
+    "Look for other modules that still call plStale symbols only from asm and could now be decompiled with the descriptive prototypes.",
+    "Audit StaleMoveTable::total_attack_count usage; this PR did not change it beyond nearby struct typing.",
+    "Check whether fighter and item stale-update logic can later share a helper without disrupting matching, since the C bodies are structurally similar."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

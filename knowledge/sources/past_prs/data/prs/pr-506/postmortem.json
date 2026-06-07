@@ -1,0 +1,130 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-506",
+  "pr": {
+    "number": 506,
+    "title": "Match `dvdqueue`",
+    "url": "https://github.com/doldecomp/melee/pull/506",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2022-08-27T23:16:01Z",
+    "merged_at": "2022-08-27T23:18:04Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Dolphin DVD waiting queue module by replacing asm/dolphin/dvd/dvdqueue.s with src/dolphin/dvd/dvdqueue.c and switching obj_files.mk to build the C object. The new C source implements the queue sentinel array, interrupt-protected push/pop/check/dequeue helpers, and preserves the assembly behavior closely enough to remove the 160-line assembly file. The PR body only says it was tracked in #480, and there were no review comments.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "dvd-runtime",
+      "queue-data-structure"
+    ],
+    "systems": [
+      "dolphin",
+      "dvd",
+      "osinterrupt",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "asm/dolphin/dvd/dvdqueue.s",
+    "src/dolphin/dvd/dvdqueue.c",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted asm/dolphin/dvd/dvdqueue.s, which contained assembly for __DVDClearWaitingQueue, __DVDPushWaitingQueue, __DVDPopWaitingQueue, __DVDCheckWaitingQueue, __DVDDequeueWaitingQueue, and the bss symbol lbl_804A7638.",
+    "Added src/dolphin/dvd/dvdqueue.c with C implementations of the same DVD waiting queue functions.",
+    "Introduced a local typedef DVDQueue_sub with two self-referential pointer fields, unk0 and unk4, matching the doubly-linked queue node layout used by the original assembly.",
+    "Replaced the anonymous bss label with static DVDQueue_sub WaitingQueue[4], a four-entry sentinel array used by the queue priority/slot loops.",
+    "Updated obj_files.mk so TEXT_O_FILES builds $(BUILD_DIR)/src/dolphin/dvd/dvdqueue.c.o instead of $(BUILD_DIR)/asm/dolphin/dvd/dvdqueue.s.o.",
+    "__DVDClearWaitingQueue initializes each WaitingQueue entry as an empty circular sentinel by setting both links to itself.",
+    "__DVDPushWaitingQueue disables interrupts, inserts a node before the selected queue sentinel tail link, restores interrupts, and returns 1.",
+    "__DVDPopWaitingQueue scans four queues, restores/re-disables interrupts before removing the first available node, unlinks it, clears its links to NULL, and returns it; otherwise it returns NULL.",
+    "__DVDCheckWaitingQueue scans the four sentinels under disabled interrupts and returns TRUE on the first non-empty queue.",
+    "__DVDDequeueWaitingQueue checks both neighboring links for NULL before unlinking a specific node and returning TRUE; if either link is NULL it restores interrupts and returns FALSE."
+  ],
+  "smart_moves": [
+    "Modeled the bss queue heads as a static array of four two-pointer structs, directly reflecting the assembly's 0x20-byte lbl_804A7638 region and 8-byte stride.",
+    "Used self-referential sentinel nodes for empty queues, which maps cleanly onto the assembly comparisons of WaitingQueue[i].unk0 against &WaitingQueue[i].",
+    "Kept OSDisableInterrupts/OSRestoreInterrupts calls explicit around list mutations to preserve interrupt-safety and matching call structure.",
+    "In __DVDPopWaitingQueue, preserved the unusual restore-then-disable sequence before removal, a likely matching-sensitive control-flow detail from the original assembly.",
+    "Used local temporaries named after observed registers in some places, such as r5, r31, and r4, to influence code generation and make the C structure mirror the disassembly.",
+    "Kept unresolved field names as unk0 and unk4 instead of overclaiming semantics not proven in this PR slice."
+  ],
+  "decomp_lessons": [
+    "Small assembly modules with simple bss-backed data structures can often be matched by identifying stride, sentinel behavior, and pointer writes before attempting semantic renaming.",
+    "A bss label of size 0x20 with repeated operations at offsets 0, 8, 0x10, and 0x18 is strong evidence for an array of four 8-byte structs.",
+    "For linked-list queue code, matching may depend on preserving the original order of pointer assignments, not just the final logical state.",
+    "Interrupt save/restore variables should use BOOL when matching Dolphin OSDisableInterrupts/OSRestoreInterrupts patterns.",
+    "Do not simplify apparently redundant interrupt transitions if the assembly shows them; the restore/re-disable sequence in __DVDPopWaitingQueue is part of the matched behavior.",
+    "When exact struct semantics are not established, local private typedefs with unk field names are acceptable stepping stones for matching."
+  ],
+  "naming_conventions": [
+    "Internal Dolphin DVD functions retain double-underscore names: __DVDClearWaitingQueue, __DVDPushWaitingQueue, __DVDPopWaitingQueue, __DVDCheckWaitingQueue, __DVDDequeueWaitingQueue.",
+    "The private queue node typedef was named DVDQueue_sub, with struct tag _DVDQueue_sub.",
+    "Unknown pointer fields were named by offset, unk0 and unk4.",
+    "The former bss label lbl_804A7638 was replaced by a descriptive static symbol, WaitingQueue.",
+    "The interrupt state local was named intrEnabled, matching common Dolphin decomp style for OSDisableInterrupts return values.",
+    "Boolean-returning functions use BOOL with TRUE and FALSE from Dolphin headers rather than raw int literals where the source signature indicates boolean behavior."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted the assembly object to a C object in obj_files.mk only after adding the matching C implementation.",
+    "Matched the 4-iteration assembly loops using for (i = 0; i < 4; i++).",
+    "Represented the assembly's 8-byte queue element stride as a struct containing two pointers.",
+    "Preserved the linked-list insertion order in __DVDPushWaitingQueue: update old tail forward link, set new node back link, set new node forward link to sentinel, then update sentinel back link.",
+    "Preserved __DVDPopWaitingQueue's scan of four queue heads and early return path for the first non-empty queue.",
+    "Cleared popped node links to NULL after restoring interrupts, matching the assembly's post-unlink stores.",
+    "Used local register-like variable names in matching-sensitive areas to guide compiler output.",
+    "Included <dolphin/dvd/dvd.h> and <dolphin/os/OSInterrupt.h> to obtain DVD-related declarations, BOOL, OSDisableInterrupts, and OSRestoreInterrupts."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The PR body only states: \"Tracked in #480.\""
+  ],
+  "searchable_terms": [
+    "pr-506",
+    "Match dvdqueue",
+    "ribbanya",
+    "dvdqueue",
+    "asm/dolphin/dvd/dvdqueue.s",
+    "src/dolphin/dvd/dvdqueue.c",
+    "obj_files.mk",
+    "__DVDClearWaitingQueue",
+    "__DVDPushWaitingQueue",
+    "__DVDPopWaitingQueue",
+    "__DVDCheckWaitingQueue",
+    "__DVDDequeueWaitingQueue",
+    "DVDQueue_sub",
+    "_DVDQueue_sub",
+    "WaitingQueue",
+    "lbl_804A7638",
+    "OSDisableInterrupts",
+    "OSRestoreInterrupts",
+    "intrEnabled",
+    "BOOL",
+    "TRUE",
+    "FALSE",
+    "dolphin dvd",
+    "DVD waiting queue",
+    "sentinel queue",
+    "doubly linked list",
+    "asm-to-c",
+    "tracked in #480"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename DVDQueue_sub fields unk0 and unk4 to semantic next/prev names.",
+    "Search for other Dolphin DVD queue or command block structs that include the same two-link layout.",
+    "Check issue #480 for the broader tracking context of Dolphin DVD matching work.",
+    "Look for later changes to dvdqueue.c that add headers, prototypes, or replace the private typedef with a shared DVD struct."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

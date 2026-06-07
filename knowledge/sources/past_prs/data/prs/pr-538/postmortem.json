@@ -1,0 +1,134 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-538",
+  "pr": {
+    "number": 538,
+    "title": "decompile debug.c",
+    "url": "https://github.com/doldecomp/melee/pull/538",
+    "state": "MERGED",
+    "author": "RevoSucks",
+    "created_at": "2022-09-03T22:14:13Z",
+    "merged_at": "2022-09-03T22:40:58Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Decompiled sysdolphin/baselib/debug.s into src/sysdolphin/baselib/debug.c, replacing the assembly object in obj_files.mk. The new C covers the debug/assert/panic path around lbl_8038815C, func_803881E4, __assert, and HSD_Panic, including OSReport, OSSaveContext, OSPanic, callback globals, and an inferred struct around lbl_80400430. The PR also added an ldscript FORCEACTIVE block for lbl_804C28D0 because #pragma force_active did not keep the symbol from being stripped.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "assembly-removal",
+      "build-system-update",
+      "linker-script-workaround",
+      "debug-assert-panic"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "debug",
+      "dolphin-os",
+      "linker",
+      "build"
+    ]
+  },
+  "key_files": [
+    "asm/sysdolphin/baselib/debug.s",
+    "src/sysdolphin/baselib/debug.c",
+    "obj_files.mk",
+    "ldscript.lcf"
+  ],
+  "what_changed": [
+    "Deleted asm/sysdolphin/baselib/debug.s, removing 158 lines of hand-written assembly/data/bss/sdata declarations for the debug module.",
+    "Added src/sysdolphin/baselib/debug.c with 75 lines implementing lbl_8038815C, func_803881E4, __assert, and HSD_Panic in C.",
+    "Updated obj_files.mk so TEXT_O_FILES uses $(BUILD_DIR)/src/sysdolphin/baselib/debug.c.o instead of $(BUILD_DIR)/asm/sysdolphin/baselib/debug.s.o.",
+    "Declared callback-like extern globals lbl_804D7710, lbl_804D7714, and lbl_804D7718 and preserved behavior where lbl_8038815C optionally calls lbl_804D7710 before forwarding to lbl_804D7718.",
+    "Introduced struct UnkStruct80400430 with padding to model fields at offsets 0x52 and 0x84, allowing func_803881E4 to set lbl_80400430.unk84 to lbl_8038815C and clear lbl_80400430.unk52.",
+    "Moved assembly data into C equivalents: OSContext lbl_804C2608, static empty string lbl_804D6010, and char lbl_804C28D0[0x10].",
+    "Added a static asm myStrippedFunction with four nops, documented as required to reproduce early CodeWarrior peephole behavior after stripping.",
+    "Added a FORCEACTIVE block in ldscript.lcf for lbl_804C28D0 because the source comment says #pragma force_active was not sufficient to prevent Metrowerks from stripping the symbol."
+  ],
+  "smart_moves": [
+    "Used a minimal padded placeholder struct for lbl_80400430 rather than over-naming unknown fields, while still exposing the two offsets needed for matching behavior.",
+    "Kept unknown global labels such as lbl_804D7710, lbl_804D7714, lbl_804D7718, lbl_80400430, lbl_804C2608, lbl_804C28D0, and lbl_804D6010 instead of inventing unsupported semantic names.",
+    "Preserved the callback trampoline behavior in lbl_8038815C, including dereferencing arg2 for the optional lbl_804D7710 call and returning 0 after invoking lbl_804D7718.",
+    "Matched the assert/panic strings directly in C: \"assertion \\\"%s\\\" failed\" and \"%s in %s on line %d.\\n\".",
+    "Used HSD_Panic from __assert and implemented HSD_Panic to save OSContext, report diagnostic text, call the optional panic callback, then fall through to OSPanic.",
+    "Documented and worked around a toolchain/linker retention problem instead of silently relying on a pragma that did not work for lbl_804C28D0.",
+    "Added a stripped static asm function solely for matching/toolchain side effects, showing attention to CodeWarrior codegen quirks beyond the visible callable functions."
+  ],
+  "decomp_lessons": [
+    "When replacing a .s file with C, update obj_files.mk in the same PR so the build switches from asm object to src object.",
+    "For partially understood global structs, use explicitly sized padding and offset-based field names to match layout without overclaiming semantics.",
+    "A symbol can require linker-script FORCEACTIVE even when #pragma force_active on appears in the source; verify retention in the final link/map rather than assuming the pragma worked.",
+    "Small stripped or unused functions can still affect CodeWarrior peephole/codegen behavior; preserving a local static asm stub may be necessary for matching.",
+    "Debug/assert/panic code often has varargs-sensitive calls such as OSReport and OSPanic; preserve argument order and string literals exactly.",
+    "If a function pointer global may be NULL, mirror the assembly's NULL checks before callback invocation or default initialization.",
+    "Do not rename unlabeled globals unless there is clear evidence; this PR retained lbl_* names for uncertain callbacks and data."
+  ],
+  "naming_conventions": [
+    "Used lbl_ names for unknown data and callbacks where semantics were not established: lbl_804D7710, lbl_804D7714, lbl_804D7718, lbl_80400430, lbl_804C2608, lbl_804C28D0, lbl_804D6010.",
+    "Used UnkStruct80400430 for an inferred unknown struct anchored to the global symbol lbl_80400430.",
+    "Used field names unk52 and unk84 to indicate known offsets but unknown semantic meaning.",
+    "Kept exported function labels lbl_8038815C and func_803881E4 where better names were not evidenced.",
+    "Used descriptive local placeholder myStrippedFunction for the intentionally stripped static asm helper, with comments explaining its matching role."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted the full debug.s assembly implementation after matching it with C.",
+    "Modeled lbl_80400430 offsets with filler arrays: filler0[0x52], unk52, unk53[0x84 - 0x53], and function pointer unk84.",
+    "Represented the former .bss OSContext allocation at lbl_804C2608 as OSContext lbl_804C2608.",
+    "Represented the former empty sdata bytes at lbl_804D6010 as static char lbl_804D6010[1] = \"\".",
+    "Used #pragma push, #pragma force_active on, and #pragma pop around lbl_804C28D0, then supplemented it with an ldscript FORCEACTIVE entry when the pragma did not retain the symbol.",
+    "Inserted a static asm function containing four nops to trigger the required early CodeWarrior peephole-off behavior despite the function being stripped.",
+    "Preserved function pointer calls through globals, including the optional panic hook lbl_804D7714(OSContext*, ...)."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-538",
+    "decompile debug.c",
+    "RevoSucks",
+    "sysdolphin",
+    "baselib",
+    "debug.c",
+    "debug.s",
+    "obj_files.mk",
+    "ldscript.lcf",
+    "FORCEACTIVE",
+    "force_active",
+    "Metrowerks",
+    "CodeWarrior",
+    "peephole",
+    "myStrippedFunction",
+    "lbl_8038815C",
+    "func_803881E4",
+    "__assert",
+    "HSD_Panic",
+    "OSReport",
+    "OSSaveContext",
+    "OSPanic",
+    "OSContext",
+    "lbl_80400430",
+    "UnkStruct80400430",
+    "lbl_804C2608",
+    "lbl_804C28D0",
+    "lbl_804D6010",
+    "lbl_804D7710",
+    "lbl_804D7714",
+    "lbl_804D7718",
+    "assertion failed",
+    "panic callback"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename lbl_8038815C, func_803881E4, lbl_80400430, or the lbl_804D7710/lbl_804D7714/lbl_804D7718 callback globals.",
+    "Search for other uses of ldscript FORCEACTIVE to preserve symbols when #pragma force_active fails.",
+    "Look for later cleanup of UnkStruct80400430 or identification of the field at offset 0x84.",
+    "Search for myStrippedFunction or other stripped static asm helpers used to reproduce CodeWarrior peephole behavior."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

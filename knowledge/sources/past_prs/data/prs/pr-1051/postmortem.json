@@ -1,0 +1,187 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1051",
+  "pr": {
+    "number": 1051,
+    "title": "Partial match strtoul",
+    "url": "https://github.com/doldecomp/melee/pull/1051",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-01-10T07:10:07Z",
+    "merged_at": "2024-01-10T07:36:12Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Partially decompiled MSL strtoul support by adding a matching C implementation of the public strtoul wrapper while leaving the hard-to-match internal __strtoul body in assembly. The PR also promoted the ctype classification table and case maps into C as __ctype_map, __lower_map, and __upper_map, replaced assembly references to the old anonymous MSL_AnsiFp_803B8C30 table with __ctype_map, added MSL libc headers needed by the wrapper, and added errno.c/strtoul.c to obj_files.mk. The author explicitly noted that __strtoul differs from other library versions and appears to have a bug involving an unused spaces variable, so the scope was intentionally limited to what was needed to get strtoul matching.",
+  "change_classification": {
+    "primary_type": "partial_decomp_match",
+    "categories": [
+      "decomp-matching",
+      "partial-match",
+      "libc-port",
+      "headers",
+      "symbol-renaming",
+      "build-system"
+    ],
+    "systems": [
+      "MSL",
+      "MSL/strtoul",
+      "MSL/ctype",
+      "MSL/errno",
+      "MSL/printf",
+      "asm",
+      "obj_files.mk"
+    ]
+  },
+  "key_files": [
+    {
+      "file": "src/MSL/strtoul.c",
+      "role": "New C implementation of public strtoul wrapper calling __strtoul and handling end pointer, overflow, errno, and negative result adjustment."
+    },
+    {
+      "file": "src/MSL/strtoul.h",
+      "role": "New declarations for strtol, strtoul, and internal __strtoul read-proc interface."
+    },
+    {
+      "file": "asm/MSL/strtoul.s",
+      "role": "Removed old public wrapper assembly, renamed remaining internal routine MSL_StrToUl_80325BD0 to __strtoul, switched ctype table reference to __ctype_map, and removed local sbss errno-like symbol."
+    },
+    {
+      "file": "src/MSL/ctype.c",
+      "role": "Added exported __ctype_map table and renamed lowercase/uppercase maps to __lower_map and __upper_map."
+    },
+    {
+      "file": "src/MSL/ctype.h",
+      "role": "Added MSL ctype flag constants, exported map declarations, and inline classification helpers."
+    },
+    {
+      "file": "asm/MSL/ansi_fp.s",
+      "role": "Removed duplicated ctype-like table previously labeled MSL_AnsiFp_803B8C30."
+    },
+    {
+      "file": "asm/MSL/printf.s",
+      "role": "Updated parse_format assembly references from MSL_AnsiFp_803B8C30 to __ctype_map."
+    },
+    {
+      "file": "asm/melee/lb/lb_0198.s",
+      "role": "Updated assembly references to __ctype_map and changed call from old MSL_StrToUl_80325B24 wrapper label to strtoul."
+    },
+    {
+      "file": "src/MSL/errno.c",
+      "role": "Added global int errno."
+    },
+    {
+      "file": "src/MSL/errno.h",
+      "role": "Added errno declaration and MSL error-code defines including ERANGE."
+    },
+    {
+      "file": "src/MSL/limits.h",
+      "role": "Added integer limit macros, including ULONG_MAX used by strtoul overflow handling."
+    },
+    {
+      "file": "src/MSL/ansi_files.h",
+      "role": "Added MSL FILE, file modes/states, console I/O declarations, and related typedefs needed by MSL headers."
+    },
+    {
+      "file": "src/MSL/scanf.h",
+      "role": "Added scan read-proc action enums and string-control structs including __InStrCtrl."
+    },
+    {
+      "file": "obj_files.mk",
+      "role": "Added src/MSL/errno.c.o and src/MSL/strtoul.c.o to TEXT_O_FILES before asm/MSL/strtoul.s.o."
+    }
+  ],
+  "what_changed": [
+    "Added src/MSL/strtoul.c with strtoul(const char* str, char** end, int base), constructing an __InStrCtrl, calling __strtoul(base, 0x7FFFFFFF, &__StringRead, &isc, &count, &negative, &overflow), updating *end, returning ULONG_MAX on overflow, setting errno to 0x22, and negating the value for negative input.",
+    "Kept the internal conversion parser in assembly but renamed its exported label from MSL_StrToUl_80325BD0 to __strtoul.",
+    "Removed the old assembly implementation of the public wrapper MSL_StrToUl_80325B24 from asm/MSL/strtoul.s because the wrapper is now represented in C as strtoul.",
+    "Changed assembly call sites and data references to use real library-style names: lb_8001B14C now calls strtoul, and printf/lb/strtoul assembly reference __ctype_map instead of MSL_AnsiFp_803B8C30.",
+    "Moved the ctype classification table out of asm/MSL/ansi_fp.s into src/MSL/ctype.c as const unsigned char __ctype_map[256].",
+    "Renamed static ctype case-conversion tables to exported const unsigned char __lower_map[256] and __upper_map[256], and updated tolower/toupper to use those names.",
+    "Added MSL libc support headers for ctype, errno, limits, ansi_files, scanf, and strtoul declarations.",
+    "Added errno.c defining global int errno and added errno/strtoul object files to the text object list."
+  ],
+  "smart_moves": [
+    "Scoped the match to the public strtoul wrapper instead of forcing a questionable __strtoul match; the PR body states __strtoul differs from other library versions and appears to have a bug involving unused spaces.",
+    "Preserved the unmatched internal parser as assembly while still replacing the wrapper with C, allowing incremental decomp progress without destabilizing behavior.",
+    "Gave the ctype data table its canonical MSL symbol name __ctype_map and redirected existing assembly to that symbol, removing duplicate anonymous data from ansi_fp.s.",
+    "Introduced the minimum surrounding libc surface needed by strtoul: errno, limits, scanf string-read control structs, and ctype classification helpers.",
+    "Used the existing __StringRead/read-proc abstraction instead of inventing a new parser path, matching the internal __strtoul interface visible in assembly.",
+    "Handled overflow at the wrapper boundary by setting value to ULONG_MAX and assigning errno = 0x22, matching the assembly wrapper behavior that previously wrote 0x22 and returned -1."
+  ],
+  "decomp_lessons": [
+    "For MSL libc routines, the public API wrapper and the internal worker can often be decompiled separately; matching the wrapper may be valuable even when the worker remains stubborn assembly.",
+    "When a library function differs from known source versions, avoid overfitting to external source if the local binary shows anomalous behavior.",
+    "Canonical data-symbol recovery can unlock multiple files at once: replacing MSL_AnsiFp_803B8C30 with __ctype_map clarified printf, strtoul, and melee lb assembly references.",
+    "Promoting shared tables from assembly to C should be paired with assembly reference updates rather than leaving duplicate data labels.",
+    "Header work is part of matching work: accurate typedefs, enum values, macro constants, and exported declarations are needed before small libc wrappers can compile and match.",
+    "For overflow wrappers, preserve exact observable constants even if the header also defines named values; this PR used errno = 0x22 while errno.h defines ERANGE as 34."
+  ],
+  "naming_conventions": [
+    "Use MSL internal double-underscore names for library internals: __strtoul, __ctype_map, __lower_map, __upper_map, __StringRead, __InStrCtrl.",
+    "Use public libc names for public API entry points: strtoul, strtol, errno.",
+    "MSL header guards in this PR use forms such as _MSL_COMMON_STRTOUL_H, _MSL_COMMON_SCANF_H, _MSL_COMMON_ANSI_FILES_H, MSL_COMMON_SRC_ERRNO_H, and _STD_LIMITS_H.",
+    "Ctype flag macros use double-underscore descriptive names: __control_char, __motion_char, __space_char, __punctuation, __digit, __hex_digit, __lower_case, __upper_case.",
+    "Scan/read-proc action enums use MSL-style names such as __GetAChar, __UngetAChar, and __TestForError."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced assembly references to MSL_AnsiFp_803B8C30@ha/@l with __ctype_map@ha/@l without changing instruction shape, preserving addresses/relocations while improving symbol accuracy.",
+    "Deleted the old public wrapper assembly and added a C object before the remaining asm/MSL/strtoul.s.o in obj_files.mk, enabling the C strtoul symbol while retaining assembly __strtoul.",
+    "Renamed an assembly global label for the internal parser to __strtoul instead of continuing to use an auto-generated MSL_StrToUl_80325BD0 name.",
+    "Updated external call-site assembly in asm/melee/lb/lb_0198.s from MSL_StrToUl_80325B24 to strtoul once the wrapper became a C symbol.",
+    "Moved the ctype table bytes from asm/MSL/ansi_fp.s to a C const array whose initializer encodes the same class-bit pattern using helper macros such as ctrl, motn, spac, punc, digi, hexd, uhex, and lhex.",
+    "Removed the local sbss symbol MSL_StrToUl_804D7078 after adding global errno support."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review records were present in the PR slice.",
+    "Author rationale from PR body: __strtoul did not match known library versions and appeared to have a bug involving an unused spaces variable, so the submitted change only included what was needed to get strtoul matching."
+  ],
+  "searchable_terms": [
+    "Partial match strtoul",
+    "MSL strtoul",
+    "strtoul",
+    "__strtoul",
+    "MSL_StrToUl_80325B24",
+    "MSL_StrToUl_80325BD0",
+    "__StringRead",
+    "__InStrCtrl",
+    "__GetAChar",
+    "__UngetAChar",
+    "__ctype_map",
+    "MSL_AnsiFp_803B8C30",
+    "__lower_map",
+    "__upper_map",
+    "ctype.c",
+    "ctype.h",
+    "errno",
+    "errno.c",
+    "errno.h",
+    "ERANGE",
+    "ULONG_MAX",
+    "limits.h",
+    "scanf.h",
+    "ansi_files.h",
+    "parse_format",
+    "lb_8001B14C",
+    "obj_files.mk",
+    "PsiLupan",
+    "MSL libc",
+    "partial-match",
+    "spaces unused bug"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully decompile or alter __strtoul.",
+    "Search for later renames or fixes involving __ctype_map, __lower_map, or __upper_map.",
+    "Check whether errno = 0x22 was later replaced with ERANGE or kept for matching.",
+    "Search for additional MSL scanf/read-proc decompilation using __InStrCtrl and __StringRead.",
+    "Look for follow-up work on MSL headers ansi_files.h, scanf.h, limits.h, and errno.h."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,133 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1135",
+  "pr": {
+    "number": 1135,
+    "title": "Update `dolphin/thp` symbols",
+    "url": "https://github.com/doldecomp/melee/pull/1135",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-01-27T14:05:59Z",
+    "merged_at": "2024-01-27T14:13:51Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Updated GALE01 THP decoder symbol metadata, primarily by marking many internal `dolphin/thp` functions and data objects as local instead of global, correcting one THP function size, splitting THP rodata into `__THPJpegNaturalOrder` plus `__THPAANScaleFactor`, and removing tiny placeholder labels around 0x803303BC/0x803303C0. The PR also adjusted a small `.sdata` split boundary between `lb_0192.c` and `lb_0198.c`, taught rust-utils to include `config/**/{symbols,splits}.txt` in its source-file glob, updated a Vim label grep helper to search generated build asm labels, bumped serde lockfile versions, and made `M2C_ERROR` call sites carry unknown-instruction text as comments.",
+  "change_classification": {
+    "primary_type": "symbol_config_update",
+    "categories": [
+      "symbols",
+      "splits",
+      "naming",
+      "tooling",
+      "m2c_cleanup",
+      "lockfile"
+    ],
+    "systems": [
+      "dolphin/thp",
+      "config/GALE01",
+      "tools/rust-utils",
+      "tools/vimrc",
+      "m2c_macros",
+      "fighter/common"
+    ]
+  },
+  "key_files": [
+    "config/GALE01/symbols.txt",
+    "config/GALE01/splits.txt",
+    "tools/rust-utils/src/utils.rs",
+    "tools/vimrc",
+    "src/m2c_macros.h",
+    "src/melee/ft/chara/ftCommon/ftCo_ItemThrow.c",
+    "Cargo.lock"
+  ],
+  "what_changed": [
+    "Changed `__THPPrepBitStream`, many `THPDec_8033xxxx` routines, THP decompression/Huffman helpers, THP data/BSS/SBSS/SData2 objects, and several adjacent GXInit sdata2 constants from `scope:global` to `scope:local` in `config/GALE01/symbols.txt`.",
+    "Corrected `THPDec_803302EC` size from `0xD0` to `0xD8` and removed separate `fn_803303BC` and `fn_803303C0` 4-byte entries, making the subsequent layout consistent with the adjusted size.",
+    "Split rodata at `0x803B9410`: `__THPJpegNaturalOrder` changed from a `0x90` global byte object to a `0x50` local byte object, and new local double object `__THPAANScaleFactor` was added at `0x803B9460` with size `0x40`.",
+    "Moved `.sdata` range `0x804D3800..0x804D3828` entirely under `melee/lb/lb_0198.c` in `config/GALE01/splits.txt`, removing the prior tiny `lb_0192.c` `.sdata` slice.",
+    "Added `config/**/{symbols,splits}.txt` to the rust-utils `SRC_FILES` glob set.",
+    "Changed `M2C_ERROR` from variadic `M2C_ERROR(...)` to single-parameter `M2C_ERROR(desc)` and rewrote existing unknown `cror` instruction call sites in `ftCo_ItemThrow.c` as comment arguments such as `M2C_ERROR(/* unknown instruction : cror eq, gt, eq */);`.",
+    "Updated `tools/vimrc` `LblGrep` to search generated build asm labels matching `^\\.(fn|obj) <args>` under `build/GALE01/asm/**/*.s` instead of old label lines under `expected/dump/**/*.s`.",
+    "Bumped locked `serde` and `serde_derive` versions from `1.0.195` to `1.0.196` in `Cargo.lock`."
+  ],
+  "smart_moves": [
+    "Used symbol scope metadata to distinguish internal THP implementation details from exported/global symbols without renaming uncertain address-based placeholders.",
+    "Corrected rodata granularity by separating JPEG natural-order data from AAN scale-factor doubles, which gives future decompilation a cleaner data boundary and more meaningful object typing.",
+    "Fixed the THP text boundary by adjusting `THPDec_803302EC` size rather than keeping artificial 4-byte `fn_` labels in the middle of the region.",
+    "Expanded tooling globs so symbol and split configuration files can be found by rust-utils workflows, reducing the chance that config-only changes are missed by repository tooling.",
+    "Preserved m2c unknown-instruction diagnostics as comments while making the macro interface explicit, keeping the decompiled C readable without treating the text as real macro tokens."
+  ],
+  "decomp_lessons": [
+    "When importing or refreshing SDK/library symbols, check `scope:local` versus `scope:global`; many internal THP decoder helpers and tables should remain local even if they have recognizable names.",
+    "If a rodata object seems oversized, verify whether adjacent typed constants are being swallowed; here a `0x90` byte table became a `0x50` byte table plus a `0x40` double table.",
+    "Tiny placeholder functions immediately after a function may indicate a size/boundary error rather than real callable symbols; size correction can remove bogus labels.",
+    "Split-file ownership matters even for very small `.sdata` ranges; a 4-byte slice was merged into the following source file’s `.sdata` range to keep section ownership contiguous.",
+    "For m2c-generated unknown instructions, comment-style macro arguments are a safe way to retain the disassembly note at the source location."
+  ],
+  "naming_conventions": [
+    "Internal THP SDK-style helpers use double-underscore names such as `__THPPrepBitStream`, `__THPDecompressiMCURow640x480`, `__THPHuffDecodeDCTCompY`, and should be marked local when evidence indicates file-local scope.",
+    "Unknown or not-yet-decompiled THP functions keep address-derived names like `THPDec_803300E0` rather than speculative semantic names.",
+    "THP JPEG constants use SDK-style names such as `__THPJpegNaturalOrder` and `__THPAANScaleFactor` with explicit object data typing.",
+    "Generated build asm labels searched by Vim are expected in `.fn` or `.obj` form, matching the updated `LblGrep` pattern."
+  ],
+  "assembly_or_matching_tactics": [
+    "Adjust function sizes and remove artificial `fn_` labels when contiguous assembly indicates the earlier split was wrong.",
+    "Use `scope:local` in `symbols.txt` to prevent internal THP objects from being treated as exported global symbols.",
+    "Represent unhandled PowerPC condition-register instructions such as `cror eq, gt, eq` with `M2C_ERROR(/* unknown instruction ... */)` at the relevant C control-flow point.",
+    "Improve local assembly navigation by grepping `.fn`/`.obj` labels in `build/GALE01/asm/**/*.s`."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR1135",
+    "dolphin/thp",
+    "THP symbols",
+    "THPDec_803302EC",
+    "fn_803303BC",
+    "fn_803303C0",
+    "__THPPrepBitStream",
+    "__THPDecompressiMCURow640x480",
+    "__THPDecompressiMCURowNxN",
+    "__THPHuffDecodeDCTCompY",
+    "__THPHuffDecodeDCTCompU",
+    "__THPHuffDecodeDCTCompV",
+    "__THPJpegNaturalOrder",
+    "__THPAANScaleFactor",
+    "Ydchuff",
+    "Udchuff",
+    "Vdchuff",
+    "Yachuff",
+    "Uachuff",
+    "Vachuff",
+    "Gbase",
+    "Gwid",
+    "Gq",
+    "scope:local",
+    "scope:global",
+    "config/GALE01/symbols.txt",
+    "config/GALE01/splits.txt",
+    "lb_0192.c",
+    "lb_0198.c",
+    "M2C_ERROR",
+    "unknown instruction cror",
+    "ftCo_ItemThrow.c",
+    "rust-utils SRC_FILES",
+    "symbols splits txt glob",
+    "LblGrep",
+    "build/GALE01/asm"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that decompile or rename `THPDec_803300E0` through `THPDec_803313D0`.",
+    "Check whether `__THPAANScaleFactor` and `__THPJpegNaturalOrder` were later moved into a THP header or C source file.",
+    "Search for additional `M2C_ERROR(/* unknown instruction : cror` call sites to see whether this comment-argument pattern became standard.",
+    "Look for later tooling changes involving `config/**/{symbols,splits}.txt` to understand rust-utils expectations for config files."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,146 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1377",
+  "pr": {
+    "number": 1377,
+    "title": "Link `itmew` (992 bytes)",
+    "url": "https://github.com/doldecomp/melee/pull/1377",
+    "state": "MERGED",
+    "author": "wyatt-avilla",
+    "created_at": "2024-03-06T01:37:16Z",
+    "merged_at": "2024-03-06T08:10:49Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Linked the Mew common item by replacing the 330-line asm/melee/it/items/itmew.s object with a matching C implementation in src/melee/it/items/itmew.c, moving the build to the C object, and marking itmew.c as Matching. The PR added a MewVars special-attributes struct, declared the needed it_8027ADEC prototype, converted internal itmew callbacks and state handlers to static/local scope, and localized the associated float constants in symbols.txt.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "build-config",
+      "symbol-scope-cleanup"
+    ],
+    "systems": [
+      "item",
+      "common-items",
+      "mew",
+      "asm",
+      "config",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "asm/melee/it/items/itmew.s",
+    "src/melee/it/items/itmew.c",
+    "src/melee/it/itCommonItems.h",
+    "src/melee/it/it_2725.h",
+    "config/GALE01/symbols.txt",
+    "configure.py",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted asm/melee/it/items/itmew.s and added a 158-line C implementation for itmew.",
+    "Changed configure.py from Object(NonMatching, \"melee/it/items/itmew.c\") to Object(Matching, \"melee/it/items/itmew.c\").",
+    "Changed obj_files.mk to build $(BUILD_DIR)/src/melee/it/items/itmew.c.o instead of $(BUILD_DIR)/asm/melee/it/items/itmew.s.o.",
+    "Implemented the Mew ItemStateTable it_803F80C8 in C with three states using callbacks it_802D3E08/it_802D3E2C/it_802D3ED0, it_802D3C50/it_802D3C90/it_802D3C94, and it_802D3D28/it_802D3D6C/it_802D3D8C.",
+    "Added MewVars to itCommonItems.h with four f32 fields x0, x4, x8, and xC, matching the special-attributes accesses seen in the asm.",
+    "Added an it_8027ADEC declaration in it_2725.h as M2C_UNK it_8027ADEC(M2C_UNK, Item_GObj*, HSD_JObj*, f32).",
+    "Converted itmew-internal functions it_802D3B8C through it_802D3ED0 and constants at 0x804DD4B8/0x804DD4BC from global symbols to local symbols in config/GALE01/symbols.txt.",
+    "Kept externally visible entry points it_802D3B18 and it_802D3B6C global while making the state callbacks static in C."
+  ],
+  "smart_moves": [
+    "Used a small item-specific special-attributes struct, MewVars, instead of raw offset arithmetic for xC4_article_data->x4_specialAttributes, making velocity and timing parameters clearer while preserving matching layout.",
+    "Made state callbacks static/local and updated symbols.txt scope accordingly, reducing accidental global symbol exposure after converting from asm.",
+    "Matched hitlag behavior by assigning ip->entered_hitlag = efLib_PauseAll and ip->exited_hitlag = efLib_ResumeAll in each state setup path that did so in asm.",
+    "Preserved compiler-sensitive duplicated Item* temporaries in it_802D3E2C; the author explicitly tried consolidation and left the matched form because removing the duplicate variable did not match.",
+    "Added only a conservative M2C_UNK prototype for it_8027ADEC, noting a better typed declaration may be possible but avoiding a broader signature change based on one file."
+  ],
+  "decomp_lessons": [
+    "For item files, converting the asm object is not enough: update both configure.py Matching/NonMatching status and obj_files.mk so the build links the C object instead of the asm object.",
+    "When decompiling item state tables, callback functions often become file-local static functions; symbols.txt should be adjusted from global to local to match C linkage.",
+    "Item special attributes can often be represented as a small per-item struct in itCommonItems.h when multiple offsets are accessed consistently.",
+    "Do not over-generalize shared API prototypes from a single usage site; this PR left it_8027ADEC as M2C_UNK even though the author suspected it could be typed as void it_8027ADEC(enum_t, Item_GObj*, HSD_JObj*, f32).",
+    "Matched C may need seemingly redundant local variables. In it_802D3E2C, two Item* variables looked identical semantically, but consolidation did not match.",
+    "Small float constants from asm sdata2 can become compiler-generated local constants such as @175 and @182 once represented directly as 0.0F and 2.8F in C."
+  ],
+  "naming_conventions": [
+    "New item-specific attributes struct was named MewVars and placed in itCommonItems.h.",
+    "Unknown struct fields followed offset-style names x0, x4, x8, xC because their semantic names were not established.",
+    "Address-based function names it_802D3B18, it_802D3B6C, and static itmew helpers were retained; no semantic renaming was attempted.",
+    "State callback prototypes in itmew.c were preceded by address comments such as /* 2D3B8C */.",
+    "Local sdata2 constants in symbols.txt used anonymous compiler-style names @175 and @182 rather than exported it_804DD4B8/it_804DD4BC names."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced the asm implementation with C while preserving exact state ordering and callback layout in ItemStateTable it_803F80C8.",
+    "Used HSD_GObjGetHSDObj(gobj) for the HSD_JObj* argument to it_8027ADEC, corresponding to the asm load from gobj->hsd_obj at offset 0x28.",
+    "Used GET_ITEM(gobj) to reproduce item pointer loads from gobj->user_data / offset 0x2C.",
+    "Used direct float literals 0.0F and 2.8F to replace the former sdata2 globals it_804DD4B8 and it_804DD4BC.",
+    "Used HSD_Randi(2) != 0 and an else branch assigning -attr->x4 to match the randomized horizontal velocity sign logic.",
+    "Left it_802D3E2C with two Item* locals, ip_arg and ip, because attempts to consolidate them failed to match."
+  ],
+  "review_feedback": [
+    "No formal review comments were present in the slice.",
+    "Author note: it_8027ADEC could probably be declared as void it_8027ADEC(enum_t, Item_GObj*, HSD_JObj*, f32), but the PR avoided changing it based on use in a single file.",
+    "Author note: it_802D3E2C matched but looked improvable because it used two identical item pointers.",
+    "Author follow-up: consolidating the two variables in it_802D3E2C did not work; the author suspected it may have a similar form to it_802D3BE0 but kept the already-matched version."
+  ],
+  "searchable_terms": [
+    "pr-1377",
+    "itmew",
+    "Mew",
+    "Link itmew",
+    "992 bytes",
+    "asm/melee/it/items/itmew.s",
+    "src/melee/it/items/itmew.c",
+    "it_803F80C8",
+    "MewVars",
+    "itCommonItems.h",
+    "it_2725.h",
+    "it_8027ADEC",
+    "it_802D3B18",
+    "it_802D3B6C",
+    "it_802D3B8C",
+    "it_802D3BE0",
+    "it_802D3C50",
+    "it_802D3C9C",
+    "it_802D3D28",
+    "it_802D3D6C",
+    "it_802D3D94",
+    "it_802D3E08",
+    "it_802D3E2C",
+    "it_802D3ED0",
+    "ItemStateTable",
+    "GET_ITEM",
+    "HSD_GObjGetHSDObj",
+    "HSD_Randi",
+    "Stage_GetBlastZoneTopOffset",
+    "efLib_PauseAll",
+    "efLib_ResumeAll",
+    "Item_80268E5C",
+    "Item_8026AE84",
+    "it_80279CDC",
+    "it_8027A118",
+    "Matching",
+    "NonMatching",
+    "obj_files.mk",
+    "symbols.txt",
+    "local symbols",
+    "specialAttributes"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that typed it_8027ADEC more specifically than M2C_UNK.",
+    "Search for later renames or semantic field names for MewVars x0 x4 x8 xC.",
+    "Find item decomp PRs that preserve duplicate Item* locals to match codegen.",
+    "Search for adjacent Pokemon item links such as itmetamon, itpippi, ittogepy, itcerebi, ithitodeman, and itlucky for reusable item-state-table patterns.",
+    "Check whether it_802D3E2C was later refactored after matching or kept in the two-variable form."
+  ],
+  "confidence": 0.94,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

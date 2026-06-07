@@ -1,0 +1,144 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-708",
+  "pr": {
+    "number": 708,
+    "title": "Match `func_80078A2C`",
+    "url": "https://github.com/doldecomp/melee/pull/708",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-18T17:38:25Z",
+    "merged_at": "2023-01-25T01:38:25Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched and documented the fighter collision/grab-target routine `func_80078A2C` by moving the relevant `ftcoll` assembly into `src/melee/ft/ftcoll.c`, adding a readable C implementation guarded against a `MUST_MATCH` assembly fallback, and expanding collision-related typing in headers. The PR also pulled much of `asm/melee/ft/ftcoll.s` into C-side inline asm wrappers and introduced/centralized `Hitbox`, `Hurtbox`, `Tangibility`, and `HitElement` declarations so the new grab-check logic could be expressed in terms of fighter hitboxes, hurtboxes, catch elements, grabbable hurtboxes, team checks, and nearest-grab distance. The author noted it depended on #706, resolved part of #595, and could not be fully matched due to float literal/sdata2 issues.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "typing",
+      "naming",
+      "cleanup"
+    ],
+    "systems": [
+      "fighter",
+      "fighter-collision",
+      "grabs",
+      "hurtboxes",
+      "hitboxes",
+      "lb-collision",
+      "headers",
+      "asm"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/ftcoll.c",
+    "asm/melee/ft/ftcoll.s",
+    "src/melee/ft/ftcoll.h",
+    "src/melee/ft/types.h",
+    "src/melee/lb/lbcollision.h",
+    "src/melee/lb/forward.h",
+    "src/melee/it/forward.h",
+    "src/math.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Removed nearly all of `asm/melee/ft/ftcoll.s` and added roughly the same code volume to `src/melee/ft/ftcoll.c`, including many inline-asm `ftcoll` functions and the targeted `func_80078A2C` work.",
+    "Added a readable non-`MUST_MATCH` C implementation of `func_80078A2C(HSD_GObj*)` described in-source as checking for grabbable targets.",
+    "Kept a `MUST_MATCH` assembly version of `func_80078A2C` around the C version, reflecting the PR note that full matching was blocked by float literals.",
+    "The C implementation iterates over fighter GObjs from `lbl_804D782C->x20_fighters`, skips invalid/self/team/flagged targets, checks catch hitboxes against grabbable victim hurtboxes with `func_80007ECC`, rejects targets via `func_80084CE4`, calls `func_80076808`, then records the nearest candidate in `x1A58_interactedFighter`, `x1A5C`, a flag bit on `x221B_flag`, and `unk_grab_val`.",
+    "Added helper inlines `ftHitGetPtr(Fighter*, u32)` and `ftGrabDist(Fighter*, Fighter*)` to make the grab routine more readable.",
+    "Promoted collision types from vague/local declarations to shared headers: `Hitbox`, `Hurtbox`, `Tangibility`, and `HitElement` were placed under `src/melee/lb/forward.h` and `src/melee/lb/lbcollision.h`.",
+    "Updated `Fighter` layout in `types.h` to use `Hitbox x914[4]`, `Hitbox x1064_thrownHitbox`, and `Hurtbox x11A0_fighterHurtbox[15]`; changed `x1A68`/`x1A6A` to `u16`; named `0x216C` as `unk_grab_val`.",
+    "Moved the `Tangibility` enum out of `src/melee/it/forward.h`, reducing item-header ownership of a collision concept.",
+    "Added prototypes for collision, game-mode, item, and player functions needed by the moved/decompiled code."
+  ],
+  "smart_moves": [
+    "Used a `MUST_MATCH` assembly fallback for `func_80078A2C` while still landing a readable C version, which preserves exact-build safety when float literal placement prevents a clean match.",
+    "Centralized collision forward declarations in `melee/lb/forward.h` instead of continuing to define `Tangibility` in item headers or using ad hoc `struct _Hitbox`/`ftHurt` declarations.",
+    "Converted raw fighter offsets used by the grab routine into semi-typed fields such as `x914` hitboxes, `x11A0_fighterHurtbox`, and `unk_grab_val`, making future collision decompilation less offset-heavy.",
+    "Introduced `HitElement_Catch` in a shared enum, making the grab/catch hitbox test legible instead of comparing against a magic element value.",
+    "Kept uncertain names conservative: many symbols remain `func_...`, `x...`, or `unk_grab_val`, which is safer than overclaiming semantics while still improving local readability."
+  ],
+  "decomp_lessons": [
+    "When a function is logically understood but exact matching is blocked by float literal or `sdata2` placement, a useful intermediate state is to gate exact inline assembly under `MUST_MATCH` and keep a readable C implementation for review and future cleanup.",
+    "Large collision routines often require header work first: defining `Hitbox`, `Hurtbox`, `Tangibility`, and `HitElement` made `func_80078A2C` expressible in C without excessive casts or local fake structs.",
+    "Do not leave shared gameplay concepts in subsystem-specific forward headers. `Tangibility` was removed from `it/forward.h` and moved into an `lb` collision forward header.",
+    "For fighter struct work, replacing filler with typed arrays at known offsets can unlock decompilation of loop-heavy code; here the four hitboxes at `0x914` and hurtbox array at `0x11A0` are key to the grab-target scan.",
+    "Reviewer/author comments flagged that enum names may still be wrong. Treat `Tangibility` member names and possible sharing with `Hurtbox::tangibility` as provisional until corroborated by more code."
+  ],
+  "naming_conventions": [
+    "`Hitbox` and `Hurtbox` are preferred shared type names over old temporary names such as `struct _Hitbox`, `ftHit`, and `ftHurt`.",
+    "`HitElement_*` enum members use descriptive suffixes such as `HitElement_Normal`, `HitElement_Fire`, `HitElement_Catch`, `HitElement_Ground`, `HitElement_Disable`, and `HitElement_Leadead`.",
+    "`Tangibility` enum members were introduced as `Vulnerable`, `Invincible`, and `Intangible`, but a review comment warned these names may be wrong.",
+    "Existing misspelling `tangiblity` appears in the `Hitbox` field and was preserved in the code, likely to avoid unnecessary churn while matching/decomp work continued.",
+    "Newly interpreted fighter fields remained conservative where semantics were not fully established, e.g. `unk_grab_val` rather than a stronger final name."
+  ],
+  "assembly_or_matching_tactics": [
+    "Moved code from a standalone `.s` file into `ftcoll.c` as `asm void` blocks wrapped by `#ifdef MWERKS_GEKKO`, `#pragma push`, `nofralloc`, and `// clang-format off`.",
+    "`func_80078A2C` specifically uses `#ifdef MUST_MATCH` for the exact assembly version and `#else` for readable C.",
+    "The PR body says the function could not be fully matched due to float literals; an author review comment says it matched except for adding two entries to `sdata2`.",
+    "Explicit float constants such as `lbl_804D82E0 = 0.0F`, `lbl_804D82E4 = 500.0F`, and `lbl_804D8310` appear around the moved `ftcoll` code, reinforcing that literal placement was a matching concern.",
+    "The C implementation uses small inline helpers to shape control flow and pointer arithmetic around the assembly's hitbox stride and distance-update behavior."
+  ],
+  "review_feedback": [
+    {
+      "file": "src/melee/ft/ftcoll.c",
+      "feedback": "Author comment: the function is present and matches except that it adds two entries to `sdata2`; it still needs substantial cleanup."
+    },
+    {
+      "file": "src/melee/lb/lbcollision.h",
+      "feedback": "Review/comment feedback warned that `Tangibility` or its element names are probably wrong, but using an enum is better than leaving the field untyped; it may or may not share an enum with `Hurtbox::tangibility`."
+    }
+  ],
+  "searchable_terms": [
+    "pr-708",
+    "func_80078A2C",
+    "ftcoll",
+    "fighter collision",
+    "grab target",
+    "grabbable targets",
+    "Hitbox",
+    "Hurtbox",
+    "Tangibility",
+    "HitElement",
+    "HitElement_Catch",
+    "x914",
+    "x1064_thrownHitbox",
+    "x11A0_fighterHurtbox",
+    "x119E_hurtboxNum",
+    "x1A58_interactedFighter",
+    "x1A5C",
+    "x1A68",
+    "x1A6A",
+    "unk_grab_val",
+    "MUST_MATCH",
+    "float literals",
+    "sdata2",
+    "func_80007ECC",
+    "func_8000ACFC",
+    "func_80084CE4",
+    "func_80076808",
+    "lbl_804D782C",
+    "lb/forward.h",
+    "lbcollision.h"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename `unk_grab_val`, `x1A58_interactedFighter`, or `x1A5C` after the grab/collision code became better understood.",
+    "Search for later changes to `Tangibility`, especially whether `Vulnerable`, `Invincible`, and `Intangible` were renamed or split between hitboxes and hurtboxes.",
+    "Look for follow-up work resolving the `func_80078A2C` float literal / `sdata2` mismatch so the `MUST_MATCH` assembly fallback could be removed.",
+    "Search for later cleanup of `ftcoll.c` inline assembly functions added in this PR, especially `func_80076640` through `func_80078998`.",
+    "Inspect later decompilation of `func_80007ECC`, `func_8000ACFC`, and `func_80084CE4` for improved collision type names."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

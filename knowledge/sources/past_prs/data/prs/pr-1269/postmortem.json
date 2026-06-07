@@ -1,0 +1,105 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1269",
+  "pr": {
+    "number": 1269,
+    "title": "Revert CI changes",
+    "url": "https://github.com/doldecomp/melee/pull/1269",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-02-20T10:38:00Z",
+    "merged_at": "2024-02-20T10:47:03Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Reverted/reshaped recent CI changes by separating GitHub Pages publishing back out of the Melee build workflow. The old combined `.github/workflows/build.yml` became `.github/workflows/build-melee.yml` with Pages permissions and `gen-pages`/`deploy-pages` jobs removed, while a standalone `.github/workflows/publish-pages.yml` was added to generate and deploy pages using the existing `gen-pages:latest` container. A comment was added in the page generator entrypoint noting a race condition between `build-melee` and `gen-pages`. No PR discussion or review comments were present in the provided slice.",
+  "change_classification": {
+    "primary_type": "ci-workflow-change",
+    "categories": [
+      "ci",
+      "github-actions",
+      "github-pages",
+      "revert",
+      "infrastructure"
+    ],
+    "systems": [
+      ".github",
+      "GitHub Actions",
+      "GitHub Pages",
+      "containerized page generation"
+    ]
+  },
+  "key_files": [
+    ".github/workflows/build-melee.yml",
+    ".github/workflows/publish-pages.yml",
+    ".github/packages/gen-pages/entrypoint.sh"
+  ],
+  "what_changed": [
+    "Renamed `.github/workflows/build.yml` to `.github/workflows/build-melee.yml`, changing the workflow name from `build` to `build-melee` and run-name from `Build Melee & publish GitHub Pages` to `Build Melee`.",
+    "Removed GitHub Pages-specific permissions (`pages: write`, `id-token: write`) from the Melee build workflow, leaving it focused on build jobs.",
+    "Removed the `gen-pages` and `deploy-pages` jobs from `build-melee.yml`; these had generated pages after `build-ninja` and deployed them from the same workflow.",
+    "Added a new standalone `.github/workflows/publish-pages.yml` workflow with its own Pages permissions, `pages` concurrency group, `gen-pages` job, and `deploy-pages` job.",
+    "The new `publish-pages` workflow checks out the repository, logs into `ghcr.io`, pulls `doldecomp/melee/gen-pages:latest`, runs it with `/input` mounted read-only and `/output` mounted writable, uploads the output as a Pages artifact, and deploys only on the repository default branch.",
+    "Added a source comment in `.github/packages/gen-pages/entrypoint.sh`: `BUG race condition between build-melee and gen-pages`, immediately before fetching progress data from `https://progress.decomp.club/data/melee/GALE01?format=json&mode=all`."
+  ],
+  "smart_moves": [
+    "Separated build validation from Pages publishing, reducing coupling between ordinary Melee build CI and documentation/progress page deployment.",
+    "Kept GitHub Pages elevated permissions scoped to the publishing workflow rather than the build workflow.",
+    "Used a dedicated `pages` concurrency group with `cancel-in-progress: false`, preserving serialized Pages deployments.",
+    "Preserved default-branch-only deployment via `if: github.ref_name == github.event.repository.default_branch`, while still allowing generation checks on pull requests.",
+    "Documented the known race condition near the progress data fetch rather than leaving the CI hazard implicit."
+  ],
+  "decomp_lessons": [
+    "Keep decompilation build CI narrowly focused on matching/build validation; publishing status pages can be isolated into a separate workflow to avoid unnecessary permissions and job dependencies.",
+    "When progress pages depend on externally generated or asynchronously updated progress data, record race conditions explicitly so future CI changes do not assume deterministic ordering.",
+    "Containerized helper workflows should keep repository input read-only and write generated artifacts to a separate output mount, as shown by the `docker run` invocation in the Pages generator job.",
+    "Use workflow names that describe one responsibility, such as `build-melee` and `publish-pages`, instead of a combined build-and-publish workflow name."
+  ],
+  "naming_conventions": [
+    "Workflow file names use explicit kebab-case purpose names: `build-melee.yml` and `publish-pages.yml`.",
+    "Workflow `name` values mirror the file purpose: `build-melee` and `publish-pages`.",
+    "Job names remain user-facing and descriptive: `Generate pages`, `Deploy to GitHub Pages`, `Make`.",
+    "The container image suffix for page generation is `gen-pages:latest`, combined with `IMAGE_REPO: doldecomp/melee`."
+  ],
+  "assembly_or_matching_tactics": [],
+  "review_feedback": [
+    "No issue comments, review comments, or review records were present in the provided PR slice.",
+    "The only explicit rationale-like note in the diff is the added `BUG race condition between build-melee and gen-pages` comment in `entrypoint.sh`; no reviewer explanation is available."
+  ],
+  "searchable_terms": [
+    "PR 1269",
+    "Revert CI changes",
+    "ribbanya",
+    "build-melee.yml",
+    "publish-pages.yml",
+    "GitHub Actions",
+    "GitHub Pages",
+    "deploy-pages",
+    "gen-pages",
+    "progress.decomp.club",
+    "GALE01",
+    "race condition",
+    "ghcr.io",
+    "doldecomp/melee/gen-pages:latest",
+    "upload-pages-artifact",
+    "deploy-pages@v4",
+    "configure-pages@v4",
+    "pages concurrency",
+    "id-token write",
+    "pages write"
+  ],
+  "follow_up_queries": [
+    "Why was the combined build-and-pages workflow reverted or split in PR 1269?",
+    "Investigate the documented race condition between `build-melee` and `gen-pages` around progress data fetching.",
+    "Check adjacent CI PRs before/after PR 1269 for the original CI change being reverted.",
+    "Verify whether `publish-pages` running on pull requests without deployment is still desired for current CI cost and permissions."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

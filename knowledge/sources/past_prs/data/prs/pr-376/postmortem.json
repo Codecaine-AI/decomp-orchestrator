@@ -1,0 +1,107 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-376",
+  "pr": {
+    "number": 376,
+    "title": "Remove negative sized padding",
+    "url": "https://github.com/doldecomp/melee/pull/376",
+    "state": "MERGED",
+    "author": "BR-",
+    "created_at": "2022-05-15T15:21:17Z",
+    "merged_at": "2022-05-16T04:42:34Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Removed an invalid/negative padding region in the Fighter struct around x1064_thrownHitbox. The PR explains that sizeof(ftHit) is 0x138, making the old filler expression `0x1198 - 0x1064 - sizeof(ftHit)` evaluate to -4. The fix treats the field previously labeled `x1198` as overlapping with `x1064_thrownHitbox.x134`, updates Fighter_ActionStateChange_800693AC to write that ftHit subfield directly, and deletes the bogus filler and `x1198` struct member.",
+  "change_classification": {
+    "primary_type": "struct_layout_fix",
+    "categories": [
+      "headers",
+      "types-structs",
+      "padding-cleanup",
+      "field-overlap-correction"
+    ],
+    "systems": [
+      "fighter"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/fighter.h"
+  ],
+  "what_changed": [
+    {
+      "file": "src/melee/ft/fighter.h",
+      "change": "Removed `u8 filler_x1064[0x1198 - 0x1064 - sizeof(ftHit)]`, whose computed size was negative because `sizeof(ftHit)` was 0x138."
+    },
+    {
+      "file": "src/melee/ft/fighter.h",
+      "change": "Removed the separate `/* 0x1198 */ s32 x1198;` field, because the PR evidence shows it occupied the same offset as `x1064_thrownHitbox.x134`."
+    },
+    {
+      "file": "src/melee/ft/fighter.c",
+      "change": "Changed Fighter_ActionStateChange_800693AC from writing `fighter->x1198 = 0;` to writing `fighter->x1064_thrownHitbox.x134 = 0;`."
+    }
+  ],
+  "smart_moves": [
+    "Used size arithmetic to identify the impossible padding: `0x1198 - 0x1064 - 0x138 == -4`.",
+    "Verified the layout problem by compiling writes to nearby fields and comparing generated offsets.",
+    "Recognized that `sizeof` inside the filler expression avoided the expected compiler error for a negative array size, so the bad struct layout could slip through.",
+    "Resolved the mismatch by removing the fake overlapping field instead of preserving a misleading `x1198` member."
+  ],
+  "decomp_lessons": [
+    "Do not trust padding expressions that subtract `sizeof(struct)` unless the result is explicitly checked; a negative value can indicate an already-covered region.",
+    "When two C fields appear to compile to the same offset, prefer revisiting struct layout over adding more filler.",
+    "If an apparent field is inside a known substruct range, name and access it through the containing substruct rather than duplicating it in the parent struct.",
+    "Compiler behavior around negative array sizes can be surprising when the expression includes `sizeof`; decomp struct padding should be audited with offset math and generated assembly."
+  ],
+  "naming_conventions": [
+    "Kept the existing offset-based fighter field naming style: `x1064_thrownHitbox`, `x134`, and filler names such as `filler_xDF4`/`filler_x1198`.",
+    "Removed the misleading parent-level name `x1198` because the offset belongs to `x1064_thrownHitbox.x134` in the corrected layout.",
+    "The PR uses offset comments such as `/* 0x1064 */` and `/* 0x1828 */` to document struct member positions."
+  ],
+  "assembly_or_matching_tactics": [
+    "The PR body compared C assignments against emitted PowerPC instructions to prove the offsets: writes landed at 0x1064, 0x119C, and 0x1198.",
+    "The old filler size truncated to an unsigned byte produced `0xFC`, which corresponded to -4, exposing the negative padding bug.",
+    "A test assignment to `ft->x1064_thrownHitbox.x134 = 0;` compiled to a store at the same offset as `ft->x1198 = 1;`, confirming the overlap.",
+    "The source change preserved behavior in Fighter_ActionStateChange_800693AC by still storing zero at offset 0x1198, but through the correct nested field."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR376",
+    "Remove negative sized padding",
+    "BR-",
+    "fighter",
+    "Fighter",
+    "Fighter_ActionStateChange_800693AC",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/fighter.h",
+    "ftHit",
+    "x1064_thrownHitbox",
+    "x1064_thrownHitbox.x134",
+    "x1198",
+    "filler_x1064",
+    "filler_x1198",
+    "negative padding",
+    "sizeof(ftHit)",
+    "0x1198",
+    "0x1064",
+    "0x119C",
+    "struct overlap",
+    "padding expression"
+  ],
+  "follow_up_queries": [
+    "Search for other filler arrays whose size expression subtracts `sizeof(...)` and may become negative.",
+    "Audit Fighter struct regions where parent-level fields may overlap with nested structs.",
+    "Check later PRs for renaming or typing of `ftHit.x134` after this layout correction.",
+    "Search for generated assembly stores to offset 0x1198 in Fighter code to ensure all accesses use the corrected nested field."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,138 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1274",
+  "pr": {
+    "number": 1274,
+    "title": "Finish matching itzrshell",
+    "url": "https://github.com/doldecomp/melee/pull/1274",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-02-20T16:18:15Z",
+    "merged_at": "2024-02-20T16:21:58Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Finished matching the red Koopa shell item translation unit by deleting asm/melee/it/items/itzrshell.s, moving itzrshell.c to Matching in configure.py, and switching obj_files.mk to build the C object. The PR added the remaining C-side item state table it_803F87F0 and spawn/helper function it_802E0488, tightened prototypes and headers for item creation and shell dependencies, and added an item-var union member for shell-specific data at xDD4_itemVar.shell.xE10. There were no PR body notes or review comments in the slice, so intent beyond matching completion is inferred from the title and diff.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "prototype-fix",
+      "item-state-table",
+      "struct-layout"
+    ],
+    "systems": [
+      "item",
+      "stage",
+      "asm",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "asm/melee/it/items/itzrshell.s",
+    "src/melee/it/items/itzrshell.c",
+    "src/melee/it/items/itzrshell.h",
+    "src/melee/it/items/itzgshell.h",
+    "src/melee/it/items/itnokonoko.h",
+    "src/melee/it/itCommonItems.h",
+    "src/melee/it/types.h",
+    "src/melee/it/it_266F.h",
+    "src/melee/it/it_266F.dox",
+    "src/melee/it/it_2725.h",
+    "src/melee/gr/ground.c",
+    "configure.py",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted the 298-line assembly file asm/melee/it/items/itzrshell.s, including wrapper functions it_802E02E8 through it_802E0468, item state table data it_803F87F0, zero vector rodata it_803B86F8, and the integer-to-float conversion constant it_804DD6C0.",
+    "Changed configure.py from Object(NonMatching, \"melee/it/items/itzrshell.c\") to Object(Matching, \"melee/it/items/itzrshell.c\").",
+    "Changed obj_files.mk to build $(BUILD_DIR)/src/melee/it/items/itzrshell.c.o instead of $(BUILD_DIR)/asm/melee/it/items/itzrshell.s.o.",
+    "Added ItemStateTable it_803F87F0[] in itzrshell.c as a typed C initializer mirroring the deleted assembly data table of state IDs and callbacks from itzgshell functions.",
+    "Added Item_GObj* it_802E0488(s32 arg0, s32 arg1, s32 arg2), which creates It_Kind_ZRShell via it_8027B5B0, initializes facing direction, writes shell.xE10, starts animation state 0xC, animates the JObj, and selects behavior based on it_802DDA84 and it_80277040.",
+    "Added includes in itzrshell.c for itnokonoko.h, it_266F.h, it_2725.h, it/types.h, and baselib/gobj.h to support the translated function and typed table.",
+    "Updated it_8027B5B0 prototype in it_266F.h and it_266F.dox from void* it_8027B5B0(s32, s32, HSD_JObj*, s32, s32) to Item_GObj* it_8027B5B0(s32, s32, HSD_JObj*, Vec3*, s32).",
+    "Updated ground.c call to it_8027B5B0 to pass NULL instead of integer 0 for the new Vec3* parameter.",
+    "Added itShellVars with padding to offset 0xE10 and int xE10 in itCommonItems.h, and added itShellVars shell to the Item xDD4_itemVar union in it/types.h.",
+    "Added declarations for it_80277040 and it_8027C56C in it_2725.h.",
+    "Created real contents for itnokonoko.h with an include guard, platform/item includes, and bool it_802DDA84(Item_GObj*) declaration.",
+    "Expanded itzgshell.h declarations to include many state callback functions used by it_803F87F0, with bool return types where used as state callbacks.",
+    "Updated itzrshell.h to include it/item.h, add declarations for it_802E0448, it_802E0488, and extern ItemStateTable it_803F87F0[], and remove argument names from prototypes."
+  ],
+  "smart_moves": [
+    "The deleted asm showed many one-call trampoline functions; the C file keeps those wrappers simple, allowing the translation to focus on the only substantial remaining function it_802E0488 and the state table.",
+    "Representing the deleted raw .4byte state table as ItemStateTable it_803F87F0[] preserves type information and makes callback return types explicit in headers.",
+    "Changing it_8027B5B0 from void* plus integer position argument to Item_GObj* plus Vec3* made call sites and the translated spawn code type-correct; the ground.c NULL update is a small but important fallout fix.",
+    "Adding itShellVars at the xDD4 item-var union gave the xE10 store a named layout path, it->xDD4_itemVar.shell.xE10, instead of keeping a raw offset.",
+    "The local Vec3 pos = { 0, 0, 0 } replaced the deleted rodata zero vector data and matches the item creation call pattern in C.",
+    "Using PAD_STACK(4) inside it_802E0488 is an explicit matching tactic to reproduce the stack layout needed after translating the assembly."
+  ],
+  "decomp_lessons": [
+    "When matching an item file, update both build-selection layers: configure.py's Object(Matching, ...) and obj_files.mk's asm-to-src object path.",
+    "Raw assembly state tables can often become typed ItemStateTable arrays, but doing so may require broadening sibling headers to declare all callback symbols with correct bool/void return types.",
+    "A spawn function that calls item factory code may force global prototype cleanup; here it_8027B5B0 needed an Item_GObj* return and a Vec3* spawn-position parameter.",
+    "If a union field access is needed at a high offset, add a narrow item-var struct with padding instead of scattering raw offset assumptions in C.",
+    "Integer zero arguments at pointer positions should be updated to NULL after prototype refinement to avoid type mismatch and improve documentation.",
+    "Simple assembly wrappers can be matched as direct C calls to the underlying implementation functions, but the exported symbol names must still be declared in the item header."
+  ],
+  "naming_conventions": [
+    "Shell-specific item vars were named itShellVars and installed as the xDD4_itemVar.shell union member.",
+    "The unknown shell field remained offset-based as xE10, matching existing decomp convention for unidentified struct fields.",
+    "Function names remained address-based, such as it_802E0488, it_802DEEF4, and it_8027B5B0, because no semantic names were introduced in the evidence.",
+    "Headers used the project include-guard style _itzrshell_h_ and _itnokonoko_h_.",
+    "Prototype cleanup removed parameter names in item headers where surrounding declarations use unnamed typed parameters."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted the assembly file only after all text and data from itzrshell.s were represented in C and the build switched to the C object.",
+    "Translated assembly .4byte callback table into ItemStateTable initializer rows ending with { 4, NULL, NULL, NULL }.",
+    "Replaced assembly rodata zero vector it_803B86F8 with a local stack Vec3 pos = { 0, 0, 0 } passed by address.",
+    "Used PAD_STACK(4) in it_802E0488 to preserve stack/codegen behavior for matching.",
+    "Matched the assembly's signed integer to float behavior for facing direction through it->facing_dir = arg2 followed by it_8027C56C(it_gp, it->facing_dir), rather than exposing the deleted sdata2 constant directly.",
+    "Preserved branch structure in it_802E0488: after spawn, initialize animation and JObj, then use it_802DDA84 to choose between it_802762B0/it_802762BC paths and it_80277040 to choose it_802DE0F0 versus it_802DEEF4."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The PR merged quickly, but the slice does not include reviewer rationale or requested changes."
+  ],
+  "searchable_terms": [
+    "Finish matching itzrshell",
+    "itzrshell",
+    "itzrshell.s",
+    "itzrshell.c",
+    "It_Kind_ZRShell",
+    "it_802E0488",
+    "it_803F87F0",
+    "ItemStateTable",
+    "itShellVars",
+    "xDD4_itemVar.shell.xE10",
+    "it_8027B5B0",
+    "Vec3*",
+    "Item_GObj*",
+    "PAD_STACK(4)",
+    "it_802DDA84",
+    "it_80277040",
+    "it_8027C56C",
+    "it_802DE0F0",
+    "it_802DEEF4",
+    "itnokonoko.h",
+    "itzgshell.h",
+    "asm removal",
+    "Object(Matching)",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename itShellVars or identify xE10 semantically.",
+    "Search for other item factory prototype cleanups around it_8027B5B0 and Vec3* spawn positions.",
+    "Search for similar shell item matching work in itzgshell.c and itnokonoko.c to confirm shared state table callback conventions.",
+    "Check whether other ground or stage code still passes integer 0 where NULL is expected after typed prototype updates."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

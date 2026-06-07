@@ -1,0 +1,163 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1967",
+  "pr": {
+    "number": 1967,
+    "title": "ftCo matches",
+    "url": "https://github.com/doldecomp/melee/pull/1967",
+    "state": "MERGED",
+    "author": "sadkellz",
+    "created_at": "2025-10-17T03:48:33Z",
+    "merged_at": "2025-10-17T17:41:50Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched several ftCo change-parameter routines by replacing placeholder stubs with typed implementations for fighter attribute scaling and modifier application. The PR also refined fighter global data pointers into explicit struct types, renamed ftData_LoadSpecialAttrs to ftKindCalcIndiviParamTable, and updated callers to use field-based accesses instead of raw float pointer indexing.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "typing",
+      "symbol-renaming",
+      "fighter-attribute-scaling"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "ftchangeparam",
+      "ftdata",
+      "item",
+      "config"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/ftchangeparam.c",
+    "src/melee/ft/ftchangeparam.h",
+    "src/melee/ft/fighter.h",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/types.h",
+    "src/melee/ft/ftdata.c",
+    "config/GALE01/symbols.txt",
+    "src/melee/ft/chara/ftCommon/ftCo_Damage.c",
+    "src/melee/ft/chara/ftCommon/ftCo_HammerWalk.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Walk.c",
+    "src/melee/ft/chara/ftCommon/ftpickupitem.c",
+    "src/melee/it/itcoll.c"
+  ],
+  "what_changed": [
+    "Implemented ftCo_800CF6E8 as a typed helper taking ftCo_DatAttrs* and scale, applying ftCo_CalcYScaledKnockback across many common fighter DAT attributes when vertical scale is not 1.0.",
+    "Implemented ftCo_800D0CBC, scaling entries in Fighter_x2D0_t based on fighter y-scale, bunny hood modifier Fighter_804D6520->x14, and metal modifier Fighter_804D651C->x4.",
+    "Implemented ftCo_800D105C, initializing fighter common attributes and item pickup offsets from DAT, applying scale modifiers, bunny hood modifiers, metal modifiers, an x2229_b1 gravity/weight modifier, per-kind attribute callback, x2D0 scaling, and Donkey-specific scale handling.",
+    "Changed ftCo_800D0FA0 to copy the entire itPickup struct from fp->ft_data->x40 instead of manually copying individual Vec4 entries.",
+    "Changed ftData.x40 from Vec4* to struct itPickup*, enabling direct assignment into fp->x294_itPickup.",
+    "Added explicit struct declarations for Fighter_804D6518_t, Fighter_804D651C_t, Fighter_804D6520_t, and Fighter_804D6524_t in fighter.h, with field comments for metal, bunny hood, and fighter scale modifier tables.",
+    "Changed Fighter_804D6514 from UNK_T to HSD_Joint* and described it as the trophy platform model when characters spawn.",
+    "Updated Fighter_804D651C, Fighter_804D6520, and Fighter_804D6524 declarations/definitions from raw float* or UNK_T to typed struct pointers.",
+    "Updated call sites in ftCo_Damage.c, ftCo_HammerWalk.c, ftCo_Walk.c, and ftpickupitem.c from raw pointer/indexing expressions such as *Fighter_804D6524 and Fighter_804D6524[3] to named offset fields such as Fighter_804D6524->x0, ->x8, and ->xC.",
+    "Renamed ftData_LoadSpecialAttrs to ftKindCalcIndiviParamTable in ftdata.c and config/GALE01/symbols.txt, reflecting its use as a per-fighter callback table in ftCo_800D105C.",
+    "ftCo_800D105C asserts if ftKindCalcIndiviParamTable[fp->kind] is NULL, using the message \"don't set ftKindCalcIndiviParamTable!!\" before invoking the callback."
+  ],
+  "smart_moves": [
+    "Typing the global modifier tables converted magic float indexing into offset-field accesses, making future matches easier to reason about and reducing ambiguity around scale, metal, and bunny hood modifiers.",
+    "Keeping uncertain table field names as offset-style names like x10, x14, and x98 while adding comments where evidence exists avoided overclaiming semantics.",
+    "The rename from ftData_LoadSpecialAttrs to ftKindCalcIndiviParamTable is supported by actual use in ftCo_800D105C, where the table is indexed by fp->kind and called as a per-fighter callback.",
+    "Changing ftData.x40 to struct itPickup* enabled whole-struct assignment, which simplified ftCo_800D0FA0 and ftCo_800D105C and likely better matched the original code shape.",
+    "The implementation isolated repeated y-scale math into ftCo_800CF6E8, preserving ftCo_CalcYScaledKnockback as the small shared arithmetic helper.",
+    "The code records uncertainty directly with comments such as '@warning not all comments not confirmed - from altimors ghidra db', '@todo figure out the correct args', and '@todo fix stack', which is useful for later verification."
+  ],
+  "decomp_lessons": [
+    "When a global data symbol is repeatedly indexed by constants, define a temporary offset-named struct and replace pointer arithmetic with field accesses; this often unlocks matches and improves readability without requiring fully confirmed names.",
+    "Use offset-style fields when semantics are incomplete. Comments can capture likely meanings, but field names should remain conservative until confirmed.",
+    "Per-kind callback arrays should be named for how the caller uses them, not only for one apparent callee family. Here ftKindCalcIndiviParamTable better describes a FTKIND_MAX-indexed callback table than ftData_LoadSpecialAttrs.",
+    "If a DAT pointer actually points to a compound struct, changing the type can allow direct aggregate copies and remove manual component copying.",
+    "For matching large attribute-initialization routines, preserve the original sequence of copies, scale checks, modifier checks, callback calls, and special-case handling rather than trying to abstract too aggressively.",
+    "PAD_STACK usage can be a pragmatic matching tactic when implementing formerly stubbed functions, but TODO comments should remain when stack sizing is not fully understood.",
+    "Header typing changes may require small mechanical updates across many ftCommon call sites because raw array indexing must become struct field access."
+  ],
+  "naming_conventions": [
+    "Use ftCo_ prefix for common fighter routines such as ftCo_800CF6E8, ftCo_800D0CBC, ftCo_800D105C, and ftCo_CalcYScaledKnockback.",
+    "Use Fighter_804Dxxxx_t struct names for typed global data blocks at known addresses when semantic names are not yet confirmed.",
+    "Use offset-style field names x0, x4, x8, xC, etc. inside provisional structs while adding comments for suspected meanings.",
+    "Use descriptive table names when behavior is known from callers: ftKindCalcIndiviParamTable is clearer than ftData_LoadSpecialAttrs for a per-fighter-kind callback table.",
+    "Keep existing unknown field names such as fp->x197C, fp->x2229_b1, fp->x2222_b0, xB4, xDC, x140, and x17C where evidence for semantic renaming is insufficient."
+  ],
+  "assembly_or_matching_tactics": [
+    "Added PAD_STACK(4), PAD_STACK(16), and PAD_STACK(36) in newly matched routines, indicating stack-padding was used to satisfy or approach matching constraints.",
+    "Replaced float pointer dereferences and array indexing with typed struct pointer field accesses while preserving exact offsets, e.g. Fighter_804D6524[3] became Fighter_804D6524->xC.",
+    "Used direct aggregate assignment for structs: fp->x294_itPickup = *fp->ft_data->x40 and fp->co_attrs = *fp->ft_data->x0.",
+    "Preserved explicit repeated scalar multiplications for Vec4 fields and individual attributes rather than introducing loops or helper abstractions, likely to keep generated code close to the original.",
+    "Kept the assert path in ftCo_800D105C with OSReport and __assert before invoking the per-kind callback table.",
+    "Matched modifier order in ftCo_800D105C: base DAT copy, y-scale processing, bunny hood modifier, metal modifier, x2229_b1 gravity/weight modifier, per-kind callback, x2D0 scaling, then x2222_b0 special attribute scaling."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "The PR body/comment excerpt did not include human rationale, so inferred intent is based on the title, changed files, and diff only."
+  ],
+  "searchable_terms": [
+    "pr-1967",
+    "ftCo matches",
+    "sadkellz",
+    "ftchangeparam",
+    "ftCo_800CF6E8",
+    "ftCo_800D0CBC",
+    "ftCo_800D105C",
+    "ftCo_CalcYScaledKnockback",
+    "ftCo_800D0FA0",
+    "ftCo_800D0EC8",
+    "ftKindCalcIndiviParamTable",
+    "ftData_LoadSpecialAttrs",
+    "Fighter_804D6518",
+    "Fighter_804D651C",
+    "Fighter_804D6520",
+    "Fighter_804D6524",
+    "metal modifiers",
+    "bunnyhood modifiers",
+    "fighter scale modifiers",
+    "ftCo_DatAttrs",
+    "itPickup",
+    "ftData.x40",
+    "PAD_STACK",
+    "x34_scale.y",
+    "fp->x197C",
+    "fp->is_metal",
+    "fp->x2229_b1",
+    "fp->x2222_b0",
+    "slow_walk_max",
+    "mid_walk_point",
+    "fast_walk_min",
+    "dash_run_terminal_velocity",
+    "run_animation_scaling",
+    "jump_startup_time",
+    "jump_v_initial_velocity",
+    "hop_v_initial_velocity",
+    "grav",
+    "terminal_vel",
+    "fast_fall_velocity",
+    "weight",
+    "landingairn_lag",
+    "landingairf_lag",
+    "landingairb_lag",
+    "landingairhi_lag",
+    "landingairlw_lag",
+    "name_tag_height",
+    "damageicejump_vel_y",
+    "damageicejump_vel_x_mult",
+    "GALE01 symbols.txt"
+  ],
+  "follow_up_queries": [
+    "Check whether Fighter_804D6524_t field comments from altimors ghidra db have since been confirmed or renamed.",
+    "Look for later PRs that resolve the '@todo figure out the correct args' note in ftCo_800D0CBC.",
+    "Look for later PRs that remove or adjust PAD_STACK in ftCo_800CF6E8, ftCo_800D0CBC, or ftCo_800D105C.",
+    "Search for additional uses of ftKindCalcIndiviParamTable to confirm the table's final naming and callback type.",
+    "Investigate whether ftDonkeyAttributes handling under fp->x2222_b0 received a more specific explanation in subsequent decomp work."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

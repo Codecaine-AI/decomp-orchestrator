@@ -1,0 +1,148 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1031",
+  "pr": {
+    "number": 1031,
+    "title": "Match `ftCo_HammerKneeBend` (332 bytes)",
+    "url": "https://github.com/doldecomp/melee/pull/1031",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-11-21T15:30:37Z",
+    "merged_at": "2023-11-21T15:45:58Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common fighter HammerKneeBend action file, replacing 332 bytes of assembly in asm/melee/ft/ft_0C31.s with C implementations for ftCo_800C5B88 and the HammerKneeBend Anim/IASA/Phys/Coll callbacks. The PR also moved the relevant declarations into a new ftCo_HammerKneeBend.h header, added the file to obj_files.mk, introduced a hammerkneebend motion-vars struct in ftCommon/types.h for fp+2340/fp+2344/fp+2348, and made small formatting/tooling cleanup changes driven by clang-format/vim settings. No review comments were present in the slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "fighter-action",
+      "headers",
+      "motion-vars",
+      "formatting",
+      "tooling"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "asm",
+      "src",
+      "tooling",
+      "MSL",
+      "dolphin",
+      "sysdolphin",
+      "lb"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_HammerKneeBend.c",
+    "src/melee/ft/chara/ftCommon/ftCo_HammerKneeBend.h",
+    "asm/melee/ft/ft_0C31.s",
+    "src/melee/ft/chara/ftCommon/types.h",
+    "src/melee/ft/ft_0C31.h",
+    "obj_files.mk",
+    "src/melee/ft/chara/ftCommon/ftCo_HammerJump.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Init.c",
+    ".clang-format",
+    "tools/vimrc"
+  ],
+  "what_changed": [
+    "Deleted the HammerKneeBend assembly block from asm/melee/ft/ft_0C31.s, including ftCo_800C5B88, ftCo_HammerKneeBend_Anim, ftCo_HammerKneeBend_IASA, ftCo_HammerKneeBend_Phys, ftCo_HammerKneeBend_Coll, and the local sdata2 constants ftCo_804D8D90/ftCo_804D8D94.",
+    "Added src/melee/ft/chara/ftCommon/ftCo_HammerKneeBend.c with a 100% matching 332-byte implementation according to the PR report.",
+    "Implemented ftCo_800C5B88 as the HammerKneeBend state entry/setup: stores arg1 at fp->mv.co.hammerkneebend.x4, clears x0, initializes x8 from fp->co_attrs.jump_startup_time, computes flags with ftCo_800C54C4, changes motion to ftCo_MS_HammerKneeBend, and calls ftCo_800C4E94.",
+    "Implemented ftCo_HammerKneeBend_Anim to call ftCo_800C4F64, transition via ftCo_800C5A98 when the hammerkneebend timer is <= 0, then decrement fp->mv.co.hammerkneebend.x8.",
+    "Implemented thin forwarding callbacks: IASA calls ftCo_800CB59C, Phys calls ft_80084F3C, and Coll calls ftCo_HammerWait_Coll.",
+    "Added src/melee/ft/chara/ftCommon/ftCo_HammerKneeBend.h with address-annotated prototypes and a GALE01_0C5B88 include guard.",
+    "Removed HammerKneeBend prototypes from the broader src/melee/ft/ft_0C31.h header and included the new HammerKneeBend header from ftCo_HammerJump.c and ftCo_Init.c.",
+    "Added ftCo_HammerKneeBend.c.o to TEXT_O_FILES in obj_files.mk so the new C translation unit replaces the removed assembly portion in the build.",
+    "Added a hammerkneebend struct to union ftCommon_MotionVars mapping fp+2340 to x0, fp+2344 to x4, and fp+2348 to float x8.",
+    "Changed .clang-format AllowShortIfStatementsOnASingleLine from false to Never and adjusted several existing files for spacing/label formatting, such as block labels changing from `block_9 :` to `block_9:` and operators such as `&0x7f` to `& 0x7f`.",
+    "Updated tools/vimrc project autocmds: renamed the augroup to Melee, split C/doxygen filetype handling, set C doxygen syntax on FileType c, and enabled g:c_syntax_for_h."
+  ],
+  "smart_moves": [
+    "The matched C mirrors the assembly’s motion-variable offsets through a dedicated ftCommon_MotionVars sub-struct, making fp+2340/fp+2344/fp+2348 semantics searchable and reusable instead of leaving them as raw offsets.",
+    "The state callbacks were kept minimal and direct, preserving the original assembly shape for the small 32-byte wrapper functions by delegating to existing shared helpers.",
+    "The entry function preserves match-sensitive ordering by declaring `flags` before `Fighter* fp`; the inline comment notes that moving it below fp breaks matching and may indicate an inline-related codegen constraint.",
+    "The PR isolated the newly matched action into ftCo_HammerKneeBend.c/.h and removed those symbols from ft_0C31.h, improving header locality for future ftCommon action decompilation.",
+    "The MUST_MATCH-only unused stack array documents and gates an otherwise artificial codegen requirement, keeping normal builds cleaner while preserving exact matching behavior where needed.",
+    "Adding the object file immediately before the remaining ft_0C31.s object in obj_files.mk allowed a partial extraction from a larger assembly file without requiring the whole ft_0C31 block to be matched."
+  ],
+  "decomp_lessons": [
+    "For partial decompilation of large fighter assembly files, add the new C object immediately before the residual assembly object and delete only the matched symbols from the asm file.",
+    "When a fighter action uses fp motion-var offsets, encode those offsets in the appropriate ftCommon_MotionVars union member as soon as the action is matched; this makes later action code much easier to read and prevents repeated raw-offset reasoning.",
+    "Tiny callback functions often match as direct wrappers around existing helpers; resist overcomplicating Anim/IASA/Phys/Coll implementations when the assembly shows a single call and return.",
+    "Variable declaration order can be match-critical. In this PR, `u32 flags` had to remain before `Fighter* fp`, with the author noting that moving it below fp suggests an inline/codegen issue.",
+    "MUST_MATCH blocks can be used to preserve artifacts such as unused stack allocation while documenting that they are only present for matching.",
+    "Newly matched action files should get their own local header and include it where action tables or neighboring action files need prototypes, rather than accumulating prototypes in a generic numbered header.",
+    "Formatting/tooling changes can appear alongside decomp matches; the evidence here indicates these were mostly mechanical style cleanups caused by clang-format/vim configuration rather than behavior changes."
+  ],
+  "naming_conventions": [
+    "Common fighter action files follow the ftCo_<ActionName>.c and ftCo_<ActionName>.h pattern, shown here by ftCo_HammerKneeBend.c/h.",
+    "Action callbacks use the suffix convention `_Anim`, `_IASA`, `_Phys`, and `_Coll`, as in ftCo_HammerKneeBend_Anim, ftCo_HammerKneeBend_IASA, ftCo_HammerKneeBend_Phys, and ftCo_HammerKneeBend_Coll.",
+    "Unidentified but address-known functions retain ftCo_800Cxxxx names with address comments in headers, such as `/* 0C5B88 */ void ftCo_800C5B88(...)`.",
+    "New include guards in this slice use GALE01 address-style names, such as GALE01_0C5B88 for ftCo_HammerKneeBend.h and GALE01_0679B0 for fighter.h.",
+    "Motion variable fields for not-yet-semantically-named data use offset-like placeholders x0, x4, and x8 inside an action-specific struct, here `mv.co.hammerkneebend`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced the assembly range beginning at 800C5B88 through 800C5CD0 with C and left the next assembly symbol ftCo_800C5CD4 in ft_0C31.s.",
+    "Used a MUST_MATCH-only `u8 _[8] = { 0 };` stack artifact in ftCo_800C5B88 to account for unused stack requirements visible in the original assembly.",
+    "Preserved declaration/order sensitivity by keeping `u32 flags;` before `Fighter* fp = GET_FIGHTER(gobj);`; the source comment says moving it below fp prevents matching.",
+    "Modeled sdata2 constants from assembly as literal arguments in C where possible: the change-motion call uses `1` and `0`/`NULL`, corresponding to former ftCo_804D8D90 and ftCo_804D8D94 uses.",
+    "Kept fp->mv.co.hammerkneebend.x8 as a float timer initialized from jump_startup_time and decremented with `--`, matching the assembly subtract-by-1.0 behavior.",
+    "Used shared existing helpers to match single-call wrapper functions: ftCo_800CB59C for IASA, ft_80084F3C for physics, and ftCo_HammerWait_Coll for collision."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "No explicit reviewer rationale was available; conclusions are based on the title, matching report, changed files, and diff excerpt."
+  ],
+  "searchable_terms": [
+    "pr-1031",
+    "ftCo_HammerKneeBend",
+    "ftCo_800C5B88",
+    "ftCo_HammerKneeBend_Anim",
+    "ftCo_HammerKneeBend_IASA",
+    "ftCo_HammerKneeBend_Phys",
+    "ftCo_HammerKneeBend_Coll",
+    "ftCo_MS_HammerKneeBend",
+    "ftCo_800C54C4",
+    "ftCo_800C548C",
+    "Fighter_ChangeMotionState",
+    "ftCo_800C4E94",
+    "ftCo_800C4F64",
+    "ftCo_800C5A98",
+    "ftCo_800CB59C",
+    "ft_80084F3C",
+    "ftCo_HammerWait_Coll",
+    "ftCommon_MotionVars",
+    "hammerkneebend",
+    "fp+2340",
+    "fp+2344",
+    "fp+2348",
+    "jump_startup_time",
+    "MUST_MATCH",
+    "unused stack",
+    "declaration order",
+    "obj_files.mk",
+    "ft_0C31.s",
+    "GALE01_0C5B88",
+    "AllowShortIfStatementsOnASingleLine Never",
+    "tools/vimrc",
+    "332 bytes"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that renamed or semantically refined ftCo_800C5B88, ftCo_800C54C4, ftCo_800C548C, ftCo_800C4E94, ftCo_800C4F64, or ftCo_800C5A98.",
+    "Look for subsequent work on ftCo_HammerJump, ftCo_HammerWait, ftCo_HammerFall, ftCo_HammerWalk, and ftCo_HammerTurn to see whether hammer action motion vars were unified or renamed.",
+    "Search for other uses of MUST_MATCH unused stack arrays to identify common CodeWarrior stack-allocation matching patterns.",
+    "Check whether the hammerkneebend x0/x4/x8 motion-var fields later received semantic names.",
+    "Investigate whether the formatting/tooling changes in .clang-format and tools/vimrc caused or enabled similar label/operator formatting cleanups in adjacent PRs."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

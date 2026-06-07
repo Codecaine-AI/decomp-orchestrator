@@ -1,0 +1,158 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2128",
+  "pr": {
+    "number": 2128,
+    "title": "Match 15 game mode stage data accessor functions",
+    "url": "https://github.com/doldecomp/melee/pull/2128",
+    "state": "MERGED",
+    "author": "malvarezcastillo",
+    "created_at": "2026-01-24T23:08:04Z",
+    "merged_at": "2026-01-27T09:42:42Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched a set of small game-mode stage data accessor functions for Adventure, All-Star, and Classic mode, replacing UNK_RET/UNK_PARAMS stubs with typed u8/f32 accessors over newly described stage-data table entry structs. The PR also matched mnname's IsNameNotAllowed with a bool return and typed CompareNameStrings prototype. Review focused on whether the code looked overly artificial, whether loops/array indexing should be cleaned up, and which source forms were required to preserve matching assembly.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "types-structs",
+      "headers",
+      "naming",
+      "cleanup",
+      "review-driven-fix"
+    ],
+    "systems": [
+      "game-mode",
+      "adventure-mode",
+      "allstar-mode",
+      "classic-mode",
+      "mn-name"
+    ]
+  },
+  "key_files": [
+    "src/melee/gm/gm_17C0.c",
+    "src/melee/gm/gm_17C0.h",
+    "src/melee/gm/gm_1832.c",
+    "src/melee/gm/gm_1832.h",
+    "src/melee/mn/mnname.c",
+    "src/melee/mn/mnname.h"
+  ],
+  "what_changed": [
+    "Added AdventureStageEntry in gm_17C0.c with size 0x1A, fields stage_kind, scale0_pct, scale1_pct, padding, and STATIC_ASSERT(sizeof(AdventureStageEntry) == 0x1A).",
+    "Added AllstarStageEntry in gm_17C0.c with size 0x1A, fields stage_kind, scale0_pct, scale1_pct, scale2_pct, scale3_pct, padding, and a static size assertion.",
+    "Declared extern AdventureStageEntry lbl_803D7AC0[110] and extern AllstarStageEntry lbl_803D85F0[55], documenting Adventure as 22 stages × 5 difficulty levels and All-Star as 11 stages × 5 difficulty levels.",
+    "Matched Adventure mode accessors gm_8017E500, gm_8017E528, gm_8017E578, gm_8017E664, and gm_8017E6B4 using manual index calculation stage_slot + difficulty * 5 and converting percentage fields to f32 ratios by dividing by 100.0F.",
+    "Matched All-Star mode accessors gm_8017EB3C, gm_8017EC00, gm_8017EC50, gm_8017ED3C, and gm_8017ED8C over lbl_803D85F0 with the same flattened table indexing pattern.",
+    "Updated gm_17C0.h prototypes from UNK_RET/UNK_PARAMS to concrete u8 and f32 signatures for the newly matched Adventure and All-Star accessors.",
+    "Added ClassicStageEntry in gm_1832.c with size 0x10, fields stage_kind, scale0_pct, scale1_pct, padding, and STATIC_ASSERT(sizeof(ClassicStageEntry) == 0x10).",
+    "Declared extern ClassicStageEntry lbl_803D9910[65], documenting Classic as 13 stages × 5 difficulty levels.",
+    "Matched Classic mode accessors gm_8018A160, gm_8018A188, gm_8018A1D8, gm_8018A2C4, and gm_8018A314, again using flattened stage_slot + difficulty * 5 indexing and percentage-to-float conversion.",
+    "Updated gm_1832.h prototypes for Classic accessors from UNK_RET/UNK_PARAMS to typed u8/f32 signatures.",
+    "Implemented IsNameNotAllowed in mnname.c as a bool-returning loop over NotAllowedNamesList, stopping at mnNameNew_NullCharacter and returning true when CompareNameStrings indicates a disallowed name match.",
+    "Updated mnname.h so CompareNameStrings is typed as s32 CompareNameStrings(char* str, s32 slot) and IsNameNotAllowed is typed as bool IsNameNotAllowed(s32 name_idx)."
+  ],
+  "smart_moves": [
+    "Used narrow, named structs for data-table entries instead of anonymous byte offsets, while preserving exact layout with explicit padding and STATIC_ASSERT size checks.",
+    "Documented table dimensions and the flattened indexing formula, making otherwise opaque global data accesses searchable and reviewable.",
+    "Renamed generic fields and parameters to meaningful names such as stage_kind, scale0_pct, scale1_pct, difficulty, stage_slot, and name_idx without claiming more semantics than the diff supported.",
+    "Kept percentage fields as u16 table values and converted them at accessor boundaries with division by 100.0F, matching the table representation while exposing f32 behavior.",
+    "Added an explanatory comment for the (u8) cast on int difficulty in Adventure accessors, tying it to existing function-pointer signatures typed as f32(*)(int, u8) in UnkAdventureData.",
+    "Tried reviewer-suggested cleanup such as 2D array indexing, but retained the flattened lookup form when it produced the matching assembly.",
+    "Accepted review feedback on IsNameNotAllowed by changing the return type to bool and using true/false instead of 1/0."
+  ],
+  "decomp_lessons": [
+    "For small table accessors, a clean struct definition plus explicit flattened index arithmetic can be a good compromise between readability and exact codegen.",
+    "Do not automatically rewrite flattened data tables as 2D arrays; in this PR, arr[difficulty][stage_slot] reportedly compiled differently than arr[stage_slot + difficulty * 5].",
+    "When a parameter is passed as int through a function pointer but the original code narrows it before indexing, keep the cast and document why it exists rather than hiding it as a cleanup.",
+    "Percentage-like table fields may need to remain integer storage fields such as scale*_pct, with f32 division performed in accessor functions to match the binary.",
+    "Static size assertions are valuable when introducing guessed or partially understood structs for binary data tables.",
+    "Reviewer suspicion that code looks fake can be addressed with decomp.me scratches, comments about codegen constraints, and preserving match-required source forms.",
+    "Header prototype updates are part of decomp progress: replacing UNK_RET/UNK_PARAMS with concrete signatures improves future callsite work and reduces ambiguity."
+  ],
+  "naming_conventions": [
+    "Entry structs were named by mode and role: AdventureStageEntry, AllstarStageEntry, ClassicStageEntry.",
+    "Stage table fields used semantic names based on observed accessor behavior: stage_kind for the u8 stage ID and scale0_pct/scale1_pct/scale2_pct/scale3_pct for u16 percentage fields divided by 100.",
+    "Padding was named by offset, e.g. pad_1, pad_6, pad_14, preserving layout clarity without inventing semantics.",
+    "Accessor parameters were named difficulty and stage_slot, replacing generic or misleading names such as count/arg0.",
+    "mnname parameter naming used name_idx for the selected name slot/index.",
+    "Global labels such as lbl_803D7AC0, lbl_803D85F0, and lbl_803D9910 were not renamed, but were given typed extern declarations."
+  ],
+  "assembly_or_matching_tactics": [
+    "Manual flattened indexing stage_slot + (difficulty * 5) was kept because reviewer-suggested 2D array syntax reportedly changed generated assembly.",
+    "Some Adventure accessors use ((u8) difficulty * 5) even though difficulty is int, because callsites/function-pointer types pass int and the original behavior narrows for array indexing.",
+    "Accessor functions return table u16 percentage fields as f32 divided by 100.0F, matching ratio-returning behavior.",
+    "The discussion notes that source loop shape can affect branch structure; an if+goto/backward branch pattern had been considered for matching IsNameNotAllowed, though the final diff shows a while (true) loop after review.",
+    "A decomp.me scratch was shared in review to demonstrate an alternative matching cleanup for the mnname loop issue.",
+    "Exact struct sizes were enforced with STATIC_ASSERT to prevent layout drift from breaking data-table access codegen."
+  ],
+  "review_feedback": [
+    "r-burns initially said IsNameNotAllowed looked mergeable with cleanup, while the other functions looked fake and should probably be dropped.",
+    "r-burns requested that the IsNameNotAllowed loop should be a for loop or otherwise cleaned up from the initial goto-style loop.",
+    "r-burns noted IsNameNotAllowed appears to return a bool and suggested bool IsNameNotAllowed(s32 arg0) with return true/false instead of return 1/0.",
+    "The author replied that the goto/loop pattern had been used for matching because compiler branch structure differed, but later accepted cleanup after a decomp.me scratch was provided.",
+    "r-burns suggested using 2D arrays and u8 args for the stage table lookups, e.g. lbl_803D7AC0[difficulty][stage_slot].stage_kind.",
+    "The author reported that 2D array syntax did not match the original assembly and kept the manual calculation stage_slot + difficulty * 5, while preserving struct definitions and clearer names.",
+    "r-burns accepted the explanation after the attempt: \"Ok appreciate you giving it a try, thanks for humoring my suggestions.\""
+  ],
+  "searchable_terms": [
+    "PR2128",
+    "gm_17C0",
+    "gm_1832",
+    "mnname",
+    "AdventureStageEntry",
+    "AllstarStageEntry",
+    "ClassicStageEntry",
+    "lbl_803D7AC0",
+    "lbl_803D85F0",
+    "lbl_803D9910",
+    "gm_8017E500",
+    "gm_8017E528",
+    "gm_8017E578",
+    "gm_8017E664",
+    "gm_8017E6B4",
+    "gm_8017EB3C",
+    "gm_8017EC00",
+    "gm_8017EC50",
+    "gm_8017ED3C",
+    "gm_8017ED8C",
+    "gm_8018A160",
+    "gm_8018A188",
+    "gm_8018A1D8",
+    "gm_8018A2C4",
+    "gm_8018A314",
+    "IsNameNotAllowed",
+    "CompareNameStrings",
+    "NotAllowedNamesList",
+    "mnNameNew_NullCharacter",
+    "stage_kind",
+    "scale0_pct",
+    "scale1_pct",
+    "scale2_pct",
+    "scale3_pct",
+    "difficulty",
+    "stage_slot",
+    "flattened table indexing",
+    "difficulty * 5",
+    "percentage divided by 100",
+    "STATIC_ASSERT",
+    "UNK_RET",
+    "UNK_PARAMS"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename lbl_803D7AC0, lbl_803D85F0, or lbl_803D9910 to semantic table names.",
+    "Check whether UnkAdventureData and UnkAllstarData function pointer signatures were later refined to align with these accessor prototypes.",
+    "Look for subsequent work on gm_8017E5C8, gm_8017E5FC, gm_8017E630, gm_8017E704, gm_8017EB64, gm_8017EB98, gm_8017EBCC, gm_8017ECA0, gm_8017ECD4, and gm_8017ED08.",
+    "Search for later mnname PRs that further clean up IsNameNotAllowed, CompareNameStrings, or NotAllowedNamesList typing.",
+    "Investigate whether the table dimensions documented here, especially Adventure's stated 22 stages × 5 difficulty levels versus a 110-entry array indexed by difficulty * 5 + stage_slot, were later clarified or corrected."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

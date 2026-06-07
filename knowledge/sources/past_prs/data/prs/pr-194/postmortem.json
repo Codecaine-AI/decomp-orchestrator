@@ -1,0 +1,136 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-194",
+  "pr": {
+    "number": 194,
+    "title": "match more functions in stage.c and label many functions and few constants",
+    "url": "https://github.com/doldecomp/melee/pull/194",
+    "state": "MERGED",
+    "author": "snuffysasa",
+    "created_at": "2021-12-14T09:53:43Z",
+    "merged_at": "2021-12-14T16:01:42Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched and named a block of stage camera helper functions in src/melee/gr/stage.c, removing their handwritten assembly from asm/melee/gr/stage.s and propagating the new symbols through assembly callers. The work turned anonymous func_80224A54-style accessors into descriptive camera/blast-zone getters, named a few float constants such as degrees_2_radians, and added the Dolphin matrix/vector type include needed for Vec. Review focused on not creating a duplicate vector struct because Vec already exists in Dolphin headers; the author reported that this was fixed.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "symbol-naming",
+      "headers",
+      "types-structs",
+      "constant-labeling",
+      "asm-label-propagation"
+    ],
+    "systems": [
+      "stage",
+      "camera",
+      "asm",
+      "include",
+      "Dolphin types"
+    ]
+  },
+  "key_files": [
+    "src/melee/gr/stage.c",
+    "src/melee/gr/stage.h",
+    "asm/melee/gr/stage.s",
+    "include/functions.h",
+    "include/variables.h",
+    "asm/sdata2.s",
+    "asm/melee/cm/code_80028B9C.s",
+    "asm/melee/ft/code_8006DBF4.s",
+    "asm/melee/it/code_8027CF30.s",
+    "asm/melee/gr/grbigblue.s"
+  ],
+  "what_changed": [
+    "Added C implementations/names for stage camera helper accessors in stage.c, including get_cam_bounds_left_offset, get_cam_bounds_right_offset, get_cam_bounds_top_offset, get_cam_bounds_bottom_offset, get_cam_pan_angle_radians, get_cam_max_depth, get_cam_zoom_rate, get_cam_track_ratio, and get_cam_track_smooth.",
+    "Added blast-zone offset helpers in stage.c: get_blast_zone_right_offset, get_blast_zone_left_offset, get_blast_zone_top_offset, and get_blast_zone_bottom_offset.",
+    "Matched additional nearby helpers that were previously in asm/melee/gr/stage.s, including calc_unk_cam_y_80224B98, calc_unk_cam_y_bounds_80224BC4, unk_set_vec3_to_cam_offset_80224BF8, get_pausecam_zpos_min, get_pausecam_zpos_init, get_pausecam_zpos_max, and get_cam_angle_radians_up/down/left/right.",
+    "Removed the corresponding assembly bodies for func_80224B98 through func_80224C94 from asm/melee/gr/stage.s, leaving later stage assembly in place.",
+    "Renamed float constants in variables/include context and assembly uses: lbl_804DBCD0 became degrees_2_radians, lbl_804DBCD4 became unk_one_half_const_804DBCD8, and lbl_804DBCD8 became unk_zero_const_804DBCD8 in the provided diff context.",
+    "Updated include/functions.h comments from anonymous func_80224A54-style names to the new descriptive camera/stage helper names.",
+    "Updated many assembly call sites across camera, fighter, item, and stage files so bl instructions refer to the new symbol names instead of the old func_80224Axx labels.",
+    "Added #include <dolphin/mtx/mtxtypes.h> to src/melee/gr/stage.h, providing the Dolphin Vec declaration used by unk_set_vec3_to_cam_offset_80224BF8."
+  ],
+  "smart_moves": [
+    "The PR renamed tiny accessors according to the field they return, which made many otherwise opaque camera call sites more searchable without needing to decompile all callers first.",
+    "It kept unknown behavior honest by using names such as calc_unk_cam_y_80224B98 and unk_set_vec3_to_cam_offset_80224BF8 where the exact purpose was not fully established, while still recording the address for traceability.",
+    "It propagated symbol renames into assembly callers immediately, so future decompilation can infer semantics from call names in files that remain assembly-only.",
+    "The reviewer-requested use of Dolphin's existing Vec avoided introducing a duplicate local vector struct and aligned stage.c/stage.h with project-wide SDK type conventions.",
+    "The degree-to-radian constant was named by observed use in functions that multiply camera angle fields, making the constant reusable and easier to validate."
+  ],
+  "decomp_lessons": [
+    "For small accessors, matching can be done safely by reading the _StageInfo field offsets and expressing the direct field access in C; descriptive getter names then help unlock larger camera functions later.",
+    "When a helper writes x/y/z vector fields, first check Dolphin headers for existing types such as Vec before inventing a project-local struct.",
+    "Use address-suffixed unk names when behavior is only partially understood; this is better than overclaiming while still making cross-references searchable.",
+    "Constant labels should be upgraded when their numeric role is clear from usage, such as 0.017453f as degrees_2_radians and 0.5 as a half multiplier.",
+    "After matching a group of functions, update remaining assembly references in all dependent files so the semantic naming benefit spreads beyond the newly decompiled C file.",
+    "Stage camera bounds and blast-zone helpers consistently add cam_x_offset or cam_y_offset to stage_info fields; this pattern is reusable when identifying related accessors."
+  ],
+  "naming_conventions": [
+    "Getter names use get_ + subsystem/field semantics, e.g. get_cam_bounds_left_offset, get_cam_zoom_rate, get_pausecam_zpos_max.",
+    "Camera angle conversion helpers explicitly mention radians, e.g. get_cam_pan_angle_radians and get_cam_angle_radians_right.",
+    "Unknown-but-matched helpers preserve the address suffix, e.g. calc_unk_cam_y_80224B98 and unk_set_vec3_to_cam_offset_80224BF8.",
+    "Constants can be renamed from lbl_ addresses to role names when value and usage are clear, e.g. degrees_2_radians for 0.017453f.",
+    "Less-understood constants retained an unk_ prefix plus role/value hint, e.g. unk_one_half_const_804DBCD8 and unk_zero_const_804DBCD8."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted matched assembly bodies from asm/melee/gr/stage.s for the newly implemented C functions rather than leaving duplicate definitions.",
+    "Preserved address traceability in uncertain function names while replacing func_80224Axx labels in assembly call sites.",
+    "Updated bl targets across many assembly files without changing instruction bytes, turning symbol-only diffs into documentation for still-unmatched code.",
+    "Used simple C expressions over stage_info.cam_info and stage_info.blast_zone fields to match short leaf functions.",
+    "For the vector helper, matching used Vec * and direct x/y/z assignments to stage_info camera offsets plus zero constant."
+  ],
+  "review_feedback": [
+    "PsiLupan on src/melee/gr/stage.c: \"Vec is already declared as in the Dolphin includes.\"",
+    "PsiLupan review summary: \"Use the Vec already declared in Dolphin and remove the struct you created, and you should be good.\"",
+    "Author replied in an issue comment quoting the review request and saying \"done\", indicating the custom struct was removed in favor of Dolphin Vec."
+  ],
+  "searchable_terms": [
+    "pr-194",
+    "snuffysasa",
+    "stage.c",
+    "stage.h",
+    "asm/melee/gr/stage.s",
+    "StageInfo",
+    "stage_info",
+    "cam_info",
+    "blast_zone",
+    "camera bounds",
+    "blast zone",
+    "degrees_2_radians",
+    "unk_one_half_const_804DBCD8",
+    "unk_zero_const_804DBCD8",
+    "Vec",
+    "dolphin/mtx/mtxtypes.h",
+    "get_cam_bounds_left_offset",
+    "get_cam_bounds_right_offset",
+    "get_cam_bounds_top_offset",
+    "get_cam_bounds_bottom_offset",
+    "get_cam_pan_angle_radians",
+    "get_cam_max_depth",
+    "get_cam_zoom_rate",
+    "get_cam_track_ratio",
+    "get_blast_zone_left_offset",
+    "get_blast_zone_top_offset",
+    "unk_set_vec3_to_cam_offset_80224BF8",
+    "calc_unk_cam_y_80224B98",
+    "func_80224A54",
+    "func_80224C94"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that renamed calc_unk_cam_y_80224B98 or unk_set_vec3_to_cam_offset_80224BF8 to final semantic names.",
+    "Search for subsequent StageInfo/cam_info struct refinements affecting fields x20, x24, cam_angle_up/down/left/right, and pausecam_zpos_* fields.",
+    "Check whether unk_one_half_const_804DBCD8 and unk_zero_const_804DBCD8 were later corrected, since the names in this slice appear address/value-oriented rather than final semantic labels.",
+    "Look for later decompilation of callers in asm/melee/cm/code_80028B9C.s that benefited from the camera getter names."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

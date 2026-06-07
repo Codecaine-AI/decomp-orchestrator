@@ -1,0 +1,132 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-828",
+  "pr": {
+    "number": 828,
+    "title": "Partially match all of `ftPe_Float`",
+    "url": "https://github.com/doldecomp/melee/pull/828",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-04-30T08:30:04Z",
+    "merged_at": "2023-04-30T08:40:34Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added a new C translation unit for Peach float behavior and removed the corresponding early `ftPe_Float` routines from `asm/melee/ft/chara/ftPe_Init.s`, while keeping some routines behind `MUST_MATCH` inline-asm fallbacks. The PR also made supporting fighter/input/Peach-attribute naming improvements across many fighter files so the new C could express float state and input tests more clearly.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-naming",
+      "fighter-state-cleanup",
+      "tooling"
+    ],
+    "systems": [
+      "fighter",
+      "ftPeach",
+      "input",
+      "effect",
+      "asm",
+      "build"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftPeach/ftPe_Float.c",
+    "src/melee/ft/chara/ftPeach/ftPe_Float.h",
+    "asm/melee/ft/chara/ftPeach/ftPe_Init.s",
+    "src/melee/ft/chara/ftPeach/ftPe_Init.c",
+    "src/melee/ft/chara/ftPeach/types.h",
+    "src/common_structs.h",
+    "src/melee/ft/types.h",
+    "src/melee/ef/efasync.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Created `src/melee/ft/chara/ftPeach/ftPe_Float.c` with C implementations or partial implementations for Peach float entry, animation, IASA, physics, collision, and float-fall direction logic.",
+    "Created `src/melee/ft/chara/ftPeach/ftPe_Float.h` declaring `ftPe_8011BA54`, `ftPe_8011BAD8`, `ftPe_8011BB6C`, `ftPe_Float_Anim`, `ftPe_Float_IASA`, `ftPe_Float_Phys`, and `ftPe_Float_Coll`.",
+    "Deleted the matching `ftPe_Float` block from `asm/melee/ft/chara/ftPe_Init.s`, leaving later Peach init/float-fall assembly and converting remaining sdata2 literals from raw `.4byte` to typed `.float`/`.double` notation.",
+    "Added `$(BUILD_DIR)/src/melee/ft/chara/ftPeach/ftPe_Float.c.o` to `obj_files.mk` before the remaining Peach assembly object.",
+    "Renamed Peach fighter vars in `src/melee/ft/chara/ftPeach/types.h`, notably `x222C` to `has_float`, `x2230` to `x4`, and Peach DAT attrs to `ftPe_DatAttrs` with names such as `floatfallf_anim_start`, `floatfallb_anim_start`, and `floatfall_anim_start_offset`.",
+    "Updated Peach init to initialize the renamed Peach float state and use `ftPe_DatAttrs` in load/copy attribute macros.",
+    "Replaced `HSD_Buttons` enum constants with `typedef u32 HSD_Pad` plus `static HSD_Pad const` bit constants such as `HSD_Pad_B`, `HSD_Pad_DpadDown`, and new combined `HSD_Pad_XY`.",
+    "Updated many fighter files from old fighter field names such as `fp->x4_fighterKind` and `fp->x2219_flag.bits.b0` to shorter names such as `fp->kind` and `fp->x2219_b0`.",
+    "Adjusted `efAsync_Spawn` declaration to include `HSD_JObj*` for its final fixed argument and include `baselib/forward.h` instead of the full gobj header."
+  ],
+  "smart_moves": [
+    "Separated the new C object from the residual Peach assembly in `obj_files.mk`, allowing only the translated float routines to move out of `ftPe_Init.s` without forcing the rest of the file to match at once.",
+    "Used helper predicates such as `checkStartFloatInput`, `checkContinueFloatInput`, `getFloatDir`, and `updateFloatDir` to expose the control-flow meaning of input and direction tests while still preserving the original function boundaries.",
+    "Kept difficult routines guarded with `#if defined(MUST_MATCH) && !defined(WIP)` inline assembly, making the file usable for matching builds while documenting the intended C equivalent under the non-asm branch.",
+    "Introduced `HSD_Pad_XY` so Peach float input can be expressed as `heldInputs & HSD_Pad_XY` rather than repeating or relying on anonymous bit masks.",
+    "Renamed Peach-specific state and DAT attributes before using them heavily in `ftPe_Float.c`, reducing unknown-offset noise in the new decompilation."
+  ],
+  "decomp_lessons": [
+    "Partial file migration is viable: add a new C object immediately before the remaining asm object and delete only the matched assembly range, preserving link/order constraints.",
+    "When matching fighter action code, struct field naming often has to be improved project-wide first; here, `fp->kind`, `fp->x2219_b0`, `HSD_Pad_*`, and Peach float fields made the C code simpler and more reusable.",
+    "For motion-state transitions, recover semantic constants early: this PR names Peach float/fall motion states and DAT animation-start fields rather than leaving all values as offsets.",
+    "Inline `MUST_MATCH` assembly can be used as a bridge for routines that are understood but not yet cleanly matched in C, especially when a PR goal is to partially match a whole action group.",
+    "Effect-spawn prototypes matter for matching and readability; refining `efAsync_Spawn` to take an `HSD_JObj*` made the call sites in fighter code more accurately typed."
+  ],
+  "naming_conventions": [
+    "`HSD_BUTTON_*` enum names were replaced by `HSD_Pad_*` static constants, using Pascal-ish suffixes such as `DpadDown`, `Start`, `LR`, `AB`, and `XY`.",
+    "The fighter kind field convention moved from `x4_fighterKind` to `kind`.",
+    "The common fighter bitfield access convention moved from `x2219_flag.bits.b0` to direct `x2219_b0`.",
+    "Peach DAT attributes use the `ftPe_DatAttrs` type name and descriptive float-fall fields such as `floatfallf_anim_start`, `floatfallb_anim_start`, and `floatfall_anim_start_offset`.",
+    "Peach fighter vars retained some unknown suffix names (`x4`, `x8`, `xC`, etc.) but named the key boolean at offset `fp+222C` as `has_float`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Moved a contiguous assembly range for `ftPe_8011BA54` through `ftPe_8011BD6C` out of `ftPe_Init.s` into `ftPe_Float.c` while retaining later Peach assembly in the same original asm file.",
+    "Used `float const ftPe_Float_804D97C0 = 0` and `ftPe_Float_804D97C4 = 1` for sdata2 constants needed by inline asm and C.",
+    "Used `#pragma push`, inline `asm`, `nofralloc`, and original instruction comments under `MUST_MATCH` for functions that were not cleanly matched in portable C.",
+    "Provided non-`MUST_MATCH` C alternatives under `#else`, which documents intended behavior even when the matching path still relies on assembly.",
+    "Converted remaining sdata2 entries in the asm file from raw hexadecimal `.4byte` values to readable `.float` and `.double` directives."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The PR body evidence is minimal: it contains the title and an embedded image, but no detailed written rationale."
+  ],
+  "searchable_terms": [
+    "ftPe_Float",
+    "ftPe_8011BA54",
+    "ftPe_8011BAD8",
+    "ftPe_8011BB6C",
+    "ftPe_Float_Anim",
+    "ftPe_Float_IASA",
+    "ftPe_Float_Phys",
+    "ftPe_Float_Coll",
+    "updateFloatDir",
+    "checkStartFloatInput",
+    "checkContinueFloatInput",
+    "getFloatDir",
+    "ftPe_MS_Float",
+    "ftPe_MS_FloatFallF",
+    "ftPe_MS_FloatFallB",
+    "has_float",
+    "ftPe_DatAttrs",
+    "floatfallf_anim_start",
+    "floatfallb_anim_start",
+    "floatfall_anim_start_offset",
+    "HSD_Pad_XY",
+    "HSD_Pad_B",
+    "x2219_b0",
+    "fp->kind",
+    "efAsync_Spawn",
+    "MUST_MATCH",
+    "WIP",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match the `MUST_MATCH` inline asm routines in `src/melee/ft/chara/ftPeach/ftPe_Float.c`.",
+    "Search for follow-up renames of Peach fighter vars `fv.pe.x4`, `x8`, `xC`, `x10`, `x14`, `x18`, and `x20`.",
+    "Search for project-wide adoption or later revision of the `HSD_Pad_*` input constants introduced here.",
+    "Inspect later changes to `ftPe_DatAttrs` for more complete naming of the `xC` and `x10` fields."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

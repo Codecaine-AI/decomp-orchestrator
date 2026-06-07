@@ -1,0 +1,144 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-208",
+  "pr": {
+    "number": 208,
+    "title": "Match PPCArch and AmcExi2Stubs",
+    "url": "https://github.com/doldecomp/melee/pull/208",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-20T00:58:46Z",
+    "merged_at": "2021-12-20T00:58:50Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched two small Dolphin library units by replacing assembly source files for PPCArch and AmcExi2Stubs with C sources and headers, updating obj_files.mk to build the new C objects, and propagating newly identified PPCArch symbol names into existing assembly call sites and include/functions.h. The PR primarily converted trivial EXI stub routines and low-level PowerPC register helper routines into source while improving symbol names such as PPCMtmsr, PPCMfhid0, PPCMtdec, PPCSync, and PPCMtwpar.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "symbol-renaming",
+      "build-system"
+    ],
+    "systems": [
+      "dolphin/base",
+      "dolphin/amcstubs",
+      "dolphin/os",
+      "dolphin/gx",
+      "melee/db",
+      "include",
+      "build"
+    ]
+  },
+  "key_files": [
+    "src/dolphin/base/PPCArch.c",
+    "src/dolphin/base/PPCArch.h",
+    "asm/dolphin/base/PPCArch.s",
+    "src/dolphin/amcstubs/AmcExi2Stubs.c",
+    "src/dolphin/amcstubs/AmcExi2Stubs.h",
+    "asm/dolphin/amcstubs/AmcExi2Stubs.s",
+    "obj_files.mk",
+    "include/functions.h",
+    "asm/dolphin/os/OSAlarm.s",
+    "asm/dolphin/os/OSCache.s",
+    "asm/dolphin/gx/GXFifo.s",
+    "asm/dolphin/gx/GXInit.s",
+    "asm/melee/db/code_80225374.s"
+  ],
+  "what_changed": [
+    "Deleted asm/dolphin/amcstubs/AmcExi2Stubs.s and added src/dolphin/amcstubs/AmcExi2Stubs.c with equivalent trivial C implementations: EXI2_Init, EXI2_EnableInterrupts, EXI2_Reserve, and EXI2_Unreserve return immediately; EXI2_Poll, EXI2_ReadN, and EXI2_WriteN return FALSE; AMC_IsStub returns TRUE.",
+    "Added src/dolphin/amcstubs/AmcExi2Stubs.h with prototypes for the EXI2 and AMC stub functions and an include of dolphin/types.h for BOOL.",
+    "Deleted asm/dolphin/base/PPCArch.s and added src/dolphin/base/PPCArch.c using inline asm functions with nofralloc for low-level PowerPC operations.",
+    "Added src/dolphin/base/PPCArch.h with prototypes for PPCMfmsr, PPCMtmsr, PPCMfhid0, PPCMfl2cr, PPCMtl2cr, PPCMtdec, PPCSync, PPCHalt, PPCMfhid2, PPCMthid2, and PPCMtwpar.",
+    "Updated obj_files.mk to build src/dolphin/amcstubs/AmcExi2Stubs.o and src/dolphin/base/PPCArch.o instead of their asm object paths.",
+    "Renamed unresolved PPCArch function references in include/functions.h from address-based names to apparent SDK-style names: func_80335E64 to PPCMtmsr, func_80335E6C to PPCMfhid0, func_80335E84 to PPCMtdec, func_80335E8C to PPCSync, and func_80335EB8 to PPCMtwpar.",
+    "Updated assembly call-site comments/labels in OSAlarm.s, OSCache.s, GXFifo.s, GXInit.s, and melee/db/code_80225374.s to reference the newly named PPCArch functions while preserving the same branch instruction encodings and addresses."
+  ],
+  "smart_moves": [
+    "Used inline asm with nofralloc for PPCArch helpers, which is appropriate for one- or two-instruction leaf routines that must preserve exact register use and avoid compiler-generated prologue/epilogue code.",
+    "Converted AmcExi2Stubs to simple C rather than inline asm because the original assembly was just blr or constant return stubs, making C sufficient and much easier to maintain.",
+    "Renamed call sites across still-assembly files after matching PPCArch, improving future readability without needing to decompile the callers immediately.",
+    "Kept build integration explicit in obj_files.mk by swapping only the two matched object paths from asm to src, minimizing risk to unrelated object ordering.",
+    "Introduced headers alongside new source files so later decompilation work can include named prototypes instead of relying solely on include/functions.h comments."
+  ],
+  "decomp_lessons": [
+    "Very small SDK/library stubs are good early asm-to-C targets: if the function is a bare return or constant BOOL return, a direct C implementation can match cleanly and reduce assembly surface area.",
+    "For hardware register helpers, matching may require inline asm rather than C expressions because instructions like mfmsr, mtmsr, mfspr, mtspr, sc, and sync have exact opcode requirements.",
+    "When replacing assembly with source, update both the object list and all known symbol references; otherwise the code may build but the knowledge graph and future decompilation context remain address-based.",
+    "A matched low-level utility file can unlock better names in many unrelated systems, as seen with OSAlarm, OSCache, GX FIFO/init, and debug code call sites.",
+    "Use header files to capture confirmed function names and signatures as soon as asm is promoted to source, but avoid overclaiming parameter types when evidence only shows empty prototypes."
+  ],
+  "naming_conventions": [
+    "Dolphin PowerPC architecture helpers use the PPC prefix followed by the instruction/register operation, e.g. PPCMfmsr, PPCMtmsr, PPCMfhid0, PPCMfl2cr, PPCMtl2cr, PPCMtdec, PPCMfhid2, PPCMthid2, and PPCMtwpar.",
+    "Stubbed EXI2 functions use uppercase SDK-style names with the EXI2_ prefix: EXI2_Init, EXI2_EnableInterrupts, EXI2_Poll, EXI2_ReadN, EXI2_WriteN, EXI2_Reserve, and EXI2_Unreserve.",
+    "The AMC stub indicator uses the uppercase SDK-style name AMC_IsStub.",
+    "Header guards in this PR use uppercase underscore-wrapped file names, such as _PPCARCH_H_ and _AMCEXI2STUBS_H_.",
+    "Unknown address-based names like func_80335E64 were replaced once the operation was identified, but prototypes still omitted parameter lists/types where the diff did not establish them."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used Metrowerks-style `asm void` functions with `nofralloc` to emit exact leaf routines for special-purpose PowerPC instructions.",
+    "Mapped `mfmsr r3; blr` to PPCMfmsr and `mtmsr r3; blr` to PPCMtmsr.",
+    "Mapped SPR accesses to named helpers: `mfspr r3, 0x3f0` to PPCMfhid0, `mfspr r3, 0x3f9` to PPCMfl2cr, `mtspr 0x3f9, r3` to PPCMtl2cr, `mtspr 0x16, r3` to PPCMtdec, `mfspr r3, 0x398` to PPCMfhid2, `mtspr 0x398, r3` to PPCMthid2, and `mtspr 0x399, r3` to PPCMtwpar.",
+    "Recreated PPCHalt as inline asm with a local `halt_loop` label containing sync, nops, li r3,0, and a self-branch, matching the original infinite halt loop shape.",
+    "For AmcExi2Stubs, relied on C constant returns FALSE/TRUE to match simple `li r3, 0/1; blr` assembly.",
+    "Assembly files outside the matched units were not decompiled; only their branch target labels were renamed to the new PPCArch symbols."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR208",
+    "PPCArch",
+    "AmcExi2Stubs",
+    "PPCMfmsr",
+    "PPCMtmsr",
+    "PPCMfhid0",
+    "PPCMfl2cr",
+    "PPCMtl2cr",
+    "PPCMtdec",
+    "PPCSync",
+    "PPCHalt",
+    "PPCMfhid2",
+    "PPCMthid2",
+    "PPCMtwpar",
+    "EXI2_Init",
+    "EXI2_EnableInterrupts",
+    "EXI2_Poll",
+    "EXI2_ReadN",
+    "EXI2_WriteN",
+    "EXI2_Reserve",
+    "EXI2_Unreserve",
+    "AMC_IsStub",
+    "nofralloc",
+    "mfmsr",
+    "mtmsr",
+    "mfspr",
+    "mtspr",
+    "mtdec",
+    "hid0",
+    "hid2",
+    "l2cr",
+    "wpar",
+    "AmcExi2Stubs.c",
+    "PPCArch.c",
+    "obj_files.mk",
+    "OSAlarm",
+    "OSCache",
+    "GXFifo",
+    "GXInit"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that add typed parameter lists for PPCArch.h or AmcExi2Stubs.h prototypes.",
+    "Search for remaining func_80335E-prefixed symbols to see whether other PPCArch or DB functions were later identified.",
+    "Check whether PPCSync is the intended SDK name for the `sc; blr` helper or if later work corrected this naming.",
+    "Find subsequent decompilation of OSAlarm or OSCache that includes PPCMtdec, PPCMfhid0, or PPCMtmsr calls in C."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,160 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2077",
+  "pr": {
+    "number": 2077,
+    "title": "mn: match mnitemsw, mnstagesw, and mnvibration functions",
+    "url": "https://github.com/doldecomp/melee/pull/2077",
+    "state": "CLOSED",
+    "author": "itsgrimetime",
+    "created_at": "2026-01-10T02:36:12Z",
+    "merged_at": null
+  },
+  "agent_status": "agent_completed",
+  "summary": "WIP, closed-unmerged attempt to match several menu settings functions in mnitemsw, mnstagesw, and mnvibration. The patch filled previously empty item/stage switch source and header files, added typed prototypes and globals, implemented list traversal helpers, menu transition/setup functions, language-dependent item table lookup, stage switch persistence, and several vibration helper functions. Review feedback focused on unfinished or questionable mnvibration work, especially wrapping HSD_GObj with ad-hoc offset structs and appearing to delete/rework an existing function without enough explanation.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "wip",
+      "closed-unmerged"
+    ],
+    "systems": [
+      "mn",
+      "menu-settings",
+      "item-switch-menu",
+      "stage-switch-menu",
+      "vibration-menu"
+    ]
+  },
+  "key_files": [
+    "src/melee/mn/mnitemsw.c",
+    "src/melee/mn/mnitemsw.h",
+    "src/melee/mn/mnstagesw.c",
+    "src/melee/mn/mnstagesw.h",
+    "src/melee/mn/mnvibration.c",
+    "src/melee/mn/mnvibration.h"
+  ],
+  "what_changed": [
+    "Added mnitemsw implementations for mnItemSw_80233A98, mnItemSw_8023405C, and mnItemSw_802358C0, plus ItemSwTable, globals mnItemSw_803ED340 and mnItemSw_804D6BEC, and public prototypes in mnitemsw.h.",
+    "Implemented mnItemSw_80233A98 as a table lookup with special cases for item IDs 0x11 and 0x13 when the language setting is not Japanese, returning 0x28 and 0x27 respectively.",
+    "Implemented mnItemSw_8023405C as a two-bucket linked-list traversal helper using an index split at 16, following x10 for the first child and x8 for siblings while preserving explicit NULL checks.",
+    "Implemented mnItemSw_802358C0 to update MenuFlow state to menu 0x10, reset hovered_selection, set mnItemSw_804D6BEC, call mnItemSw_802351A0, create a GObj, attach fn_80233E10 as a proc, and assign proc->flags_3 from HSD_GObj_804D783C.",
+    "Added mnstagesw implementations for mnStageSw_8023593C, mnStageSw_802364A0, and mnStageSw_80237410, plus globals mnStageSw_803ED4C4 and mnStageSw_804D6BF4 and public prototypes in mnstagesw.h.",
+    "Implemented mnStageSw_8023593C to iterate 0x1D stage entries from mnStageSw_803ED4C4, call gm_801641CC/gm_80164430/gm_801641E4, and write stage switch settings based on GObj user data at offset 0x2C.",
+    "Implemented mnStageSw_802364A0 as a two-bucket linked-list traversal helper using an index split at 15, analogous to the item switch helper but with node pointers at offsets 0x2C and 0x34.",
+    "Implemented mnStageSw_80237410 to update MenuFlow state to menu 0x11, initialize hovered_selection through mnStageSw_80235C58(0), set mnStageSw_804D6BF4, call HSD_GObj_80390CD4 on mnStageSw_80236CBC(1), create a proc for fn_80235F80, and set proc->flags_3.",
+    "Expanded mnvibration.h with VibNode, VibNodeContainer, VibData, VibJObjData, typed prototypes for mnVibration_802474C4, fn_80248084, and fn_80248748, and externs for mnVibration_803EECEC and mnVibration_804D6C28.",
+    "Added mnVibration_802474C4 linked-list traversal through mnVibration_804D6C28->x2C->x50, fn_80248084 to destroy/unlink a GObj when cur_menu is not 0x13, and fn_80248748 to unlink after an animation reaches end_frame.",
+    "Reworked mnVibration_80249174 formatting and setup to load vibration archive sections, call mnVibration_80248ED4 through a cast, create a GObj proc for fn_80247510, and set proc->flags_3 instead of manually bit-twiddling the GObj flag byte."
+  ],
+  "smart_moves": [
+    "Using HSD_GObjProc_8038FD54's returned HSD_GObjProc and assigning proc->flags_3 = HSD_GObj_804D783C is cleaner and more structurally meaningful than manually editing the GObj flag byte at offset 0xD.",
+    "The item and stage switch traversal helpers preserve likely match-sensitive NULL-check structure while walking x10 child and x8 sibling links, which is a common decomp tactic for matching compiler output around linked UI node trees.",
+    "The PR moved several unknown functions from placeholder UNK_RET/UNK_PARAMS toward typed signatures where enough evidence was available, improving callsite type checking and future matching work.",
+    "The mnitemsw language-specific table lookup captures JP/non-JP behavior directly with lbLang_IsSettingJP, making regional behavior explicit instead of hiding it behind magic table values."
+  ],
+  "decomp_lessons": [
+    "When matching menu code that traverses JObj/GObj-associated UI trees, small offset structs can be useful locally, but reviewers may object if they wrap known engine types like HSD_GObj instead of using existing definitions.",
+    "If a PR is WIP or includes large replacement/deletion of existing functions, call that out prominently and explain the matching rationale; otherwise reviewers may interpret it as accidental code loss.",
+    "Prefer existing baselib structs and fields, such as HSD_GObjProc::flags_3, over raw byte-offset manipulation once the field is known.",
+    "For settings menus, MenuFlow updates are consistent: save prev_menu, assign cur_menu to the target menu ID, initialize hovered_selection, set a menu-specific active flag, create a GObj, attach the menu proc, and set proc flags.",
+    "Header work should expose only the structs and externs needed across translation units; local node-data structs can stay in .c files unless shared by multiple functions/files."
+  ],
+  "naming_conventions": [
+    "Matched menu functions use module-prefixed names with address suffixes: mnItemSw_80233A98, mnStageSw_80237410, mnVibration_80249174.",
+    "Unidentified local/static functions retain fn_ address names such as fn_80233E10, fn_80235F80, fn_80248084, and fn_80248748.",
+    "Globals use module prefix plus address, such as mnItemSw_803ED340, mnStageSw_803ED4C4, mnVibration_804A0868, and mnVibration_804D6C28.",
+    "Temporary or reverse-engineered struct fields use offset names such as x2C, x34, x50, x8, and x10.",
+    "Header guards follow MELEE_MN_ITEMSW_H and MELEE_MN_STAGESW_H style."
+  ],
+  "assembly_or_matching_tactics": [
+    "Preserved redundant-looking NULL branches in linked-list traversal helpers, likely because simplifying them could alter generated control flow.",
+    "Used split-index traversal for item and stage switch UI node lists: item switch splits at 16, stage switch splits at 15.",
+    "Inserted dummy stack storage in mnStageSw_8023593C with s32 dummy[3]; (void) dummy;, suggesting a stack-layout or matching tactic, though the PR context does not explain it.",
+    "Used a function-pointer cast when calling mnVibration_80248ED4(arg0), indicating the target prototype was still unresolved or mismatched.",
+    "Replaced raw flag-byte manipulation with typed proc->flags_3 assignment to match known HSD_GObjProc layout."
+  ],
+  "review_feedback": [
+    {
+      "author": "PsiLupan",
+      "file": "src/melee/mn/mnvibration.c",
+      "comment": "Why are we making a wrapper type for a GObj instead of using it directly?",
+      "lesson": "Avoid creating wrapper structs around known engine types when the actual HSD_GObj type can be used."
+    },
+    {
+      "author": "PsiLupan",
+      "file": "src/melee/mn/mnvibration.c",
+      "comment": "Very confused why an entire function was deleted?",
+      "lesson": "Large removals or replacements in decomp PRs need explicit justification, especially in WIP slices."
+    },
+    {
+      "author": "itsgrimetime",
+      "file": "src/melee/mn/mnvibration.c",
+      "comment": "I shoulda called out that this one is still a WIP - will clean this stuff up",
+      "lesson": "Mark WIP status clearly and separate cleanup/matching experiments from ready-for-review changes."
+    }
+  ],
+  "searchable_terms": [
+    "pr-2077",
+    "itsgrimetime",
+    "mn settings",
+    "menu settings",
+    "mnitemsw",
+    "mnstagesw",
+    "mnvibration",
+    "mnItemSw_80233A98",
+    "mnItemSw_8023405C",
+    "mnItemSw_802358C0",
+    "mnItemSw_803ED340",
+    "mnItemSw_804D6BEC",
+    "ItemSwTable",
+    "ItemSwNode",
+    "lbLang_IsSettingJP",
+    "mnStageSw_8023593C",
+    "mnStageSw_802364A0",
+    "mnStageSw_80237410",
+    "mnStageSw_803ED4C4",
+    "mnStageSw_804D6BF4",
+    "StageSw_Node",
+    "gm_801641CC",
+    "gm_80164430",
+    "gm_801641E4",
+    "mnVibration_802474C4",
+    "fn_80248084",
+    "fn_80248748",
+    "mnVibration_80249174",
+    "mnVibration_804A0868",
+    "mnVibration_804D6C28",
+    "mnVibration_803EECEC",
+    "VibNode",
+    "VibData",
+    "VibJObjData",
+    "HSD_GObjProc_8038FD54",
+    "HSD_GObjPLink_80390228",
+    "HSD_GObj_804D783C",
+    "proc->flags_3",
+    "GObj_Create",
+    "MenuFlow",
+    "mn_804A04F0",
+    "closed unmerged WIP"
+  ],
+  "follow_up_queries": [
+    "Find later merged PRs for mnitemsw.c, mnstagesw.c, or mnvibration.c to see which parts of PR #2077 were reused or corrected.",
+    "Search for reviewer guidance on using HSD_GObj directly versus ad-hoc wrapper structs in menu decomp code.",
+    "Check current mnvibration.h and mn/types.h for final accepted definitions of VibNode, VibData, VibJObjData, and AnimLoopSettings.",
+    "Compare accepted implementations of mnItemSw_8023405C and mnStageSw_802364A0 for linked-list traversal patterns and index split constants.",
+    "Investigate whether dummy stack arrays like dummy[3] in mnStageSw_8023593C are still used as matching tactics or were replaced by cleaner struct typing."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

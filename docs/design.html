@@ -75,9 +75,9 @@
 
   <ul>
     <li>This document defines the top-level <code>decomp-orchestrator</code> system we want to build for Melee decomp.</li>
-    <li>It should replace <code>decomp-find</code>, <code>melee-decomp</code>, and <code>melee-decomp-sweep</code> as the top-level workflow:
+    <li>It should consolidate the former <code>decomp-find</code> and <code>melee-decomp</code> surfaces into one top-level run system, with sweep tooling kept as a last-resort helper mode:
       <ul>
-        <li>Those skills become internal strategy libraries, references, prompts, and helper modes inside one larger system.</li>
+        <li>Those surfaces become internal scoring logic, agent context, prompts, and CLI helpers inside one larger system.</li>
       </ul>
     </li>
     <li>It should still rely on the repo's hard tools:
@@ -237,7 +237,7 @@
         <text class="ds" x="1050" y="310" text-anchor="middle">Pi worker</text>
         <rect x="944" y="344" width="212" height="52" rx="7" fill="var(--tealfill)" stroke="var(--tealline)"/>
         <text class="dl" x="1050" y="367" text-anchor="middle" fill="var(--teal)">Capabilities</text>
-        <text class="ds" x="1050" y="384" text-anchor="middle">PR/docs/source · sweep/permuter</text>
+        <text class="ds" x="1050" y="384" text-anchor="middle">PR/docs/source · last-resort sweeps</text>
       </g>
       <path d="M856 146 L908 146" class="arr" marker-end="url(#arrow)"/>
       <text class="ds" x="882" y="130" text-anchor="middle">leases</text>
@@ -262,7 +262,7 @@
     </li>
     <li>Workers pull bounded leases from that state:
       <ul>
-        <li>Do the PR search, resource lookup, source archaeology, sweeps, permuter work, and cleanup inside their leased write sets.</li>
+        <li>Do the PR search, resource lookup, source archaeology, optional last-resort sweep/permuter work, and cleanup inside their leased write sets.</li>
         <li>Return reports and events for the reducer/director loop.</li>
       </ul>
     </li>
@@ -606,7 +606,7 @@ integrations(id, attempt_id, base_rev, patch_path, validation_path, old_matched_
         <text class="dl" x="765" y="106" text-anchor="middle">Attempt loop</text>
         <text class="ds" x="765" y="132" text-anchor="middle">focused edit</text>
         <text class="ds" x="765" y="154" text-anchor="middle">duplicate adaptation</text>
-        <text class="ds" x="765" y="176" text-anchor="middle">sweep batch</text>
+        <text class="ds" x="765" y="176" text-anchor="middle">last-resort sweep</text>
         <text class="ds" x="765" y="198" text-anchor="middle">permuter handoff</text>
         <text class="ds" x="765" y="220" text-anchor="middle">type/symbol request</text>
         <text class="ds" x="765" y="242" text-anchor="middle">source cleanup</text>
@@ -707,7 +707,7 @@ integrations(id, attempt_id, base_rev, patch_path, validation_path, old_matched_
     <li><b>Gather context.</b> Before changing source, the worker searches relevant PRs, docs, source siblings, headers, symbols, splits, data sheets, naming conventions, public scratches, previous run bundles, and known mismatch patterns.</li>
     <li><b>Bootstrap workspace.</b> Worker runs <code>python configure.py</code> if needed, then builds the narrowest relevant object/report baseline.</li>
     <li><b>Attempt planning.</b> Based on that research, the worker chooses which capabilities are likely to produce progress or useful information.</li>
-    <li><b>Attempt loop.</b> Worker may combine focused editing, duplicate adaptation, sweep batches, permuter handoff, fact research, and cleanup validation. The loop pursues grounded hypotheses, not unlimited random variants.</li>
+    <li><b>Attempt loop.</b> Worker may combine focused editing, duplicate adaptation, fact research, cleanup validation, and optional last-resort sweep/permuter work. The loop pursues grounded hypotheses, not unlimited random variants.</li>
     <li><b>Verify narrowly.</b> Use symbol or unit objdiff first. Only candidates that improve or reveal strong evidence get broader checks.</li>
     <li><b>Emit shard.</b> Worker writes patch, result JSON, diff text, compile logs, and learned/rejected patterns into its artifacts.</li>
     <li><b>Report or stop.</b> If progress continues, renew the lease. If evidence runs out, report "stalled/no useful guess," preserve context, release the slot, and emit a director wake event.</li>
@@ -900,7 +900,7 @@ COMMIT;
   <pre>python configure.py
 ninja build/GALE01/report.json
 ninja progress
-python .codex/skills/decomp-find/scripts/rank_decomp_candidates.py --json --limit 200
+python decomp-orchestrator/knowledge/tools/rank_decomp_candidates.py --json --limit 200
 build/tools/objdiff-cli diff -p . -u &lt;unit&gt; &lt;symbol&gt;
 (cd tools/table-typer &amp;&amp; go run . dups)</pre>
 
@@ -921,12 +921,12 @@ build/tools/objdiff-cli diff -p . -u &lt;unit&gt; &lt;symbol&gt;
         <li>Wakes again when worker output or progress changes the board.</li>
       </ul>
     </li>
-    <li>Duplicate adaptation, sweeps, permuter work, PR research, and local cleanup are worker capabilities chosen inside a lease.</li>
+    <li>Duplicate adaptation, PR research, local cleanup, and optional last-resort sweep/permuter work are worker capabilities chosen inside a lease.</li>
     <li>The old skills still matter, but they move down a layer:
       <ul>
-        <li><code>decomp-find</code> becomes board-scanning logic.</li>
-        <li><code>melee-decomp</code> becomes the careful file-worker playbook.</li>
-        <li><code>melee-decomp-sweep</code> becomes the reproducible experiment mode.</li>
+        <li><code>decomp-find</code> becomes board-scanning logic and ranking helpers.</li>
+        <li><code>melee-decomp</code> becomes the worker system prompt plus co-located worker context.</li>
+        <li><code>melee-decomp-sweep</code> becomes archived guidance plus last-resort sweep tools.</li>
       </ul>
     </li>
     <li>The top-level mental model is no longer "pick a target, then decomp it":
@@ -941,8 +941,8 @@ build/tools/objdiff-cli diff -p . -u &lt;unit&gt; &lt;symbol&gt;
     </thead>
     <tbody>
       <tr><td><code>decomp-find</code></td><td>Board scan, candidate-prior features, linked-blocker awareness, and progress metrics.</td></tr>
-      <tr><td><code>melee-decomp</code></td><td>Worker playbook for one file or symbol: gather PR/docs/local context, edit source, verify, and stop before random guessing.</td></tr>
-      <tr><td><code>melee-decomp-sweep</code></td><td>Worker mode for high-throughput source-shape experiments, result shards, Pareto selection, and learned patterns.</td></tr>
+      <tr><td><code>melee-decomp</code></td><td>Worker system prompt and context for one file or symbol: gather PR/docs/local context, edit source, verify, and stop before random guessing.</td></tr>
+      <tr><td><code>melee-decomp-sweep</code></td><td>Last-resort sweep tooling for bounded source-shape experiments, with detailed historical docs archived outside runtime prompt routing.</td></tr>
       <tr><td>New run director</td><td>A Pi-agent Sudoku player: decides which square to touch next based on the entire board and every new fact.</td></tr>
     </tbody>
   </table>

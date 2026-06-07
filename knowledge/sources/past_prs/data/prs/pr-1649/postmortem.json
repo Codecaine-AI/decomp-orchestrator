@@ -1,0 +1,189 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1649",
+  "pr": {
+    "number": 1649,
+    "title": "Camera work",
+    "url": "https://github.com/doldecomp/melee/pull/1649",
+    "state": "MERGED",
+    "author": "sadkellz",
+    "created_at": "2025-06-28T00:41:34Z",
+    "merged_at": "2025-06-28T08:58:16Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Camera-focused decomp PR that replaced many camera.c asm stubs or UNK prototypes with C implementations and refined camera-related structs, bitfields, constants, and headers. The decomp.dev bot reported +1340 matched bytes, 6 new 100% matches, and 7 partial function improvements. There was no substantive human review text in the slice, so intent beyond the diff and match report is inferred only from changed code.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-layout",
+      "camera-system"
+    ],
+    "systems": [
+      "melee-core",
+      "camera",
+      "baselib-cobj",
+      "stage",
+      "fighter-lib",
+      "input"
+    ]
+  },
+  "key_files": [
+    {
+      "file": "src/melee/cm/camera.c",
+      "role": "Main camera decomp work; added implementations for multiple Camera_* functions and updated helper logic."
+    },
+    {
+      "file": "src/melee/cm/types.h",
+      "role": "Refined camera data structures, including CameraQuake, Camera bitfields, offsets, Vec3 fields, callback union, and callback function pointer typing."
+    },
+    {
+      "file": "src/melee/cm/camera.h",
+      "role": "Replaced UNK_RET/UNK_PARAMS and void-only prototypes with typed signatures for newly understood camera functions."
+    },
+    {
+      "file": "src/melee/cm/camera.static.h",
+      "role": "Corrected several camera constants from float arrays to scalar f64 constants with pi-derived meanings and thresholds."
+    },
+    {
+      "file": "src/melee/cm/forward.h",
+      "role": "Added forward declaration for CameraQuake."
+    }
+  ],
+  "what_changed": [
+    "Implemented or partially implemented camera mode application in Camera_8002A4AC, including mode-specific HSD_CObjSetFov, HSD_CObjSetInterest, HSD_CObjSetEyePosition, near/far plane handling, debug camera modes 7 and 8, and stage-specific floor clamping for some internal stage IDs.",
+    "Added Camera_8002B0E0 logic using gm_8016B41C single-player detection, Player_GetPlayerId, HSD_PadCopyStatus substick Y input, and cm_803BCCA0 tuning values to update and clamp camera state fields unk_2ba and unk_2bc.",
+    "Added vector/math-oriented implementations for Camera_8002BAA8 and Camera_8002BC78, including explicit reciprocal square root refinement, lbVector_Normalize, and PSVECCrossProduct usage.",
+    "Added Camera_8002EA64 and Camera_8002FE38 behavior for camera mode 6 target state, replacing commented offset-by-offset assignments with struct/Vec3 assignments and grouped bitfields.",
+    "Changed fn_8002F360 and CameraModeCallbacks so camera mode callbacks accept a void* argument, and implemented Camera_8002F3AC to invoke the current mode callback and copy target movement values to active movement values.",
+    "Implemented Camera_8002F7AC camera mode setup for a player slot, using Player_GetEntity, ftLib_80086B74 camera box direction, HSD_Randi/HSD_Randf, Stage_GetCamAngleRadiansLeft/Right, and pitch/yaw offsets.",
+    "Added Camera_800307D0 frustum/edge projection logic using HSD_CObjGetAspect, HSD_CObjGetFov, HSD_CObjGetEyePosition, HSD_CObjGetEyeVector, sinf/cosf, threshold constants, and large sentinel return values.",
+    "Implemented Camera_SetStageVisible by setting cm_80452C68.unk_399_b5 based on whether the argument is zero.",
+    "Implemented Camera_80030BBC as a world-to-screen helper using lbVector_WorldToScreen, screen coordinate range checks, optional S32Vec2 output, and HSD_CObjGetScissor bounds tests.",
+    "Implemented Camera_80030CFC subject-on-screen logic using camera eye/interest, CameraBox position/size, lbVector_8000E838, lbVector_Diff, lbVector_Normalize, lbVector_Add, and Camera_80030BBC.",
+    "Renamed/clarified camera struct fields: UnkInternalCameraStruct became CameraQuake with Vec3 x0 and int type; camera quake arrays use CameraQuake; unk_2C8/unk_2CC became pitch_offset/yaw_offset; CameraBox fields gained comments for position, direction, and size.",
+    "Expanded Camera struct layout around offsets 0x2F8 through 0x378 with Vec3 fields, scalar fields, grouped bitfields for unk_341, and a union at unk_35C containing either Vec3 vec or s32 (*cb)(f32*).",
+    "Updated camera.static.h constants cm_804D7EC8, cm_804D7ED0, cm_804D7ED8, cm_804D7EE0, and cm_804D7EE8 from odd float arrays to scalar f64 constants corresponding to M_PI_8, M_PI_16, 2*pi, pi, and 0.0001."
+  ],
+  "smart_moves": [
+    "Used typed function signatures in camera.h to lock down known arguments and returns instead of leaving new progress behind UNK_RET/UNK_PARAMS.",
+    "Converted repeated raw component assignments in Camera_8002FE38 into whole-Vec3 assignments, which both clarifies intent and can match when the compiler emits struct copies.",
+    "Grouped adjacent camera flag bits as 2-bit bitfields where code treated them as small mode values rather than independent booleans.",
+    "Reinterpreted the old 4-s32 quake structure as Vec3 plus type, which enabled meaningful use of .type instead of xC and better reflected Camera_8002A28C behavior.",
+    "Identified pi-derived static constants and replaced misleading float-array declarations with scalar f64 constants, making random pitch/yaw code in Camera_8002F7AC much more readable.",
+    "Used existing engine APIs rather than hand-written math where applicable: CObj getters/setters, lbVector helpers, PSVECCrossProduct, HSD_Randf/HSD_Randi, and stage camera-angle accessors.",
+    "Preserved matching-sensitive details such as PAD_STACK calls, literal sentinel floats, and explicit __frsqrte refinement where the generated code likely depends on them."
+  ],
+  "decomp_lessons": [
+    "For camera code, understanding the Camera struct layout often unlocks multiple functions at once; this PR paired function decomp with field renames and offset expansion.",
+    "When a field stores a camera vector, prefer Vec3 struct fields and whole-struct assignments over separate x/y/z placeholder floats if the code and offsets support it.",
+    "Callback arrays should be typed to match call sites. Changing CameraModeCallbacks.callback from void* to void (*)(void*) allowed fn_8002F360 and Camera_8002F3AC to be represented directly.",
+    "Pi-related constants may appear as strange float arrays before relocation/type cleanup; compare usage sites for pitch/yaw/random-angle code before accepting odd array declarations.",
+    "Large sentinel float constants such as ±8.5070587e37f and float-int range guards can be important for camera projection and screen tests; keep exact literals when matching.",
+    "Stage-specific camera behavior may require direct internal_stage_id switches and calls to stage module helpers rather than generic ground queries.",
+    "Partial function progress is still useful when it clarifies headers and structs; the bot reported several functions improved substantially without reaching 100%."
+  ],
+  "naming_conventions": [
+    "Camera quake data was promoted from UnkInternalCameraStruct to CameraQuake.",
+    "The quake field xC was renamed to type, evidenced by cm_80452C68.unk_B0[i][j].type = 0.",
+    "Camera pitch/yaw fields were renamed from unk_2C8 and unk_2CC to pitch_offset and yaw_offset.",
+    "Newly suspected CameraBox semantics were documented with comments: x1C as position, x28 as direction, and x34 as size.",
+    "Functions with known common names kept address-style symbols plus comments where known, such as Camera_SetModeTraining, Camera_ToScreen, and Camera_IsSubjectOnScreen.",
+    "Unknown camera mode state around unk_341 was represented as grouped bitfields named unk_341_b1_b2, unk_341_b3_b4, unk_341_b5_b6, and unk_341_b7 rather than separate one-bit flags."
+  ],
+  "assembly_or_matching_tactics": [
+    "PAD_STACK was inserted in several functions, including Camera_8002A4AC, Camera_8002EA64, Camera_8002F3AC, Camera_80030BBC, and Camera_80030CFC, suggesting stack-shape tuning for matching.",
+    "Camera_8002BAA8 used explicit __frsqrte and Newton-style refinement rather than only lbVector_Normalize, likely to match the original square-root sequence.",
+    "Camera_800307D0 retained exact threshold and sentinel constants, including cm_804D7EE8, cm_804D7EF0, 8.5070587e37f, and -8.5070587e37f.",
+    "Function pointer dispatch was written in a direct indexed form, cm_803BCB18.callback[cm_80452C68.mode](...), matching the table-driven camera mode design.",
+    "Whole-struct Vec3 copies were used for camera movement targets and state, which can produce closer codegen than manual component copies.",
+    "Randomized camera angle code used f64 temporaries/constants and HSD_Randf/HSD_Randi calls in a way consistent with the static constant type corrections.",
+    "Header prototype corrections removed UNK signatures for functions where argument and return types were established, helping later translation units compile with accurate calls."
+  ],
+  "review_feedback": [
+    {
+      "source": "decomp.dev bot",
+      "feedback": "Reported matched code increased to 32.66%, +0.03%, +1340 bytes."
+    },
+    {
+      "source": "decomp.dev bot",
+      "feedback": "Reported 6 new 100% matches: Camera_8002F7AC (+328), Camera_80030BBC (+284), Camera_8002BC78 (+272), Camera_8002F3AC (+200), Camera_8002FE38 (+148), and fn_8002F360 (+38)."
+    },
+    {
+      "source": "decomp.dev bot",
+      "feedback": "Reported 7 unmatched-function improvements: Camera_8002A4AC to 78.29%, Camera_800307D0 to 73.12%, Camera_8002BAA8 to 87.07%, Camera_8002EA64 to 88.89%, Camera_80030CFC to 82.76%, Camera_8002B0E0 to 52.86%, and Camera_SetStageVisible to 77.78%."
+    },
+    {
+      "source": "slice observation",
+      "feedback": "No human review comments or reviewer suggestions were present in the provided PR slice."
+    }
+  ],
+  "searchable_terms": [
+    "Camera work",
+    "pr-1649",
+    "sadkellz",
+    "src/melee/cm/camera.c",
+    "src/melee/cm/types.h",
+    "src/melee/cm/camera.h",
+    "camera.static.h",
+    "Camera_8002A4AC",
+    "Camera_8002B0E0",
+    "Camera_8002BAA8",
+    "Camera_8002BC78",
+    "Camera_8002EA64",
+    "fn_8002F360",
+    "Camera_8002F3AC",
+    "Camera_8002F7AC",
+    "Camera_8002FE38",
+    "Camera_800307D0",
+    "Camera_SetStageVisible",
+    "Camera_80030BBC",
+    "Camera_80030CFC",
+    "Camera_ToScreen",
+    "Camera_IsSubjectOnScreen",
+    "CameraQuake",
+    "CameraModeCallbacks",
+    "pitch_offset",
+    "yaw_offset",
+    "unk_341_b1_b2",
+    "unk_341_b3_b4",
+    "unk_35C",
+    "HSD_CObjSetFov",
+    "HSD_CObjSetInterest",
+    "HSD_CObjSetEyePosition",
+    "HSD_CObjGetScissor",
+    "lbVector_WorldToScreen",
+    "PSVECCrossProduct",
+    "lbVector_Normalize",
+    "__frsqrte",
+    "HSD_Randf",
+    "HSD_Randi",
+    "ftLib_80086B74",
+    "Player_GetEntity",
+    "gm_8016B41C",
+    "Stage_GetCamAngleRadiansLeft",
+    "Stage_GetCamAngleRadiansRight",
+    "cm_804D7EC8",
+    "cm_804D7ED0",
+    "cm_804D7ED8",
+    "cm_804D7EE0",
+    "cm_804D7EE8"
+  ],
+  "follow_up_queries": [
+    "Inspect later PRs touching Camera_8002A4AC, Camera_800307D0, Camera_8002BAA8, Camera_8002EA64, Camera_80030CFC, Camera_8002B0E0, or Camera_SetStageVisible to see how the partial matches were completed.",
+    "Search for subsequent renames of CameraBox x1C, x28, and x34 to confirm whether position, direction, and size comments became established names.",
+    "Search for uses of CameraQuake and unk_B0/unk_1B0 to determine whether CameraQuake fields x0 and type were later refined.",
+    "Check whether the project later replaced cm_804D7EC8/cm_804D7ED0/cm_804D7ED8/cm_804D7EE0 with named M_PI-derived constants.",
+    "Compare callback users after this PR to confirm the void* CameraModeCallbacks signature remained correct across all camera modes."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

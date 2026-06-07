@@ -1,0 +1,208 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2182",
+  "pr": {
+    "number": 2182,
+    "title": "First bunch of functions of gm_1601.c",
+    "url": "https://github.com/doldecomp/melee/pull/2182",
+    "state": "MERGED",
+    "author": "jurrejelle",
+    "created_at": "2026-02-21T12:06:15Z",
+    "merged_at": "2026-02-21T21:38:06Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Decompiled and typed a first batch of functions in src/melee/gm/gm_1601.c, mostly game-mode/stat/unlock/color-selection helpers, while cleaning up related headers and struct exposure. The PR replaced many placeholder `/// #...` stubs with C implementations, added `NUM_LBL_8046B668`, converted `lbl_8046B668` usage toward an array of `struct lbl_8046B668_t`, and updated prototypes in gm_1601.h plus related forward/type headers. Review focused heavily on using project-preferred integer/bool types, preserving unknown fields as `UNK_T` until understood, simplifying bitmask expressions, and expressing global array access directly instead of via artificial base pointers.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "prototype-cleanup",
+      "review-driven-type-fixes"
+    ],
+    "systems": [
+      "game-mode",
+      "melee-core",
+      "menu",
+      "hud",
+      "player-stats",
+      "unlockables"
+    ]
+  },
+  "key_files": [
+    "src/melee/gm/gm_1601.c",
+    "src/melee/gm/gm_1601.h",
+    "src/melee/gm/gm_1601.static.h",
+    "src/melee/gm/types.h",
+    "src/melee/gm/forward.h",
+    "src/melee/mn/types.h",
+    "src/melee/if/ifstock.c"
+  ],
+  "what_changed": [
+    "Implemented a large first batch of previously stubbed functions in `gm_1601.c`, including stat accumulation/update helpers around `gmMainLib_8015D0C0`, `gmMainLib_8015D1E8`, `gmMainLib_8015D310`, `gmMainLib_8015D06C`, and related accessors.",
+    "Added saturating-add style totals that clamp to `(u32)-1`/`-1` in functions such as `gm_801628C4`, `gm_80162C48`, `gm_80162E44`, `gm_80163040`, and `gm_801631F0`.",
+    "Implemented boolean update-on-new-record helpers such as `fn_80162BFC` and `fn_80162FF4`, returning true only when a stored stat was increased.",
+    "Implemented minimum-over-character/stat helpers such as `gm_80162D6C`, `gm_80162F68`, and `gm_80163164`, iterating over 0x19 entries and starting from minimum value 4.",
+    "Implemented stage-mask helpers `gm_80164250` and `fn_801642A0`, using `gmMainLib_8015CC58()->stage_mask` and bit tests over stage indices.",
+    "Implemented unlock/selection related code such as `gm_80164A0C`, which searches data near `lbl_803B75F8` and clears a bit in the value returned by `gmMainLib_8015ED8C()`.",
+    "Implemented small gate/accessor functions including `gm_8016332C`, `gm_80163690`, `gm_801639F4`, `gm_80167470`, `fn_8016758C`, `gm_801688AC`, `fn_80169444`, `fn_8016A488`, `gm_8016A944`, and `gm_8016A998`.",
+    "Implemented color/random assignment routines `fn_801695BC`, `fn_801697FC`, and `fn_8016989C`, using `gm_80169238`, sentinel value `-2`, temporary color arrays, and `HSD_Randi`.",
+    "Added `#pragma dont_inline on/reset` around `gm_80169238`, indicating an inlining-sensitive matching constraint.",
+    "Changed `gm_8016A92C` to initialize `lbl_8046B668[0].unk1C = -2` and store `&lbl_8046B668` into `StartMeleeRules::x58`.",
+    "Changed `gm_8016A98C` to return a pointer to the `lbl_8046B668` array type: `struct lbl_8046B668_t (*)[NUM_LBL_8046B668]`.",
+    "Added `#define NUM_LBL_8046B668 27` in `src/melee/gm/forward.h` for the global array length.",
+    "Updated prototypes in `gm_1601.h` from `UNK_RET`/generic signatures toward concrete bool, u8, u16, int, long/s32/u32-style signatures, though review comments show some type refinements were still being actively corrected.",
+    "Included `mn/types.h` from `gm_1601.h` and adjusted includes in `gm_1601.c`, replacing/removing several unused headers and adding `gmstamina.h` and `gm/forward.h`."
+  ],
+  "smart_moves": [
+    "Promoted clear 0-or-1 return functions to `bool` after review, which improves semantic accuracy and was noted by the reviewer as unlikely to cause mismatches when a function cannot return anything other than true/false.",
+    "Kept unresolved structure field `StartMeleeRules::x58` as pointer-like/unknown (`UNK_T`) rather than forcing a premature concrete struct type; review explicitly said to use `UNK_T` until fields are determined.",
+    "Reused a named array-size macro, `NUM_LBL_8046B668`, and `ARRAY_SIZE(lbl_8046B668)` rather than hardcoding all accesses to the 27-element global array.",
+    "Used direct array access for `lbl_8046B668` in `gm_8016A998` after review feedback, avoiding an artificial `base_ptr` variable and making the code more idiomatic.",
+    "Simplified the stage mask check to `return (1 << mask) & gmMainLib_8015CC58()->stage_mask;`, matching reviewer preference and making the bit-test intent obvious.",
+    "Introduced a `dont_inline` pragma around `gm_80169238`, a targeted matching tactic for a small accessor whose inlining behavior likely affected codegen.",
+    "Encoded repeated stat patterns consistently: get per-character slot via `gm_80164024(ckind)`, compare existing value, update only if the new value is larger, and return whether an update occurred.",
+    "Separated forward declarations/type ownership into `forward.h`, `types.h`, and `gm_1601.h` rather than keeping all local declarations in the C file/static header."
+  ],
+  "decomp_lessons": [
+    "For Melee decomp work, prefer semantic `bool` plus `true`/`false` when the original function only returns 1 or 0; the reviewer stated this kind of change basically never causes a mismatch.",
+    "Avoid C `long` in implementation code when the width/sign is intended as a 32-bit signed value; reviewer preference was `s32` over `long`.",
+    "Do not over-type unknown pointer fields just because a comparison or cast matches assembly. If the field layout is not known, keep it as `UNK_T` and express pointer checks as `field != NULL`.",
+    "Unsignedness can reveal intent: reviewer identified a cast-heavy nonzero test on `x58` as a null check based on unsignedness.",
+    "Global arrays should generally be expressed as arrays and indexed directly, not through temporary base-pointer aliases created to satisfy decompiler output.",
+    "When a function is a bitmask membership test, a compact expression like `(1 << mask) & stage_mask` is preferred over extra parentheses/temporaries if it still matches.",
+    "For array-returning globals, use a precise pointer-to-array return type when the symbol is known as an array, as with `struct lbl_8046B668_t (*gm_8016A98C(void))[NUM_LBL_8046B668]`.",
+    "Repeated generated-looking loops can often be matched while still being cleaned up: this PR retained do/while and explicit bounds where needed, but review pushed for clearer types and array forms.",
+    "Header prototypes should be updated in tandem with C implementations; otherwise mismatches between `long`, `s32`, `u32`, and `bool` can linger across compilation units."
+  ],
+  "naming_conventions": [
+    "Kept address-based names for unidentified functions, e.g. `gm_801628C4`, `fn_80162FF4`, `gm_8016A998`, matching the existing project convention for not-yet-named functions.",
+    "Used subsystem prefixes: `gm_` for game-mode functions, `gmMainLib_` for main game-mode library accessors, and `fn_` for local/static or still-unknown functions.",
+    "Used `ckind` / `c_kind` to denote character kind arguments where functions call `gm_80164024` for character index normalization.",
+    "Used `NUM_LBL_8046B668` as a count macro for the global `lbl_8046B668` array; this follows a symbol-based macro naming style when the semantic name is not yet known.",
+    "Preserved unknown field names such as `unk1C`, `unk1D`, `x58`, `x1B8`, and `FighterMatchInfo[i].x8` where field semantics were not fully established.",
+    "Reviewer feedback implies project style favors fixed-width typedefs (`s32`, `u32`, `u8`, etc.) over platform C types like `long` when practical."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used saturating overflow checks of the form `(u32)(accum + value) > (u32)-1` to select either `-1`/`(u32)-1` or the computed sum.",
+    "Inserted `#pragma dont_inline on` / `#pragma dont_inline reset` around `gm_80169238` to control compiler inlining for matching.",
+    "Used pointer arithmetic and casts against `gmMainLib_8015EDBC()` in `gm_80163298`, specifically offset `((temp_r3 * 4) & 0x3FC) + 0x114`, indicating a layout not yet fully expressed as a struct.",
+    "Used sentinel byte `-2` in color/character assignment buffers in `fn_801695BC` and related routines, matching surrounding code such as `fn_80169574` that writes `-2` as a terminator.",
+    "Used `HSD_Randi` for random permutation/color assignment behavior while preserving loop-heavy control flow in `fn_801695BC`.",
+    "Used bit operations for stage/unlock state: `(1 << mask) & stage_mask`, `1 << (u16)var_r29`, and `*temp_r31 &= ~(1ULL << var_r0)`.",
+    "Retained explicit loop bounds observed in the diff, including 0x19 for many per-character/stat loops, 0x1D for stage mask scanning, and 0x1B/`ARRAY_SIZE(lbl_8046B668)` for the `lbl_8046B668` table.",
+    "Changed `lbl_8046B668` handling from scalar/field-style `lbl_8046B668.unk_1C` toward array-style `lbl_8046B668[0].unk1C` and `&lbl_8046B668[i]`, improving both type correctness and likely codegen clarity."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "ribbanya",
+      "file": "src/melee/gm/gm_1601.c",
+      "feedback": "Prefer `s32` over `long`."
+    },
+    {
+      "reviewer": "ribbanya",
+      "file": "src/melee/gm/gm_1601.c",
+      "feedback": "Simplify `gm_80164250` to `return (1 << mask) & gmMainLib_8015CC58()->stage_mask;`."
+    },
+    {
+      "reviewer": "ribbanya",
+      "file": "src/melee/gm/gm_1601.c",
+      "feedback": "Change `x58` to `UNK_T` until its fields are determined; the check should be a pointer null check, `gm_8016AE50()->x58 != NULL`."
+    },
+    {
+      "reviewer": "ribbanya",
+      "file": "src/melee/gm/gm_1601.c",
+      "feedback": "`gm_8016A944` should be `bool` because it only returns 1 or 0, with `return true;` and `return false;`."
+    },
+    {
+      "reviewer": "ribbanya",
+      "file": "src/melee/gm/gm_1601.c",
+      "feedback": "`fn_80162FF4` should be `bool fn_80162FF4(u8 ckind, u32 arg1)` with boolean returns."
+    },
+    {
+      "reviewer": "ribbanya",
+      "file": "src/melee/gm/gm_1601.c",
+      "feedback": "Try direct array access of `lbl_8046B668` without declaring an artificial `base_ptr` in `gm_8016A998`."
+    },
+    {
+      "reviewer": "ribbanya",
+      "file": "src/melee/gm/gm_1601.c",
+      "feedback": "Assign `arg0->x58 = &lbl_8046B668;` rather than casting the address through an integer or unnecessary type."
+    }
+  ],
+  "searchable_terms": [
+    "gm_1601.c",
+    "gm_1601.h",
+    "gm_801628C4",
+    "fn_80162BFC",
+    "gm_80162C48",
+    "gm_80162D6C",
+    "fn_80162DF8",
+    "gm_80162E44",
+    "gm_80162F68",
+    "fn_80162FF4",
+    "gm_80163040",
+    "gm_80163164",
+    "gm_801631F0",
+    "gm_80163298",
+    "gm_8016332C",
+    "gm_80163690",
+    "gm_801639F4",
+    "gm_80164250",
+    "fn_801642A0",
+    "gm_80164A0C",
+    "gm_80167470",
+    "fn_8016758C",
+    "gm_801688AC",
+    "gm_80169238",
+    "fn_80169444",
+    "fn_801695BC",
+    "fn_801697FC",
+    "fn_8016989C",
+    "fn_8016A488",
+    "gm_8016A92C",
+    "gm_8016A944",
+    "gm_8016A98C",
+    "gm_8016A998",
+    "lbl_8046B668",
+    "NUM_LBL_8046B668",
+    "lbl_8046B488",
+    "lbl_803B75F8",
+    "StartMeleeRules",
+    "MatchEnd",
+    "MatchPlayerData",
+    "gmMainLib_8015CC58",
+    "gmMainLib_8015D0C0",
+    "gmMainLib_8015D1E8",
+    "gmMainLib_8015D310",
+    "gmMainLib_8015D06C",
+    "gmMainLib_8015D7EC",
+    "gmMainLib_8015EDBC",
+    "stage_mask",
+    "s32 over long",
+    "bool true false",
+    "UNK_T x58",
+    "dont_inline",
+    "HSD_Randi",
+    "ARRAY_SIZE(lbl_8046B668)"
+  ],
+  "follow_up_queries": [
+    "Audit `gm_1601.h` prototypes after this PR for remaining `long`/`unsigned long` declarations that should become `s32`/`u32` to match reviewer style.",
+    "Determine the real type and field layout behind `StartMeleeRules::x58` and `lbl_8046B668` once more callsites are decompiled.",
+    "Search for other functions in `gm_1601.c` using the same stat update/total/min patterns and reuse the boolean update helper style.",
+    "Investigate whether offsets into `gmMainLib_8015EDBC()` in `gm_80163298` can be replaced with a named struct field.",
+    "Review color assignment functions `fn_801695BC`, `fn_801697FC`, and `fn_8016989C` for possible semantic names once character color selection behavior is understood.",
+    "Look for other stage-mask helpers that can use the same simplified `(1 << mask) & stage_mask` expression.",
+    "Check if the `dont_inline` pragma around `gm_80169238` remains necessary after future compiler/type cleanup."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,146 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-916",
+  "pr": {
+    "number": 916,
+    "title": "Partially match `ftcoll`",
+    "url": "https://github.com/doldecomp/melee/pull/916",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-06-02T21:20:38Z",
+    "merged_at": "2023-06-02T21:30:51Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Partially matched `src/melee/ft/ftcoll.c` by replacing three small ASM stubs with C implementations: `ftColl_8007B1B8`, `ftColl_CreateReflectHit`, and `ftColl_CreateAbsorbHit`. The PR introduced a `ShieldDesc` struct, updated `ftColl_8007B1B8` to take `ShieldDesc*` instead of `AbsorbDesc*`, and added casts at existing callsites whose character attribute blobs were not yet typed as `ShieldDesc`. It also made a small M2CTX include-order/header adjustment in `ftCo_DamageIce.h`. The PR body says it resolves part of issue #595 and reports 100% matching for the three converted functions.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "struct-typing",
+      "fighter-collision"
+    ],
+    "systems": [
+      "fighter",
+      "ftcoll",
+      "ftCommon",
+      "Link",
+      "Young Link",
+      "Marth",
+      "Peach"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/ftcoll.c",
+    "src/melee/ft/ftcoll.h",
+    "src/common_structs.h",
+    "src/melee/ft/chara/ftCLink/ftCl_Init.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Guard.c",
+    "src/melee/ft/chara/ftLink/ftLk_AttackAir.c",
+    "src/melee/ft/chara/ftMars/ftMs_SpecialLw.c",
+    "src/melee/ft/chara/ftPeach/ftPe_SpecialN.c",
+    "src/melee/ft/chara/ftCommon/ftCo_DamageIce.h"
+  ],
+  "what_changed": [
+    "Converted `ftColl_8007B1B8` from inline ASM/`NOT_IMPLEMENTED` wrapper form into C. The function now gets `Fighter* fp = GET_FIGHTER(gobj)`, sets shield-related bitfields `x221B_b0` through `x221B_b4`, stores `cb` in `fp->cb.x21C4_callback_OnShieldHit`, and fills `fp->shield_hit` from a `ShieldDesc`.",
+    "Converted `ftColl_CreateReflectHit` into C. It sets reflect enable/state bits, stores `x21C8_callback_OnReflectHit`, copies reflect max damage/damage multiplier/speed multiplier/behavior, and builds `fp->reflect_hit` from the reflect descriptor bone, size, and offset.",
+    "Converted `ftColl_CreateAbsorbHit` into C. It sets absorb enable/state bits and fills `fp->absorb_hit` from `AbsorbDesc` bone, size, and offset.",
+    "Added `ShieldDesc` to `src/common_structs.h` with fields `bone`, `pos`, `radius`, `dmg_mul`, `vel_mul`, and an 8-bit `flags` bitfield.",
+    "Changed the declaration of `ftColl_8007B1B8` in `ftcoll.h` from `AbsorbDesc*` to `ShieldDesc*`.",
+    "Updated existing callsites in CLink, Link, Marth, Peach, and common guard code to cast their existing descriptor storage to `ShieldDesc*` when calling `ftColl_8007B1B8`.",
+    "Moved the `#ifdef M2CTX` boundary in `ftCo_DamageIce.h` so the M2C stack structs and `Vec3` include are consistently guarded together."
+  ],
+  "smart_moves": [
+    "Separated shield descriptor semantics from absorb semantics by introducing `ShieldDesc` instead of continuing to route `ftColl_8007B1B8` through `AbsorbDesc*`. This improved type intent while allowing still-opaque character attribute layouts to keep working via explicit casts.",
+    "Matched the ASM stores by mapping raw offsets to existing fighter fields: callback slots, bitfields, `parts[bone].joint`, and hit bubble fields (`shield_hit`, `reflect_hit`, `absorb_hit`).",
+    "Kept the scope small: only three short collision creation helpers were converted, while nearby unmatched `ftcoll` functions remained ASM. This limited risk in a large collision file.",
+    "Used explicit callsite casts to document that the underlying attribute blobs are layout-compatible with `ShieldDesc` even if their owning character attribute structs have not been fully renamed or retyped yet.",
+    "Preserved descriptor-to-joint translation behavior by indexing `fp->parts[descriptor_bone].joint`, matching the original assembly pattern that loaded from the fighter parts array rather than storing a raw bone id."
+  ],
+  "decomp_lessons": [
+    "When a function previously used the wrong descriptor type only because the layouts overlapped, introduce the more accurate descriptor type and use explicit casts at legacy callsites until the character attribute structs are fully typed.",
+    "Small ASM helper functions that mostly copy descriptor fields into fighter state are good candidates for early matching because the assembly directly reveals field offsets, bitfield writes, callback assignment, and vector copies.",
+    "Bitfield names such as `x2218_b3`, `x2218_b4`, `x2218_b5`, `x2218_b6`, `x2218_b7`, and `x221B_b0` through `x221B_b4` can encode `rlwimi` bit operations cleanly enough to eliminate hand-written ASM.",
+    "Descriptor structs should reflect semantic roles (`ShieldDesc`, `ReflectDesc`, `AbsorbDesc`) even when several share the same leading layout pattern of bone id, Vec3 offset/position, and size/radius.",
+    "Header changes for M2C-only stack structs need to account for type dependencies such as `Vec3`; guarding both the include and the structs under `M2CTX` avoids leaking temporary decomp scaffolding into normal builds."
+  ],
+  "naming_conventions": [
+    "`ftColl_CreateReflectHit` and `ftColl_CreateAbsorbHit` use descriptive Create*Hit names for collision helper functions once behavior is understood.",
+    "`ShieldDesc` follows the existing descriptor naming style used by `AbsorbDesc` and `ReflectDesc`.",
+    "`ShieldDesc` fields use plain semantic names for understood values (`bone`, `pos`, `radius`) and multiplier names (`dmg_mul`, `vel_mul`) while leaving flags generic as `flags`.",
+    "Existing less-understood fighter fields remain offset/bitfield-style names such as `x221B_b0`, `x2218_b5`, `shield_unk0`, and `shield_unk1`, avoiding overclaiming meaning.",
+    "Callback fields retain event-oriented names such as `x21C4_callback_OnShieldHit` and `x21C8_callback_OnReflectHit`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced direct ASM stores to fighter offsets with field assignments through `Fighter* fp = GET_FIGHTER(gobj)`.",
+    "Translated `rlwimi` bit operations into C bitfield assignments, for example setting one state bit true and clearing related state bits false.",
+    "Translated assembly descriptor loads into struct field accesses, including vector copies like `fp->shield_hit.offset = shield->pos` and `fp->absorb_hit.offset = absorb->x4_offset`.",
+    "Mapped the assembly pattern of shifting a bone index and loading from `fp->parts` to `fp->parts[desc->bone].joint` or equivalent descriptor bone fields.",
+    "Used explicit casts at callsites to satisfy the updated `ShieldDesc*` signature without requiring larger character data-attribute struct rewrites in the same PR.",
+    "The PR body's match report records `ftColl_CreateReflectHit`, `ftColl_8007B1B8`, and `ftColl_CreateAbsorbHit` as 100.00% matched."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review records were present in the supplied PR context.",
+    "There is no evidence in the slice of reviewer-requested changes or discussion about the `ShieldDesc` casts."
+  ],
+  "searchable_terms": [
+    "pr-916",
+    "ftcoll",
+    "ftColl_8007B1B8",
+    "ftColl_CreateReflectHit",
+    "ftColl_CreateAbsorbHit",
+    "ShieldDesc",
+    "AbsorbDesc",
+    "ReflectDesc",
+    "Fighter_GObj",
+    "GET_FIGHTER",
+    "x221B_b0",
+    "x221B_b1",
+    "x221B_b2",
+    "x221B_b3",
+    "x221B_b4",
+    "x2218_b3",
+    "x2218_b4",
+    "x2218_b5",
+    "x2218_b6",
+    "x2218_b7",
+    "x21C4_callback_OnShieldHit",
+    "x21C8_callback_OnReflectHit",
+    "shield_hit",
+    "reflect_hit",
+    "absorb_hit",
+    "ReflectAttr",
+    "x1A30_maxDamage",
+    "x1A34_damageMul",
+    "x1A38_speedMul",
+    "parts joint",
+    "ftCl_Init_8014919C",
+    "ftCo_80092450",
+    "ftLk_AttackAir_800EB3BC",
+    "ftMs_SpecialLw_Anim",
+    "ftMs_SpecialAirLw_Anim",
+    "ftMs_SpecialLw_80138D38",
+    "ftMs_SpecialLw_80138DD0",
+    "ftPe_SpecialN",
+    "M2CTX",
+    "ftCo_DamageIce.h",
+    "issue 595"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that remove the explicit `(ShieldDesc*)` casts by properly typing Link, CLink, Marth, Peach, or guard attribute structs.",
+    "Search for later renames of `x221B_b0` through `x221B_b4` and `x2218_b3` through `x2218_b7` to recover shield/reflect/absorb state semantics.",
+    "Search for later work on `ftColl_8007B320` and neighboring functions after the three helpers matched in this PR.",
+    "Check whether `ShieldDesc` fields `dmg_mul`, `vel_mul`, and `flags` are used or renamed in later collision/shield matching work.",
+    "Search issue #595 for the broader `ftcoll` matching plan and any remaining unmatched functions."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

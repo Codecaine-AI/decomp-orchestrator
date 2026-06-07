@@ -1,0 +1,177 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-327",
+  "pr": {
+    "number": 327,
+    "title": "Match grbattle",
+    "url": "https://github.com/doldecomp/melee/pull/327",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-03-19T17:43:32Z",
+    "merged_at": "2022-03-19T18:14:12Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Battlefield stage module by replacing asm/melee/gr/grbattle.s with src/melee/gr/grbattle.c and wiring it into the normal C object lists. The C recreation defines the Battlefield StageData, StageCallbacks table, stage init/destruct callbacks, background GObj creation, JObj translation setup, and randomized background cycling logic. Supporting changes adjusted Map layout, added/typed needed function declarations, centralized assert_line, and tweaked HSD_JObj inline helpers to reduce stack usage, as noted in the PR body.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "stage-module",
+      "headers",
+      "build-system",
+      "inline-tuning"
+    ],
+    "systems": [
+      "asm",
+      "src/melee/gr",
+      "src/melee/lb",
+      "src/sysdolphin/baselib",
+      "include",
+      "build"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "asm/melee/gr/grbattle.s",
+      "role": "Deleted 838-line assembly implementation after matching the module in C."
+    },
+    {
+      "path": "src/melee/gr/grbattle.c",
+      "role": "New 392-line C implementation of Battlefield stage data, callbacks, GObj setup, JObj transforms, and background swap state machine."
+    },
+    {
+      "path": "src/melee/gr/grbattle.h",
+      "role": "New local header declaring the static grbattle callbacks used by the StageCallbacks table."
+    },
+    {
+      "path": "src/sysdolphin/baselib/jobj.h",
+      "role": "Reworked JObj inline helpers, especially HSD_JObjMtxIsDirty and HSD_JObjSetTranslate, to use assert_line and simpler expressions."
+    },
+    {
+      "path": "src/melee/gr/stage.h",
+      "role": "Adjusted Map layout from byte-sized xC4/xC5/xC6 fields to s32 xC4, xC8, xCC, xD0 fields needed by grbattle."
+    },
+    {
+      "path": "src/melee/gr/grstory.c",
+      "role": "Introduced a local UnkUserData2 layout so grstory could keep byte/s16 field interpretation after Map changed."
+    },
+    {
+      "path": "include/dolphin/types.h",
+      "role": "Added global assert_line(line, cond) macro."
+    },
+    {
+      "path": "include/functions.h",
+      "role": "Typed declarations for func_801C2BA4, func_801C2CF4, and func_801C5DB0."
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "Swapped grbattle object from asm to C in TEXT_O_FILES."
+    },
+    {
+      "path": "e_files.mk",
+      "role": "Added epilogue grbattle C object."
+    },
+    {
+      "path": "src/melee/lb/lbvector.c",
+      "role": "Updated local assertions to the new global assert_line argument order."
+    }
+  ],
+  "what_changed": [
+    "Removed asm/melee/gr/grbattle.s and replaced it with src/melee/gr/grbattle.c, then changed obj_files.mk from asm/melee/gr/grbattle.s.o to src/melee/gr/grbattle.c.o.",
+    "Added Battlefield StageData lbl_803E7E38, StageCallbacks lbl_803E7DA0[7], and static callbacks retaining existing address-based names such as func_80219C98 and lbl_80219CA4.",
+    "Implemented stage initialization that sets stage_info.unk8C bitfields, creates map/background GObjs via func_80219D84, branches on func_8016B3D8 and Stage_80225194 values 0x111/0xF5, then runs stage setup functions and clears a local load-time flag.",
+    "Implemented func_80219D84 to allocate a stage GObj by id, initialize Map fields, install GX link func_801C5DB0, apply StageCallbacks callback0/callback2/callback3, and OSReport if the GObj cannot be obtained.",
+    "Implemented JObj translation update logic in lbl_80219E6C using func_801C9A70, func_801C2CF4, and HSD_JObjSetTranslate for ids 0 through 3 while lbl_804D6AC8 is set.",
+    "Implemented randomized Battlefield background cycling in lbl_8021A3BC using HSD_Randi, BATTLE_BG_MAX = 3, candidate ids {1, 2, 4}, func_801C2BA4, func_801C9604, func_801C96E8, func_801C4A08, and assert_line checks.",
+    "Extended Map in stage.h with s32 xC4, xCC, and xD0 fields and moved padding to xD4; grstory.c was protected from that shared struct change by adding a local UnkUserData2 with its prior xC4/xC5/xC6/xC8 layout.",
+    "Added assert_line(line, cond) to include/dolphin/types.h and updated lbvector.c and jobj.h call sites to use the new argument order.",
+    "Changed JObj inlines to use assert_line and simpler boolean expressions; the PR body specifically says JObj inlines needed tweaks to reduce stack usage.",
+    "Typed previously unknown functions in include/functions.h: func_801C2BA4 returns HSD_GObj*, func_801C2CF4 returns HSD_JObj*, and func_801C5DB0 takes struct _HSD_GObj and s32."
+  ],
+  "smart_moves": [
+    "Kept address-derived symbol names and static linkage in grbattle.c/grbattle.h, which minimizes naming churn while still removing the assembly file.",
+    "Used a StageCallbacks array matching the original table layout instead of open-coding callback dispatch; func_80219D84 indexes it by map id and handles callback0/callback2/callback3 consistently.",
+    "Created a global assert_line(line, cond) macro so decompiled code can reproduce original __FILE__/line/assert-string behavior without repeating custom macros in each source file.",
+    "Adjusted HSD_JObj inline bodies for matching constraints instead of treating baselib inlines as fixed; the PR body explicitly calls out reducing stack usage as necessary.",
+    "Avoided forcing all stage users into the new Map interpretation by giving grstory.c a file-local UnkUserData2 layout for the fields it expects.",
+    "Typed function declarations just enough to support grbattle and related inline calls, improving compiler knowledge for HSD_GObj/HSD_JObj interactions."
+  ],
+  "decomp_lessons": [
+    "Matching a stage module may require coordinated changes outside the target file: shared Map layout, function prototypes, assertion macros, and baselib inlines can all affect codegen.",
+    "For shared user_data structs, do not assume one stage's discovered field sizes are globally valid; a local compatibility struct can preserve another module's expected layout.",
+    "JObj helpers are sensitive matching surfaces. Small inline expression changes, assertion style, return types, and parameter names can change stack usage and generated code.",
+    "A central assert_line(line, cond) macro is useful for reproducing original assert line numbers and reducing per-file macro drift.",
+    "When replacing asm with C, update both normal and epilogue object lists if applicable; this PR touched obj_files.mk and e_files.mk.",
+    "Callback table decomp should preserve table order and nullable callback slots before attempting semantic renames."
+  ],
+  "naming_conventions": [
+    "Unidentified stage callbacks kept address labels such as lbl_80219CA4, lbl_8021A3BC, and func_80219D84.",
+    "Static data retained address labels such as lbl_803E7DA0 for the StageCallbacks table and lbl_803E7E38 for StageData.",
+    "Unknown Map fields used offset-style names like xC4, xC8, xCC, xD0, x1C_callback, and x11_flags.b012.",
+    "A file-local compatibility type was named UnkUserData2 in grstory.c when the shared Map type no longer matched that module's field interpretation.",
+    "The added grbattle header used guard _grtbattle_h_, matching the diff even though the filename is grbattle.h."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted an 838-line grbattle.s assembly file into a 392-line C file and changed build object selection to compile the C implementation.",
+    "Used static const int BATTLE_BG_MAX = 3 and a stack array s16 sp28[BATTLE_BG_MAX] = {1, 2, 4} to reproduce the Battlefield background selection loop.",
+    "Inserted unused stack arrays such as u32 unused[2], unused[6], and unused[7] in several callbacks, indicating stack-shape padding for matching.",
+    "Used assert_line with original source line values like 527, 535, 539, and 546 in the background cycling logic to match assert call sites.",
+    "Simplified HSD_JObjMtxIsDirty to a direct boolean return and HSD_JObjSetTranslate to assert_line plus assignment to reduce inline stack usage.",
+    "Retained an apparent standalone expression `gobj;` in lbl_8021A2DC, likely as a codegen/matching artifact rather than meaningful logic.",
+    "Preserved OSReport failure text in func_80219D84: \"%s:%d: couldn t get gobj(id=%d)\\n\" with __FILE__ and line 232."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or formal reviews were present in the provided PR slice.",
+    "The only human note in the PR body was: \"Note that some JObj inlines needed to be tweaked to reduce their stack usage\"."
+  ],
+  "searchable_terms": [
+    "Match grbattle",
+    "Battlefield",
+    "grbattle",
+    "grbattle.c",
+    "grbattle.s",
+    "grbattle.h",
+    "StageData",
+    "StageCallbacks",
+    "lbl_803E7DA0",
+    "lbl_803E7E38",
+    "func_80219C98",
+    "lbl_80219CA4",
+    "func_80219D84",
+    "lbl_80219E6C",
+    "lbl_8021A3BC",
+    "lbl_804D6AC8",
+    "lbl_804D6ACC",
+    "Map",
+    "UnkUserData2",
+    "assert_line",
+    "HSD_JObjSetTranslate",
+    "HSD_JObjMtxIsDirty",
+    "HSD_JObjSetMtxDirty",
+    "HSD_Randi",
+    "BATTLE_BG_MAX",
+    "func_801C2BA4",
+    "func_801C2CF4",
+    "func_801C5DB0",
+    "GObj_SetupGXLink",
+    "OSReport",
+    "stack usage",
+    "JObj inlines"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename grbattle symbols away from lbl_80219* labels.",
+    "Find PRs that further refine the Map struct layout after grbattle changed xC4/xCC/xD0.",
+    "Find other stage matches that tweak HSD_JObjSetTranslate or HSD_JObjMtxIsDirty for stack usage.",
+    "Find uses of assert_line(line, cond) introduced after PR 327.",
+    "Find later fixes to func_801C5DB0 prototype, especially whether the HSD_GObj parameter should be a pointer."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

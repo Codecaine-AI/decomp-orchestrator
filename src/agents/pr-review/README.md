@@ -13,5 +13,6 @@ Default Pi review config:
 
 - Provider: `codex-lb`
 - Model: `gpt-5.5`
-- Thinking: `xhigh`
+- Thinking: `medium`
 - Tools: `read,grep,find,ls`
+- Auth/config: ignored repo-local `local.env` points Pi at `.pi-agent/`, whose `models.json` carries this project's `codex-lb` key.

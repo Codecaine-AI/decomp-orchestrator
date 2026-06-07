@@ -1,0 +1,157 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-688",
+  "pr": {
+    "number": 688,
+    "title": "Match dolphin ARQ",
+    "url": "https://github.com/doldecomp/melee/pull/688",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-01-16T06:21:35Z",
+    "merged_at": "2023-01-16T07:59:08Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Replaced the hand-written assembly implementation of Dolphin ARQ with a matching C implementation and public header. The PR removed asm/dolphin/ar/arq.s, added src/dolphin/ar/arq.c and src/dolphin/ar/arq.h, and updated obj_files.mk to build arq.c.o instead of arq.s.o. The implementation models ARQ high/low request queues, pending requests, callbacks, chunked low-priority DMA transfers, DMA interrupt servicing, initialization, posting requests under disabled interrupts, and ARQGetChunkSize. The PR body says it was based on Prime decomp. There were no review comments; one collaborator review approved it.",
+  "change_classification": {
+    "primary_type": "asm-to-c decompilation match",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "library-port",
+      "build-system"
+    ],
+    "systems": [
+      "dolphin",
+      "dolphin/ar",
+      "ARQ",
+      "obj_files.mk"
+    ]
+  },
+  "key_files": [
+    "asm/dolphin/ar/arq.s",
+    "src/dolphin/ar/arq.c",
+    "src/dolphin/ar/arq.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted the 308-line assembly file asm/dolphin/ar/arq.s.",
+    "Added src/dolphin/ar/arq.c with C implementations for __ARQPopTaskQueueHi, __ARQServiceQueueLo, __ARQCallbackHack, __ARQInterruptServiceRoutine, ARQInit, ARQPostRequest, and ARQGetChunkSize.",
+    "Added src/dolphin/ar/arq.h defining ARQ_CHUNK_SIZE_DEFAULT, ARQType, ARQPrio, ARQRequest, ARQCallback, and ARQ function prototypes.",
+    "Changed obj_files.mk so the ARQ object is built from $(BUILD_DIR)/src/dolphin/ar/arq.c.o instead of $(BUILD_DIR)/asm/dolphin/ar/arq.s.o.",
+    "Converted the ARQ sbss globals from assembly symbols into static C state: high/low queue heads and tails, pending requests, callbacks, chunk size, and volatile init flag.",
+    "Implemented high-priority queue popping as a helper, replacing duplicated high-priority start-DMA logic that appeared in the original assembly interrupt/post paths.",
+    "Implemented low-priority servicing as chunked DMA work using __ARQChunkSize and setting the low callback only when the remaining request length fits in the current transfer.",
+    "Implemented ARQPostRequest to fill the ARQRequest fields, install a no-op callback when callback is NULL, enqueue by ARQ priority, kick off DMA if no request is pending, and restore interrupts afterward."
+  ],
+  "smart_moves": [
+    "Factored the repeated high-priority DMA scheduling sequence into __ARQPopTaskQueueHi, which keeps the C source compact while preserving the observed behavior.",
+    "Kept the original internal Dolphin-style double-underscore names for ARQ internals, making the source easy to compare against the deleted assembly symbols.",
+    "Used explicit ARQType and ARQPrio enums plus an ARQRequest struct in the new header to document field offsets that were only implicit in the assembly.",
+    "Preserved the MRAM-to-ARAM versus ARAM-to-MRAM argument swap around ARStartDMA, which is central to matching the original control flow.",
+    "Preserved the NULL callback behavior by assigning __ARQCallbackHack rather than branching around callback storage later.",
+    "Used OSDisableInterrupts and OSRestoreInterrupts around queue mutation in ARQPostRequest, matching the interrupt-sensitive nature of ARQ queue state.",
+    "Declared __ARQ_init_flag as static volatile bool, consistent with the assembly's small-data init guard while representing it idiomatically in C.",
+    "Kept ARQ_CHUNK_SIZE_DEFAULT as a named header constant with the observed value 4096 instead of hardcoding 0x1000 in ARQInit."
+  ],
+  "decomp_lessons": [
+    "When replacing Dolphin library assembly, first recover the request struct field layout from offsets; here next, owner, type, priority, source, dest, length, and callback map to the assembly stores and loads.",
+    "For queue-driven interrupt code, model both queue-head/tail state and pending/current-operation state explicitly; ARQ uses separate high and low queues plus pending high/low slots.",
+    "A small helper can improve C readability and still match if it corresponds to a repeated assembly block or produces compatible call structure.",
+    "Chunked transfer code may intentionally update length/source/dest by a fixed chunk size even when the final transfer length is shorter or equal; preserve the original arithmetic instead of normalizing it unless matching proves otherwise.",
+    "External decomp sources can be useful matching references, but the PR only states 'Based on prime decomp'; future reuse should still validate against Melee's target assembly.",
+    "After migrating an assembly object to C, update obj_files.mk in the same PR so the build switches from asm/*.s.o to src/*.c.o.",
+    "Header additions should carry both public API declarations and internal prototypes when other compilation units or matching constraints need stable names."
+  ],
+  "naming_conventions": [
+    "Internal ARQ functions and state use Dolphin-style double underscores, e.g. __ARQServiceQueueLo, __ARQInterruptServiceRoutine, __ARQRequestQueueHi, and __ARQChunkSize.",
+    "Public ARQ APIs use ARQ-prefixed PascalCase names, e.g. ARQInit, ARQPostRequest, and ARQGetChunkSize.",
+    "Enums use ARQ_TYPE_* for transfer direction and ARQ_PRIORITY_* for queue priority.",
+    "The default chunk size macro is named ARQ_CHUNK_SIZE_DEFAULT.",
+    "The init flag preserves the original mixed-case symbol style as __ARQ_init_flag rather than forcing a new naming scheme."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted sbss assembly globals into file-scope static variables in the same logical order: high queue, high tail, low queue, low tail, pending high, pending low, callback high, callback low, chunk size, init flag.",
+    "Matched the ARStartDMA call argument order by branching on ARQ_TYPE_MRAM_TO_ARAM: MRAM-to-ARAM passes source then dest, otherwise passes dest then source.",
+    "Kept the low-priority queue service behavior where only the final chunk installs __ARQCallbackLo, while intermediate chunks continue advancing the request by __ARQChunkSize.",
+    "Preserved the interrupt callback priority: service high callback first, otherwise low callback, then pop high queue, then service low queue only if no high request is pending.",
+    "Used a switch on ARQPrio in ARQPostRequest to reproduce the assembly's priority dispatch for low and high queues.",
+    "Maintained a no-op __ARQCallbackHack function so NULL callbacks still become callable function pointers, matching the assembly's fallback branch.",
+    "Replaced the assembly object in obj_files.mk with the C object, which is the build-system step required to prove the new C is matching."
+  ],
+  "review_feedback": [
+    {
+      "source": "review",
+      "reviewer": "ribbanya",
+      "state": "APPROVED",
+      "body": "",
+      "submitted_at": "2023-01-16T07:58:42Z"
+    },
+    {
+      "source": "comments",
+      "note": "No issue comments or review comments were present in the PR slice, so there is no detailed reviewer rationale to extract."
+    }
+  ],
+  "searchable_terms": [
+    "PR 688",
+    "Match dolphin ARQ",
+    "r-burns",
+    "Prime decomp",
+    "asm/dolphin/ar/arq.s",
+    "src/dolphin/ar/arq.c",
+    "src/dolphin/ar/arq.h",
+    "obj_files.mk",
+    "ARQ",
+    "ARQInit",
+    "ARQPostRequest",
+    "ARQGetChunkSize",
+    "ARQRequest",
+    "ARQCallback",
+    "ARQType",
+    "ARQPrio",
+    "ARQ_TYPE_MRAM_TO_ARAM",
+    "ARQ_TYPE_ARAM_TO_MRAM",
+    "ARQ_PRIORITY_LOW",
+    "ARQ_PRIORITY_HIGH",
+    "ARQ_CHUNK_SIZE_DEFAULT",
+    "__ARQPopTaskQueueHi",
+    "__ARQServiceQueueLo",
+    "__ARQCallbackHack",
+    "__ARQInterruptServiceRoutine",
+    "__ARQRequestQueueHi",
+    "__ARQRequestTailHi",
+    "__ARQRequestQueueLo",
+    "__ARQRequestTailLo",
+    "__ARQRequestPendingHi",
+    "__ARQRequestPendingLo",
+    "__ARQCallbackHi",
+    "__ARQCallbackLo",
+    "__ARQChunkSize",
+    "__ARQ_init_flag",
+    "ARStartDMA",
+    "ARRegisterDMACallback",
+    "OSDisableInterrupts",
+    "OSRestoreInterrupts",
+    "Dolphin AR",
+    "ARAM",
+    "MRAM",
+    "DMA callback",
+    "chunked DMA",
+    "asm-to-c"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify src/dolphin/ar/arq.c or src/dolphin/ar/arq.h for fixes to ARQ matching or API completeness.",
+    "Search for uses of ARQReset, __ARQInitTempQueue, and __ARQPushTempQueue because this header declares them but this PR slice does not show implementations.",
+    "Compare this ARQ implementation against other Dolphin SDK or Prime decomp ARQ sources to understand which naming and struct-layout choices were imported.",
+    "Check whether later matching work adjusted __ARQServiceQueueLo's chunk length arithmetic or callback timing.",
+    "Search obj_files.mk migrations from asm/dolphin/* to src/dolphin/* for reusable patterns in replacing Dolphin library assembly."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

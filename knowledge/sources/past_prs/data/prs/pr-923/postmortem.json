@@ -1,0 +1,134 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-923",
+  "pr": {
+    "number": 923,
+    "title": "Match `ftCo_ThrownKoopa`",
+    "url": "https://github.com/doldecomp/melee/pull/923",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-06-04T17:12:22Z",
+    "merged_at": "2023-06-04T17:29:54Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common fighter Bowser/Koopa thrown-state slice by moving `ftCo_800BCDE0`, `ftCo_800BCE64`, and the no-op `ftCo_ThrownKoopa*` Anim/IASA/Phys/Coll callbacks out of `asm/melee/ft/ft_08A4.s` into new C source/header files. The PR also wired the new object into `obj_files.mk`, included the new header from `ftKp_Init.c`, removed stale declarations from `ft_0877.dox` and `ft_08A4.h`, and eliminated the local sdata2 float constants from the assembly file. The report shows the new `ftCo_ThrownKoopa.c` file at 100.00% with all listed functions matched.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "asm-removal",
+      "build-wiring",
+      "fighter-state-callbacks"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "ftKoopa",
+      "asm",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_ThrownKoopa.c",
+    "src/melee/ft/chara/ftCommon/ftCo_ThrownKoopa.h",
+    "asm/melee/ft/ft_08A4.s",
+    "obj_files.mk",
+    "src/melee/ft/chara/ftKoopa/ftKp_Init.c",
+    "src/melee/ft/ft_0877.dox",
+    "src/melee/ft/ft_08A4.h"
+  ],
+  "what_changed": [
+    "Added `src/melee/ft/chara/ftCommon/ftCo_ThrownKoopa.c` containing matched C for `ftCo_800BCDE0` and `ftCo_800BCE64` plus empty callback bodies for `ftCo_ThrownKoopaF/B/AirF/AirB` Anim, IASA, Phys, and Coll functions.",
+    "Added `src/melee/ft/chara/ftCommon/ftCo_ThrownKoopa.h` with address-commented prototypes for the thrown Koopa helpers and callbacks.",
+    "Deleted the corresponding assembly implementations from `asm/melee/ft/ft_08A4.s`, including the `blr`-only callback stubs and two local float constants `ftCo_804D8B90` and `ftCo_804D8B94`.",
+    "Added `$(BUILD_DIR)/src/melee/ft/chara/ftCommon/ftCo_ThrownKoopa.c.o` to `TEXT_O_FILES` before the remaining `ft_08A4.s.o`, preserving object ordering for the split-out text.",
+    "Included `ftCommon/ftCo_ThrownKoopa.h` in `src/melee/ft/chara/ftKoopa/ftKp_Init.c` so Koopa motion-state table references can use the new prototypes.",
+    "Removed the `ftCo_800BCE64` prototype from the broad `src/melee/ft/ft_08A4.h` header and removed a block of stale/common Koopa capture/thrown declarations from `src/melee/ft/ft_0877.dox`."
+  ],
+  "smart_moves": [
+    "Factored common thrown-state setup into a local `static inline void inlineA0(...)` for the first matched function, capturing repeated behavior: copy facing direction from `victim_gobj`, clear `fp->mv.co.capturekoopa.x0`, call `Fighter_ChangeMotionState`, install `ftCo_800DE508` into `x21B0_callback_Accessory1`, and call `ftCommon_8007E2F4(fp, 0x1FF)`.",
+    "Kept `ftCo_800BCE64` as an explicit expanded sequence under a `SOLUTION == 1` path with a `@todo Use #inlineA0`, which documents that the inline abstraction is conceptually right but did not currently satisfy matching constraints for that function.",
+    "Used `FtMotionId`, `MotionFlags`, `ftCo_GObj*`, and `ftCo_Fighter*` instead of generic `enum_t`/`HSD_GObj*` in the new header and C file, improving type precision for future fighter work.",
+    "Preserved all 4-byte callback stubs as empty C functions, matching the original `blr` functions while moving symbol ownership into the ftCommon source file.",
+    "Used a `MUST_MATCH`-guarded unused stack array in both nontrivial functions to account for stack layout only when exact matching requires it."
+  ],
+  "decomp_lessons": [
+    "When splitting a matched region out of a large assembly file, add the new C object immediately before the residual assembly object in `obj_files.mk` so subsequent symbols retain their expected addresses/order.",
+    "Empty state callbacks can be represented directly as empty C functions when the original assembly body is only `blr`; this is useful for Anim/IASA/Phys/Coll state tables.",
+    "For motion-state transition helpers, matching may depend on whether a repeated helper is truly inlined. A readable `static inline` can work for one function, but another nearly identical function may still need an expanded body to reproduce stack/register behavior.",
+    "Use `MUST_MATCH`-guarded dummy stack locals sparingly and annotate them as unused stack so future cleanup can revisit them when compiler behavior or surrounding types improve.",
+    "Moving declarations from broad legacy headers/dox files into a feature-specific header helps isolate common fighter state APIs and reduces reliance on catch-all `ft_08A4.h` declarations."
+  ],
+  "naming_conventions": [
+    "Feature-specific common fighter files use the `ftCo_ThrownKoopa` basename under `src/melee/ft/chara/ftCommon/`.",
+    "Thrown Koopa callbacks follow the pattern `ftCo_ThrownKoopa{F,B,AirF,AirB}_{Anim,IASA,Phys,Coll}`.",
+    "Unknown address-based helpers remained named by address as `ftCo_800BCDE0` and `ftCo_800BCE64`.",
+    "The new header uses an address-style include guard `GALE01_0BCDE0`, matching the first function address in the file.",
+    "Header prototypes retain address comments such as `/* 0BCDE0 */`, preserving searchability between C declarations and the original DOL address map."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced assembly loads of `0.0f` and `1.0f` from local sdata2 symbols with direct C float arguments to `Fighter_ChangeMotionState`; deletion of `ftCo_804D8B90` and `ftCo_804D8B94` indicates those constants were no longer needed in the residual assembly slice.",
+    "`ftCo_800BCDE0` calls `inlineA0(gobj, msid, Ft_MF_None, 0)` and then `ftAnim_8006EBA4(gobj)`, matching the assembly sequence that changed motion state, set callbacks/accessory flags, and then advanced/reset animation via `ftAnim_8006EBA4`.",
+    "`ftCo_800BCE64` builds a compound `MotionFlags` mask from `Ft_MF_SkipMatAnim`, `Ft_MF_SkipColAnim`, `Ft_MF_UpdateCmd`, `Ft_MF_SkipItemVis`, `Ft_MF_Unk19`, `Ft_MF_SkipModelPartVis`, `Ft_MF_SkipModelFlags`, and `Ft_MF_Unk27`, corresponding to the immediate flag value in the deleted assembly.",
+    "`fp->cur_anim_frame` is passed as the animation start for `ftCo_800BCE64`, matching the deleted assembly load from fighter offset `0x894`.",
+    "The empty callback functions intentionally compile to 4-byte `blr` functions, matching the PR report's 100-byte max/0-score entries for each no-op callback."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR context.",
+    "Inline code comments in the diff identify two self-review/todo items: `@todo Unused stack.` around `MUST_MATCH` dummy stack arrays and `@todo Use #inlineA0.` in `ftCo_800BCE64`."
+  ],
+  "searchable_terms": [
+    "pr-923",
+    "Match ftCo_ThrownKoopa",
+    "ribbanya",
+    "ftCo_ThrownKoopa.c",
+    "ftCo_ThrownKoopa.h",
+    "ftCo_800BCDE0",
+    "ftCo_800BCE64",
+    "ftCo_ThrownKoopaF_Anim",
+    "ftCo_ThrownKoopaF_IASA",
+    "ftCo_ThrownKoopaF_Phys",
+    "ftCo_ThrownKoopaF_Coll",
+    "ftCo_ThrownKoopaB_Anim",
+    "ftCo_ThrownKoopaAirF_Anim",
+    "ftCo_ThrownKoopaAirB_Anim",
+    "Fighter_ChangeMotionState",
+    "ftCo_800DE508",
+    "ftCommon_8007E2F4",
+    "ftAnim_8006EBA4",
+    "Ft_MF_None",
+    "Ft_MF_SkipMatAnim",
+    "Ft_MF_SkipColAnim",
+    "Ft_MF_UpdateCmd",
+    "Ft_MF_SkipItemVis",
+    "Ft_MF_Unk19",
+    "Ft_MF_SkipModelPartVis",
+    "Ft_MF_SkipModelFlags",
+    "Ft_MF_Unk27",
+    "capturekoopa",
+    "victim_gobj",
+    "cur_anim_frame",
+    "x21B0_callback_Accessory1",
+    "MUST_MATCH unused stack",
+    "inlineA0",
+    "GALE01_0BCDE0",
+    "ft_08A4.s",
+    "ftKp_Init_MotionStateTable"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that remove the `SOLUTION` macro or make `ftCo_800BCE64` use `inlineA0`.",
+    "Search for additional `MUST_MATCH` unused stack arrays in ftCommon motion-state code to identify shared matching patterns.",
+    "Inspect neighboring Koopa capture/wait/damage PRs for the same `Fighter_ChangeMotionState` and `ftCommon_8007E2F4(fp, 0x1FF)` setup pattern.",
+    "Check whether `GALE01_*` include guards were later standardized or replaced for feature-specific headers."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

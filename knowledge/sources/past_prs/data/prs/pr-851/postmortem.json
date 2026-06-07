@@ -1,0 +1,203 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-851",
+  "pr": {
+    "number": 851,
+    "title": "Match `ftCo_AttackS4`",
+    "url": "https://github.com/doldecomp/melee/pull/851",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-14T06:10:03Z",
+    "merged_at": "2023-05-14T06:20:21Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common forward smash (`ftCo_AttackS4`) path by replacing a large block of `asm/melee/ft/ft_08A4.s` with a new C implementation and header. The PR also cleaned up related fighter input names, exposed helper prototypes, renamed stick-angle helpers, moved an `ABS` macro to shared math code, and adjusted the object file order so `ftCo_AttackS4.c` builds in the correct text position.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "input-struct-naming",
+      "fighter-action-logic",
+      "build-order"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "input",
+      "asm",
+      "src",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    {
+      "file": "src/melee/ft/chara/ftCommon/ftCo_AttackS4.c",
+      "role": "new matched C implementation for forward smash input handling, item-throw interaction, character-specific enter routing, animation, IASA, physics, and collision callbacks"
+    },
+    {
+      "file": "src/melee/ft/chara/ftCommon/ftCo_AttackS4.h",
+      "role": "new public prototypes for `ftCo_AttackS4_CheckInput`, `ftCo_AttackS4_8008C114`, and action callbacks"
+    },
+    {
+      "file": "asm/melee/ft/ft_08A4.s",
+      "role": "large assembly deletion corresponding to the newly matched AttackS4 code"
+    },
+    {
+      "file": "obj_files.mk",
+      "role": "inserts `ftCo_AttackS4.c.o` before remaining `ft_08A4.s.o` to preserve object/text ordering"
+    },
+    {
+      "file": "src/melee/ft/types.h",
+      "role": "renames fighter input fields from `lsubstick`/`lsubstick1` to `cstick`/`cstick1` and renames common-data field `x98_shieldHealthInit` to `x98`"
+    },
+    {
+      "file": "src/melee/ft/fighter.c",
+      "role": "propagates the c-stick field rename through input initialization and input update code"
+    },
+    {
+      "file": "src/melee/ft/ftcommon.c",
+      "role": "renames angle helpers to `ftCo_GetLStickAngle` and `ftCo_GetCStickAngle`; c-stick helper now reads `fp->input.cstick`"
+    },
+    {
+      "file": "src/math.h",
+      "role": "moves the local `ABS` macro out of `ftCo_AttackS3.c` into shared math code for reuse by AttackS4"
+    },
+    {
+      "file": "src/melee/ft/ft_3C54.c",
+      "role": "deleted obsolete jump-table stub now represented by C-side logic in `decideFighter`"
+    }
+  ],
+  "what_changed": [
+    "Added `ftCo_AttackS4_CheckInput`, which checks A-button/l-stick smash input via `checkLStick`, falls back to c-stick detection via `ft_800DF1C8`, computes stick sign and stick angle, handles item throws first, then enters the appropriate forward-smash motion.",
+    "Added `ftCo_AttackS4_8008C114`, a variant using facing-relative l-stick input (`checkFacingDir`) before the same c-stick fallback, item-throw check, and fighter-decision path; the source includes a TODO noting it may be combinable with `ftCo_AttackS4_CheckInput`.",
+    "Added `checkItemThrow`, preserving item-specific behavior: light throw forward/back when LR is held, item type is 0, item type 3 is blocked by `it_8026B594`, or `ft_800DF21C` is true; item type 2 calls `ftCo_Attack_800CCF58(gobj, 2)` after setting facing direction; item type 3 calls `ftCo_Attack_800CDD14(gobj)`.",
+    "Added `decideFighter`, replacing an assembly jump table with a C switch over `fp->kind`: Ness, Peach, and Game & Watch dispatch to character-specific AttackS4 enter functions; Pikachu/Pichu use normal entry plus hitlag pause/resume effect callbacks; all others use the common enter path.",
+    "Added `doEnter`, which selects `AttackS4` motion variants from stick-angle thresholds and availability checks through `ftData_80085FD4`, clears interrupt/cmd/throw state, calls `Fighter_ChangeMotionState`, then starts animation with `ftAnim_8006EBA4`.",
+    "Added standard action callbacks: `ftCo_AttackS4_Anim` exits through `ft_8008A2BC` when no frames remain, `ftCo_AttackS4_IASA` performs interrupt/action checks through `GUARD`, `ftCo_AttackS4_Phys` calls `ft_80084FA8`, and `ftCo_AttackS4_Coll` calls `ft_80084104`.",
+    "Renamed helper functions `ftCommon_8007D964` and `ftCommon_8007D99C` to the more descriptive `ftCo_GetLStickAngle` and `ftCo_GetCStickAngle`, and updated AttackS3/Hi3/Lw3 call sites.",
+    "Renamed fighter input fields `lsubstick` and `lsubstick1` to `cstick` and `cstick1`, with corresponding changes in fighter input reset/update logic and c-stick angle calculation.",
+    "Replaced some anonymous input-check function names with clearer names: `ft_800D695C` became `ftCo_Attack100_CheckInput`, and `ft_800D8990` became `ftCo_Catch_CheckInput`, with usage updates in Wait, Link special, Samus special, and Yoshi guard code.",
+    "Deleted `src/melee/ft/ft_3C54.c`, which previously held a jump table of static stubs for AttackS4 routing."
+  ],
+  "smart_moves": [
+    "Factored repeated forward-smash input code into small static helpers (`checkLStick`, `checkFacingDir`, `checkItemThrow`, `decideFighter`, `doEnter`) instead of translating the assembly as one large monolithic function.",
+    "Preserved matching-sensitive object ordering by inserting `ftCo_AttackS4.c.o` before the remaining `ft_08A4.s.o` rather than simply appending the new object.",
+    "Used descriptive stick-angle helper names and c-stick field names to make later input decompilation work easier to search and reason about.",
+    "Converted an assembly jump-table pattern into a readable `switch (fp->kind)` while retaining special cases for Ness, Peach, Game & Watch, Pikachu, and Pichu.",
+    "Kept uncertain structure/function knowledge explicit: the PR uses names like `cmd_unk0_bool` and leaves a TODO that `ftCo_AttackS4_8008C114` might be combined with `ftCo_AttackS4_CheckInput`, avoiding overclaiming semantics.",
+    "Moved the `ABS` macro from AttackS3 into shared `math.h`, allowing AttackS4 to reuse the same expression while documenting uncertainty about whether `fabs_inline` is fake."
+  ],
+  "decomp_lessons": [
+    "When matching common fighter action code, expect adjacent input helper names and struct fields to need cleanup; matching AttackS4 required clearer l-stick/c-stick angle helpers and c-stick input field names.",
+    "For fighter action input checks, small helper functions can reproduce assembly control flow while making semantic branches clearer, especially for l-stick vs c-stick fallback logic.",
+    "Object file placement is part of the match: moving a block from asm to C may require reordering unrelated-looking objects in `obj_files.mk` to keep the same text layout.",
+    "Jump tables in asm can often be represented as C `switch` statements over fighter kind when case-specific entry functions are known.",
+    "Header exposure should be minimal but sufficient: formerly static/unknown functions used by the new C implementation were promoted in headers only where the diff needed them.",
+    "Use address comments in headers for newly matched functions to preserve searchability and continuity with the original assembly addresses.",
+    "Keep uncertain names honest. This PR retained address-based names such as `ftCo_AttackS4_8008C114` and `ft_800DF1C8` where semantics were not fully established."
+  ],
+  "naming_conventions": [
+    {
+      "old": "ftCommon_8007D964",
+      "new": "ftCo_GetLStickAngle",
+      "lesson": "Prefer semantic helper names once usage shows the function computes the l-stick angle."
+    },
+    {
+      "old": "ftCommon_8007D99C",
+      "new": "ftCo_GetCStickAngle",
+      "lesson": "Rename paired helpers together to clarify l-stick/c-stick symmetry."
+    },
+    {
+      "old": "fp->input.lsubstick",
+      "new": "fp->input.cstick",
+      "lesson": "Use gameplay/control terminology when a substick field is clearly the C-stick."
+    },
+    {
+      "old": "fp->input.lsubstick1",
+      "new": "fp->input.cstick1",
+      "lesson": "Keep historical/current input-buffer field naming parallel after renaming the base field."
+    },
+    {
+      "old": "ft_800D695C",
+      "new": "ftCo_Attack100_CheckInput",
+      "lesson": "Anonymous action-check functions can be renamed as their role in IASA/input chains becomes clear."
+    },
+    {
+      "old": "ft_800D8990",
+      "new": "ftCo_Catch_CheckInput",
+      "lesson": "Use `ftCo_*_CheckInput` naming for common action input predicates."
+    }
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed approximately 696 lines of `ft_08A4.s` while adding a 227-line C file for the matched AttackS4 implementation.",
+    "Used `ABS(x) ((x) < 0 ? -(x) : (x))` instead of relying solely on `fabs_inline`, with a TODO noting matching uncertainty.",
+    "Matched stick-sign selection with ternary expressions returning explicit `+1.0f` or `-1.0f` values.",
+    "Matched item-throw branching by preserving repeated calls to `it_8026B30C` and separate item type cases rather than aggressively caching or refactoring.",
+    "Replaced an asm jump table (`jtbl_803C54D8` and labels such as `ft_8008C388`, `ft_8008C390`, `ft_8008C398`) with a C switch in `decideFighter`.",
+    "Kept remaining unknown functions as address-style declarations in headers (`ft_800DF1C8`, `ft_800DF21C`, `ftCo_800CECE8`) to unblock matching without inventing names."
+  ],
+  "review_feedback": [
+    {
+      "type": "none_recorded",
+      "note": "The PR context contains no issue comments, review comments, or review bodies; no reviewer feedback can be inferred from the available evidence."
+    }
+  ],
+  "searchable_terms": [
+    "pr-851",
+    "ftCo_AttackS4",
+    "ftCo_AttackS4_CheckInput",
+    "ftCo_AttackS4_8008C114",
+    "ftCo_AttackS4_Anim",
+    "ftCo_AttackS4_IASA",
+    "ftCo_AttackS4_Phys",
+    "ftCo_AttackS4_Coll",
+    "checkItemThrow",
+    "decideFighter",
+    "doEnter",
+    "checkLStick",
+    "checkFacingDir",
+    "ftCo_GetLStickAngle",
+    "ftCo_GetCStickAngle",
+    "cstick",
+    "cstick1",
+    "lsubstick",
+    "ftCo_Attack100_CheckInput",
+    "ftCo_Catch_CheckInput",
+    "ftCo_MS_AttackS4S",
+    "ftCo_MS_AttackS4Hi",
+    "ftCo_MS_AttackS4HiS",
+    "ftCo_MS_AttackS4Lw",
+    "ftCo_MS_AttackS4LwS",
+    "ftCo_MS_LightThrowF4",
+    "ftCo_MS_LightThrowB4",
+    "ftNs_AttackS4_Enter",
+    "ftPe_AttackS4_Enter",
+    "ftGw_AttackS4_Enter",
+    "FTKIND_NESS",
+    "FTKIND_PEACH",
+    "FTKIND_GAMEWATCH",
+    "FTKIND_PIKACHU",
+    "FTKIND_PICHU",
+    "jtbl_803C54D8",
+    "obj_files.mk",
+    "ft_08A4.s",
+    "ft_3C54.c"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename `ftCo_AttackS4_8008C114` or merge it with `ftCo_AttackS4_CheckInput`.",
+    "Find later PRs that resolve the TODO about `ABS` versus `fabs_inline` in stick-angle checks.",
+    "Search for follow-up naming of `ft_800DF1C8`, `ft_800DF21C`, `ftCo_800CECE8`, and `ftCo_800CED30`.",
+    "Check whether later decompilation reuses the `cstick`/`cstick1` field names across all fighter input code.",
+    "Compare this AttackS4 implementation with later matched AttackHi4 and AttackLw4 code for shared input and item-throw patterns."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

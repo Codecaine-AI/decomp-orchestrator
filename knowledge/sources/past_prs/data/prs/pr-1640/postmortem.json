@@ -1,0 +1,152 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1640",
+  "pr": {
+    "number": 1640,
+    "title": "Match dolphin OSExi",
+    "url": "https://github.com/doldecomp/melee/pull/1640",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-26T06:10:40Z",
+    "merged_at": "2025-06-26T06:17:36Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched extern/dolphin/src/dolphin/os/OSExi.c and switched it from NonMatching to Matching in configure.py. The implementation was rebuilt from a mixture of Pikmin 1, Super Mario Sunshine, and hand tweaks, adding proper EXI probe timing state, ID caching, attach/probe separation, interrupt callback context wrapping, and USB adapter special-case behavior. The only header change renamed the low-memory symbol __gUnknown800030C0 to the more meaningful __EXIProbeStartTime with int[2] type.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "sdk-porting",
+      "hardware-io"
+    ],
+    "systems": [
+      "external-sdk",
+      "dolphin-os",
+      "exi",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "configure.py",
+    "extern/dolphin/include/dolphin/os.h",
+    "extern/dolphin/src/dolphin/os/OSExi.c"
+  ],
+  "what_changed": [
+    "configure.py changed dolphin/os/OSExi.c from Object(NonMatching, ...) to Object(Matching, ...), marking the OS EXI unit as matched.",
+    "extern/dolphin/include/dolphin/os.h renamed the low-memory array at OS_BASE_CACHED | 0x30C0 from __gUnknown800030C0[2] to __EXIProbeStartTime[2] and changed its type from unsigned int to int.",
+    "OSExi.c now includes \"__os.h\", enabling use of internal OS helpers such as __OSGetDIConfig and interrupt masking APIs already referenced in the diff.",
+    "struct EXIControl gained id and idTime fields, used to cache EXI device IDs against the probe-start timestamp.",
+    "EXIProbeReset now clears both __EXIProbeStartTime and Ecb idTime, then calls a new static __EXIProbe helper instead of the public EXIProbe wrapper.",
+    "The previous EXIProbe body was split into static __EXIProbe, while public EXIProbe now calls __EXIProbe and attempts EXIGetID when idTime is not populated.",
+    "EXIProbeEx now tests __EXIProbeStartTime instead of the old unknown low-memory symbol.",
+    "A new static __EXIAttach helper performs the low-level attach path using __EXIProbe, EXIClearInterrupts, extCallback assignment, __OSUnmaskInterrupts, and state bit 8.",
+    "EXIAttach now probes first, requires exi->idTime to be set, and delegates to __EXIAttach.",
+    "EXISelect and EXIDeselect were adjusted to call __EXIProbe rather than public EXIProbe in internal paths, avoiding recursive ID-fetch side effects.",
+    "EXIDeselect generalized a channel check from chan == 0 to chan != 2 before probing after deselect when cpr has bit 0x80.",
+    "EXI interrupt, transfer-complete, and external interrupt handlers now create an OSContext old, clear it, set it as current around callback invocation, then restore the incoming interrupt context.",
+    "EXIGetID gained channel-0/1 device-0 probe handling, start-time validation, cached id/idTime reuse, __EXIAttach usage, an UnlockedHandler callback for EXILock, and cache update after a stable successful ID read.",
+    "EXISync gained constants/macros for EXI registers, USB adapter device ID, and 1 MHz frequency, and special-cases immediate transfers for a USB adapter when __OSGetDIConfig and register conditions match."
+  ],
+  "smart_moves": [
+    "The PR separated raw probe state checking (__EXIProbe) from the public EXIProbe behavior that may fetch/cache IDs, reducing unwanted side effects in internal paths like EXISelect and EXIDeselect.",
+    "Renaming __gUnknown800030C0 to __EXIProbeStartTime documents the low-memory variable's role and makes later EXI timing logic much easier to search and reason about.",
+    "ID caching uses idTime tied to __EXIProbeStartTime, so cached IDs are invalidated when probe timing changes or detach/reinsert conditions occur.",
+    "EXIGetID validates that startTime still matches __EXIProbeStartTime after the transaction, guarding against device state changes during ID retrieval.",
+    "Interrupt callbacks are wrapped with OSClearContext and OSSetCurrentContext calls, matching the SDK-style context discipline visible in the diff.",
+    "The implementation cross-references other matched Nintendo SDK-derived codebases, explicitly noted as Pikmin 1 and SMS, while still allowing hand tweaks where Melee's binary required them.",
+    "Introducing local EXI_REG_MAX, EXI_USB_ADAPTER, EXI_FREQ_1M, and EXIREG made the special-case register comparisons explicit rather than embedding all magic indexing inline."
+  ],
+  "decomp_lessons": [
+    "For Dolphin SDK code, other first-party game decompilations can be strong matching references, but the PR body indicates final matching still required hand adjustments.",
+    "Unknown low-memory symbols should be renamed once behavior is understood; here a generic __gUnknown800030C0 became __EXIProbeStartTime after probe timing usage was identified.",
+    "Public SDK APIs may include extra side effects such as ID population; matching internal callsites may require a private helper that preserves the lower-level behavior.",
+    "When adding cache fields to SDK control structs, tie invalidation to the same hardware/probe state transitions used by the original binary, not just to API success/failure.",
+    "Interrupt handler callback invocation may need explicit OSContext swapping to match original SDK codegen and runtime behavior.",
+    "A file should only be promoted to Matching in configure.py after the source and headers together describe the symbols and behavior needed for the object to match.",
+    "Matching hardware-interface code often depends on small special cases, such as DI config, EXI frequency bits, and USB adapter ID checks, that are easy to miss if only reconstructing generic API behavior."
+  ],
+  "naming_conventions": [
+    "__EXIProbeStartTime names the OS_BASE_CACHED | 0x30C0 low-memory array used for EXI probe timing.",
+    "The double-underscore prefix is used for private/internal SDK helpers and state, e.g. __EXIProbe, __EXIAttach, __EXIProbeStartTime, __OSGetDIConfig, and __OSUnmaskInterrupts.",
+    "Public EXI APIs retain the SDK-style EXI prefix, e.g. EXIProbe, EXIAttach, EXIGetID, EXISelect, and EXIDeselect.",
+    "Private interrupt handlers in this file use the existing misspelled names shown in the diff: EXIIntrruptHandler, TCIntrruptHandler, and EXTIntrruptHandler.",
+    "Constants added for matching use all-caps descriptive names: EXI_REG_MAX, EXI_USB_ADAPTER, EXI_FREQ_1M, and EXIREG."
+  ],
+  "assembly_or_matching_tactics": [
+    "Promoted OSExi.c from NonMatching to Matching only after restructuring source behavior to match the target object.",
+    "Used source transplantation/reference from Pikmin 1 and Super Mario Sunshine plus manual tweaks, according to the PR body.",
+    "Split EXIProbe into public and private variants to match call graph/codegen expectations while preserving API behavior.",
+    "Added explicit local temporaries such as var_r3, result, enabled, old OSContext, and startTime where needed to shape control flow and match generated code.",
+    "Used cache and timestamp fields in EXIControl to reproduce original EXIGetID behavior rather than relying on a simpler one-shot attach/select/read/detach implementation.",
+    "Replaced anonymous register access with EXIREG(chan, idx) macro and constants, making the conditions precise while still matching register-index arithmetic.",
+    "Matched callback behavior by inserting OSClearContext/OSSetCurrentContext pairs around function-pointer calls in interrupt handlers."
+  ],
+  "review_feedback": [
+    "No review comments were present in the supplied PR context.",
+    "The PR body states: \"This is a mixture of code from Pikmin 1, SMS, and a few tweaks by hand.\""
+  ],
+  "searchable_terms": [
+    "PR1640",
+    "Match dolphin OSExi",
+    "OSExi.c",
+    "configure.py",
+    "dolphin/os/OSExi.c",
+    "extern/dolphin/include/dolphin/os.h",
+    "EXI",
+    "OSExi",
+    "EXIProbe",
+    "__EXIProbe",
+    "EXIProbeEx",
+    "EXIProbeReset",
+    "__EXIProbeStartTime",
+    "__gUnknown800030C0",
+    "EXIAttach",
+    "__EXIAttach",
+    "EXIDetach",
+    "EXISelect",
+    "EXIDeselect",
+    "EXIGetID",
+    "EXISync",
+    "EXIClearInterrupts",
+    "EXISetExiCallback",
+    "EXIDma",
+    "CompleteTransfer",
+    "EXIIntrruptHandler",
+    "TCIntrruptHandler",
+    "EXTIntrruptHandler",
+    "UnlockedHandler",
+    "EXIControl",
+    "idTime",
+    "id cache",
+    "OSContext",
+    "OSClearContext",
+    "OSSetCurrentContext",
+    "__OSGetDIConfig",
+    "__OSUnmaskInterrupts",
+    "EXI_USB_ADAPTER",
+    "EXI_FREQ_1M",
+    "EXIREG",
+    "Pikmin 1",
+    "SMS",
+    "Super Mario Sunshine",
+    "Matching",
+    "NonMatching"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that touch extern/dolphin/src/dolphin/os/OSExi.c to see whether this matched implementation needed corrections.",
+    "Search for other __gUnknown800030C0 references to confirm the rename to __EXIProbeStartTime was complete.",
+    "Compare other Dolphin OS interrupt handlers for the same OSClearContext/OSSetCurrentContext callback wrapping pattern.",
+    "Search for SDK-derived EXI implementations in Pikmin 1 or Super Mario Sunshine decomp projects to trace which portions were reused.",
+    "Check whether other OS low-memory symbols in dolphin/os.h still use __gUnknown-style names and can be renamed from observed behavior."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

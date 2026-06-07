@@ -1,0 +1,140 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-531",
+  "pr": {
+    "number": 531,
+    "title": "Use new `calcprogress`",
+    "url": "https://github.com/doldecomp/melee/pull/531",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2022-09-02T11:44:54Z",
+    "merged_at": "2022-09-03T03:28:43Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Replaced the old single-file `tools/calcprogress.py` with a vendored/modular `tools/calcprogress/` implementation and updated the Makefile and GitHub Actions workflow to call the new path and CLI. The new tool calculates decomp progress by reading DOL sizes, parsing CodeWarrior map section header symbols, reading assembly files listed by `obj_files.mk`, summing remaining assembly section sizes, and reporting source bytes as total minus assembly bytes. It preserves Melee-specific trophy/event progress output through a callback.",
+  "change_classification": {
+    "primary_type": "tooling_update",
+    "categories": [
+      "tooling",
+      "build",
+      "ci",
+      "progress_tracking"
+    ],
+    "systems": [
+      "tools/calcprogress",
+      "Makefile",
+      ".github/workflows"
+    ]
+  },
+  "key_files": [
+    "tools/calcprogress.py",
+    "tools/calcprogress/calcprogress.py",
+    "tools/calcprogress/src/main.py",
+    "tools/calcprogress/src/asm_util.py",
+    "tools/calcprogress/src/cw_map.py",
+    "tools/calcprogress/src/dol.py",
+    "tools/calcprogress/src/input_stream.py",
+    "tools/calcprogress/src/progress.py",
+    "tools/calcprogress/README.md",
+    "Makefile",
+    ".github/workflows/build.yml"
+  ],
+  "what_changed": [
+    "Deleted the legacy 196-line `tools/calcprogress.py` script.",
+    "Added a new modular `tools/calcprogress/` package with separate modules for DOL parsing, CodeWarrior map parsing, assembly parsing, stream helpers, progress calculations, and CLI entrypoint.",
+    "Updated `Makefile` progress generation from `python tools/calcprogress.py $(DOL) $(MAP)` to `python tools/calcprogress/calcprogress.py --dol $(DOL) --map $(MAP) --asm-obj-ext .s.o --old-map true`.",
+    "Updated the CI build workflow's GitHub step summary command to use the new CLI path and named arguments.",
+    "Added `tools/calcprogress/README.md` documenting usage, limitations, customization hooks, and the design rationale.",
+    "Added vendored project metadata under `tools/calcprogress/`, including MIT license, `.gitignore`, and `.gitattributes`.",
+    "Kept Melee's trophy/event progress flavor by implementing `exec_progress_callback`, which derives trophies from code bytes and event matches from data bytes."
+  ],
+  "smart_moves": [
+    "Moved from positional CLI arguments to explicit `--dol`, `--map`, `--asm-obj-ext`, and `--old-map` options, making build/CI invocations more self-documenting.",
+    "Made the assembly object extension configurable and used `--asm-obj-ext .s.o`, matching Melee's convention for distinguishing assembly objects from C objects.",
+    "Changed the progress calculation model to count remaining assembly sections and subtract them from total executable size, avoiding fragile assumptions about which map symbols came from decompiled source.",
+    "Used `obj_files.mk` as the authoritative list of linked assembly objects, which prevents scanning assembly that is not part of the current build.",
+    "Split responsibilities into focused modules: `Dol` for executable sections, `Map`/`Symbol` for CodeWarrior maps, `AsmUtil` for assembly/object handling, and `progress.py` for aggregate calculations.",
+    "Preserved project-specific output through callbacks rather than hardcoding all game-specific display logic into the generic progress engine.",
+    "Documented known ambiguity when assembly and source files have the same name and recommended mitigations such as different object names like `file.s.o` versus `file.c.o`."
+  ],
+  "decomp_lessons": [
+    "For progress tracking, prefer calculating how much assembly remains over trying to infer how much source is decompiled solely from map entries.",
+    "When a project mixes assembly and source with similar names, encode that distinction in object naming; Melee uses `.s.o` for assembly objects.",
+    "Progress tools should read the built DOL for authoritative total code/data sizes rather than duplicating size constants by hand.",
+    "Parsing the linker map for section header symbols can recover assembly section sizes because the first symbol for a section can carry the whole section size.",
+    "Use build metadata such as `obj_files.mk` to determine what assembly is actually linked; this keeps progress results aligned with the current build graph.",
+    "Keep generic progress machinery separate from game-specific counters so future projects can reuse the same tool with callbacks.",
+    "Document tool limitations near the tool itself; this PR's README explicitly calls out map indistinguishability when assembly and source share names."
+  ],
+  "naming_conventions": [
+    "Assembly source default extension is `.s`.",
+    "Melee assembly object extension is `.s.o`, passed as `--asm-obj-ext .s.o`.",
+    "The README recommends differentiating assembly and C objects with names such as `file.s.o` and `file.c.o`.",
+    "The new tool entrypoint lives at `tools/calcprogress/calcprogress.py`, not the old root-level `tools/calcprogress.py`.",
+    "Progress customization names include `EXEC_SLICE_GROUPS`, `exec_progress_callback`, and `slice_group_progress_callback`.",
+    "Code/data section classification includes `.init` and `.text` as code, with data-like sections such as `.rodata`, `.data`, `.bss`, `.sdata`, `.sbss`, `.sdata2`, `.sbss2`, constructors/destructors, extab, and extabindex treated as data."
+  ],
+  "assembly_or_matching_tactics": [
+    "The new workflow parses assembly files for `.section` directives and tracks each unique section per object.",
+    "CodeWarrior map parsing uses separate regexes for new and old map formats; Melee invokes the tool with `--old-map true`.",
+    "The map parser records the first symbol for each object file within each section as a section header symbol.",
+    "The assembly parser looks up each assembly object's section header in the parsed map to obtain virtual offset and size.",
+    "Progress is computed as `src_code = total_code - asm_code` and `src_data = total_data - asm_data`.",
+    "DOL parsing reads all 18 DOL sections, treating the first 7 as code and the remaining 11 as data, then adds BSS into data size.",
+    "Slice support was added through `Slice` and `SliceGroup` to allow future range/library-specific progress tracking."
+  ],
+  "review_feedback": [
+    {
+      "source": "PR body",
+      "feedback": "`Makefile` and `build.yml` were modified to accommodate the new path; the PR was initially marked draft until tested properly."
+    },
+    {
+      "source": "review",
+      "feedback": "The only review body in the slice says: \"Looks okay to me now. Can someone else review this?\" No line-level review comments were present."
+    }
+  ],
+  "searchable_terms": [
+    "calcprogress",
+    "new calcprogress",
+    "progress tracking",
+    "tools/calcprogress",
+    "tools/calcprogress.py",
+    "tools/calcprogress/calcprogress.py",
+    "GENERATE_MAP",
+    "GITHUB_STEP_SUMMARY",
+    "GALE01.map",
+    "main.dol",
+    "DOL",
+    "REL",
+    "CodeWarrior map",
+    "old-map",
+    "asm-obj-ext",
+    ".s.o",
+    "obj_files.mk",
+    "section header symbols",
+    "assembly section sizes",
+    "Slice",
+    "SliceGroup",
+    "trophy count",
+    "event match count",
+    "ribbanya",
+    "kiwi",
+    "zeldaret Twilight Princess progress concept"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify `tools/calcprogress` after PR 531.",
+    "Search for fixes involving `--old-map`, `--asm-obj-ext`, or `.s.o` progress calculation.",
+    "Search for PRs that adjust `obj_files.mk` parsing or assembly object naming conventions.",
+    "Search for later uses of `SliceGroup` or custom range progress tracking in Melee tooling.",
+    "Check whether later reviews found issues in the new `InputStream`, map parsing, or progress percentage calculations."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

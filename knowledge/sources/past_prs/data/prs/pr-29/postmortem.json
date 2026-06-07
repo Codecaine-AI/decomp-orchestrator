@@ -1,0 +1,175 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-29",
+  "pr": {
+    "number": 29,
+    "title": "Further Sysdolphin matching and splitting out of some stage .c file assembly",
+    "url": "https://github.com/doldecomp/melee/pull/29",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2020-07-31T17:41:07Z",
+    "merged_at": "2020-07-31T17:57:59Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Split a large assembly region out of asm/text_2.s into asm/text_3.s with stage-specific assembly files inserted between them, updated ldscript.lcf ordering/FORCEFILES accordingly, and advanced Sysdolphin matching by converting small AObj/ObjAlloc routines and replacing anonymous objalloc call targets with HSD_* names. The PR body explicitly notes the split point was chosen because asserts and lookup tables make it a good future anchor for labeling stage.c files.",
+  "change_classification": {
+    "primary_type": "decomp-matching-and-asm-split",
+    "categories": [
+      "decomp-matching",
+      "asm-splitting",
+      "symbol-naming",
+      "headers",
+      "linker-script"
+    ],
+    "systems": [
+      "sysdolphin",
+      "stage",
+      "asm",
+      "ldscript"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "asm/text_2.s",
+      "reason": "Large assembly file was split; most of its previous contents were removed or relocated."
+    },
+    {
+      "path": "asm/text_3.s",
+      "reason": "New continuation assembly file holding a large moved text region."
+    },
+    {
+      "path": "asm/grgarden.s",
+      "reason": "New stage assembly slice inserted between text_2 and text_3."
+    },
+    {
+      "path": "asm/grvenom.s",
+      "reason": "New stage assembly slice inserted between text_2 and text_3."
+    },
+    {
+      "path": "asm/grtest.s",
+      "reason": "New stage assembly slice inserted between text_2 and text_3 and forced in linker script."
+    },
+    {
+      "path": "asm/grkinokoroute.s",
+      "reason": "New stage assembly slice inserted between text_2 and text_3 and forced in linker script."
+    },
+    {
+      "path": "ldscript.lcf",
+      "reason": "Updated object ordering to place grgarden, grvenom, grtest, grkinokoroute, and text_3 after text_2; added objalloc_asm.o and moved FORCEFILES block."
+    },
+    {
+      "path": "src/sysdolphin/aobj.c",
+      "reason": "Matched HSD_AObjRemove and HSD_AObjFree in C and updated objalloc call names."
+    },
+    {
+      "path": "src/sysdolphin/objalloc.c",
+      "reason": "New C file adding matched HSD_ObjSetHeap."
+    },
+    {
+      "path": "src/sysdolphin/objalloc.h",
+      "reason": "Added objheap struct and ObjAlloc function declarations."
+    },
+    {
+      "path": "asm/objalloc_asm.s",
+      "reason": "Renamed from asm/objalloc.s and relabeled ObjAlloc assembly functions."
+    },
+    {
+      "path": "asm/code_80005940.s",
+      "reason": "Added .global labels for multiple previously unlabeled function starts."
+    }
+  ],
+  "what_changed": [
+    "Split asm/text_2.s into asm/text_2.s plus new asm/text_3.s, with new stage assembly files grgarden.s, grvenom.s, grtest.s, and grkinokoroute.s placed in the link order between them.",
+    "Updated ldscript.lcf .text order to include grgarden.o, grvenom.o, grtest.o, grkinokoroute.o, text_3.o, and objalloc_asm.o; FORCEFILES was rewritten at the end and includes grtest.o and grkinokoroute.o.",
+    "Renamed asm/objalloc.s to asm/objalloc_asm.s while adding C coverage in src/sysdolphin/objalloc.c.",
+    "Added HSD_ObjSetHeap in C, which initializes lbl_80406E48 fields top, curr, remain, and size from a pointer and size.",
+    "Extended objalloc.h with objheap and declarations for HSD_ObjSetHeap, HSD_ObjAllocAddFree, and HSD_ObjAlloc.",
+    "Converted HSD_AObjRemove and HSD_AObjFree from inline assembly to C with #pragma peephole on.",
+    "Changed many branch comments/call targets from anonymous func_8037ABC8 and func_8037AD20 to HSD_ObjAlloc and HSD_ObjFree across Sysdolphin assembly files.",
+    "Relabeled func_8037A968 as HSD_ObjAllocAddFree and func_8037ABC8 as HSD_ObjAlloc in objalloc assembly.",
+    "Added global labels in asm/code_80005940.s such as func_8000594C, func_80005994, func_800059DC, func_80005A30, func_80005A88, func_80005AC4, func_80005AE4, func_80005B00, and func_80005B18.",
+    "Changed an AObj float extern from mutable f32 to const f32 for lbl_804DE438."
+  ],
+  "smart_moves": [
+    "Used a natural split point identified by asserts and lookup tables, making the assembly organization more searchable and setting up future stage.c labeling work.",
+    "Preserved link order explicitly in ldscript.lcf while carving stage files out of a monolithic text file, reducing risk of address drift.",
+    "Introduced C for small, well-understood routines first: HSD_ObjSetHeap, HSD_AObjRemove, and HSD_AObjFree are compact and semantically clear.",
+    "Kept unmatched ObjAlloc code in a renamed asm companion file, objalloc_asm.s, while moving only matched code into objalloc.c.",
+    "Propagated the newly understood HSD_ObjAlloc/HSD_ObjFree names through many caller comments, increasing cross-file navigability without changing instruction bytes.",
+    "Used #pragma peephole on around C replacements in aobj.c, indicating compiler-control tactics were needed to match generated code."
+  ],
+  "decomp_lessons": [
+    "When splitting large assembly files, update linker order in the same PR and keep newly extracted files adjacent to their original address range.",
+    "Assert strings and lookup tables are strong anchors for identifying and naming stage-specific files.",
+    "A safe incremental pattern is to rename the remaining assembly file with an _asm suffix and add a new C file for matched functions in the same subsystem.",
+    "Once a core utility function is identified, update all callsite labels/comments across assembly to improve future matching context.",
+    "Small null-check-heavy free/remove routines can often be converted from asm to C once struct fields and called destructors are known.",
+    "Header work should accompany matched C: adding objheap and ObjAlloc prototypes made later ObjAlloc matching reusable."
+  ],
+  "naming_conventions": [
+    "Sysdolphin object allocator symbols use the HSD_Obj* prefix: HSD_ObjSetHeap, HSD_ObjAllocAddFree, HSD_ObjAlloc, HSD_ObjFree.",
+    "Animation object symbols use HSD_AObj* names: HSD_AObjRemove, HSD_AObjFree, HSD_AObjAlloc.",
+    "Remaining non-decompiled assembly companions may be named with an _asm suffix, as in objalloc_asm.s.",
+    "Stage assembly files use gr-prefixed lowercase stage names, e.g. grgarden.s, grvenom.s, grtest.s, grkinokoroute.s.",
+    "Previously anonymous function starts in assembly were promoted to .global func_ADDRESS labels when they represented callable functions.",
+    "Float constants may be declared const when evidence indicates read-only data, as with extern const f32 lbl_804DE438."
+  ],
+  "assembly_or_matching_tactics": [
+    "C-matched HSD_AObjRemove uses early return on NULL, removes all FObjs if present, clears aobj->fobj, unrefs hsd_obj if present, clears aobj->hsd_obj, then calls HSD_AObjFree.",
+    "C-matched HSD_AObjFree returns on NULL and otherwise calls HSD_ObjFree with allocator data lbl_804C0880 and the aobj cast to HSD_ObjAllocLink.",
+    "HSD_ObjSetHeap match writes curr and top to the incoming pointer value and writes remain and size to the incoming size.",
+    "Used #pragma push / #pragma peephole on / #pragma pop around matched AObj C functions.",
+    "Relabeled branch targets/call comments from func_8037ABC8 to HSD_ObjAlloc and from func_8037AD20 to HSD_ObjFree without evidence of instruction changes.",
+    "Added .global labels at known address boundaries in code_80005940.s to expose callable units for future references."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review records were present in the provided PR slice.",
+    "The only explicit future-work note is from the PR body: the chosen split region is a good spot for labeling stage.c files due to asserts and lookup tables, but that was deferred."
+  ],
+  "searchable_terms": [
+    "PR29",
+    "PsiLupan",
+    "Sysdolphin",
+    "HSD_ObjSetHeap",
+    "HSD_ObjAlloc",
+    "HSD_ObjFree",
+    "HSD_ObjAllocAddFree",
+    "HSD_AObjRemove",
+    "HSD_AObjFree",
+    "HSD_AObjAlloc",
+    "objalloc",
+    "objalloc_asm",
+    "objheap",
+    "HSD_ObjAllocData",
+    "HSD_ObjAllocLink",
+    "asm/text_2.s",
+    "asm/text_3.s",
+    "grgarden",
+    "grvenom",
+    "grtest",
+    "grkinokoroute",
+    "ldscript.lcf",
+    "FORCEFILES",
+    "stage.c asserts",
+    "lookup tables",
+    "func_8037ABC8",
+    "func_8037AD20",
+    "func_8000594C"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that label the stage.c files around grgarden, grvenom, grtest, or grkinokoroute using asserts and lookup tables.",
+    "Find later PRs that complete HSD_ObjFree or remaining ObjAlloc functions left in objalloc_asm.s.",
+    "Find follow-up changes to objalloc.h adding HSD_ObjFree prototype or refining objheap/HSD_ObjAllocData layouts.",
+    "Find later AObj matching PRs that build on HSD_AObjRemove, HSD_AObjFree, or HSD_AObjAlloc.",
+    "Search for subsequent renames of func_8000594C and nearby code_80005940 functions."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

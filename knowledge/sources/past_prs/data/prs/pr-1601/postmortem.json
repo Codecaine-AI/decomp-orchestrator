@@ -1,0 +1,152 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1601",
+  "pr": {
+    "number": 1601,
+    "title": "Misc matches",
+    "url": "https://github.com/doldecomp/melee/pull/1601",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-16T08:11:22Z",
+    "merged_at": "2025-06-16T08:15:25Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Small decompilation-matching PR replacing several placeholder functions with matched C across game-mode camera/scene code and SysDolphin baselib particle, TEV, SIS, and SObj helpers. The changes are mostly direct wrapper/setup functions: scene Init iteration in gm_801A3EF4, SIS camera setup in gmCamera_801A2650, render-state setup in hsd_80391A04 and psSetupTevCommon, archive load/free wrappers in sislib, and SObj allocator initialization.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "placeholder-removal",
+      "render-state-setup",
+      "archive-wrapper",
+      "allocator-initialization"
+    ],
+    "systems": [
+      "game-mode",
+      "gmcamera",
+      "sysdolphin",
+      "baselib",
+      "particle",
+      "psdisptev",
+      "sislib",
+      "sobjlib"
+    ]
+  },
+  "key_files": [
+    "src/melee/gm/gm_1A36.c",
+    "src/melee/gm/gmcamera.c",
+    "src/sysdolphin/baselib/particle.c",
+    "src/sysdolphin/baselib/psdisptev.c",
+    "src/sysdolphin/baselib/sislib.c",
+    "src/sysdolphin/baselib/sobjlib.c"
+  ],
+  "what_changed": [
+    "Implemented gm_801A3EF4 by iterating the MajorScene table returned by gm_801A50AC until scene->idx == 0x2D and calling each non-NULL scene->Init.",
+    "Implemented gmCamera_801A2650 to set gmCamera_80479BC8.gcus.x20 to 2, register/load SIS data with HSD_SisLib_803A62A0(3, \"SdVsCam\", \"SIS_VsCameraData\"), and store the HSD_SisLib_803A611C result in gmCamera_80479BC8.gcus.x54.",
+    "Added extern declarations in gmcamera.c for HSD_SisLib_803A62A0 and HSD_SisLib_803A611C, and moved the local gmcamera.h include before platform/placeholder includes.",
+    "Implemented hsd_80391A04 in particle.c, including static scale/line-width globals lbl_804D6070, lbl_804D6074, and lbl_804D6078, then setting GX/HSD vertex descriptors, matrices, line width, point size, render mode, and cull mode.",
+    "Added baselib/cobj.h and baselib/state.h includes to particle.c to support camera matrix and state setup calls.",
+    "Implemented psSetupTevCommon by configuring TEV order, color op, alpha op, and swap mode for TEV stages 0, 1, and 2.",
+    "Added dolphin/gx.h include to psdisptev.c for GX TEV APIs.",
+    "Implemented HSD_SisLib_803A945C as a thin wrapper around lbArchive_LoadArchive.",
+    "Implemented HSD_SisLib_803A947C as a thin wrapper around lbArchive_80016EFC.",
+    "Added melee/lb/lbarchive.h include to sislib.c for archive wrapper declarations.",
+    "Added global HSD_ObjAllocData HSD_SObjLib_804D10E0 and implemented HSD_SObjLib_803A44A4 to initialize it with HSD_ObjAllocInit(&HSD_SObjLib_804D10E0, 0x9C, 4)."
+  ],
+  "smart_moves": [
+    "Matched several small isolated functions in one PR, reducing placeholder count without requiring broad architectural changes.",
+    "Used direct wrapper functions for archive load/free in sislib rather than over-complicating functions that appear to simply delegate to lbArchive APIs.",
+    "Preserved unknown/generated-style symbol names such as hsd_80391A04 and HSD_SisLib_803A945C where semantic names were not established, avoiding speculative renaming.",
+    "For gm_801A3EF4, represented the original control flow as a simple table walk with a sentinel scene idx value and a NULL Init guard.",
+    "For psSetupTevCommon, kept the repeated GX TEV setup calls explicit, which is often the safest route for matching order-sensitive GX state code.",
+    "Introduced only the headers needed for newly matched calls, making dependencies explicit in particle.c, psdisptev.c, and sislib.c."
+  ],
+  "decomp_lessons": [
+    "Small render setup functions can often be matched by preserving the exact GX/HSD call sequence and literal arguments rather than abstracting repeated stages into loops.",
+    "When a function is just an asset/archive adapter, a thin wrapper around an existing library call may be the correct decompilation result.",
+    "Scene-table functions may use sentinel indices rather than explicit counts; matching code should reflect the table-walk condition observed in assembly.",
+    "Unknown global state used by rendering helpers may need to remain as address-derived lbl_ names until its broader role is identified.",
+    "For allocator setup functions, the object size and alignment/count arguments to HSD_ObjAllocInit are matching-critical literals.",
+    "Header inclusion can be part of a clean match: add the specific baselib, GX, or lbarchive headers needed rather than relying on undeclared externs where declarations already exist."
+  ],
+  "naming_conventions": [
+    "Unidentified functions retained address-based names: gm_801A3EF4, gmCamera_801A2650, hsd_80391A04, psSetupTevCommon, HSD_SisLib_803A945C, HSD_SisLib_803A947C, HSD_SObjLib_803A44A4.",
+    "Unidentified static/global data retained lbl/address-style names: lbl_804D6070, lbl_804D6074, lbl_804D6078, HSD_SObjLib_804D10E0.",
+    "Existing struct/member naming remained partially inferred or generated, including SisLibUnkStruct2, gmCamera_80479BC8.gcus.x20, and gmCamera_80479BC8.gcus.x54.",
+    "Asset/string identifiers were preserved exactly as literals: \"SdVsCam\" and \"SIS_VsCameraData\"."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use sentinel-controlled pointer iteration for MajorScene arrays: start from gm_801A50AC(), advance scene++, stop at idx 0x2D, and call Init only if non-NULL.",
+    "Keep GX state setup calls in source order for functions like hsd_80391A04 and psSetupTevCommon because register/state sequencing affects matching.",
+    "Represent render-state constants as raw literals where no named enum mapping was introduced, such as HSD_SetupRenderMode(0x68000002), TEV argument zeros/fours, and HSD_StateSetLineWidth(..., 5).",
+    "Use static file-scope variables for persistent render parameters when the assembly references fixed data addresses.",
+    "Thin wrappers can match archive helper functions exactly when they only return or forward an existing call result.",
+    "Allocator init matching may require declaring the global allocation data object in the same translation unit and passing exact size/alignment constants."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "No human PR body text was present in the provided PR slice beyond the title."
+  ],
+  "searchable_terms": [
+    "PR1601",
+    "Misc matches",
+    "r-burns",
+    "gm_801A3EF4",
+    "gm_801A50AC",
+    "MajorScene",
+    "scene->Init",
+    "idx 0x2D",
+    "gmCamera_801A2650",
+    "gmCamera_80479BC8",
+    "SdVsCam",
+    "SIS_VsCameraData",
+    "HSD_SisLib_803A62A0",
+    "HSD_SisLib_803A611C",
+    "particle.c",
+    "hsd_80391A04",
+    "lbl_804D6070",
+    "lbl_804D6074",
+    "lbl_804D6078",
+    "HSD_ClearVtxDesc",
+    "GXSetCurrentMtx",
+    "HSD_CObjGetViewingMtx",
+    "GXLoadPosMtxImm",
+    "HSD_StateSetLineWidth",
+    "HSD_StateSetPointSize",
+    "HSD_SetupRenderMode",
+    "GXSetVtxAttrFmt",
+    "GXSetVtxDesc",
+    "HSD_StateSetCullMode",
+    "psdisptev.c",
+    "psSetupTevCommon",
+    "GXSetTevOrder",
+    "GXSetTevColorOp",
+    "GXSetTevAlphaOp",
+    "GXSetTevSwapMode",
+    "sislib.c",
+    "HSD_SisLib_803A945C",
+    "HSD_SisLib_803A947C",
+    "lbArchive_LoadArchive",
+    "lbArchive_80016EFC",
+    "sobjlib.c",
+    "HSD_SObjLib_804D10E0",
+    "HSD_SObjLib_803A44A4",
+    "HSD_ObjAllocInit"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or type lbl_804D6070, lbl_804D6074, lbl_804D6078, or HSD_SObjLib_804D10E0.",
+    "Search for subsequent work on DrawASCII or hsd_80391AC8 in particle.c to understand adjacent render helper conventions.",
+    "Search for follow-up declarations or header moves for HSD_SisLib_803A62A0, HSD_SisLib_803A611C, HSD_SisLib_803A945C, and HSD_SisLib_803A947C.",
+    "Look for later gmcamera.c matches around gmCamera_801A26C0 and other SIS camera data setup functions.",
+    "Search for other psdisptev.c matches to confirm whether repeated TEV stage setup remains explicit or is later abstracted."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

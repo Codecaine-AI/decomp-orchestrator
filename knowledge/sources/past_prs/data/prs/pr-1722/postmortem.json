@@ -1,0 +1,158 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1722",
+  "pr": {
+    "number": 1722,
+    "title": "Match & link ifall",
+    "url": "https://github.com/doldecomp/melee/pull/1722",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-07-22T06:38:19Z",
+    "merged_at": "2025-07-22T06:44:01Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched and linked the UI all/HUD setup unit `src/melee/if/ifall.c` by replacing placeholders with typed C implementations, moving `ifall.c` from `NonMatching` to `Matching` in `configure.py`, deleting the stale static header, and tightening adjacent interfaces needed by callers in `ifstatus`, `un_2FC9`, scene types, and lb headers. The decomp.dev bot reported +1556 matched bytes and +1876 linked bytes, with new full matches for `ifAll_802F343C`, `ifAll_802F370C`, `ifAll_802F390C`, `ifStatus_802F6E1C`, and `ifStatus_802F665C`; it also reported a small unmatched regression for `ifStatus_802F6508` after it was left as an external declaration rather than an in-file `NOT_IMPLEMENTED` body.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "linking",
+      "headers",
+      "type-recovery",
+      "static-data-cleanup"
+    ],
+    "systems": [
+      "melee-ui",
+      "ifall",
+      "ifstatus",
+      "scene-types",
+      "baselib-integration",
+      "build-config"
+    ]
+  },
+  "key_files": [
+    "configure.py",
+    "src/melee/if/ifall.c",
+    "src/melee/if/ifall.h",
+    "src/melee/if/ifall.static.h",
+    "src/melee/if/ifstatus.c",
+    "src/melee/if/ifstatus.h",
+    "src/melee/if/if_2F72.h",
+    "src/melee/sc/types.h",
+    "src/melee/un/un_2FC9.c",
+    "src/melee/lb/lb_00F9.h"
+  ],
+  "what_changed": [
+    "Changed `Object(NonMatching, \"melee/if/ifall.c\")` to `Object(Matching, \"melee/if/ifall.c\")` in `configure.py`, linking the `ifall` object into the matching build.",
+    "Replaced the old `ifall.static.h` include pattern with `#include \"ifall.h\"` plus explicit baselib/melee headers, and deleted `src/melee/if/ifall.static.h`.",
+    "Moved `ifAll_804A0FD8`, the archive pointer storage, and the HUD-hidden byte into `ifall.c` as file-local static data instead of exposing a static header with padded placeholder structs.",
+    "Recovered `ifAll_804A0FD8_t` as a concrete structure containing two `HSD_GObj*`, an `HSD_JObj*`, and several `Vec3` arrays: `xC`, `x18[6]`, `x60[3]`, and `x84[2]`.",
+    "Changed `ifAll_802F3414` and `ifAll_802F3424` return types from placeholder/opaque types to `Vec3*`, and updated `un_802FF364` to access `ifAll->x` and `ifAll->y` directly instead of casting through `float*`.",
+    "Implemented `ifAll_802F343C(int arg0)`, including a small inline helper that scales selected `x18[i].x` positions by `0.65F` for cases 5 and 6.",
+    "Implemented `ifAll_802F370C(SceneDesc*)` as a static scene/model setup helper that creates a UI GObj, loads the joint, extracts joint positions with `lb_80011E24` and `lb_8000B1CC`, stores them in `ifAll_804A0FD8`, and unlinks the temporary GObj.",
+    "Implemented `ifAll_802F390C(void)` to show the HUD, load the `IfAll` archive and `ScInfDmg_scene_data`, set up the camera and light GObjs/GX links, store their GObj handles, and initialize related HUD/UI subsystems (`ifStatus`, `ifStock`, `ifTime`, `if_2F72`, `ifMagnify`, and `un_2FC9` routines).",
+    "Made the HUD visibility API typed around `bool`: `ifAll_HideHUD` sets the local `hidden` byte true, `ifAll_ShowHUD` sets it false, and `ifAll_IsHUDHidden` returns `bool`.",
+    "Made `fn_802F36B8` static and adjusted its signature to `HSD_GObj* gobj, int unused`, matching GX callback usage while gating rendering on `ifAll_IsHUDHidden()`.",
+    "Updated `ifStatus_802F665C` to take `int`, call `ifAll_802F343C(arg0)`, and store the value in a now-unsigned `u8 ifStatus_804D6D60`.",
+    "Changed `ifStatus_802F6508` in `ifstatus.c` from a local `NOT_IMPLEMENTED` function body to a declaration, which the bot reported as a small unmatched regression in that function.",
+    "Added previously missing `if_2F72.h` prototypes for several `fn_802F72xx`/`if_802F7xxx` routines and `if_802F7E24`, allowing `ifAll_802F390C` to call the UI initialization routine with a typed declaration.",
+    "Adjusted `SceneDesc` light typing in `src/melee/sc/types.h` from `HSD_LightDesc** lights` to an array of light entries with `desc` and `anims`, matching `sp14->lights[0]->desc` access.",
+    "Relaxed `lb_80011AC4`'s prototype in `lb_00F9.h` from `HSD_LightDesc**` to `UNK_T`, likely to avoid an incorrect or over-specific type while other code is still unresolved."
+  ],
+  "smart_moves": [
+    "Deleted the static header rather than continuing to share file-local storage definitions through `ifall.static.h`; this reduces accidental duplicate/static symbol patterns and keeps implementation-only layout in the C file.",
+    "Recovered `Vec3`-based APIs for coordinates and updated a caller to use named fields, replacing unsafe float-pointer reinterpretation with semantically meaningful vector access.",
+    "Used a local static `HSD_Archive* archive` inside `ifAll_802F3690` instead of carrying an address-named global placeholder from the static header, preserving the public API while keeping storage private.",
+    "Matched the large setup functions by first correcting surrounding struct shapes (`SceneDesc` cameras/lights and `ifAll_804A0FD8_t`) so expressions like `sp14->lights[0]->desc` and vector stores naturally compile.",
+    "Kept the scene-load helper `ifAll_802F370C` static because it is only used internally by `ifAll_802F390C`, while leaving exported functions in `ifall.h` only for known external users.",
+    "Introduced an inline helper for the repeated `x *= 0.65F` operation in `ifAll_802F343C`, likely helping both readability and matching code generation.",
+    "Updated call signatures at both declaration and use sites (`ifAll_802F343C(int)`, `ifStatus_802F665C(int)`, `ifAll_IsHUDHidden(bool)`) instead of forcing matches with placeholder types."
+  ],
+  "decomp_lessons": [
+    "When a formerly nonmatching UI setup file depends on many other subsystems, matching may require simultaneous cleanup of headers, scene descriptor types, and adjacent callers rather than only editing the target C file.",
+    "Replacing opaque padded structs with real vector fields can unlock both local matches and downstream cleanup; here `Vec3*` return types simplified `un_802FF364` and made coordinate consumers clearer.",
+    "Avoid exporting static implementation details through `.static.h` files once enough layout is known; keep file-local globals and helper structs in the C file unless another translation unit genuinely needs the definition.",
+    "Scene/resource setup functions often reveal data layout: archive section loading, camera descriptors, light descriptors, and joint traversal gave evidence for `SceneDesc` and `ifAll_804A0FD8_t` field types.",
+    "GX callback signatures may include unused parameters required by the engine callback ABI; matching can depend on adding the unused parameter even if the function body ignores it.",
+    "If a local `NOT_IMPLEMENTED` stub blocks linking or matching, it can be replaced by a declaration, but watch decomp.dev for regressions in that unit; this PR accepted a reported -4 byte unmatched regression for `ifStatus_802F6508`.",
+    "Prefer accurate partial type recovery over overly specific guesses: the PR changed one lb prototype to `UNK_T` while making other types more concrete, showing that wrong specificity can be worse than a placeholder."
+  ],
+  "naming_conventions": [
+    "Public ifall symbols use the project’s address-derived `ifAll_802Fxxxx` naming, with human-readable names for HUD helpers: `ifAll_HideHUD`, `ifAll_ShowHUD`, and `ifAll_IsHUDHidden`.",
+    "Header include guards were modernized from address-style `GALE01_2F3394` to path-style `MELEE_IF_IFALL_H`.",
+    "Implementation-only static data retained the address-derived aggregate name `ifAll_804A0FD8` but was defined as `static struct ifAll_804A0FD8_t` inside `ifall.c`.",
+    "Small unknown local helpers still use `fn_802Fxxxx` naming (`fn_802F36B8`) when behavior is not named beyond its address.",
+    "Subsystem initialization functions in headers retain `if_802F7E24`/`if_802F7E7C` style until better semantic names are established.",
+    "Recovered coordinate values should use `Vec3*` and `.x`/`.y` field access rather than opaque `UNK_T` or custom padded `x18_t` structs when the layout is exactly three floats."
+  ],
+  "assembly_or_matching_tactics": [
+    "Turned `ifall.c` matching only after implementing the three large formerly placeholder functions `ifAll_802F343C`, `ifAll_802F370C`, and `ifAll_802F390C`.",
+    "Used switch-case structure in `ifAll_802F343C` with case-specific joint indices: case 1 uses joint 9, case 2 uses 11+, case 3 uses 8+, case 4 uses 2+, and cases 5/6 use joints 6, 7, and 2..5 with x-scaling.",
+    "Preserved stack-shaping evidence with `PAD_STACK(0xC)` in `ifAll_802F390C`, indicating a deliberate stack layout tactic for matching.",
+    "Matched object setup by using the engine creation/link calls directly: `GObj_Create`, `HSD_JObjLoadJoint`, `HSD_GObjPLink_80390228`, `HSD_GObjObject_80390A70`, `GObj_SetupGXLinkMax`, and `GObj_SetupGXLink`.",
+    "Recovered the camera render callback flow as `HSD_CObjSetCurrent(GET_COBJ(gobj))`, draw via `HSD_GObj_80390ED0(gobj, 0x7)`, then `HSD_CObjEndCurrent()`, gated by the HUD-hidden flag.",
+    "Used `lbArchive_80016F80` and `lbArchive_LoadSections` with literal resource names `\"IfAll\"` and `\"ScInfDmg_scene_data\"`, which are useful anchors for future UI scene matching.",
+    "Kept exact float literals (`0.65F`, `3.2f`, `0.06`) and explicit integer constants/priorities (`0xE`, `0xF`, `0x13`, `0x14`, `0xD00`) visible, which are likely important for codegen and behavior."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided slice.",
+    "The decomp.dev bot reported matched code improved to 35.38% (+0.04%, +1556 bytes) and linked code improved to 24.49% (+0.05%, +1876 bytes).",
+    "The bot listed 5 new full matches: `ifAll_802F343C` (+596 bytes), `ifAll_802F370C` (+512 bytes), `ifAll_802F390C` (+344 bytes), `ifStatus_802F6E1C` (+28 bytes), and `ifStatus_802F665C` (+24 bytes).",
+    "The bot reported one unmatched regression: `main/melee/if/ifstatus` function `ifStatus_802F6508` dropped by 4 bytes from 1.18% to 0.00%."
+  ],
+  "searchable_terms": [
+    "pr-1722",
+    "Match & link ifall",
+    "r-burns",
+    "ifall",
+    "ifAll_802F343C",
+    "ifAll_802F370C",
+    "ifAll_802F390C",
+    "ifAll_802F3A64",
+    "ifAll_HideHUD",
+    "ifAll_ShowHUD",
+    "ifAll_IsHUDHidden",
+    "ifAll_804A0FD8",
+    "ifAll_802F3690",
+    "ifAll_802F3414",
+    "ifAll_802F3424",
+    "ifstatus",
+    "ifStatus_802F665C",
+    "ifStatus_802F6508",
+    "ifStatus_802F6E1C",
+    "if_2F72",
+    "if_802F7E24",
+    "ScInfDmg_scene_data",
+    "IfAll",
+    "SceneDesc",
+    "HSD_JObjLoadJoint",
+    "HSD_LObjLoadDesc",
+    "HSD_CObjSetCurrent",
+    "GObj_SetupGXLinkMax",
+    "GObj_SetupGXLink",
+    "lb_80011E24",
+    "lb_8000B1CC",
+    "Vec3",
+    "HUD hidden",
+    "MatchingFor",
+    "Object(Matching)",
+    "ifall.static.h deleted",
+    "PAD_STACK"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that resolve or rematch `ifStatus_802F6508` after this PR's small unmatched regression.",
+    "Search for other `.static.h` deletions to compare patterns for moving file-local globals into C files.",
+    "Find future PRs that rename or type the `if_2F72` functions added here, especially `if_802F7E24`.",
+    "Audit `SceneDesc` users after this change to see whether the `lights` entry struct with `desc` and `anims` became the stable project type.",
+    "Search for additional callers of `ifAll_802F3414` and `ifAll_802F3424` that could benefit from `Vec3*` field access cleanup."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

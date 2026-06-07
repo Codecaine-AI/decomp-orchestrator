@@ -1,0 +1,140 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-148",
+  "pr": {
+    "number": 148,
+    "title": "More data section labels being moved to respective files",
+    "url": "https://github.com/doldecomp/melee/pull/148",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-04T22:24:28Z",
+    "merged_at": "2021-12-04T22:24:35Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Moved anonymous data-section labels out of central aggregate asm files and into the asm translation-unit files they belong with. The PR relocates .bss labels for player data, .sbss labels for lb/cm/pl files, .sdata strings for lbshadow, and many .sdata2 constants for lbshadow and lb/code_8000F9F8, while preserving raw label names and data bytes. There were no PR body notes or review comments in the provided slice, so intent is inferred primarily from the title and diff.",
+  "change_classification": {
+    "primary_type": "asm data-label relocation",
+    "categories": [
+      "code-change",
+      "data-section cleanup",
+      "asm organization"
+    ],
+    "systems": [
+      "asm",
+      "bss",
+      "sbss",
+      "sdata",
+      "sdata2",
+      "lb",
+      "cm",
+      "pl",
+      "player",
+      "lbshadow"
+    ]
+  },
+  "key_files": [
+    "asm/bss.s",
+    "asm/sbss.s",
+    "asm/sdata.s",
+    "asm/sdata2.s",
+    "asm/melee/pl/player.s",
+    "asm/melee/pl/code_8003715C.s",
+    "asm/melee/cm/code_80028B9C.s",
+    "asm/melee/lb/lbshadow.s",
+    "asm/melee/lb/code_8000F9F8.s",
+    "asm/melee/lb/code_80016A54.s",
+    "asm/melee/lb/code_8001E2F8.s"
+  ],
+  "what_changed": [
+    "Removed lbl_80453080 and lbl_804587E0 from the global asm/bss.s aggregate and added them to asm/melee/pl/player.s under .section .bss, \"wa\".",
+    "Removed a block of .sbss labels from asm/sbss.s and redistributed them into module-specific asm files: lbl_804D63D0 to asm/melee/lb/code_80016A54.s; lbl_804D63D8 through lbl_804D6454 to asm/melee/lb/code_8001E2F8.s; lbl_804D6458 through lbl_804D6468 to asm/melee/cm/code_80028B9C.s; lbl_804D6470 through lbl_804D6480 to asm/melee/pl/code_8003715C.s.",
+    "Removed lbshadow-related .sdata strings lbl_804D3728, lbl_804D3730, and lbl_804D3738 from asm/sdata.s and added them to asm/melee/lb/lbshadow.s. The strings include \"shadow\", \"lobj\", and \"0\" with .balign 4 and a trailing NULL word.",
+    "Removed many floating-point/raw constants from asm/sdata2.s and placed them in owning files: lbl_804D7B58 through lbl_804D7B9C were appended to asm/melee/lb/lbshadow.s, while lbl_804D7BA0 through lbl_804D7CC0 were appended to asm/melee/lb/code_8000F9F8.s.",
+    "Kept central aggregate section files as the source only for the remaining labels after the moved ranges, e.g. asm/bss.s still begins at lbl_80458810, asm/sbss.s still begins at lbl_804D6488, and asm/sdata2.s still begins at lbl_804D7CC8 after the removed block."
+  ],
+  "smart_moves": [
+    "Relocated labels without renaming them, preserving existing lbl_-address identities and reducing risk of breaking references during an organization-only PR.",
+    "Moved contiguous address ranges as blocks into likely owning asm files, which makes future function/data matching easier because constants and storage are closer to the code that references them.",
+    "Preserved exact directives and sizes such as .skip lengths, .4byte values, .asciz strings, .balign 4, NULL words, and section declarations, minimizing the chance of binary layout drift.",
+    "Used explicit section switches inside recipient asm files before appended data, such as .section .sbss, .section .sdata, .section .sdata2, and .section .bss, \"wa\".",
+    "Reduced monolithic data buckets in asm/bss.s, asm/sbss.s, asm/sdata.s, and asm/sdata2.s, which supports incremental decompilation by associating anonymous data with specific source-like files."
+  ],
+  "decomp_lessons": [
+    "For early decomp cleanup, moving anonymous data labels from global section dumps into their respective module asm files can improve locality while still retaining binary-equivalent raw labels.",
+    "When relocating data-section labels, keep the original label names, order, alignment, and byte payload exactly unless there is stronger evidence for semantic names or typed declarations.",
+    "Contiguous .sbss or .sdata2 ranges can often be transferred as a unit into the file whose code or nearby data owns them; this is safer than scattering individual labels without evidence.",
+    "Do not infer semantic variable names from float constants or strings unless review context or usage analysis supports it; this PR intentionally keeps lbl_804Dxxxx names.",
+    "Section placement is part of matching: appending data to a file still requires the correct .section directive for .bss, .sbss, .sdata, or .sdata2."
+  ],
+  "naming_conventions": [
+    "Anonymous labels remain in address-based form, e.g. lbl_80453080, lbl_804D63D0, lbl_804D7B58, lbl_804D7CC0.",
+    "Hex address portions use uppercase A-F in labels shown by the diff, e.g. lbl_804D6458 and lbl_804D7BA0.",
+    "Module asm file paths follow subsystem directories under asm/melee, such as asm/melee/lb/lbshadow.s, asm/melee/lb/code_8000F9F8.s, asm/melee/cm/code_80028B9C.s, and asm/melee/pl/player.s.",
+    "Generic unmatched code files use code_<address>.s naming, with uppercase hex in the file names shown in the diff."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use raw .skip sizes for uninitialized .bss/.sbss labels when only size/layout is known, e.g. .skip 0x5760, .skip 0x30, .skip 0x8, and .skip 0x4.",
+    "Use .4byte hexadecimal payloads for .sdata2 constants to preserve exact floating-point/double bit patterns instead of rewriting them as decimal floats.",
+    "Use .asciz plus .balign 4 for small strings in .sdata, preserving original padding and word alignment.",
+    "When a recipient asm file already has data sections, append the moved labels after an explicit section marker rather than relying on the previous section context.",
+    "Maintain label order across moved ranges so subsequent aggregate files continue at the correct remaining label address."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-148",
+    "PsiLupan",
+    "data-label-splitup",
+    "data section labels",
+    "asm data relocation",
+    "asm/bss.s",
+    "asm/sbss.s",
+    "asm/sdata.s",
+    "asm/sdata2.s",
+    "asm/melee/lb/code_8000F9F8.s",
+    "asm/melee/lb/code_80016A54.s",
+    "asm/melee/lb/code_8001E2F8.s",
+    "asm/melee/lb/lbshadow.s",
+    "asm/melee/cm/code_80028B9C.s",
+    "asm/melee/pl/code_8003715C.s",
+    "asm/melee/pl/player.s",
+    "lbl_80453080",
+    "lbl_804587E0",
+    "lbl_804D63D0",
+    "lbl_804D63D8",
+    "lbl_804D6454",
+    "lbl_804D6458",
+    "lbl_804D6468",
+    "lbl_804D6470",
+    "lbl_804D6480",
+    "lbl_804D3728",
+    "lbl_804D3730",
+    "lbl_804D3738",
+    "lbl_804D7B58",
+    "lbl_804D7B9C",
+    "lbl_804D7BA0",
+    "lbl_804D7CC0",
+    "lbshadow",
+    "player",
+    "shadow",
+    "lobj",
+    ".bss",
+    ".sbss",
+    ".sdata",
+    ".sdata2"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or type the moved labels from PR 148, especially lbl_804D7B58-lbl_804D7CC0 and lbl_804D63D0-lbl_804D6480.",
+    "Check whether subsequent decompilation converts lbshadow .sdata strings \"shadow\", \"lobj\", and \"0\" into C string constants or named symbols.",
+    "Search for later cleanup removing more labels from asm/bss.s, asm/sbss.s, asm/sdata.s, and asm/sdata2.s into module-specific files.",
+    "Compare PR 148 with adjacent data-label splitup PRs to identify the project convention for deciding which module owns anonymous data labels."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

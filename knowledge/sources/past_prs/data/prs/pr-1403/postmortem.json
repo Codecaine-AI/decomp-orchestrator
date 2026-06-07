@@ -1,0 +1,146 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1403",
+  "pr": {
+    "number": 1403,
+    "title": "Partially match `grflatzone`",
+    "url": "https://github.com/doldecomp/melee/pull/1403",
+    "state": "MERGED",
+    "author": "thefoxcam",
+    "created_at": "2024-07-26T20:58:12Z",
+    "merged_at": "2024-07-26T23:52:31Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added a partial C decompilation for the Flat Zone stage module, replacing an effectively empty grflatzone.c with stage data, callback tables, lifecycle callbacks, object spawning/control logic, random timing helpers, animation/map collision updates, and item/dynamic-attribute interactions. The PR also introduced grflatzone.h prototypes, added Flat Zone-specific GroundVars union members in gr/types.h, moved grDynamicAttr_UnkStruct earlier for reuse, and corrected mpLib_80051EC8's prototype to pointer-based arguments needed by the new call site.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "stage-decompilation",
+      "headers",
+      "struct-layout",
+      "prototype-correction"
+    ],
+    "systems": [
+      "stage",
+      "ground",
+      "map-collision",
+      "items",
+      "camera",
+      "baselib"
+    ]
+  },
+  "key_files": [
+    {
+      "file": "src/melee/gr/grflatzone.c",
+      "role": "Main partial Flat Zone decompilation; added StageCallbacks, StageData, many grFlatzone_80216E74-through-802182BC routines, random timing helpers, stage object setup, animation control, map collision refreshes, camera setup, and item/dynamic-attribute behavior."
+    },
+    {
+      "file": "src/melee/gr/grflatzone.h",
+      "role": "New public header with address-commented prototypes for Flat Zone stage entry points and callbacks."
+    },
+    {
+      "file": "src/melee/gr/types.h",
+      "role": "Added GroundVars_flatzone and GroundVars_flatzone2 layouts and inserted them into the GroundVars union; relocated grDynamicAttr_UnkStruct definition before those structs."
+    },
+    {
+      "file": "src/melee/mp/mplib.h",
+      "role": "Updated mpLib_80051EC8 declaration from value-like unknown integer parameters to pointer parameters matching the Flat Zone collision-query call."
+    }
+  ],
+  "what_changed": [
+    "Created the Flat Zone stage callback array grFz_803E7940 with nine StageCallbacks entries and wired it into StageData grFz_803E7A00 for /GrFz.dat.",
+    "Implemented the stage init path grFlatzone_80216E78, including Ground_801C49F8 parameter fetch, stage_info flag setup, spawning several ground object IDs through grFlatzone_80216F48, camera configuration, and blast-zone-bottom offset adjustment.",
+    "Added grFlatzone_80216F48 as a shared ground-object factory/setup routine using Ground_801C14D0, GET_GROUND, GObj_SetupGXLink, callback assignment, optional init callback execution, and optional HSD_GObjProc_8038FD54 registration.",
+    "Implemented many Flat Zone object callbacks that initialize JObjs, hide/show geometry, start grAnime_801C8138 animations, call Ground_801C2ED0/Ground_801C2FE0, coordinate other ground objects via Ground_801C2BA4, and maintain per-object state in gp->gv.flatzone or gp->gv.flatzone2.",
+    "Added random helper inlines rand_int_inner and rand_int plus SIGN_RANDOM macro to model randomized Flat Zone timing/direction behavior using HSD_Randi and HSD_Randf.",
+    "Added behavior for Flat Zone hazards/effects, including dynamic attribute creation through grDynamicAttr_801CA0F8, map collision probing via mpLib_80051EC8, map/collision refresh via mpLib_80058560, and item spawning through it_802EEFA8.",
+    "Added a static animation-selection table grFz_803E7A68 used by Flat Zone animation transition logic.",
+    "Added grflatzone.h prototypes for the newly introduced address-named functions, including grFlatzone_80218060, grFlatzone_802181B4, grFlatzone_80218260, grFlatzone_802182B4, and grFlatzone_802182BC.",
+    "Added GroundVars_flatzone and GroundVars_flatzone2 structs in gr/types.h, with fields at xC4/xC5/xC6/xC7/xC8/xCA/xCC/xCE/xD0/xD4 and a dynamic-attribute pointer field in flatzone2.",
+    "Changed mpLib_80051EC8's prototype so its second, third, and fourth parameters are s32*, s32*, and Vec3* rather than plain s32 values."
+  ],
+  "smart_moves": [
+    "Centralized stage-object creation in grFlatzone_80216F48 instead of duplicating gobj setup across every callback entry; this mirrors the StageCallbacks table and keeps GX link/proc/callback wiring consistent.",
+    "Introduced dedicated Flat Zone GroundVars structs rather than relying only on raw gp->gv._ byte indexing, while still preserving raw access where the exact layout or meaning remained uncertain.",
+    "Kept address-based symbol names and address comments in the header, which is useful for partial decompilation where semantic names are not yet proven.",
+    "Used small inline helpers for random integer ranges and NULL-safe cross-object state pokes, likely to satisfy codegen constraints while making repeated matching patterns explicit.",
+    "Adjusted a shared library prototype only as far as the new evidence required: mpLib_80051EC8 now reflects pointer arguments observed at the Flat Zone call site without broad renaming or over-documentation."
+  ],
+  "decomp_lessons": [
+    "For stage modules, start by reconstructing the StageCallbacks table and StageData; those tables reveal object count/order, entry-point addresses, and which routines are init/update/destruct-style callbacks.",
+    "When matching stage object state, adding per-stage GroundVars union variants can improve typed access and matching readability, but keep unknown x-offset field names until semantics are established.",
+    "A partial match can still be valuable if it lands stable headers, table wiring, and struct layout improvements, even when some routines remain address-named or not fully semantically understood.",
+    "Cross-object Flat Zone logic repeatedly uses Ground_801C2BA4 object IDs to coordinate stage hazards; future work should preserve object ID relationships when renaming or splitting behavior.",
+    "Map collision and dynamic attribute calls are often the evidence needed to correct shared prototypes; verify pointer/value parameters from concrete call sites before changing library headers.",
+    "Randomized stage behavior may require helper inlines/macros to match original ternary/range codegen instead of replacing it with cleaner but nonmatching abstractions."
+  ],
+  "naming_conventions": [
+    "Stage-local data uses the grFz_ prefix, such as grFz_803E7940, grFz_803E7A00, grFz_803E7A68, grFz_804D6AB0, and grFz_803B8430.",
+    "Unidentified Flat Zone functions keep address-derived names of the form grFlatzone_80216E78 and fn_8021706C.",
+    "Header prototypes include address comments like /* 216E78 */ before each function declaration.",
+    "Unknown struct fields are named by offset, such as xC4, xC5, xC8, xCC, xD0, and xD4, or by unkN when representing stage parameter data.",
+    "The GroundVars union uses per-stage member names such as flatzone and flatzone2 alongside existing generic unk and other stage-specific variants."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used a StageCallbacks array with exact function-pointer ordering and flags, including a 0xC0000000 entry, to match stage callback table data.",
+    "Preserved explicit casts such as (HSD_GObj*) gobj and raw union/byte accesses gp->gv._[...] where needed for codegen or uncertain layout.",
+    "Used inline helper functions rand_int_inner, rand_int, and grFlatzone_802171D4_inline to express repeated logic while likely controlling generated code shape.",
+    "Used address-named static globals and extern declarations for unresolved cross-module symbols instead of forcing premature semantic names.",
+    "Left some evidence of partial matching in the source, including a large #if 0 block for grFlatzone_80218060 in the diff excerpt, indicating not all routines were cleanly matched in this PR.",
+    "Corrected mpLib_80051EC8 to accept pointer outputs, enabling the Flat Zone call passing &pos_2 and &ret to type-check and better reflect original ABI usage."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice, so there is no direct reviewer feedback to extract."
+  ],
+  "searchable_terms": [
+    "PR 1403",
+    "Partially match grflatzone",
+    "Flat Zone",
+    "GrFz.dat",
+    "src/melee/gr/grflatzone.c",
+    "src/melee/gr/grflatzone.h",
+    "src/melee/gr/types.h",
+    "src/melee/mp/mplib.h",
+    "grFz_803E7940",
+    "grFz_803E7A00",
+    "grFz_803E7A68",
+    "grFz_804D6AB0",
+    "grFz_803B8430",
+    "grFlatzone_80216E78",
+    "grFlatzone_80216F48",
+    "grFlatzone_8021707C",
+    "grFlatzone_802171D4",
+    "grFlatzone_802174EC",
+    "grFlatzone_802176BC",
+    "grFlatzone_80217EF0",
+    "grFlatzone_80218060",
+    "GroundVars_flatzone",
+    "GroundVars_flatzone2",
+    "grDynamicAttr_UnkStruct",
+    "mpLib_80051EC8",
+    "mpLib_80058560",
+    "StageCallbacks",
+    "StageData",
+    "Ground_801C2BA4",
+    "Ground_801C2FE0",
+    "grAnime_801C8138",
+    "it_802EEFA8"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that finish matching grFlatzone_80218060, grFlatzone_802181B4, grFlatzone_80218260, grFlatzone_802182B4, or grFlatzone_802182BC.",
+    "Search for later renames of GroundVars_flatzone fields xC4/xC5/xC8/xCC/xD0/xD4 to semantic hazard or animation-state names.",
+    "Check whether the mpLib_80051EC8 prototype was further refined after this PR based on other call sites.",
+    "Compare Flat Zone stage callback-table reconstruction with other stage PRs that add StageCallbacks and StageData from empty stage modules.",
+    "Look for subsequent cleanup of raw gp->gv._ accesses in grflatzone.c into typed flatzone or flatzone2 fields."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

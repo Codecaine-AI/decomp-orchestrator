@@ -1,0 +1,161 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-630",
+  "pr": {
+    "number": 630,
+    "title": "Label dolphin MCC, AXFX",
+    "url": "https://github.com/doldecomp/melee/pull/630",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-12-28T01:44:43Z",
+    "merged_at": "2022-12-28T02:40:38Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large assembly-labeling PR that moved a previously ambiguous Dolphin audio block out of asm/dolphin/ax/ax_unk.s into named asm/dolphin/axfx files, labeled AXFX chorus/delay/reverb routines, and applied GameCube debug-ELF-derived MCC/FIO/HIO and related baselib symbol names. The PR mattered because it replaced thousands of func_/lbl_ placeholders and an explicitly uncertain ax_unk grouping with library-recognizable modules and entry points, improving future decompilation targeting and callgraph readability.",
+  "change_classification": {
+    "primary_type": "symbol_labeling_and_asm_reorganization",
+    "categories": [
+      "naming",
+      "asm_split",
+      "library_identification",
+      "build_file_update"
+    ],
+    "systems": [
+      "dolphin_axfx",
+      "dolphin_mcc",
+      "dolphin_hio",
+      "sysdolphin_baselib",
+      "obj_files"
+    ]
+  },
+  "key_files": [
+    "asm/dolphin/ax/ax_unk.s",
+    "asm/dolphin/axfx/axfx.s",
+    "asm/dolphin/axfx/chorus.s",
+    "asm/dolphin/axfx/delay.s",
+    "asm/dolphin/axfx/reverb_hi.s",
+    "asm/dolphin/axfx/reverb_std.s",
+    "asm/dolphin/mcc/mcc.s",
+    "asm/dolphin/mcc/fio.s",
+    "asm/dolphin/hio/hio.s",
+    "asm/sysdolphin/baselib/AXDriver.s",
+    "asm/sysdolphin/baselib/baselib_unknown_002.s",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted asm/dolphin/ax/ax_unk.s, which previously contained 3381 lines and a comment warning that the block was likely not part of AX and that ReverbHICreate might not be correct.",
+    "Added separate AXFX assembly files for axfx.s, chorus.s, delay.s, reverb_hi.s, and reverb_std.s, then updated obj_files.mk to replace asm/dolphin/ax/ax_unk.s.o with the new AXFX object list.",
+    "Introduced AXFX allocator hook symbols and defaults: AXFXAllocFunction, AXFXFreeFunction, AXFXSetHooks, __AXFXAlloc, and __AXFXFree.",
+    "Labeled AXFX effect functions including AXFXChorusInit, AXFXChorusShutdown, AXFXChorusSettings, AXFXChorusCallback, AXFXDelayInit, AXFXDelaySettings, AXFXDelayShutdown, AXFXDelayCallback, AXFXReverbHiInit, AXFXReverbHiShutdown, AXFXReverbHiCallback, AXFXReverbStdInit, AXFXReverbStdShutdown, and AXFXReverbStdCallback.",
+    "Kept lower-level/internal AXFX labels where available, including ReverbHICreate, ReverbHIFree, ReverbSTDCreate, ReverbSTDFree, DoCrossTalk, HandleReverb, do_src1, do_src2, rsmpTab12khz, and lens.",
+    "Relabeled MCC and FIO routines in asm/dolphin/mcc/mcc.s and asm/dolphin/mcc/fio.s, replacing many func_8032xxxx callsites with meaningful MCC/FIO names such as MCCInit, MCCOpen, MCCClose, MCCNotify, MCCRead, MCCWrite, MCCSetChannelEventMask, MCCGetConnectionStatus, MCCStreamOpen, MCCStreamClose, MCCStreamWrite, FIOInit, FIOExit, FIOQuery, FIOFopen, FIOFclose, and FIOFwrite.",
+    "Labeled FIO packet helpers and globals, including fioPacketMakeHeader, fioPacketSendPacket, fioPacketReceiveResult, fioPacketReceiveDone, fioPacketWrite, fioPacketResultWrite, gBuf, gmSizeOfBlocks, gSizeOfBlocks, gProcDone, gmChID, gChID, gQuery, gProcBusy, gStreamReady, gLastErr, bAsyncIsRead, bAsyncBusy, bAsyncBuffer, gAsyncDataSize, and gRequestSequenceNumber.",
+    "Relabeled HIOReadStatus and Chan in asm/dolphin/hio/hio.s.",
+    "Updated sysdolphin/baselib assembly callsites to use the newly named symbols, for example replacing a call to func_8032EE94 with FIOFclose in baselib_unknown_002.s."
+  ],
+  "smart_moves": [
+    "Used external symbol evidence from \"various gamecube debug elfs\" rather than guessing, according to the PR text.",
+    "Resolved an uncertain module boundary by deleting ax_unk.s and splitting the code into AXFX-specific assembly files that match library subsystems: reverb_hi, reverb_std, chorus, delay, and axfx hooks.",
+    "Updated obj_files.mk in lockstep with the assembly split so the object order/build inclusion reflected the newly identified modules.",
+    "Preserved exact assembly while improving symbol names and call targets, a low-risk way to increase decompilation knowledge without introducing C rewrites.",
+    "Added allocator/free hook labels for AXFX, making repeated indirect allocation/free callsites through __AXFXAlloc and __AXFXFree understandable across the effect implementations.",
+    "Propagated symbol names through callsites, not just function definitions, making later decomp work easier to follow in MCC/FIO/AXFX callgraphs."
+  ],
+  "decomp_lessons": [
+    "When an asm bucket has a comment indicating uncertain ownership, compare against external debug ELFs or SDK-like symbol sources and split it into real subsystem files before attempting C conversion.",
+    "For library code, meaningful file partitioning can be as valuable as individual labels; AXFX reverb, chorus, delay, and hook routines should live under asm/dolphin/axfx rather than an unrelated ax_unk bucket.",
+    "After relabeling a function, update all branch/call annotations in neighboring assembly so cross-file relationships become searchable by semantic names.",
+    "Allocator hook globals such as __AXFXAlloc and __AXFXFree are important structural clues for AXFX effect lifecycle functions and should be carried into future C headers/struct work.",
+    "Debug-ELF symbol imports are strong evidence for names, but unlabeled constants that remain as lbl_804DExxx should not be overinterpreted without additional evidence.",
+    "MCC/FIO naming exposes a layered design: FIO public operations call packet helpers, which call MCC channel/event/read/write primitives. Future decomp should preserve this layering."
+  ],
+  "naming_conventions": [
+    "AXFX public effect APIs use the AXFX prefix with effect and action suffixes, e.g. AXFXChorusInit, AXFXChorusSettings, AXFXDelayShutdown, AXFXReverbHiCallback, AXFXReverbStdInit.",
+    "AXFX reverb internal lifecycle names use ReverbHI/ReverbSTD plus Create/Free, e.g. ReverbHICreate, ReverbHIFree, ReverbSTDCreate, ReverbSTDFree.",
+    "AXFX allocator hooks use double-underscore data names for hook globals, __AXFXAlloc and __AXFXFree, and plain public setter/default names AXFXSetHooks, AXFXAllocFunction, AXFXFreeFunction.",
+    "MCC public routines use MCC-prefixed verbs and nouns such as MCCOpen, MCCClose, MCCNotify, MCCRead, MCCWrite, MCCSetChannelEventMask, MCCGetConnectionStatus, and MCCStreamWrite.",
+    "FIO public routines use FIO/FIOF prefixes mirroring file I/O concepts: FIOInit, FIOExit, FIOQuery, FIOFopen, FIOFclose, FIOFwrite.",
+    "FIO internal packet helpers use lower camel-case with fioPacket prefix: fioPacketMakeHeader, fioPacketSendPacket, fioPacketReceiveResult, fioPacketReceiveDone, fioPacketWrite, fioPacketResultWrite.",
+    "MCC helper names are descriptive PascalCase without MCC prefix when internal to the module, e.g. LoadChannelInfo, FlushChannelInfo, SetChannelInfoDirty, MakeMemoryMap, SearchFreeBlocks, NotifyCompulsorily, WaitAMinute, MailboxCheck."
+  ],
+  "assembly_or_matching_tactics": [
+    "Performed a pure assembly relabel/rebucket: function bodies remain assembly, but labels and call targets were renamed to known library symbols.",
+    "Deleted one large unknown assembly file and reintroduced the same code as smaller named files while preserving object inclusion via obj_files.mk.",
+    "Used branch target relabeling to turn calls from func_8032xxxx/func_8035xxxx placeholders into semantic calls such as MCCOpen, FIOFclose, AXFXDelaySettings, ReverbHIFree, and HandleReverb.",
+    "Kept remaining unknown data labels as lbl_804DExxx or named only where evidence supported it, e.g. value0_6, value0_3, rsmpTab12khz, lens.",
+    "Separated AXFX hook code into axfx.s so common allocation/free behavior is distinct from individual effect implementations."
+  ],
+  "review_feedback": [
+    "One collaborator review by ribbanya approved the PR.",
+    "No review comments or requested changes were present in the provided slice.",
+    "The only explanatory PR text says the author found the remaining symbols in various GameCube debug ELFs."
+  ],
+  "searchable_terms": [
+    "PR630",
+    "r-burns",
+    "Label dolphin MCC AXFX",
+    "GameCube debug ELFs",
+    "asm/dolphin/ax/ax_unk.s",
+    "asm/dolphin/axfx",
+    "AXFXAllocFunction",
+    "AXFXFreeFunction",
+    "AXFXSetHooks",
+    "__AXFXAlloc",
+    "__AXFXFree",
+    "AXFXChorusInit",
+    "AXFXChorusSettings",
+    "AXFXChorusCallback",
+    "AXFXDelayInit",
+    "AXFXDelaySettings",
+    "AXFXDelayCallback",
+    "AXFXReverbHiInit",
+    "AXFXReverbStdInit",
+    "ReverbHICreate",
+    "ReverbSTDCreate",
+    "ReverbHIFree",
+    "ReverbSTDFree",
+    "DoCrossTalk",
+    "HandleReverb",
+    "rsmpTab12khz",
+    "MCCInit",
+    "MCCOpen",
+    "MCCClose",
+    "MCCNotify",
+    "MCCRead",
+    "MCCWrite",
+    "MCCSetChannelEventMask",
+    "MCCGetConnectionStatus",
+    "MCCStreamOpen",
+    "MCCStreamClose",
+    "MCCStreamWrite",
+    "FIOInit",
+    "FIOExit",
+    "FIOQuery",
+    "FIOFopen",
+    "FIOFclose",
+    "FIOFwrite",
+    "fioPacketMakeHeader",
+    "fioPacketSendPacket",
+    "fioPacketReceiveResult",
+    "HIOReadStatus",
+    "AXDriver",
+    "baselib_unknown_002",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that convert asm/dolphin/axfx/reverb_hi.s or reverb_std.s to C using the AXFX labels from PR630.",
+    "Search for struct definitions or headers added for AXFXReverbHi, AXFXReverbStd, AXFXChorus, AXFXDelay, or MCC/FIO after this labeling PR.",
+    "Search for remaining lbl_804DE360-style constants in AXFX files to see whether later PRs named or typed them.",
+    "Search for baselib callsites updated after MCC/FIO labels, especially FIOFopen, FIOFclose, and FIOFwrite.",
+    "Compare AXFXSetHooks and __AXFXAlloc/__AXFXFree handling with SDK or other GameCube title decompilations."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

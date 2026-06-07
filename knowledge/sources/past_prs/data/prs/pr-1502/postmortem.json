@@ -1,0 +1,157 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1502",
+  "pr": {
+    "number": 1502,
+    "title": "Match abort_exit",
+    "url": "https://github.com/doldecomp/melee/pull/1502",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2025-05-22T03:49:13Z",
+    "merged_at": "2025-05-22T03:58:58Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched MSL/abort_exit.c by replacing address-placeholder globals with MSL-style names, making the atexit and exit-state storage static, iterating the _dtors table directly from C, and marking abort_exit.c as Matching in configure.py. The PR also removed the small hand-authored abort_exit .dtors asm file and a 506-line Runtime/runtime.s asm fallback, and adjusted GALE01 symbols/splits for the renamed and resized MSL abort/exit data.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "symbol-renaming",
+      "config-update",
+      "library-runtime-cleanup"
+    ],
+    "systems": [
+      "MSL",
+      "Runtime",
+      "asm",
+      "config",
+      "build-config"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/MSL/abort_exit.c",
+      "reason": "Main matching source change: renamed placeholder variables, used static MSL abort/exit state, switched destructor traversal to _dtors, and kept exit shutdown ordering."
+    },
+    {
+      "path": "configure.py",
+      "reason": "Changed Object(NonMatching, \"MSL/abort_exit.c\") to Object(Matching, \"MSL/abort_exit.c\")."
+    },
+    {
+      "path": "config/GALE01/symbols.txt",
+      "reason": "Replaced MSL_AbortExit_* placeholder symbols with atexit_funcs, __atexit_funcs, __aborting, atexit_curr_func, __atexit_curr_func, __stdio_exit, and __console_exit."
+    },
+    {
+      "path": "config/GALE01/splits.txt",
+      "reason": "Adjusted MSL/abort_exit.c .sbss end from 0x804D7078 to 0x804D7074."
+    },
+    {
+      "path": "asm/MSL/abort_exit.s",
+      "reason": "Deleted the hand-written .dtors table containing __destroy_global_chain, __fini_cpp_exceptions, __destroy_global_chain, and NULL."
+    },
+    {
+      "path": "asm/Runtime/runtime.s",
+      "reason": "Deleted a 506-line asm fallback containing compiler/runtime helper routines such as __cvt_fp2unsigned, __div2u, __div2i, __mod2u, __mod2i, __shl2i, __shr2u, __shr2i, __cvt_sll_flt, and __constants."
+    }
+  ],
+  "what_changed": [
+    "abort_exit.c was promoted from NonMatching to Matching in configure.py.",
+    "The abort_exit data symbols were renamed from address-based placeholders like MSL_AbortExit_804A2F48 and MSL_AbortExit_804D7060 to semantic names: atexit_funcs, __atexit_funcs, __aborting, atexit_curr_func, __atexit_curr_func, __stdio_exit, and __console_exit.",
+    "The atexit arrays and abort/exit state in abort_exit.c were made static rather than exposed as generic global placeholder variables.",
+    "exit() now tests __aborting, drains atexit_funcs with atexit_curr_func, calls __destroy_global_chain(), walks _dtors until NULL, optionally calls and clears __stdio_exit, drains __atexit_funcs, kills critical regions, optionally calls and clears __console_exit, then calls _ExitProcess().",
+    "The previous for-loop over MSL_AbortExit_803B7260 was rewritten as explicit pointer initialization to _dtors followed by a while (*dtor != NULL) loop.",
+    "asm/MSL/abort_exit.s was deleted, removing the local .dtors table definition that had been named MSL_AbortExit_803B7260.",
+    "config/GALE01/symbols.txt was updated to reflect the new semantic symbol names for the abort_exit .bss and .sbss data.",
+    "config/GALE01/splits.txt shrank the abort_exit .sbss range by 4 bytes, ending at 0x804D7074 instead of 0x804D7078.",
+    "asm/Runtime/runtime.s was removed entirely, eliminating an assembly fallback for several Runtime helper functions and constants."
+  ],
+  "smart_moves": [
+    "Replacing address-derived placeholder names with plausible MSL runtime names made the source self-documenting and aligned it with known abort/exit library concepts.",
+    "Using static storage for abort_exit internals matched the intended C ownership better than keeping decomp placeholder globals in the source.",
+    "Walking the _dtors sentinel table directly in C avoided carrying a local assembly file just to represent the destructor list.",
+    "The explicit while-loop over _dtors preserved the generated control-flow shape while still expressing the logic in idiomatic C.",
+    "The PR paired the C match with all required project bookkeeping: symbols.txt renames, splits.txt size adjustment, configure.py status change, and asm file deletion."
+  ],
+  "decomp_lessons": [
+    "For MSL runtime files, address-placeholder globals are often match blockers; converting them to known library names and correct static/global linkage can unlock a clean match.",
+    "Destructor tables should be modeled via the project’s canonical symbol when possible, here _dtors, rather than maintaining a bespoke asm symbol such as MSL_AbortExit_803B7260.",
+    "When matching exit/abort code, preserve shutdown ordering carefully: atexit callbacks, global destructor chain, .dtors traversal, stdio cleanup, __atexit callbacks, critical-region teardown, console cleanup, then process exit.",
+    "A successful C match should remove obsolete asm fallbacks and update configure.py immediately so future builds no longer depend on the assembly source.",
+    "Small .sbss range changes can accompany static data cleanup; verify splits.txt after renaming or removing abort/exit state variables."
+  ],
+  "naming_conventions": [
+    "Use semantic MSL names instead of MSL_AbortExit_ADDRESS placeholders for recovered library globals.",
+    "Plain atexit callback storage used names atexit_funcs and atexit_curr_func.",
+    "Double-underscore MSL/internal exit storage used names __atexit_funcs and __atexit_curr_func.",
+    "Abort state was named __aborting.",
+    "Exit hook function pointers were named __stdio_exit and __console_exit.",
+    "The destructor table was referenced as _dtors rather than an address-based MSL_AbortExit_803B7260 symbol.",
+    "Known runtime/library entry points retained double-underscore names such as __destroy_global_chain, __kill_critical_regions, and __fini_cpp_exceptions."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted asm/MSL/abort_exit.s after replacing the local .dtors table with an extern _dtors reference from C.",
+    "Rewrote the destructor traversal from a for-loop over a placeholder symbol into an explicit dtor assignment plus while-loop, likely to match compiler codegen more closely.",
+    "Changed data declarations to static arrays and counters to better match storage/linkage and emitted symbol layout.",
+    "Removed asm/Runtime/runtime.s, including assembly implementations of 64-bit arithmetic/shift helpers and conversion helpers, as part of reducing remaining handwritten runtime assembly.",
+    "Used configure.py’s Object(Matching, ...) switch as the final declaration that the source now matches."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1502",
+    "Match abort_exit",
+    "PsiLupan",
+    "MSL/abort_exit.c",
+    "abort_exit.c",
+    "Object(Matching)",
+    "Object(NonMatching)",
+    "configure.py",
+    "asm/MSL/abort_exit.s",
+    "asm/Runtime/runtime.s",
+    "config/GALE01/symbols.txt",
+    "config/GALE01/splits.txt",
+    "MSL_AbortExit_803B7260",
+    "_dtors",
+    "__destroy_global_chain",
+    "__fini_cpp_exceptions",
+    "__kill_critical_regions",
+    "_ExitProcess",
+    "atexit_funcs",
+    "__atexit_funcs",
+    "__aborting",
+    "atexit_curr_func",
+    "__atexit_curr_func",
+    "__stdio_exit",
+    "__console_exit",
+    "__cvt_fp2unsigned",
+    "__div2u",
+    "__div2i",
+    "__mod2u",
+    "__mod2i",
+    "__shl2i",
+    "__shr2u",
+    "__shr2i",
+    "__cvt_sll_flt",
+    "__constants",
+    ".dtors",
+    ".sbss",
+    "0x804D7060",
+    "0x804D7074",
+    "0x804D7078"
+  ],
+  "follow_up_queries": [
+    "Find other MSL files still using MSL_*_ADDRESS placeholder globals that could be renamed to known library symbols.",
+    "Search for remaining asm files that only define tables or constants and can be replaced by canonical extern symbols in C.",
+    "Audit exit/abort related code for correct ordering around _dtors, __destroy_global_chain, __stdio_exit, and __console_exit.",
+    "Check whether other Runtime helper asm fallbacks can be removed after their C counterparts are marked matching."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

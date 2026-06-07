@@ -1,0 +1,139 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-985",
+  "pr": {
+    "number": 985,
+    "title": "Partially match `ftCo_CaptureWaitKirby`",
+    "url": "https://github.com/doldecomp/melee/pull/985",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-10-10T05:05:39Z",
+    "merged_at": "2023-10-10T05:17:58Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Moved the beginning of the CaptureWaitKirby region out of asm into a new C translation unit and header, added that object to the build, and did broad Fighter callback field renaming from the old nested `fp->cb.xNNNN_callback_*` style to direct fields such as `accessory1_cb`, `accessory4_cb`, `pre_hitlag_cb`, and `take_dmg_cb`. The PR body reports `ftCo_CaptureWaitKirby.c` at 77.68% overall: `ftCo_800BD620`, `ftCo_800BD6EC`, and the empty Anim/Phys/Coll callbacks matched 100%, while `ftCo_CaptureWaitKirby_IASA` remained partial at 60.31%. There were no review comments in the slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "struct-field-naming",
+      "build-system"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "ftKirby",
+      "asm",
+      "src",
+      "docs",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_CaptureWaitKirby.c",
+    "src/melee/ft/chara/ftCommon/ftCo_CaptureWaitKirby.h",
+    "asm/melee/ft/ft_08A4.s",
+    "obj_files.mk",
+    "src/melee/ft/types.h",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/chara/ftKirby/ftKb_Init.h",
+    "src/melee/ft/chara/ftKirby/forward.h",
+    "src/melee/ft/chara/ftCommon/types.h",
+    "docs/getting_started.md"
+  ],
+  "what_changed": [
+    "Added `src/melee/ft/chara/ftCommon/ftCo_CaptureWaitKirby.c` with C implementations or C stubs for `ftCo_800BD620`, `ftCo_CaptureWaitKirby_Anim`, `ftCo_800BD6EC`, `ftCo_CaptureWaitKirby_IASA`, `ftCo_CaptureWaitKirby_Phys`, and `ftCo_CaptureWaitKirby_Coll`.",
+    "Added `src/melee/ft/chara/ftCommon/ftCo_CaptureWaitKirby.h` declaring the new functions and related static data symbols `ftCo_804D3BC8`, `ftCo_804D3BD0`, and `ftCo_804D3BD8`.",
+    "Removed the corresponding assembly block for `ftCo_800BD620` through `ftCo_CaptureWaitKirby_Coll` from `asm/melee/ft/ft_08A4.s`, leaving later functions such as `ftCo_800BD9E0` in asm.",
+    "Added `$(BUILD_DIR)/src/melee/ft/chara/ftCommon/ftCo_CaptureWaitKirby.c.o` to `obj_files.mk` immediately before the remaining `ft_08A4.s.o` object.",
+    "Kept the new file compatible with partial matching by using `ASM` functions with `#if !defined(MUST_MATCH) || defined(WIP)` C bodies and inline assembly fallbacks under the opposite branch.",
+    "Implemented `ftCo_800BD620` as the CaptureWaitKirby motion-state setup: clears `x2226_b2`, calls `ftCo_800DB368`, changes motion state to `ftCo_MS_CaptureWaitKirby` with skip model/material flags, updates model scale, assigns `accessory1_cb = ftCo_800DB464`, updates collision/common state, and runs animation/common setup helpers.",
+    "Implemented `ftCo_800BD6EC` around vertical left-stick thresholds from `p_ftCommonData`, `x671_timer_lstick_tilt_y`, and Kirby victim callbacks `ftKb_SpecialN_800F597C`, `ftKb_SpecialN_800F598C`, and `ftKb_SpecialN_800F5954`.",
+    "Implemented a partial `ftCo_CaptureWaitKirby_IASA` that checks `ftKb_SpecialN_800F5A38`, handles stick direction timers, decrements `x1A4C` by `ftKb_SpecialN_800F5B00`, stores `mv.co.capturekirby.x18` from `ftCommon_8007DC08`, and on timeout restores facing/scale and releases the victim via `ftCo_800DC750` and `ftCo_800DA698`.",
+    "Converted many Fighter callback accesses across fighter character files from nested `fp->cb.xNNNN_callback_*` members to direct fields, including `accessory1_cb`, `accessory4_cb`, `anim_cb`, `coll_cb`, `death2_cb`, `take_dmg_cb`, `deal_dmg_cb`, `pre_hitlag_cb`, `post_hitlag_cb`, and `hitlag_cb`.",
+    "Updated `docs/getting_started.md` example code from `fp->cb.x21BC_callback_Accessory4 = NULL;` to `fp->accessory4_cb = NULL;`."
+  ],
+  "smart_moves": [
+    "Split only the matched/partially matched CaptureWaitKirby range out of `ft_08A4.s`, preserving the rest of the assembly file and keeping the build order stable by inserting the new C object before the remaining asm object.",
+    "Used small static inline helpers (`inlineA0`, `inlineB0`) to express repeated timer-and-Kirby-callback behavior while still keeping assembly fallback available for non-matching configurations.",
+    "Represented empty callbacks as true empty C functions for Anim/Phys/Coll, giving cheap 100% matches and reducing asm surface area.",
+    "Promoted recurring callback offsets to semantic field names, making future decomp work easier to read and reducing the need to carry offset-heavy `fp->cb.xNNNN_callback_*` expressions through new matches.",
+    "Localized static float/double constants (`0`, `1`, `U32_TO_F32`, `S32_TO_F32`) in the new C file and removed their old sdata2 definitions from the asm slice."
+  ],
+  "decomp_lessons": [
+    "For partial matches, it is acceptable to land a C file with matched helper/setup functions and a partially matching high-level IASA function as long as the PR body reports the unmatched score clearly.",
+    "When pulling a function range out of an asm file, also move or expose any nearby string/assert symbols and floating constants needed by the C translation unit.",
+    "Directly named Fighter callback fields are preferable to nested offset names when the semantics are known; update existing callers broadly so new decomp code can use the semantic API consistently.",
+    "Timer fields like `x670_timer_lstick_tilt_x` and `x671_timer_lstick_tilt_y` can document controller gating behavior even when surrounding function names remain unknown.",
+    "In match-oriented C, using `p_ftCommonData` threshold fields and exact helper calls can recover high-level intent without fully naming every common-data member.",
+    "Keep assembly fallbacks with `ASM`, `MUST_MATCH`, and `WIP` gates when a function is useful as readable C but not yet fully matching."
+  ],
+  "naming_conventions": [
+    "`ftCo_CaptureWaitKirby_*` follows the common-state action callback suffix pattern: `_Anim`, `_IASA`, `_Phys`, and `_Coll`.",
+    "Unknown functions retained address-based names such as `ftCo_800BD620`, `ftCo_800BD6EC`, and `ftKb_SpecialN_800F5A38` when the PR did not provide stronger semantic names.",
+    "Fighter callback fields were renamed from `fp->cb.x21B0_callback_Accessory1` style to direct semantic names such as `fp->accessory1_cb`.",
+    "Hitlag callback names use phase-oriented fields: `pre_hitlag_cb`, `hitlag_cb`, and `post_hitlag_cb`.",
+    "Damage and lifecycle callback names use event semantics: `deal_dmg_cb`, `take_dmg_cb`, and `death2_cb`.",
+    "Remaining unidentified callback slots kept offset-like direct names such as `x21EC`, `x21F0`, and `x21F4` rather than inventing semantics."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed 277 lines from `asm/melee/ft/ft_08A4.s` for the extracted CaptureWaitKirby functions while leaving later asm in place.",
+    "Used `ASM void ...` plus C under `#if !defined(MUST_MATCH) || defined(WIP)` and `nofralloc` inline asm under `#else` to support both readable decomp and exact fallback.",
+    "Matched trivial `blr` functions with empty C bodies for `_Anim`, `_Phys`, and `_Coll`.",
+    "Used explicit conversion constants `U32_TO_F32` and `S32_TO_F32` to mirror integer-to-float conversion patterns seen in the original assembly.",
+    "Kept assert-related string symbols (`\"jobj.h\"`, `\"jobj\"`, `\"scale\"`) globally visible from the asm side by adding globals for `ftCo_804D3BC8`, `ftCo_804D3BD0`, and `ftCo_804D3BD8`.",
+    "Preserved exact callback/motion setup ordering in `ftCo_800BD620`, including motion-state change, model scale update, callback assignment, collision update, common-state setup, and animation update."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice."
+  ],
+  "searchable_terms": [
+    "pr-985",
+    "ribbanya",
+    "ftCo_CaptureWaitKirby",
+    "ftCo_CaptureWaitKirby.c",
+    "ftCo_CaptureWaitKirby.h",
+    "ftCo_CaptureWaitKirby_IASA",
+    "ftCo_CaptureWaitKirby_Anim",
+    "ftCo_CaptureWaitKirby_Phys",
+    "ftCo_CaptureWaitKirby_Coll",
+    "ftCo_800BD620",
+    "ftCo_800BD6EC",
+    "ft_08A4.s",
+    "ftKb_SpecialN_800F598C",
+    "ftKb_SpecialN_800F597C",
+    "ftKb_SpecialN_800F5954",
+    "ftKb_SpecialN_800F5A38",
+    "ftKb_SpecialN_800F5A04",
+    "ftKb_SpecialN_800F5B00",
+    "accessory1_cb",
+    "accessory4_cb",
+    "pre_hitlag_cb",
+    "post_hitlag_cb",
+    "take_dmg_cb",
+    "death2_cb",
+    "deal_dmg_cb",
+    "MUST_MATCH",
+    "WIP",
+    "U32_TO_F32",
+    "S32_TO_F32",
+    "CaptureWaitKirby partial match"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match `ftCo_CaptureWaitKirby_IASA` or rename `ftCo_800BD6EC`.",
+    "Search for remaining uses of `fp->cb.x21` callback fields after PR 985.",
+    "Look for subsequent PRs naming `ftKb_SpecialN_800F5A38`, `ftKb_SpecialN_800F5B00`, and related Kirby victim callbacks.",
+    "Check whether the direct Fighter callback field names introduced here became the stable convention in `src/melee/ft/types.h`."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

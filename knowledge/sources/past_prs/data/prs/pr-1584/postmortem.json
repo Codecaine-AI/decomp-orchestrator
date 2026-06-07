@@ -1,0 +1,210 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1584",
+  "pr": {
+    "number": 1584,
+    "title": "Match dolphin dvd.c, dvdlow.c",
+    "url": "https://github.com/doldecomp/melee/pull/1584",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-08T05:09:04Z",
+    "merged_at": "2025-06-08T05:47:00Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Dolphin DVD library units dvd.c and dvdlow.c, moving both from NonMatching to Matching in configure.py. The PR substantially rewrote DVD state-machine/error/cancel handling and low-level DI command scheduling, added timeout/workaround alarm logic, corrected DVD public/internal declarations, and updated symbols for newly identified DVD BSS/SBSS objects. The decomp.dev bot reported +11220 bytes matched code and 42 new function matches, with dvderror.c's __DVDStoreErrorCode slightly improved by correcting ErrorTable size.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "sdk-reconstruction",
+      "symbol-map-cleanup",
+      "state-machine-refactor"
+    ],
+    "systems": [
+      "dolphin-dvd",
+      "external-sdk",
+      "build-config",
+      "symbols",
+      "dvd-low-level-io"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "extern/dolphin/src/dolphin/dvd/dvd.c",
+      "role": "Main DVD state-machine matching work; added fatal error/timeouts, cancel helper, reset preparation, DVDCheckDisk, and callback/error-path refinements."
+    },
+    {
+      "path": "extern/dolphin/src/dolphin/dvd/dvdlow.c",
+      "role": "Low-level DI command matching work; added DVDLowCallback, command queue, read workaround logic, timeout alarms, StopAtNextInt/Breaking handling, and __DVDInitWA."
+    },
+    {
+      "path": "extern/dolphin/src/dolphin/dvd/__dvd.h",
+      "role": "Internal prototypes added for state/error callbacks and new cross-unit functions such as __DVDPrepareResetAsync and __DVDInitWA."
+    },
+    {
+      "path": "extern/dolphin/include/dolphin/dvd.h",
+      "role": "Public API prototype cleanup for DVDCancelAllAsync and DVDCancelAll using DVDCBCallback and explicit void."
+    },
+    {
+      "path": "config/GALE01/symbols.txt",
+      "role": "Symbol map updated for DVD BSS/SBSS discoveries: AlarmForBreak, Prev, Curr, tmpBuffer size, LastReadFinished, and LastReadIssued."
+    },
+    {
+      "path": "configure.py",
+      "role": "Changed dolphin/dvd/dvdlow.c and dolphin/dvd/dvd.c from NonMatching to Matching."
+    },
+    {
+      "path": "extern/dolphin/src/dolphin/dvd/dvderror.c",
+      "role": "Adjusted ErrorTable length from 18 to 16, improving __DVDStoreErrorCode match percentage."
+    }
+  ],
+  "what_changed": [
+    "Set Object(Matching, \"dolphin/dvd/dvdlow.c\") and Object(Matching, \"dolphin/dvd/dvd.c\") in the DolphinLib(\"dvd\") build configuration.",
+    "Added DVD initialization details in DVDInit, including OSInitAlarm() and __DVDInitWA(), alongside existing DVD filesystem and interrupt setup.",
+    "Reworked dvd.c error handling around stateError(int code), cbForStateError, stateTimeout, cbForUnrecoveredError, and cbForUnrecoveredErrorRetry, including explicit __DVDStoreErrorCode calls.",
+    "Introduced FatalErrorFlag and recurring intType == 0x10 timeout/fatal-error handling in many DVD state callbacks.",
+    "Factored repeated cancellation completion code in dvd.c into static inline BOOL cancel_inline(int resume).",
+    "Adjusted stateCheckID behavior so default read/seek-style commands compare tmpBuffer against currID, while DVD_COMMAND_CHANGE_DISK keeps the disk-change path.",
+    "Added dvd.c alarm-based cover-close recovery through static OSAlarm alarm, AlarmHandler, OSCreateAlarm, and OSSetAlarm(OS_MSEC_TO_TICKS(1150), AlarmHandler).",
+    "Implemented or matched DVDCheckDisk and __DVDPrepareResetAsync near the end of dvd.c.",
+    "Added dvdlow.c DVDCommand queue state, CommandList[3], AlarmForWA, AlarmForTimeout, AlarmForBreak, Prev/Curr read tracking, StopAtNextInt, WorkAroundType, WorkAroundSeekLocation, LastReadFinished, LastReadIssued, LastCommandWasRead, NextCommandNumber, and FirstRead.",
+    "Added low-level DVD read workaround flow in dvdlow.c: ProcessNextCommand, Read, HitCache, DoJustRead, SeekTwiceBeforeRead, WaitBeforeRead, and __DVDLowSetWAType.",
+    "Added timeout infrastructure in dvdlow.c through AlarmHandlerForTimeout and SetTimeoutAlarm, with most DVDLow* commands now arming a 10-second timeout and large reads using 20 seconds.",
+    "Changed DVDLowBreak from direct DI status-register break manipulation to StopAtNextInt = TRUE and Breaking = TRUE.",
+    "Updated low-level commands to use sizeof(DVDDiskID) and sizeof(DVDDriveInfo) instead of repeated 0x20 literals.",
+    "Changed public prototypes to int DVDCancelAllAsync(DVDCBCallback callback) and long DVDCancelAll(void).",
+    "Updated GALE01 symbols to identify AlarmForBreak, Prev, Curr, tmpBuffer as size 0x80, and LastReadFinished/LastReadIssued as 8-byte OSTime-like objects."
+  ],
+  "smart_moves": [
+    "The PR did not only tweak expressions for isolated functions; it reconstructed missing SDK control flow across dvd.c and dvdlow.c, enabling entire compilation units to be promoted to Matching.",
+    "Factoring repeated cancel-completion behavior into cancel_inline(int resume) reduced duplicated state-machine code while preserving resume-point differences needed for matching.",
+    "Adding explicit timeout handling via intType == 0x10, AlarmForTimeout, and stateTimeout aligned high-level DVD state handling with low-level DI timeout delivery.",
+    "Using a small DVDCommand queue in dvdlow.c reproduced hardware workaround sequencing such as seek-before-read and delayed read scheduling instead of forcing all reads through one path.",
+    "Updating symbols.txt alongside code was necessary because the matching work depended on correct object boundaries and types, especially for OSAlarm objects and 8-byte OSTime values.",
+    "Header cleanup used existing typedefs such as DVDCBCallback rather than open-coded callback signatures, improving consistency with Dolphin SDK-style declarations."
+  ],
+  "decomp_lessons": [
+    "For Dolphin SDK library work, matching a source file may require reconstructing interlocking state machines across files, not just local codegen fixes.",
+    "Timeout paths can be encoded as synthetic interrupt causes; here low-level AlarmHandlerForTimeout calls the saved DVDLow callback with 0x10, and dvd.c state callbacks treat intType == 0x10 as fatal timeout handling.",
+    "Object-size corrections in symbols.txt matter for matching: LastReadFinished and LastReadIssued were modeled as 8-byte values, and tmpBuffer's true allocation overlapped prior unknown BSS space.",
+    "When a repeated state-machine idiom appears in many callbacks, an inline helper can be the matching shape if it keeps state writes, callback order, and resume values exact.",
+    "Prefer SDK typedefs and explicit void parameter lists in headers when they match surrounding conventions; these small signature differences can affect matching and readability.",
+    "Use sizeof(named struct) for DI transfer lengths when the SDK type is known; it documents intent and can still compile to the expected constant.",
+    "Low-level hardware code often clears or snapshots callbacks before invoking them; dvdlow.c copies Callback to a local, clears the global, then calls it.",
+    "Alarm setup and cancellation are part of observable code shape in SDK I/O routines; missing OSCreateAlarm/OSSetAlarm/OSCancelAlarm calls can block matches across many command wrappers."
+  ],
+  "naming_conventions": [
+    "High-level DVD state callbacks use cbForState* names, e.g. cbForStateError, cbForStateGettingError, cbForStateGoToRetry, cbForStateCheckID1, and cbForStateBusy.",
+    "Unrecovered error helpers follow cbForUnrecoveredError and cbForUnrecoveredErrorRetry.",
+    "Low-level DVD API functions use DVDLow* names, e.g. DVDLowRead, DVDLowSeek, DVDLowStopMotor, DVDLowRequestError, DVDLowInquiry, and DVDLowAudioBufferConfig.",
+    "Internal Dolphin DVD functions use double-underscore prefixes, e.g. __DVDInitWA, __DVDPrepareResetAsync, __DVDInterruptHandler, and __DVDLowSetWAType.",
+    "BSS/SBSS SDK globals in this slice use PascalCase names such as CommandList, AlarmForTimeout, AlarmForBreak, Prev, Curr, LastReadFinished, LastReadIssued, LastCommandWasRead, and NextCommandNumber.",
+    "Callback typedefs are preferred where available: DVDCBCallback for public DVD command callbacks and a local DVDLowCallback for low-level unsigned interrupt-cause callbacks."
+  ],
+  "assembly_or_matching_tactics": [
+    "Promoted whole objects to Matching only after code, declarations, and symbol map were updated together.",
+    "Introduced static inline cancel_inline(int resume) to reproduce repeated cancellation codegen without leaving bulky duplicated blocks.",
+    "Used volatile qualifiers for hardware/state globals in dvdlow.c, including StopAtNextInt, WaitingCoverClose, Breaking, WorkAroundType, LastReadFinished, LastReadIssued, LastCommandWasRead, and Reset-related state.",
+    "Matched DI register writes directly through __DIRegs indices while preserving command constants such as 0xa8000000, 0xAB000000, 0xE0000000, 0xE1000000, 0xE2000000, 0xE3000000, and 0xE4000000.",
+    "Modeled read timing with OSTime and conversion helpers such as OSSecondsToTicks, OSMillisecondsToTicks, OSMicrosecondsToTicks, and OS_MSEC_TO_TICKS.",
+    "Adjusted data declarations to align with generated storage: OSAlarm objects in BSS, Prev/Curr as small structs, tmpBuffer alignment/size, and 8-byte OSTime SBSS values.",
+    "Used boolean constants TRUE/FALSE and BOOL returns in places where the SDK style and codegen expected them."
+  ],
+  "review_feedback": [
+    {
+      "source": "decomp.dev bot",
+      "feedback": "GALE01 matched code increased to 29.69% (+0.29%, +11220 bytes) and linked code increased to 21.96% (+0.33%, +12732 bytes)."
+    },
+    {
+      "source": "decomp.dev bot",
+      "feedback": "Reported 42 new matches, including cbForStateBusy, DVDLowRead, cbForStateGettingError, __DVDInterruptHandler, __DVDPrepareResetAsync, Read, cbForStateGoToRetry, DVDCheckDisk, cbForStateCheckID1, cbForStateCheckID3, stateReady, cbForStateError, and multiple DVDLow command wrappers."
+    },
+    {
+      "source": "decomp.dev bot",
+      "feedback": "Reported one improvement in an unmatched function: main/dolphin/dvd/dvderror __DVDStoreErrorCode improved from 40.66% to 45.35%."
+    },
+    {
+      "source": "human review",
+      "feedback": "No human review comments were present in the provided slice."
+    }
+  ],
+  "searchable_terms": [
+    "pr-1584",
+    "r-burns",
+    "Match dolphin dvd.c, dvdlow.c",
+    "dolphin/dvd/dvd.c",
+    "dolphin/dvd/dvdlow.c",
+    "dvd.c matching",
+    "dvdlow.c matching",
+    "DVDInit",
+    "OSInitAlarm",
+    "__DVDInitWA",
+    "__DVDPrepareResetAsync",
+    "DVDCheckDisk",
+    "DVDCancelAsync",
+    "DVDCancelAllAsync",
+    "DVDCBCallback",
+    "cbForStateBusy",
+    "cbForStateGettingError",
+    "cbForStateError",
+    "stateTimeout",
+    "cbForUnrecoveredError",
+    "cbForUnrecoveredErrorRetry",
+    "cancel_inline",
+    "stateCheckID",
+    "stateCoverClosed",
+    "DVDLowRead",
+    "DVDLowSeek",
+    "DVDLowReadDiskID",
+    "DVDLowStopMotor",
+    "DVDLowRequestError",
+    "DVDLowInquiry",
+    "DVDLowAudioStream",
+    "DVDLowRequestAudioStatus",
+    "DVDLowAudioBufferConfig",
+    "DVDLowBreak",
+    "__DVDInterruptHandler",
+    "DVDLowCallback",
+    "CommandList",
+    "AlarmForWA",
+    "AlarmForTimeout",
+    "AlarmForBreak",
+    "StopAtNextInt",
+    "WorkAroundType",
+    "WorkAroundSeekLocation",
+    "LastReadFinished",
+    "LastReadIssued",
+    "LastCommandWasRead",
+    "NextCommandNumber",
+    "FirstRead",
+    "SeekTwiceBeforeRead",
+    "WaitBeforeRead",
+    "HitCache",
+    "ProcessNextCommand",
+    "SetTimeoutAlarm",
+    "AlarmHandlerForTimeout",
+    "__DVDLowSetWAType",
+    "ErrorTable",
+    "__DVDStoreErrorCode",
+    "tmpBuffer",
+    "Prev",
+    "Curr"
+  ],
+  "follow_up_queries": [
+    "Find PRs that matched remaining dolphin/dvd/dvderror.c or changed __DVDStoreErrorCode after ErrorTable size 16.",
+    "Search for later edits to DVDLowRead workaround logic, WorkAroundType, or __DVDLowSetWAType.",
+    "Compare other Dolphin SDK low-level I/O files for timeout alarm patterns using callback cause 0x10.",
+    "Look for PRs that adjusted GALE01 symbols around CommandList, AlarmForTimeout, tmpBuffer, LastReadFinished, and LastReadIssued.",
+    "Search future DVD state-machine fixes that reuse cancel_inline-style factoring or intType == 0x10 fatal timeout handling."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

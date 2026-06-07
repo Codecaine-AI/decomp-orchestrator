@@ -1,0 +1,142 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-997",
+  "pr": {
+    "number": 997,
+    "title": "Upload asm dump to GitHub Pages",
+    "url": "https://github.com/doldecomp/melee/pull/997",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-10-29T21:03:54Z",
+    "merged_at": "2023-10-29T21:17:25Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "This PR reworked the GitHub package/container setup so the GitHub Pages generation job can build the project, run the DOL disassembly dump tooling, and publish the resulting asm dump alongside Doxygen and ctx output. It consolidated multiple package Dockerfiles into stages of the build-linux Dockerfile, added a reusable melee-mwcc wrapper for invoking MWCC under wibo, added tools/dump_tree.py to generate an HTML directory index for the dump, and loosened Python requirement pins while adding beautifulsoup4 for HTML generation. There were no PR comments or review comments in the provided slice, so rationale and review intent are inferred only from the title and diff.",
+  "change_classification": {
+    "primary_type": "tooling",
+    "categories": [
+      "ci",
+      "github-pages",
+      "tooling",
+      "decomp-matching",
+      "docker",
+      "documentation-publishing"
+    ],
+    "systems": [
+      ".github",
+      ".github/packages",
+      ".github/workflows",
+      "tools",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    ".github/packages/build-linux/Dockerfile",
+    ".github/packages/build-linux/melee-mwcc",
+    ".github/packages/build-linux/setup.sh",
+    ".github/packages/gen-pages/entrypoint.sh",
+    ".github/workflows/publish-packages.yml",
+    "requirements.txt",
+    "tools/dump_tree.py",
+    ".github/packages/gen-pages/Dockerfile",
+    ".github/packages/gen-pages/setup.sh",
+    ".github/packages/check-issues/Dockerfile"
+  ],
+  "what_changed": [
+    "Added a Rust build stage in .github/packages/build-linux/Dockerfile to clone and build InusualZ/dadosod, then copied the resulting dadosod binary into the shared Linux image.",
+    "Split the build-linux Dockerfile into a shared linux-base stage plus build-linux, gen-pages, and check-issues target stages, replacing separate gen-pages and check-issues Dockerfiles.",
+    "Changed publish-packages.yml so all matrix targets use .github/packages/build-linux/Dockerfile as the containerfile, relying on Docker build targets rather than per-package Dockerfiles.",
+    "Added .github/packages/build-linux/melee-mwcc, a bash wrapper that invokes /opt/mwcc_compiler/1.2.5n/mwcceppc.exe through $WINE with fixed Melee compiler arguments and include paths.",
+    "Expanded build-linux/setup.sh to install git, doxygen, python3-full, python-is-python3, create /opt/venv, install requirements.txt into that venv, and then install the Melee compiler archive.",
+    "Updated .github/packages/gen-pages/entrypoint.sh to symlink /opt/mwcc_compiler into tools/, run m2ctx, compile build/ctx.c with melee-mwcc, build the project with GENERATE_MAP=1 and MAX_ERRORS=1, copy GALE01.map, run tools/parse_map.py, invoke dadosod on main.dol using build/map.csv, and generate an HTML dump index.",
+    "Added tools/dump_tree.py, which walks a directory with pathlib and BeautifulSoup and emits a nested HTML unordered-list index with file links opening in a blank target.",
+    "Updated requirements.txt from mostly exact pins to minimum-version constraints and added beautifulsoup4>=4.12.2.",
+    "Deleted .github/packages/gen-pages/Dockerfile, .github/packages/gen-pages/setup.sh, and .github/packages/check-issues/Dockerfile because their behavior moved into the shared multi-stage build-linux Dockerfile."
+  ],
+  "smart_moves": [
+    "Consolidating package images into one multi-stage Dockerfile reduced duplicated setup logic between build-linux, gen-pages, and check-issues while still allowing separate published targets.",
+    "Putting the MWCC invocation into a dedicated melee-mwcc wrapper made the Pages/dump pipeline independent of Makefile-specific command construction and documented the exact compiler flags needed for ctx.c compilation.",
+    "The gen-pages entrypoint builds a map and feeds it to dadosod, which makes the published Pages output more useful for decompilation browsing than Doxygen alone.",
+    "Generating a simple dump/index.html with tools/dump_tree.py makes the uploaded asm dump navigable without requiring server-side indexing on GitHub Pages.",
+    "Using a Python venv in the container isolates the Pages/tooling Python dependencies from the system Python environment.",
+    "The pipeline explicitly touches .nojekyll before copying Pages output, preserving Doxygen-style paths and files that GitHub Pages/Jekyll might otherwise mishandle."
+  ],
+  "decomp_lessons": [
+    "For repo-generated reference artifacts, CI can publish Doxygen, context output, map files, and disassembly dumps together so contributors can cross-reference source, ctx, map symbols, and asm from one GitHub Pages site.",
+    "When a Pages generation job needs real decomp build products, reuse the same compiler and devkit setup as the build image rather than maintaining a separate lightweight docs-only image.",
+    "A small compiler wrapper is a useful tactic when tooling needs to compile a single generated C file with the same MWCC options used by the project.",
+    "Publishing a DOL dump from CI benefits from first generating a map file and parsing it into CSV so the disassembler/dump tool can label output with project symbols.",
+    "If multiple CI images share toolchains, consolidate them into a common base stage to avoid drift in MWCC, devkitPPC, Python, and documentation dependencies.",
+    "The evidence does not show matching changes to game code; the decomp value is in making asm/map artifacts easier to produce and browse."
+  ],
+  "naming_conventions": [
+    "The new compiler wrapper is named melee-mwcc, clearly indicating a Melee-specific MWCC invocation.",
+    "The Dockerfile uses target/stage names build-rust, linux-base, build-linux, gen-pages, and check-issues.",
+    "The new tree-index helper is named tools/dump_tree.py and its main function is generate_nested_html_list.",
+    "The Pages output directory for disassembly artifacts is build/doxygen/html/dump.",
+    "The map artifact copied to Pages uses the game ID path/name build/ssbm.us.1.2/GALE01.map."
+  ],
+  "assembly_or_matching_tactics": [
+    "The Pages pipeline runs make with WINE=\"$WINE\" GENERATE_MAP=1 MAX_ERRORS=1 to produce build artifacts and a map even in a docs/dump publishing context.",
+    "tools/parse_map.py is run before dadosod, producing build/map.csv for symbol-aware DOL dumping.",
+    "dadosod is invoked as `dadosod dol build/ssbm.us.1.2/main.dol -m build/map.csv -o build/doxygen/html/dump`, tying the generated main.dol to the parsed map data.",
+    "The melee-mwcc wrapper fixes MWCC options including -proc gekko, -DGEKKO, hard floating point, -fp_contract on, -O4,p, -enum int, -nodefaults, -inline auto, -requireprotos, and warning-as-error mode.",
+    "The wrapper includes Melee-specific include roots such as src/melee, src/melee/ft/chara, src, src/MSL, src/Runtime, and src/sysdolphin.",
+    "The gen-pages job compiles build/ctx.c with melee-mwcc before building and publishing, suggesting the ctx generation flow needed compiler validation or compiler-derived output."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review records were present in the provided PR slice.",
+    "No explicit reviewer rationale was available; conclusions are based on the title and diff only."
+  ],
+  "searchable_terms": [
+    "PR997",
+    "Upload asm dump to GitHub Pages",
+    "asm dump",
+    "GitHub Pages",
+    "gen-pages",
+    "build-linux",
+    "check-issues",
+    "multi-stage Dockerfile",
+    "publish-packages.yml",
+    "CONTAINERFILE",
+    "melee-mwcc",
+    "mwcc",
+    "mwcceppc.exe",
+    "wibo",
+    "dadosod",
+    "InusualZ/dadosod",
+    "Doxygen",
+    ".nojekyll",
+    "m2ctx",
+    "ctx.html",
+    "ctx.c",
+    "GENERATE_MAP",
+    "MAX_ERRORS",
+    "GALE01.map",
+    "parse_map.py",
+    "map.csv",
+    "main.dol",
+    "dump_tree.py",
+    "BeautifulSoup",
+    "beautifulsoup4",
+    "requirements.txt",
+    "devkitPPC",
+    "MELEE_COMPILERS_URL"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify tools/dump_tree.py or replace the GitHub Pages asm dump index.",
+    "Find later PRs that change melee-mwcc flags or move the wrapper out of .github/packages/build-linux.",
+    "Find CI failures or fixes involving dadosod, build/map.csv, parse_map.py, or GENERATE_MAP in gen-pages.",
+    "Find PRs that further consolidate or split .github/packages/build-linux/Dockerfile targets.",
+    "Find PRs that adjust requirements.txt minimum-version constraints introduced around PR 997."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

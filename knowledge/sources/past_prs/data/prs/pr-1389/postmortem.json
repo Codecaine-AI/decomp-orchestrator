@@ -1,0 +1,159 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1389",
+  "pr": {
+    "number": 1389,
+    "title": "Match `itfflowerflame`",
+    "url": "https://github.com/doldecomp/melee/pull/1389",
+    "state": "MERGED",
+    "author": "thefoxcam",
+    "created_at": "2024-06-15T17:12:46Z",
+    "merged_at": "2024-07-08T04:36:53Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the F Flower flame item translation unit by replacing the 756-line hand-written assembly file with a 236-line C implementation, moving `itfflowerflame.c` from NonMatching to Matching, wiring the C object into the build, adding the needed item-var struct, and correcting declarations/includes for external users. The PR also localized many internal state callbacks in `symbols.txt` and documented a useful reviewer tactic for reconstructing `ItemStateTable` entries from `.data`.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "asm-to-c",
+      "decomp-matching",
+      "headers",
+      "naming",
+      "symbols-scope",
+      "types-structs",
+      "build-config"
+    ],
+    "systems": [
+      "item",
+      "fighter",
+      "config",
+      "asm",
+      "build"
+    ]
+  },
+  "key_files": [
+    "asm/melee/it/items/itfflowerflame.s",
+    "src/melee/it/items/itfflowerflame.c",
+    "src/melee/it/items/itfflowerflame.h",
+    "src/melee/it/itCommonItems.h",
+    "src/melee/it/types.h",
+    "src/melee/ft/ftcommon.c",
+    "config/GALE01/symbols.txt",
+    "configure.py",
+    "obj_files.mk",
+    "src/melee/it/items/it_27CF.h"
+  ],
+  "what_changed": [
+    "Deleted `asm/melee/it/items/itfflowerflame.s`, removing the old 756-line assembly implementation.",
+    "Added a matched C implementation in `src/melee/it/items/itfflowerflame.c` for the F Flower flame item, including spawn/setup logic, animation/state callbacks, per-frame callbacks, and helper wrappers such as `it_8029A748`, `it_8029A89C`, `it_8029A8F4`, and `it_8029B0A8`.",
+    "Defined `ItemStateTable it_803F66C8[]` in C with five entries reconstructed from `.data`, using local static callbacks for the table-owned functions.",
+    "Added `FFlowerFlameVars` with `Vec3 pos` and `f32 unk` in `itCommonItems.h`, and added `fflowerflame` to the `Item::xDD4_itemVar` union in `it/types.h`.",
+    "Changed `configure.py` so `melee/it/items/itfflowerflame.c` is built as `Object(Matching, ...)` instead of `Object(NonMatching, ...)`.",
+    "Changed `obj_files.mk` to link `src/melee/it/items/itfflowerflame.c.o` instead of the assembly object.",
+    "Moved public `itfflowerflame` declarations into `itfflowerflame.h`, added needed platform/type includes, and removed `it_8029A89C`/`it_8029A8F4` declarations from the broader `it_27CF.h` header.",
+    "Updated `ftcommon.c` to include `it/items/itfflowerflame.h` directly and adjusted the call to `it_8029A8F4` from three arguments to the matched two-argument signature.",
+    "Updated `symbols.txt` so many state callbacks from `it_8029AA1C` through `it_8029B074` became `scope:local`, while externally-used functions remained global."
+  ],
+  "smart_moves": [
+    "Kept callbacks referenced only by the item state table as `static` in the C file and matched this with `scope:local` in `symbols.txt`, reducing unnecessary header/API exposure.",
+    "Reconstructed the state table directly as `ItemStateTable it_803F66C8[]`, preserving the order and function pointer roles from the original `.data` layout.",
+    "Introduced a dedicated `FFlowerFlameVars` item-var struct instead of using raw offsets for `xDD4_itemVar`, making repeated position/scale state accesses readable and reusable.",
+    "Moved declarations out of a broad item header into `itfflowerflame.h`, then included that specific header from `ftcommon.c`, which is cleaner for dependency ownership.",
+    "Used existing item helper calls such as `Item_80268B18`, `Item_80268E5C`, `it_8026B3A8`, `it_80272CC0`, `it_80272F7C`, `HSD_JObjSetTranslate`, and `it_80273130` to express behavior rather than open-coding engine logic."
+  ],
+  "decomp_lessons": [
+    "For item files, start by converting the `.data` `ItemStateTable`; its function pointer slots reveal which callbacks exist and often constrain their return types.",
+    "Functions that only appear in an item state table do not need public header declarations; make them file-local/static and mark their symbols local.",
+    "When a caller in another translation unit needs only a small set of item functions, prefer the item-specific header over a broad catch-all header.",
+    "Use a named `xDD4_itemVar` union member when repeated offsets represent a coherent item-specific state block; in this PR the flame item stored a base position and an unknown float.",
+    "Special attributes can be ambiguous early in matching. The author noted uncertainty around `xC4_article_data->x4_specialAttributes`; the merged code used a direct `f32*` cast for the lone member, so future work should revisit if a clearer article-special-attributes struct appears.",
+    "Build-system completion for a matched file needs both configure metadata and object-file list changes: `Object(Matching, ...)` plus replacing the `.s.o` object with the `.c.o` object."
+  ],
+  "naming_conventions": [
+    "The new item-var struct follows the existing item-specific pattern: `FFlowerFlameVars` next to `FFlowerVars`, with a matching union member named `fflowerflame`.",
+    "Unknown fields remained conservatively named, e.g. `FFlowerFlameVars::unk`, rather than inventing semantics not proven by the diff.",
+    "Address-based function names were retained (`it_8029A748`, `it_8029AA6C`, etc.), consistent with the current decomp state.",
+    "Item-state callback prototypes were annotated with address comments and declared `static` when local to the translation unit.",
+    "Public prototypes use project typedefs such as `Item_GObj*`, `HSD_GObj*`, `Vec3*`, `u8`, and `f32`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted `.data` bytes for `it_803F66C8` into five `ItemStateTable` C entries: `{0, callback1, callback2, callback3}` rows, with `NULL` where the original table used null pointers.",
+    "Used the position of a function in the `ItemStateTable` to infer callback signature/return type; the review comment specifically notes that a callback such as `it_8029AA6C` should return an integer/bool-like value rather than `u32` based on its slot.",
+    "Matched small empty callbacks as empty functions returning either `void` or `false` according to their state-table role, e.g. `it_8029AB60`/`it_8029B070` as empty void callbacks and several bool callbacks returning `false`.",
+    "Used `PAD_STACK(4)` in `it_8029A89C`, indicating a stack-shape matching adjustment was needed for that function.",
+    "Preserved assembly-observed null checks around item/gobj access in public helpers like `it_8029A89C` and `it_8029A8F4`.",
+    "Replaced direct JObj translation copy sequences with `HSD_JObjGetTranslation`/`HSD_JObjSetTranslate` and stored/restored the base position through `xDD4_itemVar.fflowerflame.pos`."
+  ],
+  "review_feedback": [
+    {
+      "author": "wyatt-avilla",
+      "feedback": "To determine `ItemStateTable` function pointers, look for the corresponding variable in `.data` and translate the sequence of `.4byte` entries into C rows.",
+      "reuse": "Build the item state table early when decomping an item file; it gives many function declarations and callback return types for free."
+    },
+    {
+      "author": "wyatt-avilla",
+      "feedback": "The state-table slot can imply return type; the comment cites `it_8029AA6C` as a function that should return an int-like value rather than `u32` based on its table position.",
+      "reuse": "Use table role before guessing callback prototypes."
+    },
+    {
+      "author": "ribbanya",
+      "feedback": "Asked the author to take note of changes in commit `977d3e7b01dea410814ce6852afb31ea0eec70ef` for future contributions.",
+      "reuse": "Evidence does not include that commit diff, so the exact requested changes are unknown from this slice."
+    }
+  ],
+  "searchable_terms": [
+    "pr-1389",
+    "itfflowerflame",
+    "F Flower Flame",
+    "It_Kind_F_Flower_Flame",
+    "it_8029A748",
+    "it_8029A89C",
+    "it_8029A8F4",
+    "it_8029A9FC",
+    "it_8029AA1C",
+    "it_8029AA6C",
+    "it_8029AB60",
+    "it_8029AB64",
+    "it_8029AB90",
+    "it_8029ABCC",
+    "it_8029ACCC",
+    "it_8029ACFC",
+    "it_8029AD1C",
+    "it_8029AD58",
+    "it_8029AD94",
+    "it_8029ADD0",
+    "it_8029AED0",
+    "it_8029AF00",
+    "it_8029AF34",
+    "it_8029AF70",
+    "it_8029B070",
+    "it_8029B074",
+    "it_8029B0A8",
+    "it_803F66C8",
+    "ItemStateTable",
+    "FFlowerFlameVars",
+    "xDD4_itemVar.fflowerflame",
+    "xC4_article_data->x4_specialAttributes",
+    "HSD_JObjSetTranslate",
+    "HSD_JObjGetTranslation",
+    "PAD_STACK",
+    "symbols scope local",
+    "Object Matching",
+    "asm to C item"
+  ],
+  "follow_up_queries": [
+    "Inspect commit 977d3e7b01dea410814ce6852afb31ea0eec70ef to identify the specific style or matching corrections ribbanya wanted future contributors to notice.",
+    "Search for later PRs that rename `FFlowerFlameVars::unk` or replace the `x4_specialAttributes` `f32*` cast with a typed special-attributes struct.",
+    "Compare neighboring item matches that use `ItemStateTable` to confirm consistent callback return types and static/local symbol treatment.",
+    "Check whether `itfflowerflame` functions were later renamed beyond address-based names."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

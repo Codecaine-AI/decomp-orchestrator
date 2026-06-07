@@ -1,0 +1,167 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-700",
+  "pr": {
+    "number": 700,
+    "title": "Match `grtluigi`",
+    "url": "https://github.com/doldecomp/melee/pull/700",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-17T19:48:10Z",
+    "merged_at": "2023-01-18T09:09:08Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Target Test Luigi ground/stage file `grtluigi` by replacing `asm/melee/gr/grtluigi.s` with `src/melee/gr/grtluigi.c`, adding a new header, wiring the C object into `obj_files.mk`, and exposing supporting ground/display declarations. The PR also introduced a reusable `Ground_JObjInline1` inline in `ground.h` after review discussion showed that using new GObj getter helpers and C casts fixed stack/matching issues in repeated target-stage callbacks.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "stage-data",
+      "inline-helper",
+      "matching-fix"
+    ],
+    "systems": [
+      "stage",
+      "ground",
+      "asm",
+      "build-system",
+      "headers",
+      "sysdolphin-gobj"
+    ]
+  },
+  "key_files": [
+    "asm/melee/gr/grtluigi.s",
+    "src/melee/gr/grtluigi.c",
+    "src/melee/gr/grtluigi.h",
+    "src/melee/gr/ground.h",
+    "src/melee/gr/grdisplay.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted the 292-line assembly file `asm/melee/gr/grtluigi.s`.",
+    "Added `src/melee/gr/grtluigi.c` with C implementations for the stage callbacks and setup routines previously represented by assembly symbols such as `func_80221C10`, `lbl_80221C14`, `func_80221CB4`, `lbl_80221DD8`, and `lbl_80221E68`.",
+    "Added `src/melee/gr/grtluigi.h` declaring the grtluigi callback functions and setup function, using forward declarations for `HSD_GObj` and `HSD_JObj` plus `Vec3` from Dolphin matrix types.",
+    "Changed `obj_files.mk` to build `$(BUILD_DIR)/src/melee/gr/grtluigi.c.o` instead of `$(BUILD_DIR)/asm/melee/gr/grtluigi.s.o`.",
+    "Added `extern StageInfo stage_info;` and included `melee/gr/granime.h` in `ground.h` so the new C code could manipulate `stage_info.unk8C` and use ground animation/stage types.",
+    "Added a reusable static inline helper `Ground_JObjInline1(HSD_GObj* gobj)` in `ground.h`, which obtains `Map*` via `HSD_GObjGetUserData`, obtains `HSD_JObj*` via `HSD_GObjGetHSDObj`, then calls `func_801C2ED0(jobj, map->map_id)` and `func_801C8138(gobj, map->map_id, 0)`.",
+    "Added `#include <sysdolphin/baselib/forward.h>` to `grdisplay.h` so `HSD_GObj*` could be declared without requiring a full GObj definition.",
+    "Represented the stage callback table `lbl_803E8DF0` as a `StageCallbacks` array and the stage metadata `lbl_803E8E4C` as a `StageData` initializer for stage id `51` with asset path `\"/GrTLg.dat\"`.",
+    "Preserved behavior such as setting `stage_info.unk8C.b4 = false`, `stage_info.unk8C.b5 = true`, creating three stage GObjs via `func_80221CB4(0..2)`, registering GX links with `GObj_SetupGXLink`, and reporting failure with `OSReport(\"%s:%d: couldn t get gobj(id=%d)\\n\", \"grtluigi.c\", 0xC3, arg0)`."
+  ],
+  "smart_moves": [
+    "Factored the repeated JObj/map callback sequence into `Ground_JObjInline1` rather than keeping duplicate local code in `lbl_80221DD8` and `lbl_80221E68`.",
+    "Used `HSD_GObjGetUserData` and `HSD_GObjGetHSDObj` inside the new inline, matching review guidance that getter helpers plus casts could fix stack issues.",
+    "Kept the stage callback table and `StageData` layout close to the original assembly data, including callback ordering, `FLAGS_ZERO`, and the `(1 << 30) | (1 << 31)` flag value corresponding to `0xC0000000`.",
+    "Used a forward declaration include in `grdisplay.h` rather than pulling in a larger dependency just to declare `func_801C5DB0(HSD_GObj*, s32)`.",
+    "Converted the object file path in `obj_files.mk` in the same PR as the assembly removal, keeping the build graph consistent."
+  ],
+  "decomp_lessons": [
+    "For target-stage ground files, repeated callback bodies that fetch `Map` and `HSD_JObj` from an `HSD_GObj` may require a shared inline using `HSD_GObjGetUserData` and `HSD_GObjGetHSDObj` to match stack layout.",
+    "Reviewer comments indicate that direct field access such as `gobj->user_data` and `gobj->hsd_obj` can leave unwanted stack differences in some matching contexts; the getter helpers and explicit C casts can be the better matching tactic.",
+    "If a decompiled stage file needs `stage_info`, add or expose the `extern StageInfo stage_info;` declaration in the appropriate shared ground header rather than locally inventing an incompatible declaration.",
+    "Stage callback arrays can be modeled directly with `StageCallbacks` entries, including empty callbacks, false-return callbacks, and packed flag constants, which helps translate data-section `.4byte` tables into searchable C.",
+    "When assembly contains embedded strings after stage data, a C `StageData` initializer can reference string literals such as `\"/GrTLg.dat\"` and the `OSReport` format string while preserving behavior.",
+    "Small no-op callbacks and bool callbacks should remain explicit functions when they are referenced from callback tables; deleting or merging them would obscure table identity and symbol matching."
+  ],
+  "naming_conventions": [
+    "The PR retained unmatched symbol-style names such as `func_80221C10`, `lbl_80221C14`, `func_80221CB4`, and `lbl_803E8E4C` because no better names were evidenced.",
+    "The new file and header follow the stage module naming pattern `grtluigi.c` and `grtluigi.h` under `src/melee/gr/`.",
+    "The helper inline was named `Ground_JObjInline1`, using a `Ground_` prefix and a descriptive but still generic `JObjInline1` suffix because the exact semantic name was not established.",
+    "The stage asset path in `StageData` uses the game resource name `\"/GrTLg.dat\"`, while the source file is named `grtluigi.c`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed the assembly object from `TEXT_O_FILES` and replaced it with the C object once the translation matched.",
+    "Translated `.data` callback table entries into a `StageCallbacks lbl_803E8DF0[4]` initializer and `StageData lbl_803E8E4C` initializer.",
+    "Used `Ground_JObjInline1(gobj)` in both `lbl_80221DD8` and `lbl_80221E68` to avoid manual unused-stack padding.",
+    "Review discussion specifically identified new GObj getters plus C casts as a way to fix stack output, including using the getter for `hsd_obj` as well as user data.",
+    "The intermediate issue noted in review was unused stack: an earlier draft had `#ifdef MUST_MATCH u8 unused[8]; #endif`, and the author observed a remaining 4 bytes of unused stack in commit `8d3fc0408ed0264d00ba599fec79e0b3cdb4fad3`.",
+    "For callbacks that simply return constants, the C translation used direct `return false;` and `return true;` forms matching the original `li r3, 0/1; blr` assembly pattern."
+  ],
+  "review_feedback": [
+    {
+      "author": "r-burns",
+      "file": "src/melee/gr/grtluigi.c",
+      "feedback": "Suggested fixing stack differences using the new GObj getters plus C casts."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/melee/gr/grtluigi.c",
+      "feedback": "Noted that the repeated operation is its own inline and appears frequently in target stages."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/melee/gr/grtluigi.c",
+      "feedback": "Observed that one tested commit still had 4 bytes of unused stack."
+    },
+    {
+      "author": "r-burns",
+      "file": "src/melee/gr/grtluigi.c",
+      "feedback": "Suggested using the getter for `hsd_obj` as well."
+    },
+    {
+      "author": "r-burns",
+      "file": "src/melee/gr/grtluigi.c",
+      "feedback": "Suggested using the inline in another repeated location."
+    }
+  ],
+  "searchable_terms": [
+    "pr-700",
+    "Match grtluigi",
+    "grtluigi",
+    "grtluigi.c",
+    "grtluigi.h",
+    "asm/melee/gr/grtluigi.s",
+    "src/melee/gr/grtluigi.c",
+    "src/melee/gr/ground.h",
+    "src/melee/gr/grdisplay.h",
+    "obj_files.mk",
+    "GrTLg.dat",
+    "StageData",
+    "StageCallbacks",
+    "stage_info",
+    "stage_info.unk8C.b4",
+    "stage_info.unk8C.b5",
+    "Ground_JObjInline1",
+    "HSD_GObjGetUserData",
+    "HSD_GObjGetHSDObj",
+    "GObj_SetupGXLink",
+    "func_801C5DB0",
+    "func_801C14D0",
+    "func_801C2ED0",
+    "func_801C8138",
+    "func_801C2FE0",
+    "func_8038FD54",
+    "OSReport",
+    "lbl_803E8DF0",
+    "lbl_803E8E4C",
+    "func_80221C10",
+    "lbl_80221C14",
+    "func_80221CB4",
+    "lbl_80221DD8",
+    "lbl_80221E68",
+    "unused stack",
+    "gobj getters",
+    "hsd_obj getter",
+    "target stages",
+    "Resolves #598",
+    "Depends on #699"
+  ],
+  "follow_up_queries": [
+    "Find other target stage files that duplicate the `func_801C2ED0` plus `func_801C8138` pattern and could use `Ground_JObjInline1`.",
+    "Search for remaining direct uses of `gobj->hsd_obj` or `gobj->user_data` in ground callback code where getter helpers may fix stack mismatches.",
+    "Check whether `grtlink`, `grtmewtwo`, or other neighboring target-stage assembly files use the same `StageCallbacks` and `StageData` structure pattern.",
+    "Review PR #699 for prerequisite header, getter, or stage-structure changes this PR depended on.",
+    "Review issue #598 to understand the original scope of unmatched `grtluigi` work."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

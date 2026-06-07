@@ -1,0 +1,134 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1035",
+  "pr": {
+    "number": 1035,
+    "title": "Migrate `stage` data and most of `ground` data to C",
+    "url": "https://github.com/doldecomp/melee/pull/1035",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-11-22T14:09:40Z",
+    "merged_at": "2023-11-22T14:30:58Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Migrated all remaining `asm/melee/gr/stage.s` data and much of `asm/melee/gr/ground.s` data into C, removed the stage assembly object from the build, expanded `ground.h` prototypes, added shared ground inlines, and made small include/formatting/tooling adjustments needed for matching. The PR reports `src/melee/gr/stage.c` at 100% and `src/melee/gr/ground.c` at 68.91%, with many ground functions/data now represented in C while some large functions remained as `ASM`/`NOT_IMPLEMENTED` fallbacks.",
+  "change_classification": {
+    "primary_type": "data_migration_to_c",
+    "categories": [
+      "decompilation",
+      "data migration",
+      "headers",
+      "matching cleanup",
+      "tooling"
+    ],
+    "systems": [
+      "stage",
+      "ground",
+      "gr",
+      "mpcoll",
+      "build"
+    ]
+  },
+  "key_files": [
+    "asm/melee/gr/stage.s",
+    "asm/melee/gr/ground.s",
+    "src/melee/gr/stage.c",
+    "src/melee/gr/ground.c",
+    "src/melee/gr/ground.h",
+    "src/melee/gr/inlines.h",
+    "src/melee/mp/mpcoll.h",
+    "obj_files.mk",
+    "tools/convert_data.py"
+  ],
+  "what_changed": [
+    "Deleted `asm/melee/gr/stage.s` and removed `$(BUILD_DIR)/asm/melee/gr/stage.s.o` from `obj_files.mk`, leaving `src/melee/gr/stage.c.o` as the stage object.",
+    "Moved the large `unk_arr_803E9960` stage-id table into `src/melee/gr/stage.c` as `struct StructStageIDWithUnks unk_arr_803E9960[]`, replacing the previous external assembly data.",
+    "Moved several ground data objects from `asm/melee/gr/ground.s` into `src/melee/gr/ground.c`, including `Ground_803E065C`, `Ground_803E066C`, `Ground_803E0680`, `Ground_803E069C`, `Ground_803E06AC`, `Ground_804D4500`, `Ground_804D4508`, `Ground_804D450C`, `Ground_804D4514`, `Ground_804D451C`, `Ground_804D4524`, and `Ground_804D452C`.",
+    "Kept only a small remaining `Ground_803E06C8` block in `asm/melee/gr/ground.s`, updating its references from local labels like `.L_804D451C`/`.L_804D450C` to C symbols `Ground_804D451C`/`Ground_804D450C`.",
+    "Expanded `src/melee/gr/ground.h` with many public `Ground_801Cxxxx` prototypes and `extern StageInfo stage_info`, making cross-file references explicit.",
+    "Added `src/melee/gr/inlines.h` with `GET_GROUND(gobj)` and `Ground_JObjInline1`, then included it in several target-test ground files (`grtcaptain`, `grtdonkey`, `grtemblem`, `grtfalco`, `grticeclimber`, `grtluigi`, `grtmewtwo`, `grtpeach`, `grtpichu`) and `ground.c`.",
+    "Moved `mpColl_804D64A0`, `mpColl_804D64A4`, `mpColl_804D64A8`, and `mpColl_804D64AC` extern declarations from `mpcoll.c` into `mpcoll.h` and included `mp/mpcoll.h` from `ground.c`.",
+    "Adjusted `tools/convert_data.py` defaults for this migration: `input_glob` changed to `**/ground.s`, zero dwords defaulted to `NULL` via `zero: None`, and `find_f64` was disabled.",
+    "Made small syntax/spacing tweaks in unrelated files (`MSL/string.c`, `CARDBios.c`, `ftNs_SpecialHi.c`, `ftaction.c`, `lbcollision.c`, `cobj.c`) that appear to be matching-oriented formatting changes."
+  ],
+  "smart_moves": [
+    "Converted raw assembly tables into typed C initializers instead of leaving opaque `.4byte` sequences, making `unk_arr_803E9960` and ground data searchable and easier to type-refine later.",
+    "Used `SDATA` for C definitions that replaced small-data assembly labels (`Ground_804D450C`, `Ground_804D4514`, `Ground_804D451C`, `Ground_804D4524`, `Ground_804D452C`), preserving placement-sensitive small-data behavior.",
+    "Introduced local temporary structs (`struct Node`, `struct a`) around migrated ground data rather than forcing premature final names or full reverse-engineered types.",
+    "Centralized repeated ground object access/animation setup in `gr/inlines.h`, reducing duplicate inline bodies across target stage files.",
+    "Moved `mpColl_*` globals into the header once `ground.c` needed them, avoiding scattered file-local externs.",
+    "Left hard unmatched functions as `ASM` guarded by `MUST_MATCH`/`WIP` instead of pretending they were decompiled, while still allowing data migration and build cleanup to land."
+  ],
+  "decomp_lessons": [
+    "Large data-only assembly files can often be eliminated before every function in the adjacent C file is fully matched; migrate the data tables first and keep remaining code as guarded `ASM` if necessary.",
+    "When migrating `.sdata` symbols, preserve section intent explicitly with `SDATA` in C or references from remaining assembly may still compile but not match/link as expected.",
+    "For raw data conversion, verify how zero dwords should be represented. This PR changed converter behavior from float zero to `NULL`, which better matched pointer-heavy ground data.",
+    "Avoid overtyping unknown data on first migration. Placeholder structs with address-based symbol names are acceptable when they preserve layout and unblock further decompilation.",
+    "Shared inline helpers should live in a small `inlines.h` with the exact dependencies they require, especially for patterns used across many target/test stage files.",
+    "Even tiny whitespace changes (`t& w`, `*0.01745329252F`, label spacing) can matter in this codebase when preserving compiler output."
+  ],
+  "naming_conventions": [
+    "Address-based names such as `Ground_803E065C`, `Ground_804D450C`, `Stage_8022519C`, and `Ground_801C4FAC` were retained for symbols without stronger semantic names.",
+    "Extern/prototype comments use address prefixes, e.g. `/* 1C4FAC */ void Ground_801C4FAC(void);` and `/* 49E6C8 */ extern StageInfo stage_info;`.",
+    "New helper macro name `GET_GROUND(gobj)` parallels existing object-access macros like `GET_JOBJ(gobj)`.",
+    "Shared inline helper `Ground_JObjInline1` uses a provisional descriptive-plus-number name, signaling behavior is known enough to share but not semantically finalized.",
+    "The stage table kept the historical name `unk_arr_803E9960`, indicating the table’s purpose was still not fully named."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced `.4byte` assembly data with equivalent C arrays/structs while preserving symbol names referenced by remaining assembly.",
+    "Changed remaining assembly references from local labels to exported C symbols (`Ground_804D451C`, `Ground_804D450C`) after moving the targets into C.",
+    "Used exact C literals for migrated floats and ints such as `{ 0, 0.57, 0.57, 0.57, 0 }`, `float Ground_804D4508 = 16`, `0xD0000`, `0x40000`, and `-1`.",
+    "Used `SDATA` to force small-data placement for migrated `Ground_804D45xx` labels.",
+    "Kept unmatched functions under `ASM` with `#if !defined(MUST_MATCH) || defined(WIP)` fallback bodies containing `NOT_IMPLEMENTED`.",
+    "Added fake assertion string padding in `Stage_80224E64` with a note that it should become `HSD_ASSERT` later, showing a pragmatic matching workaround.",
+    "Tuned `convert_data.py` for `ground.s` conversion by treating zeros as `NULL` and disabling f64 detection to avoid misclassifying pointer/int-heavy data."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "stage data to C",
+    "ground data to C",
+    "asm/melee/gr/stage.s deleted",
+    "asm/melee/gr/ground.s",
+    "unk_arr_803E9960",
+    "Ground_803E065C",
+    "Ground_803E066C",
+    "Ground_803E0680",
+    "Ground_803E069C",
+    "Ground_803E06AC",
+    "Ground_804D4500",
+    "Ground_804D4508",
+    "Ground_804D450C",
+    "Ground_804D4514",
+    "Ground_804D451C",
+    "Ground_804D4524",
+    "Ground_804D452C",
+    "Ground_801C4FAC",
+    "Stage_80224E64",
+    "Stage_8022519C",
+    "StageInfo stage_info",
+    "StructStageIDWithUnks",
+    "GET_GROUND",
+    "Ground_JObjInline1",
+    "SDATA",
+    "convert_data.py zero None",
+    "find_f64 False",
+    "mpColl_804D64A0",
+    "gr/inlines.h"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or type `unk_arr_803E9960` / `StructStageIDWithUnks`.",
+    "Find later PRs that finish matching `Ground_801C4FAC`, `Ground_801C14D0`, or other 0% ground functions listed in PR #1035.",
+    "Search for follow-up cleanup replacing the fake padded assert string in `Stage_80224E64` with `HSD_ASSERT`.",
+    "Check whether `struct Node` and `struct a` in `ground.c` were later given semantic names or moved to headers.",
+    "Look for later changes to `gr/inlines.h` and uses of `Ground_JObjInline1` across target-test ground files."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

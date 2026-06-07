@@ -1,0 +1,159 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-559",
+  "pr": {
+    "number": 559,
+    "title": "Match HSD gobj, gobjgxlink, gobjplink",
+    "url": "https://github.com/doldecomp/melee/pull/559",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-09-10T02:28:05Z",
+    "merged_at": "2022-09-10T03:01:06Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched major HSD GObj baselib code by replacing gobjplink assembly with C, removing the gobjgxlink assembly object in favor of the existing C object, and moving a large block of gobj runtime/render/user-object logic from asm/sysdolphin/baselib/gobj.s into src/sysdolphin/baselib/gobj.c. The PR also strengthened gobj headers with concrete struct layouts, renamed several global data symbols, added missing gx-link/plink prototypes, and updated obj_files.mk to build the new C sources.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "asm-to-c",
+      "build-system",
+      "symbol-renaming",
+      "struct-layout"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "gobj",
+      "gobjgxlink",
+      "gobjplink",
+      "gobjuserdata",
+      "fighter-draw",
+      "obj_files"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/gobj.c",
+    "src/sysdolphin/baselib/gobjplink.c",
+    "src/sysdolphin/baselib/gobjgxlink.c",
+    "include/sysdolphin/baselib/gobj.h",
+    "include/sysdolphin/baselib/gobjgxlink.h",
+    "asm/sysdolphin/baselib/gobj.s",
+    "asm/sysdolphin/baselib/gobjgxlink.s",
+    "asm/sysdolphin/baselib/gobjplink.s",
+    "src/sysdolphin/baselib/gobjuserdata.c",
+    "obj_files.mk",
+    "src/melee/ft/ftdrawcommon.c",
+    "include/functions.h"
+  ],
+  "what_changed": [
+    "Deleted asm/sysdolphin/baselib/gobjplink.s and added src/sysdolphin/baselib/gobjplink.c with C implementations for process-link ordering, GObj creation, GObj removal, and GObj relinking/reprioritization logic.",
+    "Deleted asm/sysdolphin/baselib/gobjgxlink.s from the build and expanded src/sysdolphin/baselib/gobjgxlink.c with matched C for gx-link removal, gx-link priority relinking, and reorder-by-other-gobj behavior.",
+    "Moved a large set of functions out of asm/sysdolphin/baselib/gobj.s into src/sysdolphin/baselib/gobj.c, including proc-running logic, render traversal, camera/render callback helpers, HSD object release helpers, and small GObj function-list helpers.",
+    "Updated obj_files.mk so gobjplink builds from src/sysdolphin/baselib/gobjplink.c.o and gobjgxlink builds from src/sysdolphin/baselib/gobjgxlink.c.o instead of the deleted assembly files.",
+    "Reworked include/sysdolphin/baselib/gobj.h to give HSD_GObj and HSD_GObjProc explicit offset-commented layouts, add HSD_GOBJ_GXLINK_NONE as 0xFF, and expose HSD_GObjLibInitDataType, gobj list globals, plinklow_gobjs, and newly needed prototypes.",
+    "Renamed important globals in remaining assembly/data from anonymous labels to semantic names: HSD_GObjLibInitData, gobj_alloc_data, gobjproc_alloc_data, and plinklow_gobjs.",
+    "Replaced local externs and raw __assert calls in gobjgxlink.c/gobjuserdata.c with shared header declarations and assert_line forms.",
+    "Removed a redundant local extern for func_80390EB8 from src/melee/ft/ftdrawcommon.c after adding the declaration to the gobj header."
+  ],
+  "smart_moves": [
+    "Kept the C close to the assembly control flow while adding semantic helper comments such as GObj_RunProcs, GObj_SetTextureCamera, and GObj_RunGXLinkMaxCallbacks, making future naming work easier without overclaiming final names.",
+    "Modeled HSD_GObjProc flags as bitfields at byte 0x0D, matching the assembly's rlwinm/rlwimi-style flag access and allowing cleaner C for flags_1, flags_2, and flags_3.",
+    "Changed HSD_GObjLibInitData.unk_2 from u32* to u64*, matching the code that tests p_link masks with 64-bit shifts.",
+    "Used u64 gxlink_prios and simple shifting loops in render traversal to match the original __shr2u/__shl2i-style 64-bit priority-mask behavior.",
+    "Introduced small inline helpers for list insertion and render-callback save/restore patterns, which preserved repeated assembly idioms while keeping source readable.",
+    "Used #pragma dont_inline around the HSD_JObjDispAll call path to prevent func_80390EB8 from being inlined, explicitly documenting a matching-sensitive file-boundary/codegen concern.",
+    "Centralized previously local externs in gobj.h/gobjgxlink.h, reducing duplicated declarations and making the matched C usable by neighboring files.",
+    "Named data globals in the remaining assembly instead of leaving only lbl_* labels, improving cross-file readability while leaving not-yet-decompiled assembly intact."
+  ],
+  "decomp_lessons": [
+    "For HSD GObj work, explicit offset comments in struct headers are valuable because many functions are list-manipulation heavy and depend on exact field offsets such as next/prev, next_gx/prev_gx, proc, render_cb, gxlink_prios, hsd_obj, and user_data fields.",
+    "Bitfields can be the right tool for matching packed byte flags when the assembly uses bit inserts/extracts; here HSD_GObjProc flags_1, flags_2, and flags_3 occupy byte 0x0D.",
+    "Use named sentinel constants for magic link values: HSD_GOBJ_GXLINK_NONE is 0xFF and HSD_GOBJ_OBJ_NONE remains 0xFF.",
+    "GObj p-link and gx-link lists have separate head/tail arrays and different ordering fields; p-link uses next/prev plus p_priority and plinklow_gobjs, while gx-link uses next_gx/prev_gx plus render_priority and lbl_804D7820/lbl_804D7824.",
+    "When removing or moving the currently running GObj/proc, defer actions through a global pending-action structure if the assembly shows current-object guards; this PR modeled lbl_804CE3E4 as a flags/type/link/priority/gobj carrier.",
+    "Header promotion can unblock multiple matches: adding prototypes and extern globals in gobj.h allowed removal of ad hoc externs from fighter draw and gobjgxlink/gobjuserdata code.",
+    "assert_line is the preferred project-side wrapper for preserving file/line assertion behavior without carrying raw __assert string externs in each source file.",
+    "Keep unmatched assembly and matched C synchronized through obj_files.mk, and rename remaining assembly data symbols when C code now references them semantically."
+  ],
+  "naming_conventions": [
+    "Use HSD_* names for baselib object types and globals when evidence supports them: HSD_GObj, HSD_GObjProc, HSD_GObjLibInitData, HSD_GObjLibInitDataType.",
+    "Use descriptive lowercase names for allocator/list globals exposed from data: gobj_alloc_data, gobjproc_alloc_data, plinklow_gobjs.",
+    "Retain func_8039xxxx names for functions that are matched but not conclusively named; add nearby semantic comments only when the behavior is clear.",
+    "Use HSD_GOBJ_* macros for GObj sentinel and classifier constants, including HSD_GOBJ_GXLINK_NONE and existing classifier names.",
+    "Prefer pointer style and offset comments consistent with the updated header: `HSD_GObj*` and `/* 0xNN */` field annotations."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced entire assembly translation units with C only after corresponding obj_files.mk entries were switched from asm .s.o to src .c.o.",
+    "Preserved matching-sensitive codegen using inline helper functions for recurring list operations and `#pragma dont_inline on` for the func_80390EB8 call site.",
+    "Represented 64-bit masks as u64 and used `1LL << gobj->p_link` plus shifting loops to align with assembly that called 64-bit shift helpers.",
+    "Used temporary saved-global variables around render callbacks to mirror assembly patterns that store current gobj/proc globals, call through a function pointer, then restore the previous value.",
+    "Matched list splice operations by explicitly updating both predecessor and successor pointers and head/tail arrays in the same branch structure visible in assembly.",
+    "Kept some assembly data in gobj.s but renamed labels there so newly matched C could reference stable semantic global names."
+  ],
+  "review_feedback": [
+    {
+      "source": "review",
+      "reviewer": "PsiLupan",
+      "state": "APPROVED",
+      "body": "",
+      "notes": "No textual review comments were present in the slice; only an approval review is recorded."
+    }
+  ],
+  "searchable_terms": [
+    "PR559",
+    "Match HSD gobj gobjgxlink gobjplink",
+    "HSD_GObj",
+    "HSD_GObjProc",
+    "HSD_GObjLibInitData",
+    "HSD_GObjLibInitDataType",
+    "HSD_GOBJ_GXLINK_NONE",
+    "gobj_alloc_data",
+    "gobjproc_alloc_data",
+    "plinklow_gobjs",
+    "GObj_PReorder",
+    "CreateGObj",
+    "GObj_GXReorder",
+    "GObj_SetupGXLink",
+    "GObj_SetupGXLinkMax",
+    "GObj_SetupGXLinkMaxSorted",
+    "GObj_InitUserData",
+    "GObj_RemoveUserData",
+    "func_80390CFC",
+    "func_80390EB8",
+    "func_80390ED0",
+    "func_80390FC0",
+    "func_803901F0",
+    "func_80390228",
+    "func_8039032C",
+    "func_8039084C",
+    "func_80390908",
+    "func_803909D8",
+    "func_803910D8",
+    "func_803912A8",
+    "obj_files.mk",
+    "assert_line",
+    "gobjplink.c",
+    "gobjgxlink.c",
+    "gobj.c",
+    "bitfields flags_1 flags_2 flags_3",
+    "u64 gxlink_prios"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename func_80390CFC, func_803901F0, func_80390228, func_8039032C, func_8039084C, func_80390908, or func_803909D8 to final HSD GObj API names.",
+    "Search for later cleanup of lbl_804CE3E4 and the _unk_gobj_struct pending-action flags structure.",
+    "Search for PRs that fully decompile the remaining asm/sysdolphin/baselib/gobj.s functions after this partial gobj.c match.",
+    "Search for changes to HSD_GObjLibInitDataType.unk_1 and unk_2 to determine final field names and semantics.",
+    "Search for later header normalization of HSD_GObjList and lbl_804D7820/lbl_804D7824/lbl_804D782C names."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

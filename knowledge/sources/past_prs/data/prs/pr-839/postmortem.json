@@ -1,0 +1,156 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-839",
+  "pr": {
+    "number": 839,
+    "title": "Match `ftLk_SpecialHi`",
+    "url": "https://github.com/doldecomp/melee/pull/839",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-09T14:32:05Z",
+    "merged_at": "2023-05-09T14:39:45Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched Link's up-special implementation by moving the ftLk_SpecialHi / ftLk_SpecialAirHi entry, anim, IASA, phys, collision, and helper routines out of ftLk_Init.s into a new C file, wiring that object into obj_files.mk, and updating headers/callers to use named helper APIs. The PR also renamed several fighter/common attribute fields and Link fighter-var/dat-attr offsets to more useful names, with broad callsite cleanup across other fighters that used aerial drift attributes. There were no review or issue comments in the provided slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-fields",
+      "symbol-renaming",
+      "asm-to-c"
+    ],
+    "systems": [
+      "fighter",
+      "ftLink",
+      "ftCLink",
+      "ftCommon",
+      "item-asm-callers",
+      "asm",
+      "build"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftLink/ftLk_SpecialHi.c",
+    "src/melee/ft/chara/ftLink/ftLk_SpecialHi.h",
+    "src/melee/ft/chara/ftLink/types.h",
+    "src/melee/ft/chara/ftLink/ftLk_Init.h",
+    "asm/melee/ft/chara/ftLk_Init.s",
+    "asm/melee/it/it_27CF.s",
+    "obj_files.mk",
+    "src/melee/ft/types.h",
+    "src/melee/ft/ftcommon.c",
+    "src/melee/ft/chara/ftCLink/ftCl_Init.c"
+  ],
+  "what_changed": [
+    "Added src/melee/ft/chara/ftLink/ftLk_SpecialHi.c with C implementations for Link up-special routines: ftLk_SpecialHi_Enter, ftLk_SpecialAirHi_Enter, ftLk_SpecialHi_Anim, ftLk_SpecialAirHi_Anim, IASA stubs, phys, collision, and helper functions.",
+    "Removed the matched ftLk_SpecialHi assembly range from asm/melee/ft/chara/ftLk_Init.s, leaving later ftLk_Init assembly intact.",
+    "Added ftLk_SpecialHi.c.o to obj_files.mk so the new C translation unit participates in the text object build.",
+    "Renamed item-facing Link helper symbols used from asm/melee/it/it_27CF.s: ftLk_800EBF20 became ftLk_SpecialHi_GetFv4, ftLk_800EBEEC became ftLk_SpecialHi_GetPosWithAdjustedY, and ftLk_800EBEC4 became ftLk_SpecialHi_ProcessPartLThumbNb.",
+    "Updated ftLk_SpecialHi.h to declare the new helper APIs and include Vec3 forward declarations via dolphin/mtx/forward.h.",
+    "Changed Link's remaining local assembly callback label .L_800EBF2C into global lbl_800EBF2C because ftLk_Init.s still stores that callback after nearby functions were moved to C.",
+    "Expanded ftLink forward/types headers with ftLink_FighterVars, ftLk_DatAttrs, and ftLk_MotionVars declarations, plus named dat-attr fields such as specialhi_pos_y_offset, specialairhi_drift_stick_mul, specialairhi_drift_max_mul, and specialhi_grav_mul.",
+    "Rebased ftLink_FighterVars field names from absolute-looking offsets such as x222C/x2234/x2244 to relative names x0/x8/x18 while preserving offset comments like fp+222C and fp+2244.",
+    "Renamed common fighter aerial drift attributes in ft/types.h from x174_AerialDriftStickMult and x17C_AerialDriftMax to air_drift_stick_mul and air_drift_max, with callsite updates in ftcommon and several character special-move files.",
+    "Adjusted Link and CLink init/appeal/inline code to use the renamed fighter-var fields, especially replacing x2244 with x18 for the held/created item GObj pointer.",
+    "Removed ftLk_Init_804D92F8 and ftLk_Init_804D92FC float constants from the remaining asm sdata2 block after the moved C code used literal 0 and 1 parameters instead."
+  ],
+  "smart_moves": [
+    "Kept the decomp focused on a coherent move module: the new file contains the complete ground/air up-special lifecycle plus the small helpers that item code needs.",
+    "Used semantic helper names for item-facing functions instead of preserving anonymous ftLk_800EBE* names, making cross-system calls in it_27CF.s searchable and self-documenting.",
+    "Preserved an assembly callback still referenced by un-decompiled Link code by promoting .L_800EBF2C to lbl_800EBF2C, avoiding accidental loss of a relocatable symbol when splitting code across objects.",
+    "Encoded the landing/ground-to-air transition motion flags as a C MotionFlags constant rather than leaving only the raw 0x0C4C508A assembly immediate.",
+    "Centralized repeated aerial physics logic by making ftLk_SpecialHi_Phys call ftLk_SpecialAirHi_Phys when Link is airborne, matching the assembly branch while reducing duplicated source logic.",
+    "Named broad common attributes air_drift_stick_mul and air_drift_max while updating all known callsites in the same PR, avoiding a mixed old/new naming state.",
+    "Documented ftLk_SpecialHi_GetPosWithAdjustedY in the header with its out-parameter behavior and the dat-attr field that drives the Y adjustment."
+  ],
+  "decomp_lessons": [
+    "When moving a block out of a larger asm file, audit nearby labels that are still referenced by the remaining assembly; local .L labels may need exported lbl_ names if address-taking remains.",
+    "Small helper functions used by item assembly are good opportunities for behavior-based names, because they clarify both the fighter module and item callsites.",
+    "Dat-attribute field naming can unblock clean C for move physics: Link's up-special needed named gravity, drift, velocity, and Y-offset fields rather than raw x28/x34/x38/x3C/x40/x44 offsets.",
+    "Common attribute renames should be propagated broadly in the same matching PR when they affect many fighters; otherwise future decomp work inherits inconsistent struct vocabulary.",
+    "Relative fighter-var names with explicit offset comments are safer than embedding absolute fp offsets in field names, especially inside per-character substructs.",
+    "MUST_MATCH-only unused stack arrays were used to account for stack layout in several functions; keep them isolated behind MUST_MATCH and mark them as temporary matching scaffolding.",
+    "For simple no-op callbacks, empty C functions can replace bare blr assembly for IASA routines."
+  ],
+  "naming_conventions": [
+    "ftLk_SpecialHi_* and ftLk_SpecialAirHi_* are used for Link ground/air up-special lifecycle callbacks: Enter, Anim, IASA, Phys, and Coll.",
+    "Item-facing Link helpers were renamed with action-oriented names: ftLk_SpecialHi_ProcessPartLThumbNb, ftLk_SpecialHi_GetPosWithAdjustedY, and ftLk_SpecialHi_GetFv4.",
+    "Common fighter drift fields now use semantic snake_case names: air_drift_stick_mul and air_drift_max.",
+    "Link dat-attrs gained move-specific names with the specialhi/specialairhi prefix: specialhi_pos_y_offset, specialairhi_drift_stick_mul, specialairhi_drift_max_mul, and specialhi_grav_mul.",
+    "Per-character fighter vars in ftLink_FighterVars were changed from absolute-looking names x222C/x2230/x2234/x2244 to relative x0/x4/x8/x18 names while keeping fp+offset comments.",
+    "Remaining exported assembly labels use lbl_ADDRESS form when they must be globally referenced from assembly."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted the matched assembly body for addresses 0x800EBA4C through 0x800EBF20 from ftLk_Init.s and replaced it with C in ftLk_SpecialHi.c.",
+    "Added the new C object before the remaining ftLk_Init.s object in obj_files.mk, matching the expected text order for the split.",
+    "Converted .L_800EBF2C to global lbl_800EBF2C so ftLk_SpecialS_Enter and ftLk_SpecialAirS_Enter in the remaining asm can still store the callback pointer.",
+    "Used MUST_MATCH guarded dummy stack arrays in several functions to reproduce unused stack allocation patterns seen in the original assembly.",
+    "Replaced raw Fighter_ChangeMotionState constants with named motion IDs ftLk_MS_SpecialHi and ftLk_MS_SpecialAirHi plus Ft_MF_None or a composed MotionFlags constant.",
+    "Matched accessory/effect behavior by setting x21BC_callback_Accessory4 to a static onAccessory4 function, spawning effect IDs 1211/1212, setting x2219_b0, and installing efLib_PauseAll/efLib_ResumeAll hitlag callbacks.",
+    "Preserved physics calls from assembly with ftCommon_8007D494 and ftCommon_8007D344 using common attrs grav, terminal_vel, air_drift_stick_mul, and air_drift_max scaled by Link dat attrs."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or submitted reviews were present in the provided PR slice."
+  ],
+  "searchable_terms": [
+    "pr-839",
+    "ftLk_SpecialHi",
+    "ftLk_SpecialAirHi",
+    "ftLk_SpecialHi.c",
+    "ftLk_Init.s",
+    "ftLk_SpecialHi_Enter",
+    "ftLk_SpecialAirHi_Enter",
+    "ftLk_SpecialHi_Anim",
+    "ftLk_SpecialAirHi_Anim",
+    "ftLk_SpecialHi_Phys",
+    "ftLk_SpecialAirHi_Phys",
+    "ftLk_SpecialHi_Coll",
+    "ftLk_SpecialAirHi_Coll",
+    "onAccessory4",
+    "doColl",
+    "ftLk_SpecialHi_ProcessPartLThumbNb",
+    "ftLk_SpecialHi_GetPosWithAdjustedY",
+    "ftLk_SpecialHi_GetFv4",
+    "lbl_800EBF2C",
+    "FtPart_LThumbNb",
+    "FtPart_TransN",
+    "FtPart_L2ndNa",
+    "FtPart_L3rdNa",
+    "specialhi_pos_y_offset",
+    "specialairhi_drift_stick_mul",
+    "specialairhi_drift_max_mul",
+    "specialhi_grav_mul",
+    "air_drift_stick_mul",
+    "air_drift_max",
+    "x2219_b0",
+    "x21BC_callback_Accessory4",
+    "efSync_Spawn",
+    "efLib_PauseAll",
+    "efLib_ResumeAll",
+    "MUST_MATCH unused stack",
+    "ft_CheckGroundAndLedge",
+    "ftCliffCommon_80081298",
+    "ft_800D5CB0",
+    "ftCommon_8007D494",
+    "ftCommon_8007D344",
+    "it_27CF"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename remaining ftLk_DatAttrs fields x30/x34/x40 or clarify their semantics.",
+    "Find PRs that decompile the remaining ftLk_Init.s functions around lbl_800EBF2C and ftLk_SpecialS.",
+    "Find uses of ftLk_SpecialHi_GetPosWithAdjustedY and ftLk_SpecialHi_GetFv4 in item code to confirm final helper naming.",
+    "Search for follow-up cleanup removing MUST_MATCH unused stack arrays in ftLk_SpecialHi.c.",
+    "Search for additional ftCo_DatAttrs renames around x178_AerialDriftBase and x180_AerialFriction."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

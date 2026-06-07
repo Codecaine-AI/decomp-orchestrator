@@ -1,0 +1,140 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1208",
+  "pr": {
+    "number": 1208,
+    "title": "Match `lbSnap_8001D2BC` (124 bytes)",
+    "url": "https://github.com/doldecomp/melee/pull/1208",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-02-12T22:51:14Z",
+    "merged_at": "2024-02-12T22:52:19Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the 124-byte function `lbSnap_8001D2BC` in `src/melee/lb/lbsnap.c`. The function probes two memory card slots with `CARDProbe`, stores the current card state, and sets a per-slot state-changed flag when the state differs from the previous value. The PR also moved the `lb_80433380` BSS allocation from `lbcardgame` ownership into `lbsnap`, updated GALE01 split/scratch metadata, and refreshed `asm/melee/lb/lbsnap.s` formatting/symbol declarations around the remaining assembly.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "function match",
+      "partial C decompilation",
+      "BSS ownership correction",
+      "split metadata update",
+      "scratch status update",
+      "assembly cleanup"
+    ],
+    "systems": [
+      "melee/lb/lbsnap",
+      "memory card probing",
+      "Dolphin CARD",
+      "GALE01 splits",
+      "asm"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/lb/lbsnap.c",
+      "reason": "Added the matched C implementation of `lbSnap_8001D2BC`, a local struct for `lb_80433380`, and the `CARDProbe` loop."
+    },
+    {
+      "path": "asm/melee/lb/lbsnap.s",
+      "reason": "Removed/replaced the target function from hand assembly and refreshed assembly declarations/section ownership for the remaining `lbsnap` symbols."
+    },
+    {
+      "path": "asm/melee/lb/lbcardgame.s",
+      "reason": "Removed `lb_80433380` from `lbcardgame` BSS and shortened that file's BSS range."
+    },
+    {
+      "path": "config/GALE01/splits.txt",
+      "reason": "Moved BSS range `0x80433380-0x804333E0` from `lbcardgame.c` to `lbsnap.c`."
+    },
+    {
+      "path": "config/GALE01/scratches.txt",
+      "reason": "Changed the scratch entry at `0x8001D2BC` from `100%` to `OK`."
+    }
+  ],
+  "what_changed": [
+    "Created `src/melee/lb/lbsnap.c` with includes for `<platform.h>` and `<dolphin/card/CARDMount.h>`.",
+    "Defined a partial `struct Unk80433380` with filler through `0x40`, `unk40[3]`, `x4C_cardState[2]`, and `x54_stateChanged[3]`.",
+    "Declared global `struct Unk80433380 lb_80433380;` in C, corresponding to BSS address `0x80433380`.",
+    "Implemented `void lbSnap_8001D2BC(void)` as a loop over `ARRAY_SIZE(lb_80433380.x4C_cardState)`.",
+    "For each slot index, saved the previous `x4C_cardState[i]`, assigned `CARDProbe(i)`, and set `x54_stateChanged[i] = true` if the state changed.",
+    "Removed the `lb_80433380` `.skip 0x60` BSS object from `asm/melee/lb/lbcardgame.s`.",
+    "Added `lb_80433380` BSS ownership under `asm/melee/lb/lbsnap.s` and updated the assembly section comments accordingly.",
+    "Updated `config/GALE01/splits.txt` so `lbcardgame.c` BSS ends at `0x80433380` and `lbsnap.c` owns BSS `0x80433380-0x804333E0`.",
+    "Updated `config/GALE01/scratches.txt` so the `0x8001D2BC` scratch is marked `OK`.",
+    "The large `lbsnap.s` diff is mostly assembly formatting/declaration churn, including `.file`, `.text`, `.fn`/`.endfn`, `.obj`/`.endobj`, hex immediates, and explicit data object declarations."
+  ],
+  "smart_moves": [
+    "Used a small partial struct with filler rather than overclaiming the full layout of `lb_80433380`; only fields needed by the matched function were named semantically.",
+    "Named the observed fields by offset and behavior, e.g. `x4C_cardState` and `x54_stateChanged`, which keeps unknown structure layout searchable while documenting inferred meaning.",
+    "Used `ARRAY_SIZE(lb_80433380.x4C_cardState)` to tie the loop bound to the visible two-slot array instead of hard-coding `2` in C.",
+    "Preserved signed loop comparison behavior by casting the `ARRAY_SIZE` result to signed, matching the PowerPC `cmpwi`/`blt` pattern.",
+    "Moved the BSS object to the file that actually references/owns the newly decompiled code, keeping splits consistent with the C declaration.",
+    "Kept the match narrow: only `lbSnap_8001D2BC` was decompiled, while other `lbsnap` functions remained in assembly."
+  ],
+  "decomp_lessons": [
+    "When decompiling a function that introduces a global BSS object, update both assembly ownership and `config/GALE01/splits.txt`; otherwise the C global and split boundaries will disagree.",
+    "For small polling/state-cache functions, matching often depends on preserving the previous value in a local, writing the new hardware/API result, then comparing memory/state afterward.",
+    "A partial struct with offset-bearing field names is acceptable and useful when only a slice of a larger global is understood.",
+    "Use semantic field names only where behavior is evident from the code; here `CARDProbe` supports naming the `0x4C` array as card state and the `0x54` array as state-changed flags.",
+    "Scratch metadata should be updated from `100%` to `OK` when a scratch-matched function is accepted into the tree.",
+    "If BSS ranges were previously absorbed by an adjacent file, matching the real owner may require shrinking one split and adding a new BSS section to the target file."
+  ],
+  "naming_conventions": [
+    "`lbSnap_8001D2BC` follows the project convention of subsystem prefix plus address for still-unnamed functions.",
+    "`struct Unk80433380` uses an `Unk` plus address naming pattern for unidentified globals/structs.",
+    "`lb_80433380` remains address-based because the global's full purpose is not yet established.",
+    "Field names combine offset prefixes with inferred behavior, such as `x4C_cardState` and `x54_stateChanged`.",
+    "Unknown padding is represented as `filler0[0x40]`, and unknown fields retain neutral names such as `unk40[3]`."
+  ],
+  "assembly_or_matching_tactics": [
+    "The C loop uses `int i` and a signed cast on `ARRAY_SIZE` to reproduce the original signed loop bound check.",
+    "The function stores `prev` before calling `CARDProbe(i)`, then compares the new stored state against `prev`; this mirrors the assembly sequence that loads old state, calls `CARDProbe`, stores the result, then compares.",
+    "Using `bool` for `x54_stateChanged` matches storing `true` into the state-changed slot while preserving the observed array indexing.",
+    "The BSS object size remains `0x60`, with the referenced fields at offsets `0x4C` and `0x54`; the layout was represented with filler rather than speculative full field definitions.",
+    "Assembly cleanup converted many labels/functions to `.fn`/`.endfn` and data/BSS symbols to `.obj`/`.endobj`, making the remaining assembly more structured after one function moved to C.",
+    "String/data objects in `lbsnap.s` were represented with explicit `.4byte` data in the diff excerpt, likely to preserve exact section data layout."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR context."
+  ],
+  "searchable_terms": [
+    "pr-1208",
+    "lbSnap_8001D2BC",
+    "lbsnap.c",
+    "lb_80433380",
+    "Unk80433380",
+    "x4C_cardState",
+    "x54_stateChanged",
+    "CARDProbe",
+    "CARDMount.h",
+    "memory card",
+    "stateChanged",
+    "ARRAY_SIZE signed cast",
+    "BSS split ownership",
+    "0x80433380",
+    "0x804333E0",
+    "config/GALE01/splits.txt",
+    "config/GALE01/scratches.txt",
+    "lbcardgame.s",
+    "lbsnap.s",
+    "scratch OK",
+    "124 bytes"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that further define `struct Unk80433380` or rename `lb_80433380`.",
+    "Search for later matches of other `lbsnap` functions such as `lbSnap_8001D338`, `lbSnap_8001D350`, `lbSnap_8001D40C`, or `lbSnap_8001D5FC`.",
+    "Look for PRs touching `config/GALE01/splits.txt` around `0x80433380` to see if the BSS ownership changed again.",
+    "Search for additional CARD memory-card polling matches using `CARDProbe` and state-change flags.",
+    "Check whether `x54_stateChanged[3]` was later refined, since only two `x4C_cardState` entries are iterated in this matched function."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

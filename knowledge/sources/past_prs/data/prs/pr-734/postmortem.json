@@ -1,0 +1,126 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-734",
+  "pr": {
+    "number": 734,
+    "title": "Match `func_80221288`",
+    "url": "https://github.com/doldecomp/melee/pull/734",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-29T22:38:23Z",
+    "merged_at": "2023-01-30T09:41:48Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Ice Climbers target-stage ground function `func_80221288` in C, removed the corresponding `asm/melee/gr/grticeclimber.s` object from the build, and converted related small return stubs and data declarations into typed C. The PR body says it resolves issue #617 while leaving `lbl_80221208` unmatched.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "typing-cleanup",
+      "stage-ground"
+    ],
+    "systems": [
+      "grticeclimber",
+      "ground",
+      "grmaterial",
+      "obj_files.mk"
+    ]
+  },
+  "key_files": [
+    "asm/melee/gr/grticeclimber.s",
+    "src/melee/gr/grticeclimber.c",
+    "src/melee/gr/grticeclimber.h",
+    "src/melee/gr/grmaterial.h",
+    "src/melee/gr/ground.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted `asm/melee/gr/grticeclimber.s`, which contained the assembly implementation of `func_80221288`, two tiny return stubs `lbl_80221354` and `lbl_8022135C`, and sdata2 float constants.",
+    "Removed `$(BUILD_DIR)/asm/melee/gr/grticeclimber.s.o` from `TEXT_O_FILES` in `obj_files.mk` because the relevant code now builds from `src/melee/gr/grticeclimber.c.o`.",
+    "Implemented `func_80221288(HSD_GObj* ground_gobj)` in C. It gets the `Ground*` from the gobj, iterates through `lbl_803E8B5C` until sentinel `-1`, calls `func_801C33C0(2, value)`, creates/configures material or ground-related data through `func_801C8CFC`, then calls `func_801C8DE0` and `func_801C8E08` on success.",
+    "Changed `lbl_803E8B5C` from an opaque `u32` packed array to an explicit `s16` array with values `0, 1, 2, ...` and a `-1` sentinel, matching the assembly's halfword iteration via `lha` and `addi r30, r30, 2`.",
+    "Replaced local external float constant references in `lbl_802210D8` with literal float constants `0.0F` and `1.0F` when calling `func_801C7FF8`.",
+    "Added C implementations for `lbl_80221354` returning `false` and `lbl_8022135C` returning `true`.",
+    "Added `GET_GROUND(gobj)` macro in `ground.h` and reused existing `GET_JOBJ(gobj)` inside `Ground_JObjInline1` instead of spelling out `HSD_GObjGetUserData` and `HSD_GObjGetHSDObj` casts.",
+    "Updated prototypes in `grmaterial.h` and `grticeclimber.h`, including typed declarations for `func_801C8CFC`, `func_801C8E08`, `func_801C8DE0`, and external `s16 lbl_803E8B5C[]`."
+  ],
+  "smart_moves": [
+    "Recognized that the table was not naturally a `u32` array: the assembly indexed it as signed halfwords and stopped on `-1`, so converting `lbl_803E8B5C` to `s16[]` made the loop simple and matchable.",
+    "Used a sentinel-based `for` loop over `lbl_803E8B5C[i] != -1`, directly reflecting the assembly's `lha`/`cmpwi -1` loop condition.",
+    "Kept the still-unmatched callback `lbl_80221208` as assembly-backed or separate C/asm content rather than forcing it into this match; the PR explicitly notes that `lbl_80221208` remains.",
+    "Eliminated sdata2 symbol dependencies by using float literals where the values were clear from the deleted assembly constants: `0.0F`, `1.0F`, `-1.0F`, and `4.0F`.",
+    "Improved shared ground accessor style by introducing `GET_GROUND`, which reduces repeated casts and aligns with the existing `GET_JOBJ` pattern.",
+    "Moved function signatures out of local ad-hoc declarations into headers, helping later decompilation work reuse better prototypes."
+  ],
+  "decomp_lessons": [
+    "When assembly uses `lha` and increments the pointer by 2, model the data as `s16[]`, not as packed `u32[]`; this can turn awkward data reconstruction into a natural sentinel loop.",
+    "A trailing `-1` sentinel in signed halfword data is often the key to expressing a matching loop cleanly in C.",
+    "Tiny assembly leaf functions returning constant booleans can often be safely represented as `bool` stubs once their callers/signatures are understood.",
+    "Use literal float constants when they correspond directly to deleted sdata2 constants and avoid unnecessary `extern f32 const` declarations.",
+    "Centralizing common gobj access casts in macros like `GET_GROUND` and `GET_JOBJ` can make ground code more readable and may help with consistent codegen across files.",
+    "It is acceptable to land a partial stage-file improvement that removes one assembly function while documenting that another local label/function remains unmatched."
+  ],
+  "naming_conventions": [
+    "Preserved unknown decompilation labels such as `func_80221288`, `lbl_80221208`, `lbl_80221354`, `lbl_8022135C`, and `lbl_803E8B5C` rather than inventing semantic names.",
+    "Introduced macro name `GET_GROUND(gobj)` in the same uppercase accessor style as existing `GET_JOBJ(gobj)`.",
+    "Used generic temporary names `result_0` and `result_1` where semantics were not yet known, avoiding overconfident naming.",
+    "Kept `ground_gobj` as the parameter name for the target ground object, making the gobj role clearer than a bare `arg0`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Translated the assembly table walk into `for (i = 0; lbl_803E8B5C[i] != -1; i++)` using `s16` indexing to match halfword loads and 2-byte pointer increments.",
+    "Mapped the assembly call sequence to nested conditionals: call `func_801C33C0`, skip on `-1`, call `func_801C8CFC`, skip on null/false result, then configure with `func_801C8DE0` and finalize with `func_801C8E08`.",
+    "Used direct float literals to recreate the floating-point argument setup for `func_801C8DE0`: `-1.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 4.0F`.",
+    "Removed the assembly object from the build only after the C file supplied the matched function and associated stubs.",
+    "Typed the `func_801C8CFC` prototype sufficiently for the new call site: integer arguments, `Ground*`, `HSD_JObj*`, `Event`, and integer result use."
+  ],
+  "review_feedback": [
+    "No issue comments or review comments were present in the provided slice.",
+    "One review record exists in the metadata, but no review body or inline feedback was included, so reviewer intent cannot be extracted from this dump."
+  ],
+  "searchable_terms": [
+    "pr-734",
+    "func_80221288",
+    "grticeclimber",
+    "Ice Climbers target stage",
+    "lbl_803E8B5C",
+    "s16 table",
+    "halfword sentinel",
+    "lha",
+    "func_801C33C0",
+    "func_801C3FA4",
+    "func_801C8CFC",
+    "func_801C8DE0",
+    "func_801C8E08",
+    "lbl_80221208 remains",
+    "lbl_80221354",
+    "lbl_8022135C",
+    "GET_GROUND",
+    "Ground_JObjInline1",
+    "grmaterial.h",
+    "ground.h",
+    "obj_files.mk",
+    "asm removal",
+    "Resolves #617",
+    "ribbanya",
+    "roeming",
+    "jeffm"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that match or remove `lbl_80221208` in `grticeclimber`.",
+    "Search for other ground stage files with packed `u32` arrays that should be `s16` sentinel tables.",
+    "Search for additional call sites of `func_801C8CFC`, `func_801C8DE0`, and `func_801C8E08` to refine their true signatures.",
+    "Look for later renames or semantic identification of `lbl_803E8B5C` and the material/object creation loop in Ice Climbers target stage.",
+    "Check whether `GET_GROUND` became the preferred accessor macro across other `src/melee/gr` files."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

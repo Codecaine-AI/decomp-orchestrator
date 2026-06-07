@@ -1,0 +1,149 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-131",
+  "pr": {
+    "number": 131,
+    "title": "Split lbcollision code out properly based on sdata usage",
+    "url": "https://github.com/doldecomp/melee/pull/131",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-11-29T05:14:38Z",
+    "merged_at": "2021-11-29T05:14:43Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Reorganized lb assembly object boundaries around lbcollision by moving code and its small-data constants into the objects that actually use them. The old asm/melee/lb/code_80008D30.s file was removed, asm/melee/lb/code_80005BB0.s was renamed to asm/melee/lb/lbcollision.s and expanded with the 0x80008D30-era collision routines plus their .sdata/.sdata2 labels, a new asm/melee/lb/code_8000AD8C.s object was added for the following address range, and root asm/sdata.s and asm/sdata2.s lost the labels now owned by those lb objects. obj_files.mk was updated so the build uses lbcollision.o and code_8000AD8C.o instead of code_80005BB0.o and code_80008D30.o.",
+  "change_classification": {
+    "primary_type": "assembly_object_split",
+    "categories": [
+      "code-change",
+      "asm-reorganization",
+      "small-data-placement",
+      "build-list-update"
+    ],
+    "systems": [
+      "asm/melee/lb",
+      "lbcollision",
+      "sdata",
+      "sdata2",
+      "obj_files.mk"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "asm/melee/lb/lbcollision.s",
+      "role": "Renamed from code_80005BB0.s and expanded with moved lbcollision-related routines and their local .sdata/.sdata2 constants."
+    },
+    {
+      "path": "asm/melee/lb/code_80008D30.s",
+      "role": "Deleted after its contents were redistributed into better object boundaries."
+    },
+    {
+      "path": "asm/melee/lb/code_8000AD8C.s",
+      "role": "New address-named assembly object for the 0x8000AD8C-0x8000B1C8 range, including routines such as func_8000AD8C and related data."
+    },
+    {
+      "path": "asm/melee/lb/code_8000B1CC.s",
+      "role": "Received local .sdata labels lbl_804D3710 and lbl_804D3718 for jobj assertion/string data."
+    },
+    {
+      "path": "asm/sdata.s",
+      "role": "Removed lb-owned small-data labels lbl_804D36A0 through lbl_804D3718 from the global sdata bucket."
+    },
+    {
+      "path": "asm/sdata2.s",
+      "role": "Removed lb-owned floating-point constants lbl_804D79F0 through lbl_804D7A54 from the global sdata2 bucket."
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "Updated TEXT_O_FILES to build lbcollision.o and code_8000AD8C.o with the new split."
+    }
+  ],
+  "what_changed": [
+    "Deleted asm/melee/lb/code_80008D30.s, which had contained 3048 lines of assembly beginning at func_80008D30.",
+    "Renamed asm/melee/lb/code_80005BB0.s to asm/melee/lb/lbcollision.s and appended the moved func_80008D30-and-later collision code into that object.",
+    "Added asm/melee/lb/code_8000AD8C.s as a new assembly object for the next address range, starting with func_8000AD8C, func_8000AD98, func_8000ADB4, and similar small state/query helpers.",
+    "Moved small-data color/string labels such as lbl_804D36A0 through lbl_804D3708 into lbcollision.s, and lbl_804D3710/lbl_804D3718 into code_8000B1CC.s.",
+    "Moved floating-point constants such as lbl_804D79F0 through lbl_804D7A40 into lbcollision.s and lbl_804D7A48/lbl_804D7A50/lbl_804D7A54 into code_8000AD8C.s.",
+    "Removed those relocated labels from the monolithic root asm/sdata.s and asm/sdata2.s files.",
+    "Updated obj_files.mk by replacing code_80005BB0.o and code_80008D30.o with lbcollision.o and code_8000AD8C.o."
+  ],
+  "smart_moves": [
+    "Used sdata/sdata2 usage as evidence for object boundaries instead of splitting purely by address or file-size convenience.",
+    "Kept small-data labels in the same assembly object as the code that references them, which is important for reconstructing original object layout and future C decompilation.",
+    "Renamed an address-based file, code_80005BB0.s, to the subsystem name lbcollision.s once enough context existed to identify the code.",
+    "Preserved an address-based filename, code_8000AD8C.s, for code that was split out but apparently not yet given a stronger subsystem name in the available evidence.",
+    "Adjusted obj_files.mk in the same PR as the assembly/data move, avoiding a source-tree reorganization without matching build-order changes."
+  ],
+  "decomp_lessons": [
+    "For Melee decomp, .sdata and .sdata2 references are useful fingerprints for original object-file boundaries; use them to decide where assembly chunks belong.",
+    "Do not leave object-local constants in global asm/sdata.s or asm/sdata2.s once their owning object has been identified; moving them into the object can make later matching and C migration cleaner.",
+    "When renaming an assembly file to a semantic subsystem name, keep unresolved adjacent code in address-based files unless there is direct evidence for a better name.",
+    "Object splits must be reflected in obj_files.mk, and the replacement object list should preserve the intended link order around neighboring lb objects.",
+    "A mechanical-looking assembly move can still be decompilation-enabling because it establishes correct data ownership before functions are converted to C."
+  ],
+  "naming_conventions": [
+    "Use subsystem names such as lbcollision.s when the assembly chunk is identified well enough.",
+    "Continue using address-based placeholders such as code_8000AD8C.s for unidentified or only partially classified address ranges.",
+    "Preserve existing decomp placeholder symbols like func_80008D30 and lbl_804D79F0 when the PR is reorganizing ownership rather than naming functions or data.",
+    "Small-data labels remain named by address-style lbl_804Dxxxx placeholders until stronger semantic names are known."
+  ],
+  "assembly_or_matching_tactics": [
+    "Move .section .sdata and .section .sdata2 blocks into the same asm file as their users to model original object-file local small-data layout.",
+    "Use sda21 references, such as lbl_804D7A48@sda21(r2) and lbl_804D3EE0@sda21(r13), as clues when grouping assembly and constants.",
+    "Split one large address-range file into a semantic lbcollision object plus a new address-based tail object rather than keeping all functions in one catch-all file.",
+    "Remove duplicated/global small-data definitions after relocating them, so the link uses the object-local definitions instead of root sdata buckets.",
+    "Update TEXT_O_FILES atomically with file renames/splits so the linker sees the new object names."
+  ],
+  "review_feedback": [
+    {
+      "type": "none_recorded",
+      "note": "The PR dump contains no issue comments, review comments, or review bodies, so no reviewer intent or requested changes can be extracted."
+    }
+  ],
+  "searchable_terms": [
+    "pr-131",
+    "PsiLupan",
+    "lb-split",
+    "lbcollision",
+    "asm/melee/lb/lbcollision.s",
+    "code_80005BB0.s",
+    "code_80008D30.s",
+    "code_8000AD8C.s",
+    "code_8000B1CC.s",
+    "obj_files.mk",
+    "sdata",
+    "sdata2",
+    "small data",
+    "sda21",
+    "func_80008D30",
+    "func_8000AD8C",
+    "lbl_804D36A0",
+    "lbl_804D3700",
+    "lbl_804D3710",
+    "lbl_804D79F0",
+    "lbl_804D7A48",
+    "GXSetNumChans",
+    "GXSetChanAmbColor",
+    "GXSetChanMatColor",
+    "GXSetChanCtrl",
+    "PSMTXScale",
+    "PSMTXIdentity",
+    "PSMTXConcat"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that convert asm/melee/lb/lbcollision.s functions to C after this object-boundary cleanup.",
+    "Search for uses or renames of func_80008D30, func_80008DA4, and func_80008FC8 to see how the lbcollision API was eventually named.",
+    "Check whether code_8000AD8C.s later received a semantic filename or was absorbed into another lb source file.",
+    "Audit other global asm/sdata.s and asm/sdata2.s labels for similar object-local relocation opportunities.",
+    "Compare obj_files.mk ordering before and after adjacent lb splits to confirm link-order assumptions."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

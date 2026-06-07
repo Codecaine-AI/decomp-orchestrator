@@ -1,0 +1,138 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-187",
+  "pr": {
+    "number": 187,
+    "title": "Match HSD_StateInitDirect and add matching HSD_InitComponent that needs data split",
+    "url": "https://github.com/doldecomp/melee/pull/187",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-13T21:50:04Z",
+    "merged_at": "2021-12-13T21:50:11Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched/added C for HSD_StateInitDirect in baselib displayfunc, introduced a C version of HSD_InitComponent behind NON_MATCHING while retaining the inline asm fallback, and propagated several newly identified SDK/HSD symbol names through asm callsites and functions.h. The PR also added displayfunc.o to e_files.mk and renamed call targets such as GXSetVtxDesc, GXSetVtxAttrFmt, GXSetCurrentMtx, HSD_StateInitTev, HSD_ClearVtxDesc, and HSD_SetupRenderMode across many existing assembly files.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "symbol-renaming",
+      "headers",
+      "build-configuration",
+      "nonmatching-c-candidate"
+    ],
+    "systems": [
+      "sysdolphin/baselib",
+      "dolphin/gx",
+      "melee/lb",
+      "melee/ft",
+      "melee/gm",
+      "melee/it",
+      "melee/mp",
+      "include",
+      "build"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/displayfunc.c",
+    "src/sysdolphin/baselib/initialize.c",
+    "include/functions.h",
+    "e_files.mk",
+    "asm/sysdolphin/baselib/displayfunc.s",
+    "asm/sysdolphin/baselib/tev.s",
+    "asm/sysdolphin/baselib/state.s",
+    "asm/dolphin/gx/GXFifo.s",
+    "asm/dolphin/gx/GXInit.s",
+    "asm/melee/lb/code_8000F9F8.s",
+    "asm/melee/lb/lbcollision.s"
+  ],
+  "what_changed": [
+    "Added C implementation of HSD_StateInitDirect(int vtxfmt, u32 param_2) in src/sysdolphin/baselib/displayfunc.c.",
+    "HSD_StateInitDirect clears vertex descriptors, sets vertex attr formats for attrs 9 and 0xB, initializes TEV state, calls HSD_SetupRenderMode(param_2 | 0x28000000), enables GX vertex descriptors 9 and 0xB, and resets current matrix to 0.",
+    "Added displayfunc.o to EPILOGUE_UNSCHEDULED in e_files.mk, allowing the new displayfunc C object to participate in the build.",
+    "Added a C HSD_InitComponent body under #ifdef NON_MATCHING while preserving the existing asm HSD_InitComponent under #else.",
+    "The HSD_InitComponent C candidate initializes OS, fills an HSD_VIStatus with rmode, black/vf/gamma/clear/update settings, calls HSD_VIInit with FrameBuffer[0..2], then runs HSD_GXInit, HSD_DVDInit, HSD_IDSetup, VIWaitForRetrace, HSD_ObjInit, func_803881E4, and sets init_done = TRUE.",
+    "Renamed func_8033BF00 to GXSetVtxDesc and func_8033C414 to GXSetVtxAttrFmt in asm/dolphin/gx/GXFifo.s.",
+    "Renamed func_80341510 callsites to GXSetCurrentMtx, including GXInit and numerous melee/sysdolphin asm files.",
+    "Renamed func_803624D8 to HSD_StateInitTev and func_8036C244 callsites to HSD_ClearVtxDesc.",
+    "Renamed func_803738D0 callsites to HSD_StateInitDirect.",
+    "Updated include/functions.h comments/prototypes to reflect newly identified symbols including GXSetVtxDesc, GXSetVtxAttrFmt, GXSetCurrentMtx, HSD_StateInitTev, HSD_ClearVtxDesc, and HSD_StateInitDirect."
+  ],
+  "smart_moves": [
+    "The PR paired a new C match with broad symbol propagation, making existing assembly more readable without changing instruction bytes at callsites.",
+    "HSD_StateInitDirect was expressed as a small, high-level wrapper over already-identified GX/HSD primitives, which made the function intent clear and helped validate the renamed dependencies.",
+    "The HSD_InitComponent work was isolated behind NON_MATCHING rather than replacing the working asm path, preserving build correctness while documenting the likely C structure.",
+    "Adding displayfunc.o to e_files.mk in the same PR avoided leaving the matched C function disconnected from the build.",
+    "Renaming SDK-like GX functions to their official-style names made repeated rendering setup sequences across unrelated game systems easier to recognize."
+  ],
+  "decomp_lessons": [
+    "When a low-level SDK/HSD primitive is identified, update all asm callsites immediately; the payoff is high because rendering setup code repeats throughout melee, lb, ft, gm, it, and sysdolphin files.",
+    "Small wrapper functions like HSD_StateInitDirect can often be matched by recognizing canonical GX setup order: clear descriptors, set attr formats, initialize TEV/render mode, enable descriptors, then set current matrix.",
+    "If a function is structurally understood but blocked by data placement or split issues, keep the C version under NON_MATCHING and retain asm as the matching build path.",
+    "Build-list changes such as adding an object to e_files.mk are part of the decomp match, not cleanup; include them with the C conversion so future matching attempts compile in the intended section.",
+    "Header/prototype updates should accompany symbol renames so subsequent C work can call the newly identified functions instead of relying on anonymous func_ labels."
+  ],
+  "naming_conventions": [
+    "Dolphin GX SDK functions use GX-prefixed names such as GXSetVtxDesc, GXSetVtxAttrFmt, and GXSetCurrentMtx.",
+    "HAL/SysDolphin functions use HSD_-prefixed names such as HSD_StateInitDirect, HSD_StateInitTev, HSD_ClearVtxDesc, HSD_SetupRenderMode, and HSD_InitComponent.",
+    "Previously unknown labels in assembly were replaced directly at the .global/function-label site when the symbol identity was known, then corresponding bl callsites were updated.",
+    "Unresolved functions remained as func_ addresses or commented unknowns in functions.h, avoiding speculative renames beyond the evidence in this slice."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted one displayfunc routine to C while removing or reducing corresponding asm coverage in asm/sysdolphin/baselib/displayfunc.s.",
+    "Used exact symbol aliasing/renaming in assembly files to preserve existing branch offsets while improving semantic names.",
+    "Left HSD_InitComponent as inline asm for the matching path and placed the C equivalent behind #ifdef NON_MATCHING, indicating the source is understood but not yet safely linkable/matching due to a data split issue noted in the PR title.",
+    "Matched HSD_StateInitDirect as a straightforward ordered call sequence to HSD_ClearVtxDesc, GXSetVtxAttrFmt, HSD_StateInitTev, HSD_SetupRenderMode, GXSetVtxDesc, and GXSetCurrentMtx.",
+    "Propagated new names through many asm callsites instead of waiting for each caller to be decompiled, improving searchability and future reverse-engineering context."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-187",
+    "PsiLupan",
+    "HSD_StateInitDirect",
+    "HSD_InitComponent",
+    "HSD_StateInitTev",
+    "HSD_ClearVtxDesc",
+    "HSD_SetupRenderMode",
+    "GXSetVtxDesc",
+    "GXSetVtxAttrFmt",
+    "GXSetCurrentMtx",
+    "displayfunc.c",
+    "initialize.c",
+    "functions.h",
+    "e_files.mk",
+    "NON_MATCHING",
+    "data split",
+    "FrameBuffer",
+    "HSD_VIStatus",
+    "HSD_VIInit",
+    "HSD_GXInit",
+    "HSD_DVDInit",
+    "HSD_IDSetup",
+    "VIWaitForRetrace",
+    "HSD_ObjInit",
+    "init_done",
+    "func_803738D0",
+    "func_8033BF00",
+    "func_8033C414",
+    "func_80341510",
+    "func_803624D8",
+    "func_8036C244"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that remove NON_MATCHING from HSD_InitComponent or resolve the data split blocker.",
+    "Search for callers of HSD_StateInitDirect to identify repeated GX setup patterns suitable for C conversion.",
+    "Search for remaining func_8033BF00, func_8033C414, func_80341510, func_803624D8, func_8036C244, and func_803738D0 references after this PR.",
+    "Inspect later header cleanup around GXSetVtxDesc, GXSetVtxAttrFmt, and GXSetCurrentMtx for proper typed prototypes.",
+    "Look for displayfunc.o section/order changes related to EPILOGUE_UNSCHEDULED and baselib data splitting."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

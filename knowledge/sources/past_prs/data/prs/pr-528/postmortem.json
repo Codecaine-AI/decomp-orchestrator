@@ -1,0 +1,200 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-528",
+  "pr": {
+    "number": 528,
+    "title": "Continue matching HSD jobj",
+    "url": "https://github.com/doldecomp/melee/pull/528",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-09-02T03:02:55Z",
+    "merged_at": "2022-09-02T04:31:29Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched another slice of sysdolphin baselib JObj by replacing roughly 1 KB of jobj.s assembly with C implementations in jobj.c. The new C covered reset-RST traversal, JObj hierarchy callback traversal helpers, matrix construction, animation remove/request helpers, and JObjSortAnim. The PR also named some locals from the Zoids debug map and renamed assembly-side globals/callback labels such as JObjUpdateFunc, ufc_callbacks, dptcl_callback, jsound_callback, ptcltgt_callback, and current_jobj. Review centered on preserving match-sensitive pointer patterns, improving argument/local names, using known flag names, and whether a callback signature deserved a typedef.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "naming",
+      "types-structs",
+      "matching-tactics",
+      "review-cleanup"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "jobj",
+      "asm",
+      "src"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/sysdolphin/baselib/jobj.c",
+      "role": "Added C implementations for previously-assembled HSD JObj routines and introduced the mtx include plus hsdJObj/JObjInfoInit declaration."
+    },
+    {
+      "path": "asm/sysdolphin/baselib/jobj.s",
+      "role": "Removed matched assembly for the new C functions and adjusted remaining assembly references/names for JObjUpdateFunc and callback/global data symbols."
+    }
+  ],
+  "what_changed": [
+    "Added C for JObjResetRST and HSD_JObjResetRST, copying rotation, scale, and translation from HSD_Joint to HSD_JObj and recursing across children unless the 0x1000/INSTANCE-like flag blocks traversal.",
+    "Added traversal helper functions func_8036EFAC and func_8036F0F0 using a callback signature void (*cb)(HSD_JObj*, void*, u32), including parent assertions and child/sibling iteration.",
+    "Added inline has_scl to test jobj->scl and used it in HSD_JObjMakeMatrix.",
+    "Added HSD_JObjMakeMatrix, including parent matrix setup, inherited/cumulative scale handling with HSD_VecAlloc/HSD_VecFree, SRT vs quaternion SRT matrix paths, parent matrix concatenation, and aobj-linked translation adjustment.",
+    "Added animation removal/request wrappers: HSD_JObjRemoveAnimByFlags, HSD_JObjRemoveAnimAllByFlags, HSD_JObjRemoveAnim, HSD_JObjRemoveAnimAll, HSD_JObjReqAnimByFlags, HSD_JObjReqAnimAllByFlags, HSD_JObjReqAnimAll, and HSD_JObjReqAnim.",
+    "Added JObjSortAnim using an HSD_FObj* plus HSD_FObj** pointer-to-pointer pattern to move fobj entries with obj_type 0xC to the front of the AObj fobj list.",
+    "Removed the corresponding assembly bodies from asm/sysdolphin/baselib/jobj.s and left smaller assembly deltas for remaining labels/global names.",
+    "Renamed some asm-side symbols/globals, including JObjUpdateFunc, ufc_callbacks, dptcl_callback, jsound_callback, ptcltgt_callback, and current_jobj."
+  ],
+  "smart_moves": [
+    "Kept match-sensitive linked-list manipulation in JObjSortAnim as an explicit pointer plus pointer-to-pointer pattern; the author noted that both fobj and fobj_p were needed to match.",
+    "Used jobj->scl as the basis for naming the helper/local around scale state, rather than guessing a broader semantic name without proof.",
+    "Matched recursive JObj hierarchy operations using simple child/next loops and early NULL guards, mirroring the assembly's traversal shape.",
+    "Separated one-node operations from all-tree operations, e.g. HSD_JObjRemoveAnimByFlags versus HSD_JObjRemoveAnimAllByFlags and HSD_JObjReqAnimByFlags versus HSD_JObjReqAnimAllByFlags.",
+    "Preserved known assert evidence where available, including parent assertion strings/symbols, instead of fully inventing names for still-uncertain functions.",
+    "Deferred introducing a callback typedef until the callback is used elsewhere, avoiding premature type/API churn while still recording the review suggestion."
+  ],
+  "decomp_lessons": [
+    "For JObj tree routines, watch the 0x1000 flag: review identified it as INSTANCE, and traversal often stops when that flag is set.",
+    "In HSD JObj animation code, flags arguments should be named flags when they are passed through DObj/RObj/AObj animation calls; reviewers explicitly requested replacing generic arg names.",
+    "A repeated test like jobj->flags & 0x4020 used to decide whether jobj->u.dobj is valid may deserve a named helper/inline such as a union_type_dobj-style predicate once enough uses are confirmed.",
+    "Do not rename abbreviated fields like scl to scale everywhere unless evidence supports it; in this PR the field-based name has_scl was accepted as HAL-compatible enough for now.",
+    "Pointer-to-pointer linked-list rewrites can be necessary for matching; readability suggestions such as cur may be rejected if the original fobj/fobj_p relationship is match-relevant.",
+    "Callback typedefs are useful but can wait until the callback signature has multiple users or clearer API value.",
+    "Debug maps such as the Zoids debug map can be used to name locals, but the PR evidence only says locals were named from that map and does not enumerate all of them."
+  ],
+  "naming_conventions": [
+    "Use HSD_JObj* local names such as child and child_jobj for child/next traversal; review preferred simpler child in at least one loop.",
+    "Use flags for u32 bitmask parameters passed through animation remove/request APIs, not arg1 when the semantic role is known.",
+    "Use fobj_p or similar for HSD_FObj** when it is paired with an HSD_FObj* fobj and the pointer-pointer identity matters for matching.",
+    "Use has_scl when the helper is specifically keyed to the jobj->scl field; reviewers discussed whether scl means scale but accepted the abbreviation for now.",
+    "Known or likely flag constants should replace raw magic numbers when available; review specifically called out 0x1000 as INSTANCE.",
+    "Remaining unknown functions may stay address-named, such as func_8036EFAC and func_8036F0F0, when PR evidence does not establish semantic names."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted a large contiguous block of jobj.s into C while preserving remaining assembly references by renaming labels and data symbols rather than deleting unrelated assembly.",
+    "Used an inline BOOL helper with an explicit result variable for has_scl, likely to reproduce the compiler's control flow and register behavior.",
+    "Maintained separate child_jobj/child_joint cursor advancement in HSD_JObjResetRST, including the NULL-safe joint-next update, matching the assembly's parallel traversal.",
+    "Preserved direct casts such as (Vec*) &jobj->rotate and (HSD_JObj*) jobj->aobj->hsd_obj in matrix code where structure layout and call signatures required them.",
+    "Kept pointer-to-pointer list surgery in JObjSortAnim because changing to more abstract list handling could disrupt matching.",
+    "Used existing baselib calls such as HSD_MtxSRT, HSD_MtxSRTQuat, PSMTXConcat, HSD_VecAlloc, HSD_VecFree, HSD_AObjReqAnim, HSD_DObjReqAnimAllByFlags, and HSD_RObjReqAnimAllByFlags to replace hand-translated assembly behavior."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "feedback": "Asked whether the callback parameter cb should be a typedef."
+    },
+    {
+      "author": "r-burns",
+      "feedback": "Responded that a typedef would be introduced once the callback signature is used elsewhere."
+    },
+    {
+      "author": "ribbanya",
+      "feedback": "Questioned whether scl meant scale and whether it came from an assert symbol."
+    },
+    {
+      "author": "r-burns",
+      "feedback": "Said the name was based on jobj->scl and could be changed to scale if clearer."
+    },
+    {
+      "author": "ribbanya",
+      "feedback": "Accepted the abbreviation for now if it matches HAL, noting it could be revisited later."
+    },
+    {
+      "author": "ribbanya",
+      "feedback": "Suggested simplifying a child traversal loop to use HSD_JObj* child rather than child_jobj."
+    },
+    {
+      "author": "ribbanya",
+      "feedback": "Suggested a readability rewrite of JObjSortAnim using HSD_FObj** cur."
+    },
+    {
+      "author": "r-burns",
+      "feedback": "Preferred fobj_p or similar because the pointer and pointer-pointer are both needed to match."
+    },
+    {
+      "author": "ribbanya",
+      "feedback": "Asked whether fobj_ptr would be acceptable as an alternative pointer-pointer name."
+    },
+    {
+      "author": "PsiLupan",
+      "feedback": "Requested fixing an argument name to flags."
+    },
+    {
+      "author": "PsiLupan",
+      "feedback": "Identified raw flag 0x1000 as INSTANCE."
+    },
+    {
+      "author": "PsiLupan",
+      "feedback": "Noted that the repeated 0x4020/union-dobj test looked like union_type_dobj or an inline because it appeared multiple times."
+    },
+    {
+      "author": "ribbanya",
+      "feedback": "Asked the author to avoid force-pushing because it made review suggestions/history awkward; linear pushes were preferred since the PR would be squashed anyway."
+    }
+  ],
+  "searchable_terms": [
+    "PR528",
+    "Continue matching HSD jobj",
+    "HSD_JObj",
+    "JObjResetRST",
+    "HSD_JObjResetRST",
+    "func_8036EFAC",
+    "func_8036F0F0",
+    "has_scl",
+    "HSD_JObjMakeMatrix",
+    "HSD_JObjRemoveAnimByFlags",
+    "HSD_JObjRemoveAnimAllByFlags",
+    "HSD_JObjRemoveAnim",
+    "HSD_JObjRemoveAnimAll",
+    "HSD_JObjReqAnimByFlags",
+    "HSD_JObjReqAnimAllByFlags",
+    "HSD_JObjReqAnimAll",
+    "HSD_JObjReqAnim",
+    "JObjSortAnim",
+    "HSD_AObj",
+    "HSD_FObj",
+    "fobj_p",
+    "obj_type 0xC",
+    "jobj->scl",
+    "MTX_INDEP_SRT",
+    "INSTANCE",
+    "0x1000",
+    "0x4020",
+    "union_type_dobj",
+    "HSD_MtxSRT",
+    "HSD_MtxSRTQuat",
+    "HSD_VecAlloc",
+    "HSD_VecFree",
+    "PSMTXConcat",
+    "JObjUpdateFunc",
+    "ufc_callbacks",
+    "dptcl_callback",
+    "jsound_callback",
+    "ptcltgt_callback",
+    "current_jobj",
+    "Zoids debug map",
+    "sysdolphin baselib jobj"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename func_8036EFAC or func_8036F0F0 to semantic traversal/callback names.",
+    "Search for later adoption of a callback typedef for void (*cb)(HSD_JObj*, void*, u32).",
+    "Search for commits replacing raw 0x1000 with INSTANCE in jobj.c and headers.",
+    "Search for a helper or inline around the repeated jobj->flags & 0x4020 DObj union-type test.",
+    "Check whether has_scl was later renamed to has_scale or kept to match HAL naming.",
+    "Review later HSD_JObjMakeMatrix work for flag names replacing raw 8 and 0x20000."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

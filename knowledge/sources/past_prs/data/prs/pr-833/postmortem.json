@@ -1,0 +1,172 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-833",
+  "pr": {
+    "number": 833,
+    "title": "Partially match all of `ftPe_SpecialLw`",
+    "url": "https://github.com/doldecomp/melee/pull/833",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-02T20:15:35Z",
+    "merged_at": "2023-05-02T20:21:58Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Moved Peach down-special / vegetable pull code out of the monolithic Peach init assembly into a new `ftPe_SpecialLw.c`/`.h` unit, partially decompiling the state enter/anim/phys/coll logic while keeping hard-to-match pieces guarded with `MUST_MATCH` inline assembly. The PR also improved supporting type/header knowledge: renamed the generic held-item fighter field to `item_gobj`, identified Peach's `fp+2248` as `veg_gobj`, exposed item spawn/delete prototypes, added Peach special headers, and registered the new object file. There were no review comments in the slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "struct-field-naming",
+      "build-integration"
+    ],
+    "systems": [
+      "fighter",
+      "fighter/Peach",
+      "item",
+      "asm",
+      "docs",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/chara/ftPeach/ftPe_SpecialLw.c",
+      "role": "new partial C decompilation for Peach SpecialLw/SpecialAirLw, vegetable selection/spawn/delete helpers, callbacks, motion-state transitions, physics, and collision handlers"
+    },
+    {
+      "path": "src/melee/ft/chara/ftPeach/ftPe_SpecialLw.h",
+      "role": "new public declarations for Peach down-special functions at 11CF84 through 11D3FC"
+    },
+    {
+      "path": "asm/melee/ft/chara/ftPe_Init.s",
+      "role": "removed the corresponding Peach down-special assembly block from the init asm file"
+    },
+    {
+      "path": "src/melee/ft/chara/ftPeach/types.h",
+      "role": "renamed Peach fighter var `x20` to `veg_gobj` and split early `ftPe_DatAttrs` bytes into fields used by vegetable selection"
+    },
+    {
+      "path": "src/melee/ft/types.h",
+      "role": "renamed `Fighter::x1974_heldItem` to `Fighter::item_gobj`"
+    },
+    {
+      "path": "src/melee/ft/inlines.h",
+      "role": "updated held-item inline helpers to use `item_gobj` and added `ftCheckThrowB0` helper for throw flag consumption"
+    },
+    {
+      "path": "src/melee/ft/forward.h",
+      "role": "added `FtPart_109 = 109`, used as the vegetable spawn attachment point"
+    },
+    {
+      "path": "src/melee/it/it_27CF.h",
+      "role": "added prototypes for `it_802BD4AC` and `it_802BD45C`, used by Peach vegetable spawn/delete"
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "added `ftPe_SpecialLw.c.o` before the remaining Peach init assembly object"
+    },
+    {
+      "path": "docs/glossary.md",
+      "role": "documented `veg` as short for vegetable"
+    }
+  ],
+  "what_changed": [
+    "Added `ftPe_SpecialLw.c` with partial C implementations for Peach down-special, including `ftPe_SpecialLw_Enter`, `ftPe_SpecialAirLw_Enter`, animation callbacks, ground/air physics, ground/air collision transitions, `throwVegIfHeld`, `getVeg`, `spawnVeg`, `pickVeg`, and cleanup helpers.",
+    "Kept `pickVeg` and `spawnVeg` under `#if defined(MUST_MATCH) && !defined(WIP)` inline assembly, with non-asm C attempts available for WIP/non-MUST_MATCH builds.",
+    "Removed the matching assembly range from `asm/melee/ft/chara/ftPe_Init.s`, including symbols such as `ftPe_8011CE48`, `ftPe_8011CF84`, `ftPe_8011CFA0`, `ftPe_SpecialLw_Enter`, `ftPe_SpecialAirLw_Enter`, anim/phys/coll routines, and related local labels.",
+    "Added `ftPe_SpecialLw.h`, plus new Peach `ftPe_SpecialHi.h` and `ftPe_SpecialN.h` headers, and moved Peach special declarations out of `ftPe_Init.h`.",
+    "Integrated the new Peach SpecialLw object into `obj_files.mk`.",
+    "Renamed the global fighter held item pointer at `fp+1974` from `x1974_heldItem` to `item_gobj` and propagated that rename through common fighter code, ftlib, Peach, Purin, Game & Watch, Link/Young Link, Mewtwo, Samus, and other touched call sites.",
+    "Renamed Peach fighter variable `fp+2248` from `x20` to `veg_gobj`, reset it on Peach death, and used it to track the vegetable object separate from the generic held-item field.",
+    "Exposed item functions `it_802BD4AC` and `it_802BD45C` in `it_27CF.h`; these are used to create and remove Peach turnip/vegetable items.",
+    "Added `FtPart_109 = 109` to `Fighter_Part`, matching the joint/part used to compute the vegetable spawn position via `lb_8000B1CC`.",
+    "Added glossary entry: `veg` means vegetable."
+  ],
+  "smart_moves": [
+    "Split Peach down-special into its own translation unit instead of leaving it embedded in `ftPe_Init.s`, which makes the motion-state logic searchable and isolates remaining nonmatching assembly.",
+    "Used `MUST_MATCH && !WIP` inline assembly only for the hardest routines, allowing partial C progress without sacrificing matching builds.",
+    "Introduced small semantic helpers (`getVeg`, `throwVegIfHeld`, `doAnim`, `handleAirColl`, `handleColl`) around repeated behavior, which clarified the state machine while preserving the original control flow at the exported function level.",
+    "Renaming `x1974_heldItem` to `item_gobj` across many files gave future decomp work a reliable shared name for the fighter held-item pointer and reduced dependence on raw offsets.",
+    "Identifying `fp->fv.pe.veg_gobj` captured the distinction between Peach's tracked vegetable object and the generic `item_gobj`, which is important for cleanup and turnip-specific behavior.",
+    "The code preserved fragile matching details explicitly, including the `MUST_MATCH` unused stack note in `ftPe_SpecialLw_Anim`, the static `coll_mf` bitmask, and direct callback assignments to `x21BC`, `x21E4`, and `x21DC`."
+  ],
+  "decomp_lessons": [
+    "When only part of a function cluster is matchable, moving the cluster to C with local `MUST_MATCH` asm islands can still retire large sections of standalone asm and improve code navigation.",
+    "Field renames should be propagated broadly once the semantics are clear; `item_gobj` became useful across fighter common code, character-specific item callbacks, and ftlib helpers.",
+    "Character-specific fighter vars often shadow or track global fighter state; Peach's `veg_gobj` must be distinguished from `item_gobj` because cleanup checks compare both and verify `It_Kind_Peach_Turnip`.",
+    "Motion-state decompilation benefits from factoring shared animation-end behavior: both ground and air down-special call an end-state callback then unset the tracked vegetable.",
+    "Header extraction is part of matching work: adding focused Peach special headers allowed `ftdata.c` and `ftPe_Init.c` to reference declarations without keeping all special-move prototypes in `ftPe_Init.h`.",
+    "Dat attribute structs can be refined incrementally; this PR split `ftPe_DatAttrs` at offsets `+10`, `+14`, and `+18` because vegetable RNG/weighting code accessed those fields directly, while leaving later unknown bytes as padding."
+  ],
+  "naming_conventions": [
+    "`Fighter::x1974_heldItem` was renamed to `Fighter::item_gobj` for the generic held item `HSD_GObj*`.",
+    "`ftPeach_FighterVars::x20` at `fp+2248` was renamed to `veg_gobj` for Peach's tracked vegetable object.",
+    "`veg` was documented in the glossary as short for vegetable.",
+    "New Peach down-special functions follow existing exported naming: `ftPe_SpecialLw_*` for grounded versions and `ftPe_SpecialAirLw_*` for aerial versions.",
+    "Internal helper names use behavior-oriented verbs: `pickVeg`, `spawnVeg`, `getVeg`, `throwVegIfHeld`, `handleAirColl`, `handleColl`, and `doAnim`.",
+    "New headers used address-style include guards such as `GALE01_11D11C`, consistent with the function address range represented by the header.",
+    "Item kind comparisons used named constants where available, notably `It_Kind_Peach_Turnip`, `It_Kind_Parasol`, `It_Kind_Peach_Parasol`, and `It_Kind_Sword`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed a large Peach down-special assembly block from `ftPe_Init.s` while preserving exact asm for `pickVeg` and `spawnVeg` inside the new C file under `MUST_MATCH && !WIP`.",
+    "Used `#pragma push`/`#pragma pop`, `static asm`, `nofralloc`, and `// clang-format off` around inline assembly to keep compiler formatting and prologue behavior stable.",
+    "Kept local labels in inline asm as `lbl_8011....` equivalents of the removed `.L_...` labels.",
+    "Provided non-asm C attempts for `pickVeg` and `spawnVeg` in the `#else` path, including `M2C_UNK` and `M2C_FIELD` for unresolved pointer arithmetic in the weighted vegetable selection loop.",
+    "Preserved a matching workaround in `ftPe_SpecialLw_Anim` with a `MUST_MATCH` unused stack byte array.",
+    "Used a `static MotionFlags const coll_mf` expression to encode the shared ground/air transition flags (`Ft_MF_SkipMatAnim`, `Ft_MF_SkipColAnim`, `Ft_MF_UpdateCmd`, `Ft_MF_SkipItemVis`, `Ft_MF_Unk19`, `Ft_MF_SkipModelPartVis`, `Ft_MF_SkipModelFlags`, `Ft_MF_Unk27`).",
+    "Factored animation completion into `doAnim(gobj, cb)` so ground and air animation functions share the same `ftAnim_IsFramesRemaining` pattern while passing `ft_8008A2BC` or `ft_800CC730`."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR833",
+    "ftPe_SpecialLw",
+    "ftPe_SpecialAirLw",
+    "Peach down special",
+    "Peach vegetable",
+    "Peach turnip",
+    "veg_gobj",
+    "item_gobj",
+    "x1974_heldItem",
+    "fp+1974",
+    "fp+2248",
+    "ftPe_8011CE48",
+    "ftPe_8011CF84",
+    "ftPe_8011CFA0",
+    "pickVeg",
+    "spawnVeg",
+    "getVeg",
+    "throwVegIfHeld",
+    "ftCheckThrowB0",
+    "It_Kind_Peach_Turnip",
+    "it_802BD4AC",
+    "it_802BD45C",
+    "FtPart_109",
+    "Fighter_ChangeMotionState",
+    "x21BC_callback_Accessory4",
+    "MUST_MATCH",
+    "M2C_FIELD",
+    "M2C_UNK",
+    "ftPe_DatAttrs",
+    "ftPeach_FighterVars",
+    "obj_files.mk",
+    "docs glossary veg"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match `pickVeg` or remove the `M2C_UNK`/`M2C_FIELD` code in `ftPe_SpecialLw.c`.",
+    "Search for later renames of `ftPe_SpecialLw_8011CFA0` and `ftPe_SpecialLw_UnsetVeg`.",
+    "Search for follow-up struct work on `ftPe_DatAttrs` offsets `+10`, `+14`, `+18`, `+1C`, and turnip probability tables.",
+    "Search for later cleanup of `FtPart_109` into a semantic part name.",
+    "Search for broader adoption or corrections of the `item_gobj` held-item field rename."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

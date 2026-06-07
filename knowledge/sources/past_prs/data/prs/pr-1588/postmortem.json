@@ -1,0 +1,181 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1588",
+  "pr": {
+    "number": 1588,
+    "title": "ftanim matches",
+    "url": "https://github.com/doldecomp/melee/pull/1588",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-11T03:26:48Z",
+    "merged_at": "2025-06-11T03:31:35Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched a large block of fighter animation code in src/melee/ft/ftanim.c and supporting headers/types. The decomp.dev bot reported +8236 matched bytes, 30 newly matched functions in main/melee/ft/ftanim, one ftdynamics function improved to 100%, and ftAnim_80070308 improved to 80.95%. The PR also tightened animation-related data types, replacing placeholder lbMthp-style access with FigaTree/FigaTrack structures and propagating those types through ftdata, ftdynamics, lbmthp, lbanim, and fighter structs.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "type-recovery",
+      "struct-layout",
+      "symbol-metadata"
+    ],
+    "systems": [
+      "fighter",
+      "ftanim",
+      "ftdynamics",
+      "ftparts",
+      "lbanim",
+      "lbmthp",
+      "config"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/ftanim.c",
+      "why": "Added the bulk of matched ftAnim implementations, including joint-tree traversal, animation stepping/blending, frame queries, part animation setup, rate changes, callback wrapping, and costume texture animation handling."
+    },
+    {
+      "path": "src/melee/ft/ftanim.h",
+      "why": "Replaced placeholder include guard/style and expanded/corrected ftAnim prototypes with concrete Fighter, Fighter_GObj, HSD_JObj, HSD_Joint, FigaTree, and frame/rate parameter types."
+    },
+    {
+      "path": "src/melee/ft/types.h",
+      "why": "Recovered animation-relevant fields: ftCommonData.x808 Vec3, named DObjList struct form, ftData nested x8 layout, FighterBone.xC as u8, Fighter.x590 as FigaTree*, costume TOBJ fields, ftData_80085FD4_ret flags, and ftDynamics.x10 as FigaTree***."
+    },
+    {
+      "path": "src/melee/lb/lbanim.h",
+      "why": "Moved FigaTrack and FigaTree into forward-declarable struct definitions and corrected FigaTree nodes/tracks to s8* and FigaTrack*."
+    },
+    {
+      "path": "src/melee/lb/lbmthp.c",
+      "why": "Changed lbMthp_8001E8F8 to operate on FigaTree* and return tree->frames instead of reading placeholder x8."
+    },
+    {
+      "path": "src/melee/ft/ftdynamics.c",
+      "why": "Adjusted dynamic bone animation logic to pass FigaTree* values into ftCo_8009CB40/ftAnim_8006EED4 and matched ftCo_8009E4A8."
+    },
+    {
+      "path": "config/GALE01/symbols.txt",
+      "why": "Split/identified ftAnim data symbols at 803C0670, 803C0690, and 803C06A8 as strings instead of one larger object."
+    }
+  ],
+  "what_changed": [
+    "Implemented many previously unmatched ftAnim functions from 8006DBF4 through later 80070xxx helpers, with the bot listing 30 new ftanim matches.",
+    "Added static traversal stacks for HSD_AnimJoint, HSD_MatAnimJoint, and HSD_Joint with a fixed depth of 30 and the original OSReport/assert path for overflow.",
+    "Added joint traversal helpers/inlines for HSD_JObj next, parent, and child access and used them in tree-walking animation routines.",
+    "Implemented animation update paths that distinguish non-blended animation from blended x8AC_animSkeleton animation, including calls to HSD_AObjInitEndCallBack and HSD_AObjInvokeCallBacks.",
+    "Implemented frame/rate helpers such as ftAnim_8006F0FC, ftAnim_SetAnimRate, ftAnim_IsFramesRemaining, ftAnim_8006F368, ftAnim_8006F3DC, and ftAnim_8006F484.",
+    "Updated ftAnim_8006EBA4 to call ftAnim_8006E9B4, ftAction_80073240, ftAnim_800707B0, and ftCo_800DB500 in sequence.",
+    "Corrected ftCo_800DB500 prototype from unknown return/params to void ftCo_800DB500(Fighter_GObj*).",
+    "Changed ftData_80085E50 return type from lbMthp_8001E8F8_t* to FigaTree*.",
+    "Changed ftdynamics dynamic-bone animation plumbing to pass FigaTree* and NULL rather than placeholder integer zero or Fighter_Part values.",
+    "Removed the old lbMthp_8001E8F8_t placeholder struct from lb/types.h after replacing its usage with FigaTree.",
+    "Changed ftParts_80075028 return type from u8 to int and refined several ftparts prototypes, including DObjList/HSD_TObj usage.",
+    "Updated GALE01 symbol metadata to mark ftAnim_803C0670, ftAnim_803C0690, and ftAnim_803C06A8 as separate string objects."
+  ],
+  "smart_moves": [
+    "Recovered FigaTree/FigaTrack structure semantics and reused them across ftanim, ftdynamics, ftdata, lbanim, and lbmthp instead of preserving a one-off placeholder type.",
+    "Used exact lib/HSD callback bracketing around animation walks: HSD_AObjInitEndCallBack before traversal and HSD_AObjInvokeCallBacks after traversal.",
+    "Modeled tree traversal explicitly with small helper inlines for next, parent, and child, which likely helped expression ordering and repeated traversal code match.",
+    "Preserved original assert strings and line numbers in the joint-depth checks, which are often necessary for data/string references and codegen matching.",
+    "Kept nonmatching safety under #ifdef BUGFIX in ftAnim_8006F3DC, avoiding a behavior-changing unconditional return while documenting the undefined fallthrough case.",
+    "Replaced magic integer zero with NULL in pointer contexts, while also correcting the underlying parameter type to FigaTree* where evidence supported it.",
+    "Split a previously large ftAnim data symbol into three string symbols, improving data boundary accuracy for future symbol and rodata work."
+  ],
+  "decomp_lessons": [
+    "When a placeholder struct is only used to reach a frame-count field, check whether it is actually an animation tree object; here lbMthp_8001E8F8_t became FigaTree and its x8 field became frames.",
+    "Matching animation systems often requires cross-file type recovery: ftanim matches depended on changes in ft/types.h, ftdata.h, ftdynamics.h, lbanim.h, lbmthp.h, and ftparts.h.",
+    "For HSD joint-tree walks, local helper accessors can be used to force the compiler into matching null-check and member-access structure without changing behavior.",
+    "Use forward declarations for shared structs such as FigaTree, FigaTrack, and DObjList to reduce placeholder includes and make headers composable.",
+    "Preserve original debug/assert behavior, including strings and line constants, because those details affect matching and data references.",
+    "Dynamic bone and animation blending code may store alternate skeletons or animation trees in fighter fields; correct field names/types can unlock several functions at once.",
+    "If a function can fall through in the retail binary, guard a modern safety return behind BUGFIX rather than silently changing matching behavior."
+  ],
+  "naming_conventions": [
+    "Matched ftAnim functions retain address-based names such as ftAnim_8006E054 where semantic names are not yet known.",
+    "One public semantic name remains in use: ftAnim_GetNextJointInTree.",
+    "Fighter part enum/type names are used in signatures where known, for example Fighter_Part and FtPart_TransN.",
+    "Recovered animation data structures use conventional names FigaTree and FigaTrack instead of address-derived placeholder lbMthp_8001E8F8_t.",
+    "Unknown fighter fields remain offset-style names such as x594_b0, x8A4_animBlendFrames, x8AC_animSkeleton, and x590, but their types were improved where evidence allowed.",
+    "Forward-declarable structs are written as struct DObjList/FigaTree/FigaTrack in headers, with typedefs supplied from forward headers where needed."
+  ],
+  "assembly_or_matching_tactics": [
+    "Introduced static arrays ftAnim_804590D8, ftAnim_804590D8_unk, and ftAnim_804590D8_F0 as explicit traversal stacks for recursive-like joint iteration.",
+    "Used depth counters passed by pointer for AnimJoint, MatAnimJoint, and Joint traversal routines to mirror original state updates.",
+    "Used exact HSD_ForeachAnim argument constants such as JOBJ_TYPE, 0xFB7F, AOBJ_ARG_AU, AOBJ_ARG_AF, and flag 0x20000000.",
+    "Used separate no-blend and blend paths keyed on fp->x8A4_animBlendFrames == 0.0F.",
+    "Used bitfield flags such as x594_b0, x594_b1, x594_b2, x594_b3, x594_b4, x594_b5, x594_b6, x2221_b2, x2223_b0, and x2226_b2 to steer exact control flow.",
+    "Maintained original HSD_JObj flag checks such as !(HSD_JObjGetFlags(jobj) & 0x1000) during traversal.",
+    "Changed data symbol boundaries in symbols.txt so rodata/data references align with separate strings rather than a single oversized object."
+  ],
+  "review_feedback": [
+    {
+      "source": "decomp.dev bot",
+      "feedback": "Reported matched code increased to 30.12%, +0.21%, +8236 bytes, with 30 new ftanim matches and ftCo_8009E4A8 improved to 100%."
+    },
+    {
+      "source": "human review",
+      "feedback": "No human review comments were present in the provided PR slice."
+    }
+  ],
+  "searchable_terms": [
+    "pr-1588",
+    "ftanim matches",
+    "r-burns",
+    "ftAnim_8006DBF4",
+    "ftAnim_8006DCF4",
+    "ftAnim_GetNextJointInTree",
+    "ftAnim_8006DF0C",
+    "ftAnim_8006E054",
+    "ftAnim_8006E7B8",
+    "ftAnim_8006E9B4",
+    "ftAnim_8006EBA4",
+    "ftAnim_8006EDD0",
+    "ftAnim_8006EED4",
+    "ftAnim_8006F0FC",
+    "ftAnim_SetAnimRate",
+    "ftAnim_IsFramesRemaining",
+    "ftAnim_8006F3DC",
+    "ftAnim_8006F4C8",
+    "ftAnim_8006F628",
+    "ftAnim_8006FE9C",
+    "ftAnim_8006FF74",
+    "ftAnim_80070308",
+    "ftCo_8009E4A8",
+    "FigaTree",
+    "FigaTrack",
+    "DObjList",
+    "lbMthp_8001E8F8",
+    "lbAnim_8001E6D8",
+    "HSD_AObjInitEndCallBack",
+    "HSD_AObjInvokeCallBacks",
+    "HSD_JObjAnim",
+    "HSD_ForeachAnim",
+    "fighter joint depth num over",
+    "x8A4_animBlendFrames",
+    "x8AC_animSkeleton",
+    "x590",
+    "ftDynamics.x10",
+    "ftAnim_803C0670",
+    "ftAnim_803C0690",
+    "ftAnim_803C06A8"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename ftAnim_8006E054, ftAnim_8006E7B8, ftAnim_8006E9B4, or ftAnim_8006EED4 to semantic names.",
+    "Look for follow-up work on ftAnim_80070308, which this PR improved to 80.95% but did not fully match according to the bot report.",
+    "Search for additional uses of FigaTree/FigaTrack in fighter data and dynamic bone code to confirm the recovered ftDynamics.x10 type.",
+    "Check later PRs for cleanup or semantic naming of Fighter fields x590, x594_bits, x597_bits, x8A4_animBlendFrames, and x8AC_animSkeleton.",
+    "Review future symbol updates around ftAnim_803C0670/803C0690/803C06A8 to see whether the string names were later given semantic labels."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

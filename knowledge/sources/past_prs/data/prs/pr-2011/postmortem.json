@@ -1,0 +1,129 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2011",
+  "pr": {
+    "number": 2011,
+    "title": "Add dependency graph analysis tool",
+    "url": "https://github.com/doldecomp/melee/pull/2011",
+    "state": "MERGED",
+    "author": "itsgrimetime",
+    "created_at": "2025-12-27T05:50:21Z",
+    "merged_at": "2025-12-27T08:05:59Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added `tools/dep_graph.py`, a standalone Python tool that builds object-file symbol dependency and reverse-dependency graphs from `configure.py`, built `.o` files, `nm` output, and optional `build/GALE01/report.json` metadata. Its main decompilation use is finding leaf `NonMatching` files that can potentially be converted to `Matching` without leaving other `NonMatching` files depending on them, plus identifying high-impact files whose conversion would unlock other work.",
+  "change_classification": {
+    "primary_type": "tooling",
+    "categories": [
+      "tooling",
+      "decomp-planning",
+      "dependency-analysis",
+      "matching-prioritization"
+    ],
+    "systems": [
+      "tooling",
+      "build-analysis",
+      "configure.py object metadata",
+      "GALE01 report metadata"
+    ]
+  },
+  "key_files": [
+    "tools/dep_graph.py"
+  ],
+  "what_changed": [
+    "Created a new executable script `tools/dep_graph.py` with 548 added lines and no deletions.",
+    "Added parsing of `Object(...)` declarations from `configure.py`, recognizing `Matching`, `NonMatching`, `Equivalent`, and normalizing `MatchingFor...` as `Matching`.",
+    "Added `ObjectFile` dataclass fields for path, status, defined symbols, undefined symbols, function count, and match percentage.",
+    "Added automatic `nm` tool discovery, preferring `powerpc-eabi-nm`, then `/opt/devkitpro/devkitPPC/bin/powerpc-eabi-nm`, then system `nm`.",
+    "Added object-symbol analysis using `nm -P` POSIX output with fallback parsing for non-POSIX `nm` output.",
+    "Built forward dependency graph `file -> files it depends on` and reverse dependency graph `file -> files that depend on it` by mapping undefined symbols to object files defining those symbols.",
+    "Added default leaf analysis for `NonMatching` files with no `NonMatching` reverse dependents, sorted by number of undefined symbols as a rough complexity metric.",
+    "Added `--chain` mode to report files whose conversion would make dependent `NonMatching` files become leaves.",
+    "Added `--deps FILE` and `--rdeps FILE` modes for inspecting direct dependencies and reverse dependencies for a configured source file.",
+    "Added `--cycles` mode using DFS to report dependency cycles, capped at 20 cycles by default.",
+    "Added `--all`, `--matching`, and `--limit` options for summary output, including optional matching-file inclusion and output limiting.",
+    "Loaded `build/GALE01/report.json` when present to display per-file function count and average fuzzy match percentage."
+  ],
+  "smart_moves": [
+    "Used object-file symbol tables rather than source-level includes, making the graph reflect actual linker-visible dependencies between compiled units.",
+    "Separated dependency and reverse-dependency maps, enabling both leaf selection and impact analysis from the same symbol scan.",
+    "Ranked leaf candidates by undefined-symbol count, giving decomp contributors a quick heuristic for easier conversion targets.",
+    "Integrated `report.json` metadata so matching effort can be judged with both dependency position and existing match progress/function count.",
+    "Handled multiple local toolchain setups by searching for `powerpc-eabi-nm`, devkitPPC's `powerpc-eabi-nm`, and system `nm`.",
+    "Used `nm -P` first for consistent parsing while keeping a fallback path for tools that do not support POSIX output.",
+    "Normalized `MatchingFor...` to `Matching`, which avoids treating version-specific matching declarations as separate status categories.",
+    "Kept the tool standalone under `tools/`, with CLI modes focused on common contributor questions: what is safe to match, what unlocks other files, and why a file is blocked."
+  ],
+  "decomp_lessons": [
+    "Dependency-aware matching work can avoid churn: before converting a `NonMatching` file to `Matching`, check whether other `NonMatching` files still depend on it.",
+    "Leaf `NonMatching` files are good candidates for independent matching work because the PR description states they can potentially be converted without breaking other `NonMatching` dependencies.",
+    "High-impact, non-leaf files may be strategically valuable if their conversion unlocks multiple dependent `NonMatching` files.",
+    "For repository-wide decomp planning, compiled object symbols can be more actionable than manually inspecting source references.",
+    "Combining symbol dependency data with `report.json` function counts and fuzzy match percentages gives a better work-prioritization view than either source alone.",
+    "Future tooling should continue to treat `configure.py` object status as the source of truth for whether a file is `Matching`, `NonMatching`, or `Equivalent`."
+  ],
+  "naming_conventions": [
+    "Tool file name: `tools/dep_graph.py`, using snake_case consistent with Python tooling.",
+    "Core dataclass name: `ObjectFile`, representing one configured source/object unit.",
+    "Graph variable naming uses `deps` for dependencies and `rdeps` for reverse dependencies.",
+    "CLI option naming is short and grep-friendly: `--deps`, `--rdeps`, `--cycles`, `--chain`, `--all`, `--matching`, `--limit`.",
+    "Status strings are normalized to the configure.py terminology: `Matching`, `NonMatching`, and `Equivalent`.",
+    "Helper names describe pipeline stages directly: `parse_configure`, `load_report`, `analyze_symbols`, `build_dependency_graph`, `find_leaves`, `find_unlock_chain`, `find_cycles`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use `powerpc-eabi-nm` or compatible `nm` on `build/GALE01/src/.../*.o` files to extract defined and undefined symbols for dependency analysis.",
+    "Prefer `nm -P` POSIX format for stable parsing of symbol name and type, with fallback support for traditional `nm` output.",
+    "Treat symbol type `U` as undefined and types in `TtDdBbCcRrVvWwSs` as defined symbols when building object dependency maps.",
+    "Map source paths from `configure.py` to object paths by replacing the source suffix with `.o` under `build/GALE01/src`.",
+    "A `NonMatching` file with no `NonMatching` reverse dependents is a safer matching target because converting it should not remove a dependency needed by another still-NonMatching unit, according to the PR description.",
+    "Use reverse dependencies to identify conversion chains: if converting file A removes the last `NonMatching` dependent relationship for file B, B becomes a leaf candidate."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided slice.",
+    "The decomp-dev bot reported `No changes` for GALE01, consistent with this being tooling-only and not affecting the built game output."
+  ],
+  "searchable_terms": [
+    "pr-2011",
+    "dep_graph.py",
+    "dependency graph",
+    "symbol dependencies",
+    "object file dependencies",
+    "leaf NonMatching files",
+    "NonMatching to Matching",
+    "unlock chains",
+    "reverse dependencies",
+    "rdeps",
+    "deps",
+    "cycles",
+    "configure.py Object",
+    "MatchingFor",
+    "Equivalent",
+    "powerpc-eabi-nm",
+    "llvm-nm",
+    "nm -P",
+    "report.json",
+    "fuzzy_match_percent",
+    "function_count",
+    "build/GALE01",
+    "melee/it/it_2725.c",
+    "tools/dep_graph.py",
+    "decomp planning",
+    "matching prioritization"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify `tools/dep_graph.py` for bug fixes, performance, or output changes.",
+    "Search for contributor comments or documentation that mention using `dep_graph.py` to choose matching targets.",
+    "Check whether `OBJECT_PATTERN` remained compatible with later `configure.py` formatting changes.",
+    "Look for PRs converting files identified as leaf `NonMatching` candidates after this tool landed.",
+    "Search for later tooling that integrates dependency graph output into reports, dashboards, or CI."
+  ],
+  "confidence": 0.94,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

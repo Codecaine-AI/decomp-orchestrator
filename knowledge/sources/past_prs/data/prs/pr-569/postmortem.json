@@ -1,0 +1,104 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-569",
+  "pr": {
+    "number": 569,
+    "title": "Match __OSInitSystemCall",
+    "url": "https://github.com/doldecomp/melee/pull/569",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-09-17T21:10:49Z",
+    "merged_at": "2022-09-17T21:35:37Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched __OSInitSystemCall in src/dolphin/os/OSSync.c by replacing the NON_MATCHING C/handwritten asm fallback with a compact C implementation. The matching version stores OS_SYS_CALL_HANDLER in a local handler variable, copies the system call vector by subtracting the start/end function addresses as u32 values, flushes data cache, executes __sync, and invalidates instruction cache. The PR also removed unnecessary #pragma push/pop around the nearby asm vector wrapper.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c replacement",
+      "runtime init"
+    ],
+    "systems": [
+      "src",
+      "dolphin",
+      "os",
+      "OSSync"
+    ]
+  },
+  "key_files": [
+    "src/dolphin/os/OSSync.c"
+  ],
+  "what_changed": [
+    "Removed the #ifdef NON_MATCHING split for __OSInitSystemCall and deleted the handwritten asm implementation.",
+    "Kept __OSInitSystemCall as C and adjusted it to match the original code generation.",
+    "Introduced a local void* handler initialized to OS_SYS_CALL_HANDLER, then reused it for memcpy, DCFlushRangeNoSync, and ICInvalidateRange.",
+    "Changed the memcpy length expression to cast __OSSystemCallVectorStart and __OSSystemCallVectorEnd to u32 before subtracting.",
+    "Preserved the cache-management sequence: memcpy to OS_SYS_CALL_HANDLER, DCFlushRangeNoSync, __sync, then ICInvalidateRange.",
+    "Removed #pragma push and #pragma pop around __OSSystemCallVector."
+  ],
+  "smart_moves": [
+    "Using a local handler variable likely encouraged the compiler to keep the system call handler address in a register and reuse it across calls, matching the deleted asm's use of r31.",
+    "Casting vector start/end symbols to u32 before subtracting made the size calculation more closely resemble the target PowerPC integer address arithmetic.",
+    "The code retains the exact ordering of memory copy, data-cache flush, sync, and instruction-cache invalidate, which is important for a low-level OS vector install routine.",
+    "The explicit comment, \"peephole off is needed to match,\" documents a compiler-codegen dependency for future maintainers."
+  ],
+  "decomp_lessons": [
+    "For low-level init functions that repeatedly use a fixed hardware address, introducing a local pointer can be a matching tactic because it may force register preservation/reuse similar to original asm.",
+    "When computing a code/vector length from linker symbols, integer casts on addresses may be necessary to produce the desired subtraction codegen.",
+    "Do not assume a simple pointer-difference expression will match; the original code may be better modeled as raw address arithmetic.",
+    "When replacing asm with C, preserve side-effect ordering around cache and sync operations exactly.",
+    "If a match depends on compiler peephole optimization settings, leave an inline note near the function."
+  ],
+  "naming_conventions": [
+    "Dolphin OS internal functions retain double-underscore names such as __OSInitSystemCall, __OSSystemCallVectorStart, and __OSSystemCallVectorEnd.",
+    "Hardware/system constants use all-caps names such as OS_SYS_CALL_HANDLER and OS_HANDLER_SLOT_SIZE.",
+    "Cache helper names preserve Dolphin SDK-style casing: ICInvalidateRange and DCFlushRangeNoSync."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted a full asm implementation once the C version matched.",
+    "Used a local variable to model repeated use of OS_SYS_CALL_HANDLER and likely match callee-saved register behavior.",
+    "Used u32 casts on symbol addresses for the vector size calculation.",
+    "The diff notes that peephole optimization must be disabled for this function to match.",
+    "Removed NON_MATCHING guard after achieving a C match."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-569",
+    "Match __OSInitSystemCall",
+    "__OSInitSystemCall",
+    "__OSSystemCallVector",
+    "__OSSystemCallVectorStart",
+    "__OSSystemCallVectorEnd",
+    "OSSync.c",
+    "src/dolphin/os/OSSync.c",
+    "OS_SYS_CALL_HANDLER",
+    "OS_HANDLER_SLOT_SIZE",
+    "ICInvalidateRange",
+    "DCFlushRangeNoSync",
+    "__sync",
+    "memcpy",
+    "NON_MATCHING",
+    "peephole off",
+    "asm to C",
+    "system call vector",
+    "cache flush",
+    "instruction cache invalidate",
+    "r-burns"
+  ],
+  "follow_up_queries": [
+    "Find other PRs that mention peephole off for matching.",
+    "Find other Dolphin OS functions that compute sizes from linker symbol start/end labels.",
+    "Find other matches where a local pointer variable was used to force register reuse.",
+    "Find remaining NON_MATCHING blocks in src/dolphin/os."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

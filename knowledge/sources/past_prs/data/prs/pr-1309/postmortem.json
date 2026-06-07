@@ -1,0 +1,137 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1309",
+  "pr": {
+    "number": 1309,
+    "title": "Match 99.79% of `ftCo_8009D074` (280 bytes)",
+    "url": "https://github.com/doldecomp/melee/pull/1309",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-02-23T08:29:15Z",
+    "merged_at": "2024-02-23T08:36:41Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched most of `ftCo_8009D074`, a 280-byte function in `src/melee/ft/chara/ftCommon/ftCo_09CB.c`, reaching 99.79% according to the PR report. The implementation wires Kirby hat dynamic bones into `Fighter.dynamic_bone_sets`, adds the supporting fighter/Kirby hat dynamic-bone structs, exposes the function in `ftCo_09CB.h`, and updates nearby Kirby code to use a nested `fp->fv.kb.hat` layout. The PR also made small matching/tooling cleanups: `RETURN_IF` became a safe `do { ... } while (0)` macro, call sites were adjusted for semicolon behavior, and scratch-tracker gained/renamed address-symbol resolution support.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-layout",
+      "tooling",
+      "macro-cleanup",
+      "scratch-tracker-maintenance"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "Kirby",
+      "fighter-dynamics",
+      "Runtime",
+      "tools",
+      "config"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_09CB.c",
+    "src/melee/ft/chara/ftCommon/ftCo_09CB.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/chara/ftKirby/types.h",
+    "src/melee/ft/chara/ftKirby/ftKb_Init.c",
+    "src/melee/ft/chara/ftCommon/ftCo_ThrownKirby.c",
+    "src/melee/ft/ftdrawcommon.c",
+    "src/Runtime/platform.h",
+    "src/melee/ft/chara/ftYoshi/ftYs_Guard.c",
+    "src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c",
+    "tools/scratch-tracker/src/main.rs",
+    "config/GALE01/scratches.txt"
+  ],
+  "what_changed": [
+    "`ftCo_8009D074` was changed from a `NOT_IMPLEMENTED`/unknown-params stub into `void ftCo_8009D074(Fighter* fp)`.",
+    "The new function reads the global `ft_80459B88.x18_kirbyHatStruct`, copies its dynamics count into `fp->dynamics_num`, asserts the count is below `ARRAY_SIZE(fp->dynamic_bone_sets)`, walks the Kirby hat JObj tree, initializes each dynamic bone set with `lb_8000FD48`, clears `x0_apply_phys_num`, and copies dynamic bone data with `lb_80011710`.",
+    "`ftCo_8009D074` was added to `ftCo_09CB.h` with a `Fighter*` signature.",
+    "`src/melee/ft/types.h` gained `FtDynamicBoneStruct`, `FtDynamicBones`, `ArticleDynamicBones`, `ftDynamics`, `KirbyHatStruct`, and `KirbyHat_r13` definitions.",
+    "`struct Fighter` was refined around `fp+2F0`: generic fields/filler were replaced by `FtDynamicBones dynamic_bone_sets[10]` and `int dynamics_num` at `fp+3E0`.",
+    "`src/melee/ft/chara/ftKirby/types.h` nested the early Kirby fighter variables into `struct ftKb_Hat hat`, including `victim_kind`, `x8_b0`, and a typed `HSD_JObj* jobj`, with `STATIC_ASSERT(sizeof(struct ftKb_FighterVars) == 0xC0)`.",
+    "Kirby call sites in `ftKb_Init.c` and `ftCo_ThrownKirby.c` were updated from direct fields like `fp->fv.kb.victim_kind` and `fp->fv.kb.x8_b0` to `fp->fv.kb.hat.victim_kind` and `fp->fv.kb.hat.x8_b0`.",
+    "`ftdrawcommon.c` was updated to iterate over `fighter->dynamics_num` and pass `fighter->dynamic_bone_sets[0].x4_dynamicBones` to `lb_800117F4` instead of using the old raw fields `x3E0`/`x2F4`.",
+    "`RETURN_IF` in `platform.h` was wrapped in `do { ... } while (0)`, and nearby code was adjusted: `ftYs_GuardOff_IASA` now uses `RETURN_IF(...);`, while an extra standalone semicolon was removed from `ftCo_FallSpecial_IASA`.",
+    "`tools/scratch-tracker` renamed the `Replace` command to `Resolve`, added a `--resolve` option to `list`, optionally resolves scratch names via `symbols.txt`, and avoids resolving words that begin with a decimal digit.",
+    "`config/GALE01/scratches.txt` was mass-updated from percentage completions to `OK:` entries for many scratches in the affected range, consistent with scratch-tracker behavior changes."
+  ],
+  "smart_moves": [
+    "The function match was supported by promoting raw fighter memory around `fp+2F0` into meaningful dynamic-bone arrays and count fields, making later references in both `ftCo_8009D074` and draw code more coherent.",
+    "Introducing `fp->fv.kb.hat` grouped related Kirby copy-hat fields without changing the total `ftKb_FighterVars` size, reducing ambiguous flat-field access while protecting ABI/layout with a static assert.",
+    "The `RETURN_IF` macro fix uses the standard `do { ... } while (0)` pattern, allowing call sites to be written with normal semicolon syntax and preventing macro statement hazards.",
+    "The implementation preserved assert evidence from the target through `OSReport(\"         fighter dynamics num over!\\n\")` and `__assert(\"ftdynamics.c\", 135, \"fp->dynamiscs_num < Ft_Dynamics_NumMax\")`, which is useful for matching string and line-number-sensitive code.",
+    "The scratch-tracker resolution path was made optional for listing so it can skip reading symbols when resolution is not requested."
+  ],
+  "decomp_lessons": [
+    "When a function manipulates a block of raw fighter memory repeatedly, first introduce typed struct fields at the exact offsets; this can unlock both the target function and unrelated call sites using the same region.",
+    "Use nested structs for character-specific state when evidence shows a coherent sub-object, but pair the change with `STATIC_ASSERT` to avoid silent fighter-var size drift.",
+    "For matching code that traverses JObj trees, local variable shape and control-flow spelling can matter; this implementation keeps explicit `child`, `next`, and `parent` traversal rather than hiding it behind a helper.",
+    "Preserve original diagnostic strings, file names, and assertion line numbers when reconstructing functions that include runtime checks.",
+    "Macro changes can affect decomp output at call sites. A safer macro may require small semicolon edits elsewhere, and those edits should be reviewed as matching-sensitive changes rather than pure style.",
+    "Tooling that rewrites addresses to symbols should avoid transforming numeric-looking tokens such as percentages or decimal values; PR evidence shows `resolve_word` intentionally skips words beginning with a decimal digit."
+  ],
+  "naming_conventions": [
+    "New dynamic-bone types use descriptive but still offset-aware names: `FtDynamicBoneStruct`, `FtDynamicBones`, `ArticleDynamicBones`, and `ftDynamics`.",
+    "Fighter dynamic-bone storage was named by role and count: `dynamic_bone_sets[10]` and `dynamics_num`.",
+    "Kirby copy-hat state was grouped as `fp->fv.kb.hat`, with members such as `victim_kind`, `jobj`, and `x8_b0` kept close to known offset/bitfield evidence.",
+    "Global small-data symbol `ft_80459B88` remained address-style and was documented with `/// @todo #ft_80459B88`, indicating weak naming confidence.",
+    "Unknown padding fields in the Kirby struct use underscore-prefixed filler names like `_28` and `_68`, while unknown semantic fields retain offset-style names such as `x14`, `x18`, and `x20`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Changed the target signature from `UNK_RET/UNK_PARAMS` to `void ftCo_8009D074(Fighter* fp)` to allow direct typed field access.",
+    "Used `ARRAY_SIZE(fp->dynamic_bone_sets)` in the bounds check while casting to signed to match the original comparison shape.",
+    "Introduced temporaries such as `new_var2`, `new_var`, `i`, and `i2`; names are not semantic, but their presence likely helped preserve register/control-flow shape for the 99.79% match.",
+    "Typed `fp+2F0` as an array of 10 `FtDynamicBones`, matching the asserted maximum and enabling array indexing in the loop.",
+    "The JObj traversal uses an explicit pre-order-like walk: descend to `child` when present, otherwise climb through `parent` until a `next` sibling exists, then advance to `next`.",
+    "Replaced old raw dynamic-bone fields in `ftdrawcommon.c` with the new typed fields so shared struct layout stayed consistent across translation units.",
+    "Converted many `NOT_IMPLEMENTED` stubs in `ftCo_09CB.c` into `/// #symbol` nonmatching markers around the newly implemented function, reducing stub noise while preserving symbol placeholders."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1309",
+    "ftCo_8009D074",
+    "8009D074",
+    "ftCo_09CB.c",
+    "KirbyHatStruct",
+    "KirbyHat_r13",
+    "ft_80459B88",
+    "FtDynamicBones",
+    "FtDynamicBoneStruct",
+    "ArticleDynamicBones",
+    "ftDynamics",
+    "dynamic_bone_sets",
+    "dynamics_num",
+    "ftKb_Hat",
+    "fp->fv.kb.hat",
+    "victim_kind",
+    "HSD_JObj",
+    "lb_8000FD48",
+    "lb_80011710",
+    "lb_800117F4",
+    "fighter dynamics num over",
+    "ftdynamics.c",
+    "RETURN_IF",
+    "scratch-tracker Resolve",
+    "scratches OK"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match `ftCo_8009D074` or rename `ft_80459B88`/Kirby hat dynamic structures.",
+    "Search for additional uses of `dynamic_bone_sets` and `dynamics_num` to see whether `FtDynamicBones` layout was confirmed or revised.",
+    "Search for later cleanup of `new_var`, `new_var2`, and the 99.79% mismatch in `ftCo_8009D074`.",
+    "Check whether scratch-tracker `Resolve` behavior caused or fixed further `scratches.txt` churn.",
+    "Look for later review or PRs around `RETURN_IF` macro call-site semicolon conventions."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

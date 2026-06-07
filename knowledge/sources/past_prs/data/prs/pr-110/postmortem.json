@@ -1,0 +1,131 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-110",
+  "pr": {
+    "number": 110,
+    "title": "Label stage pointers and fixup some of the BSS",
+    "url": "https://github.com/doldecomp/melee/pull/110",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-11-17T06:12:26Z",
+    "merged_at": "2021-11-17T06:12:40Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "PR 110 was an assembly/data cleanup that labeled many raw stage-related pointer constants and refined BSS/sdata boundaries so those pointers could target symbols instead of hard-coded addresses. The main mechanical change was replacing `.4byte 0x80...` entries in stage descriptor/table data with `.4byte lbl_...` references, while splitting large `.skip` blocks in `asm/bss.s` and adding missing `.global` labels in `asm/data.s` and `asm/sdata.s` at the corresponding addresses.",
+  "change_classification": {
+    "primary_type": "data_labeling",
+    "categories": [
+      "data-labeling",
+      "bss-layout-fixup",
+      "asm-cleanup",
+      "symbolization"
+    ],
+    "systems": [
+      "stage",
+      "asm/data",
+      "asm/bss",
+      "asm/sdata"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "asm/data.s",
+      "role": "Largest change; converted many raw stage table pointer words to symbolic `lbl_...` references and introduced additional labels inside stage-related data blocks."
+    },
+    {
+      "path": "asm/bss.s",
+      "role": "Split oversized BSS `.skip` ranges into smaller labeled regions such as `lbl_80470708`, `lbl_80470850`, `lbl_8047086C`, `lbl_80472AF8`, `lbl_80480530`, and `lbl_804831A8` so data tables could reference them symbolically."
+    },
+    {
+      "path": "asm/sdata.s",
+      "role": "Added missing small-data labels around embedded strings/constants such as `lbl_804D47B8`, `lbl_804D4824`, `lbl_804D4838`, `lbl_804D4968`, `lbl_804D4998`, `lbl_804D49A0`, and `lbl_804D4CD8`."
+    }
+  ],
+  "what_changed": [
+    "Replaced many hard-coded pointer constants in `asm/data.s` with labels, for example `0x804831A8` became `lbl_804831A8`, `0x804807B0` became `lbl_804807B0`, and repeated `0x80472AF8`/`0x8047086C` pairs became `lbl_80472AF8`/`lbl_8047086C`.",
+    "Split broad BSS reservation blocks into explicit labeled slices without changing the apparent address layout; examples include splitting `lbl_804706D8` into `lbl_804706D8`, `lbl_80470708`, `lbl_80470850`, `lbl_8047086C`, and `lbl_80472AF8`.",
+    "Added BSS symbols for stage pointer targets in the `8047xxxx`, `8048xxxx`, `8049xxxx`, and `804D68xx`/`804D69xx` ranges, including `lbl_8047E2A4`, `lbl_80480530`, `lbl_80480668`, `lbl_804807B0`, `lbl_804950F0`, `lbl_80495370`, `lbl_804D6860`, `lbl_804D68D0`, and `lbl_804D6948`.",
+    "Added data-section labels around stage descriptor substructures in the `803E48xx` and later ranges, then changed nearby self-references from raw addresses like `0x803E48F4`, `0x803E4944`, and `0x803E48C8` to symbolic labels.",
+    "Added small-data labels in `asm/sdata.s` at boundaries before strings and constants, including labels near `\"/GrVe\"`, float-looking words such as `0x41800000`, and other stage/resource-related data."
+  ],
+  "smart_moves": [
+    "The PR did not merely rename constants in tables; it first established real labels at the BSS addresses those constants pointed to, making the symbolic references assemblable and preserving layout.",
+    "Large `.skip` reservations were split at exact pointer-target offsets, which is a low-risk way to improve symbol coverage while keeping BSS size and ordering intact.",
+    "Repeated pointer pairs were converted consistently across many stage table entries, making patterns easier to search and reducing the chance of later treating the same address as unrelated data.",
+    "The data-table labels were added at internal structure boundaries before replacing self-referential raw addresses, which improves readability without requiring full type recovery yet."
+  ],
+  "decomp_lessons": [
+    "When decompiling data-heavy systems, replace raw `.4byte 0x80...` addresses only after adding labels at the target locations; otherwise the diff can hide whether the target is actually aligned and section-correct.",
+    "BSS fixups often mean subdividing existing `.skip` blocks, not changing total storage. Preserve aggregate sizes and addresses while exposing the offsets that code/data already reference.",
+    "Repeated stage table entries are useful evidence for discovering shared buffers or per-stage resource structures; label the repeated targets early so later C structs can use named externs instead of magic addresses.",
+    "Adding labels in `sdata` around strings, floats, and small constants can unblock later pointer cleanup in `data.s`, even if the semantic names are not yet known.",
+    "A symbolization PR can be valuable even without semantic names: address-stable `lbl_...` symbols make future struct extraction and relocation reasoning easier."
+  ],
+  "naming_conventions": [
+    "Used the existing anonymous-label convention `lbl_XXXXXXXX` with uppercase hexadecimal addresses for newly exposed data/BSS/sdata symbols.",
+    "Kept function references as existing `func_XXXXXXXX` or `lbl_XXXXXXXX` symbols rather than inventing semantic function names.",
+    "Used `.global lbl_...` immediately before each newly exposed assembly label.",
+    "Preserved existing `NULL` usage for zero pointer entries instead of changing them to numeric zeroes."
+  ],
+  "assembly_or_matching_tactics": [
+    "Convert `.4byte 0x804xxxxx` and `.4byte 0x803xxxxx` pointer constants to `.4byte lbl_...` once a matching label exists in the correct section.",
+    "Split `.skip` directives at exact address boundaries to create labels while keeping the total reserved byte count equivalent.",
+    "Label internal data-table boundaries where nearby entries contain self-pointers or table pointers, as shown by new labels such as `lbl_803E48F4` and `lbl_803E4944` followed by replacements of raw `0x803E48F4`/`0x803E4944` references.",
+    "Use repeated raw address patterns as a guide for BSS subdivision; examples in this PR include repeated references to `lbl_80472AF8`, `lbl_8047086C`, `lbl_80480530`, `lbl_80479D98`, `lbl_804D6860`, `lbl_804D68D0`, `lbl_804D6940`, and `lbl_804D6948`."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review records were present in the provided PR slice, so there is no direct reviewer feedback to extract."
+  ],
+  "searchable_terms": [
+    "stage pointers",
+    "BSS fixup",
+    "data labeling",
+    "asm/data.s",
+    "asm/bss.s",
+    "asm/sdata.s",
+    "lbl_80470708",
+    "lbl_80470850",
+    "lbl_8047086C",
+    "lbl_80472AF8",
+    "lbl_8047E2A4",
+    "lbl_80480530",
+    "lbl_80480668",
+    "lbl_804807B0",
+    "lbl_804831A8",
+    "lbl_804950F0",
+    "lbl_80495370",
+    "lbl_8049C188",
+    "lbl_8049C2C0",
+    "lbl_804D6860",
+    "lbl_804D68D0",
+    "lbl_804D6910",
+    "lbl_804D6918",
+    "lbl_804D6920",
+    "lbl_804D6930",
+    "lbl_804D6940",
+    "lbl_804D6948",
+    "lbl_803E48F4",
+    "lbl_803E4944",
+    "lbl_804D47B8",
+    "lbl_804D4824",
+    "raw pointer constants",
+    ".4byte label replacement",
+    ".skip split"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that give semantic names or C structs to the stage tables around `lbl_803DD9A0`, `lbl_803DDC58`, `lbl_803DE1B8`, and `lbl_803DE930`.",
+    "Search for later changes involving `lbl_80472AF8` and `lbl_8047086C` to see whether these BSS buffers were identified.",
+    "Search for later changes involving `lbl_80480530`, `lbl_80480668`, `lbl_804807B0`, and `lbl_804831A8` to track stage/BSS type recovery.",
+    "Search for `lbl_803E48F4`, `lbl_803E4944`, and adjacent `803E` labels to identify the stage descriptor table family introduced here.",
+    "Check whether `asm/sdata.s` labels such as `lbl_804D47B8`, `lbl_804D4824`, and `lbl_804D4968` later received semantic names."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

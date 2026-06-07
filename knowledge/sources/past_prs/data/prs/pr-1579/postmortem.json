@@ -1,0 +1,147 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1579",
+  "pr": {
+    "number": 1579,
+    "title": "Match more of robj",
+    "url": "https://github.com/doldecomp/melee/pull/1579",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-07T20:17:17Z",
+    "merged_at": "2025-06-07T20:20:41Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched additional portions of sysdolphin baselib RObj code, especially replacing the NOT_IMPLEMENTED expEvaluate path with a concrete implementation that gathers JObj transform inputs, evaluates bytecode or callback expressions, converts rotation outputs to radians where needed, and calls the object update function. The PR also tightened RObj type-mask usage, corrected descriptor/reference handling, adjusted function-pointer signatures for expression callbacks, typed the global argument buffer as float*, split several data symbols into strings in symbols.txt, and left only resolveCnsOrientation as the stated remaining unresolved function.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-map",
+      "baselib-runtime-behavior"
+    ],
+    "systems": [
+      "src/sysdolphin/baselib",
+      "config/GALE01"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/robj.c",
+    "src/sysdolphin/baselib/robj.h",
+    "config/GALE01/symbols.txt"
+  ],
+  "what_changed": [
+    "Implemented expEvaluate in robj.c, replacing a NOT_IMPLEMENTED stub with argument collection from HSD_Rvalue chains, HSD_ByteCodeEval or function callback evaluation, optional degree-to-radian conversion for output types 1 through 3, and dispatch through update_func.",
+    "Changed static arg_buf from u32 to float* and updated _HSD_RObjForgetMemory to compare pointer ranges against arg_buf as a pointer rather than as an integer address.",
+    "Added includes for memory.h and util.h so robj.c can use HSD_MemAlloc, HSD_GetNbBits, and related utilities.",
+    "Added an extern declaration for HSD_ByteCodeEval(u8*, float*, u32).",
+    "Changed HSD_Exp and HSD_ExpDesc callback signatures in robj.h from f32 (*func)(void) to f32 (*func)(void*) and updated dummy_func accordingly.",
+    "Changed resolveLimits to accept HSD_ObjUpdateFunc update_func and updated its call site in HSD_RObjUpdateAll, although the diff excerpt does not show how update_func is used inside resolveLimits.",
+    "Wrapped the remaining resolveCnsOrientation stub in #pragma push / #pragma dont_inline on / #pragma pop and added a data array HSD_RObj_80406E74[3] = { 0x32, 0x33, 0x34 } near it.",
+    "Fixed HSD_RObjResolveRefs to switch on robj->flags & ROBJ_TYPE_MASK instead of desc->flags & ROBJ_TYPE_MASK.",
+    "Replaced hard-coded RObj type-mask constants in HSD_RObjLoadDesc with ROBJ_TYPE_MASK and ~ROBJ_TYPE_MASK.",
+    "Corrected limit conversion constant from 0.01754533f to 0.017453292f for certain REFTYPE_LIMIT cases.",
+    "Simplified RObjHasLimitReftype inline helper to directly return true when the masked flags equal REFTYPE_LIMIT and false otherwise.",
+    "Updated config/GALE01/symbols.txt to split a previous large data range around 0x80406EB4 into multiple string/data symbols including lbl_80406EB4, lbl_80406EC4, lbl_80406ED0, HSD_RObj_80406EF8, HSD_RObj_80406F14, HSD_RObj_80406F2C, and HSD_RObj_80406F98."
+  ],
+  "smart_moves": [
+    "Typed arg_buf as float* to match its actual role as the expression-evaluation argument array, which also made allocation and pointer-range invalidation more semantically accurate.",
+    "Used the existing ROBJ_TYPE_MASK macro instead of duplicated magic constants such as 0x70000000 and 0x8FFFFFFF, making RObj reference-type logic clearer and less error-prone.",
+    "Matched expression evaluation by preserving the observed unit conventions: JObj rotations are fed into expressions in degrees via 57.29578F, while expression outputs for rotation types are converted back to radians using 0.017453292F.",
+    "Handled both expression representations, bytecode and function pointer, through one shared argument-buffer path.",
+    "Cached exp->nb_args after computing it from HSD_Rvalue flags with HSD_GetNbBits, avoiding repeated recounting after the first evaluation.",
+    "Preserved an unmatched or not-yet-decompiled function boundary by keeping resolveCnsOrientation as NOT_IMPLEMENTED but applying dont_inline pragmas, limiting compiler interference while other surrounding functions were matched.",
+    "Refined symbol boundaries in symbols.txt from broad anonymous/global data ranges into explicit string objects, which improves future rodata/data matching and searchability."
+  ],
+  "decomp_lessons": [
+    "When matching baselib expression evaluators, confirm callback function-pointer signatures from call sites; here expression functions receive the argument buffer, so f32 (*func)(void*) was needed instead of f32 (*func)(void).",
+    "Global scratch buffers should be typed by their payload, not by address-sized integers; this helps reproduce pointer comparisons and allocation math accurately.",
+    "Prefer existing mask macros such as ROBJ_TYPE_MASK over raw hexadecimal masks once the semantic meaning is known.",
+    "Descriptor-load code and resolved-object code may need to switch on different sources of flags; HSD_RObjResolveRefs needed robj->flags rather than desc->flags according to the matching diff.",
+    "Small float constants matter for matching and behavior. The corrected radians-per-degree value 0.017453292f replaced an inaccurate 0.01754533f.",
+    "For expression systems driven by bitfields, iterate through individual bits and push arguments in the exact flag order expected by bytecode/function evaluators.",
+    "Matrix-derived rotation and scale values are fetched only for specific high-bit flags using HSD_MtxGetRotation and HSD_MtxGetScale, while local JObj rotate/translate/scale fields satisfy lower-bit flags.",
+    "If only one difficult function remains, isolating it with dont_inline pragmas can allow surrounding functions and data to match without prematurely solving the hardest routine."
+  ],
+  "naming_conventions": [
+    "RObj helper names use HSD_RObj* for exported baselib APIs and lowerCamelCase for static helpers such as resolveCnsDirUp, resolveCnsOrientation, resolveLimits, and expEvaluate.",
+    "Reference-type constants are named REFTYPE_JOBJ, REFTYPE_LIMIT, REFTYPE_BYTECODE, and REFTYPE_IKHINT and are masked with ROBJ_TYPE_MASK.",
+    "Inline predicate helpers follow RObjHas* naming, such as RObjHasFlags, RObjHasFlags2, and RObjHasLimitReftype.",
+    "Allocator globals keep descriptive lowercase names matching their object kind: robj_alloc_data and rvalue_alloc_data.",
+    "Unidentified or compiler-emitted data symbols in config/GALE01/symbols.txt retain address-based names such as lbl_80406EB4 and HSD_RObj_80406EF8, with data:string annotations when identified as strings."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used #pragma dont_inline around resolveCnsOrientation to control code generation while the function remained a NOT_IMPLEMENTED stub.",
+    "Introduced a small explicit data array HSD_RObj_80406E74[3] = { 0x32, 0x33, 0x34 } to align data layout with known symbols.",
+    "Adjusted symbols.txt data object sizes and data:string annotations to reflect actual string boundaries, improving data-section matching.",
+    "Replaced raw masks with macro expressions that compile to equivalent bit operations while documenting intent.",
+    "Added a padding/local stack artifact in expEvaluate, noted as `u8 _[4]; // TODO should HSD_ObjData be 4 bytes larger?`, indicating stack-layout work was used to achieve or approach a match.",
+    "Used exact float literals visible in matching code paths, including 57.29578F and 0.017453292F."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR context.",
+    "The PR body states: \"Only resolveCnsOrientation remaining,\" indicating the author considered the rest of robj targeted by this PR matched or sufficiently advanced."
+  ],
+  "searchable_terms": [
+    "PR1579",
+    "Match more of robj",
+    "r-burns",
+    "HSD_RObj",
+    "robj.c",
+    "robj.h",
+    "expEvaluate",
+    "resolveCnsOrientation",
+    "resolveCnsDirUp",
+    "resolveLimits",
+    "HSD_RObjUpdateAll",
+    "HSD_RObjResolveRefs",
+    "HSD_RObjLoadDesc",
+    "HSD_RObjFree",
+    "HSD_Exp",
+    "HSD_ExpDesc",
+    "HSD_Rvalue",
+    "HSD_ByteCodeEval",
+    "HSD_GetNbBits",
+    "HSD_MemAlloc",
+    "HSD_Panic",
+    "OSReport",
+    "HSD_JObjSetupMatrix",
+    "HSD_MtxGetRotation",
+    "HSD_MtxGetScale",
+    "ROBJ_TYPE_MASK",
+    "REFTYPE_JOBJ",
+    "REFTYPE_LIMIT",
+    "REFTYPE_BYTECODE",
+    "REFTYPE_IKHINT",
+    "arg_buf",
+    "arg_buf_size",
+    "dummy_func",
+    "RObjHasLimitReftype",
+    "HSD_RObj_80406E74",
+    "HSD_RObj_80406EF8",
+    "HSD_RObj_80406F14",
+    "HSD_RObj_80406F2C",
+    "HSD_RObj_80406F98",
+    "lbl_80406EB4",
+    "lbl_80406EC4",
+    "lbl_80406ED0",
+    "symbols.txt",
+    "dont_inline"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that implement or match resolveCnsOrientation in src/sysdolphin/baselib/robj.c.",
+    "Check whether the TODO about HSD_ObjData stack size in expEvaluate was later resolved by changing the HSD_ObjData definition or local stack layout.",
+    "Search for subsequent changes to HSD_ByteCodeEval declaration to see whether it moved into a header instead of remaining extern in robj.c.",
+    "Look for later PRs touching HSD_Exp or HSD_ExpDesc function-pointer signatures to confirm f32 (*func)(void*) remained stable.",
+    "Search for future edits to arg_buf and arg_buf_size to see if the fixed size of 100 or panic path was refined."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

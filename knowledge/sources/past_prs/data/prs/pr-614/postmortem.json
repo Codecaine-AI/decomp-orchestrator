@@ -1,0 +1,154 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-614",
+  "pr": {
+    "number": 614,
+    "title": "Fix Fighter user_data accesses using `GET_FIGHTER` macro",
+    "url": "https://github.com/doldecomp/melee/pull/614",
+    "state": "MERGED",
+    "author": "RevoSucks",
+    "created_at": "2022-12-17T21:43:29Z",
+    "merged_at": "2023-01-29T21:11:49Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Standardized many Fighter pointer fetches to use GET_FIGHTER instead of direct user_data access or getFighter/HSD_GObjGetUserData variants, and introduced union Struct2070 so the Fighter fields at 0x2070 can be accessed both as a packed s32 and as named bitfields. The main matching-relevant change replaced a volatile local stack workaround in Fighter_ActionStateChange_800693AC with a local union copy, preserving access to x2070_int while allowing x2071/x2072 bitfield members to live under fp->x2070. Review accepted the union as useful but left a todo to rename/investigate broader use.",
+  "change_classification": {
+    "primary_type": "fix",
+    "categories": [
+      "fix",
+      "headers",
+      "naming",
+      "types-structs",
+      "matching-cleanup",
+      "macro-standardization"
+    ],
+    "systems": [
+      "fighter",
+      "fighter-action-state",
+      "fighter-input",
+      "character-specials"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/types.h",
+    "src/melee/ft/inlines.h",
+    "src/melee/ft/chara/ftCaptain/ftCaptain.c",
+    "src/melee/ft/chara/ftFox/ftFox_SpecialN.c",
+    "src/melee/ft/chara/ftLuigi/ftLuigi_SpecialS.c",
+    "src/melee/ft/chara/ftMewtwo/ftMewtwo_SpecialN.c",
+    "src/melee/ft/chara/ftPikachu/ftpikachu2.c",
+    "src/melee/ft/chara/ftPikachu/ftpikachu5.c",
+    "src/melee/ft/chara/ftSamus/ftsamus2.c"
+  ],
+  "what_changed": [
+    "Changed direct Fighter user data retrievals such as fighter_gobj->user_data and HSD_GObjGetUserData(fighter_gobj) to GET_FIGHTER(fighter_gobj) in multiple fighter.c routines.",
+    "Replaced getFighter(otherObj) with GET_FIGHTER(otherObj) in Fighter_ActionStateChange_800693AC.",
+    "Added union Struct2070 in src/melee/ft/types.h with bitfield members x2071_b0_3, x2071_b4 through x2071_b7, x2072_b0_3, x2072_b4 through x2072_b7, x2073, and whole-word x2070_int.",
+    "Changed Fighter's previous flat 0x2070/x2071/x2072/x2073 members into a single field, union Struct2070 x2070, at offset 0x2070.",
+    "Updated character code to access these packed flags through fp->x2070, for example fp->x2070.x2071_b6, fp->x2070.x2072_b4, fp->x2070.x2071_b0_3, and fp->x2070.x2073.",
+    "In Fighter_ActionStateChange_800693AC, replaced a volatile s32 local used to keep stack/order behavior with a local union Struct2070 x2070 assigned from fp->x2070, then passed x2070.x2070_int to func_80037C60.",
+    "Removed or inlined several small helper functions/macros in fighter.c, including getHSDJObj, pickValue, CLEAR_STICKS, Fighter_UnkApplyTransformation_8006C0F0_Inner1, and Fighter_8006C80C_Inline_1, where the diff shows equivalent direct expressions or GET_JOBJ usage.",
+    "Added comments/todos around matching-sensitive spots, including unused stack in Fighter_CallAcessoryCallbacks_8006C624, an inline/stack note in Fighter_UnkApplyTransformation_8006C0F0, and a question near recursive hitlag handling.",
+    "Left Fighter_Unload_8006DABC using its direct void* user_data argument, with a remark that GET_FIGHTER is not used because the function appears to receive Fighter user data directly."
+  ],
+  "smart_moves": [
+    "Used a union to model the same 0x2070 region both as bitfields and as a full s32, avoiding a brittle volatile variable workaround while retaining the whole-word value needed by func_80037C60.",
+    "Centralized Fighter pointer recovery through GET_FIGHTER, making future code less dependent on whether HSD_GObj user data is accessed directly, through a helper, or through HSD_GObjGetUserData.",
+    "Kept bitfield names offset-derived and mechanically searchable, which is appropriate while semantics are still unknown.",
+    "Did not force GET_FIGHTER onto Fighter_Unload_8006DABC where the parameter is already raw user_data; the added remark documents the exception instead of hiding it.",
+    "Preserved matching-sensitive stack behavior with explicit local variables and MUST_MATCH-only unused stack where needed rather than over-abstracting."
+  ],
+  "decomp_lessons": [
+    "For HSD_GObj routines that operate on fighters, prefer GET_FIGHTER(gobj) over direct gobj->user_data casts unless the function is explicitly passed raw user_data.",
+    "When a region of Fighter is accessed both as individual flags and as a packed integer, a union can replace volatile locals and make the intended aliasing explicit.",
+    "If a helper inline only exists to affect stack/codegen, consider whether a direct expression plus a documented todo is clearer and equally matchable.",
+    "Header struct changes can unblock broad source cleanup: once x2070 was represented as a union, character code could use consistent fp->x2070.<field> accesses.",
+    "Keep TODOs on provisional struct/union names and unknown flag meanings; reviewers accepted Struct2070 only with an explicit rename/investigate note.",
+    "Use comments to mark suspected inline/stack artifacts, but do not invent semantic function names unless evidence is strong."
+  ],
+  "naming_conventions": [
+    "GET_FIGHTER is the preferred macro name for retrieving Fighter* from HSD_GObj*.",
+    "GET_JOBJ appears as the preferred macro for retrieving HSD_JObj* from an HSD_GObj* in the shown transformation code.",
+    "Unknown Fighter fields retained offset-based names such as x2070, x2071_b6, x2072_b4, and x2073.",
+    "Bitfield names used the pattern xOFFSET_bBIT or xOFFSET_bSTART_END, for example x2071_b0_3 and x2072_b4.",
+    "The union was named Struct2070 only provisionally; review added `/// @todo Rename this and its members; investigate using it elsewhere.`",
+    "Local Fighter pointers were normalized toward fp rather than longer register-derived names such as fighter_r31 in the shown cleanup."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced a volatile s32 stack-order workaround with `union Struct2070 x2070;` followed by `x2070 = fp->x2070;`, then used `x2070.x2070_int` for the packed argument.",
+    "Used a union overlay to make bitfield and integer loads come from the same Fighter offset without unsafe ad hoc casts in user code.",
+    "Inlining the pickValue ternary directly preserved the expression at callsites to func_8006EBE8 instead of relying on a helper function.",
+    "Directly zeroed substick x/y fields instead of using the removed CLEAR_STICKS macro, likely to keep the generated stores straightforward.",
+    "Added MUST_MATCH-only unused stack storage in Fighter_CallAcessoryCallbacks_8006C624 to account for stack differences without affecting non-matching builds.",
+    "A transformation routine documents that an inline would usually imply the pattern, but the removed inline reserved more stack than the single allocation needed."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "file": "src/melee/ft/types.h",
+      "feedback": "Questioned extracting Struct2070 into its own type; agreed the union replacing a volatile variable made sense, but suggested it might be inlineable into Fighter."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/melee/ft/types.h",
+      "feedback": "Suggested that if this pattern reflects HAL usage, more Fighter flag members may need conversion to similar union-based representations."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/melee/ft/types.h",
+      "feedback": "Proposed merging with a todo: `Rename this and its members; investigate using it elsewhere.`"
+    },
+    {
+      "author": "r-burns",
+      "file": "src/melee/ft/types.h",
+      "feedback": "Agreed with merging using the todo."
+    }
+  ],
+  "searchable_terms": [
+    "PR614",
+    "GET_FIGHTER",
+    "Fighter user_data",
+    "fighter_gobj->user_data",
+    "HSD_GObjGetUserData",
+    "getFighter",
+    "Struct2070",
+    "x2070_int",
+    "x2071_b0_3",
+    "x2071_b5",
+    "x2071_b6",
+    "x2072_b4",
+    "x2073",
+    "volatile integer",
+    "Fighter_ActionStateChange_800693AC",
+    "func_80037C60",
+    "Fighter_Spaghetti_8006AD10",
+    "Fighter_procUpdate",
+    "Fighter_UnkApplyTransformation_8006C0F0",
+    "Fighter_CallAcessoryCallbacks_8006C624",
+    "Fighter_Unload_8006DABC",
+    "COPY_ATTRS",
+    "ftFox_CheckBlasterAction",
+    "ftLuigi_SpecialS_SetVars",
+    "ftMewtwo_SpecialN_CheckShadowBallRemove",
+    "ftPikachu_CheckProperty_801275CC",
+    "ftSamus_80128944",
+    "ftSamus_80129158"
+  ],
+  "follow_up_queries": [
+    "Search for remaining `fighter_gobj->user_data` or `HSD_GObjGetUserData` uses in fighter-owned HSD_GObj paths that should become GET_FIGHTER.",
+    "Investigate whether other Fighter packed flag regions should be modeled as unions like Struct2070.",
+    "Rename Struct2070 and its members once the semantics of x2071/x2072/x2073 flags are known.",
+    "Check whether x2071_b6 shared use in Fox blaster, Mewtwo shadow ball, Samus, and Fighter_ActionStateChange reveals a semantic name.",
+    "Review MUST_MATCH unused stack comments in fighter.c to see whether later compiler/matching improvements removed the need for them."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

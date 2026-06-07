@@ -1,0 +1,145 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-410",
+  "pr": {
+    "number": 410,
+    "title": "match ft OnKnockbackEnter and Exit for all fighters",
+    "url": "https://github.com/doldecomp/melee/pull/410",
+    "state": "MERGED",
+    "author": "snuffysasa",
+    "created_at": "2022-07-10T05:35:44Z",
+    "merged_at": "2022-07-10T19:23:46Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched fighter OnKnockbackEnter and OnKnockbackExit callbacks across many character files by replacing duplicated per-fighter assembly with C implementations and shared inline helpers. The PR removed large chunks of asm for Donkey Kong, Fox, Ice Climbers, Luigi, Peach, Purin, Seak, Yoshi, Zelda, Mewtwo, and related sdata2 float constants, while updating C files and callback table names such as ftMewTwo_OnKnockbackEnter/Exit. The main repeated behavior was wrapping two func_800704F0 calls for enter at 3.0f and exit at 0.0f, with fighter-specific argument values and extra ftAnim_ApplyPartAnim calls for Fox/Yoshi.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "callback-table-maintenance",
+      "fighter-common-helper"
+    ],
+    "systems": [
+      "fighter",
+      "fighter callbacks",
+      "character source",
+      "asm",
+      "include"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/fighter.h",
+    "asm/melee/ft/ftdata.s",
+    "include/functions.h",
+    "src/melee/ft/chara/ftDonkey/ftdonkey2.c",
+    "src/melee/ft/chara/ftFox/ftfox.c",
+    "src/melee/ft/chara/ftIceClimber/fticeclimber1.c",
+    "src/melee/ft/chara/ftLink/ftlink.c",
+    "src/melee/ft/chara/ftLuigi/ftluigi.c",
+    "src/melee/ft/chara/ftMewtwo/ftmewtwo.c",
+    "src/melee/ft/chara/ftPeach/ftpeach.c",
+    "src/melee/ft/chara/ftPurin/ftpurin.c",
+    "src/melee/ft/chara/ftSeak/ftseak.c",
+    "src/melee/ft/chara/ftYoshi/ftyoshi.c",
+    "src/melee/ft/chara/ftZelda/ftzelda.c",
+    "asm/melee/ft/chara/ftfox.s",
+    "asm/melee/ft/chara/ftluigi.s",
+    "asm/melee/ft/chara/ftpeach.s",
+    "asm/melee/ft/chara/ftyoshi.s"
+  ],
+  "what_changed": [
+    "Removed assembly definitions for many ft*_OnKnockbackEnter and ft*_OnKnockbackExit callbacks from character asm files and replaced them with C implementations.",
+    "Added shared inline helpers in src/melee/ft/fighter.h: Fighter_OnKnockbackEnter(gobj, arg1) calls func_800704F0(gobj, arg1, 3.0f) and func_800704F0(gobj, 0, 3.0f); Fighter_OnKnockbackExit(gobj, arg1) calls func_800704F0(gobj, arg1, 0.0f) and func_800704F0(gobj, 0, 0.0f).",
+    "Converted repeated simple callbacks for fighters such as Donkey, IceClimber, Luigi, Peach, Purin, Seak, Zelda, and others to one-line wrappers around Fighter_OnKnockbackEnter/Exit with argument 1.",
+    "Implemented ftMewTwo_OnKnockbackEnter and ftMewTwo_OnKnockbackExit using Fighter_OnKnockbackEnter/Exit with argument 2, matching the assembly pattern that loaded r4 = 2.",
+    "Preserved extra partial-animation behavior for Fox and Yoshi: enter applies ftAnim_ApplyPartAnim to parts 3 and 4 with state 3 and 0.0f; exit applies parts 3 and 4 with state 2 and 0.0f.",
+    "Updated asm/melee/ft/ftdata.s callback table spelling from ftMewtwo_OnKnockbackEnter/Exit to ftMewTwo_OnKnockbackEnter/Exit.",
+    "Matched additional nearby character helper functions as part of the same slice, including ftLink_800EB334, ftLuigi_8014260C, ftPeach_8011B93C, ftZelda_801395C8, and ftPikachu_SpecialAirN_StartAction rename evidence in the diff.",
+    "Adjusted ftLinkAttributes xD8 from s32 to f32, consistent with its use as a float passed into func_80092ED8.",
+    "Removed local sdata2 float labels that represented common constants such as 3.0f and 0.0f once C literals/helpers produced matching output."
+  ],
+  "smart_moves": [
+    "Factored a highly repeated assembly idiom into Fighter_OnKnockbackEnter and Fighter_OnKnockbackExit instead of cloning two func_800704F0 calls in every fighter file.",
+    "Kept the helper parameterized by the fighter-specific body-part or argument index, which covered the common arg1=1 case and Mewtwo's arg1=2 case without separate logic.",
+    "Used direct float literals 3.0f and 0.0f to eliminate many duplicate sdata2 constants, reducing asm and data noise.",
+    "Preserved fighter-specific behavior on top of the shared helper, especially Fox and Yoshi's ftAnim_ApplyPartAnim calls for parts 3 and 4.",
+    "Updated function-pointer references in existing asm when a function was renamed/matched in C, shown by func_800EB334 becoming ftLink_800EB334 in ftlink.s.",
+    "Aligned callback symbol naming in ftdata.s with the source symbol spelling for Mewtwo/MewTwo, avoiding unresolved or duplicate callback names."
+  ],
+  "decomp_lessons": [
+    "When many character callbacks share the same assembly sequence, first identify the common semantic helper and then let each fighter wrapper encode only its differences.",
+    "For knockback callbacks, the repeated pattern is two calls to func_800704F0: one with the fighter-specific argument and one with 0; enter uses 3.0f and exit uses 0.0f.",
+    "Matching a simple callback may require deleting both the .text function and the associated sdata2 constants from the asm file.",
+    "Do not flatten all fighters into identical wrappers blindly; inspect for extra calls after the common sequence, as Fox and Yoshi also update part animations.",
+    "Callback table symbols must match the final C symbol spelling exactly; this PR shows ftMewtwo versus ftMewTwo as a practical table-name cleanup.",
+    "Struct field types matter for matching and semantics: ftLinkAttributes.xD8 was changed from s32 to f32 because the implementation treats it as a floating-point attribute.",
+    "Small C helper functions near the targeted asm can be matched opportunistically when they unblock symbol references or reduce remaining asm, but their evidence should be tracked separately from the main knockback goal."
+  ],
+  "naming_conventions": [
+    "Fighter-specific knockback callbacks use ft<Character>_OnKnockbackEnter and ft<Character>_OnKnockbackExit.",
+    "The source uses ftMewTwo capitalization, and ftdata.s was updated from ftMewtwo_OnKnockbackEnter/Exit to ftMewTwo_OnKnockbackEnter/Exit.",
+    "Matched but still-address-based helper names may use the character prefix plus address, such as ftLink_800EB334, ftLuigi_8014260C, ftPeach_8011B93C, and ftZelda_801395C8.",
+    "Common fighter helpers added to fighter.h use the Fighter_ prefix: Fighter_OnKnockbackEnter and Fighter_OnKnockbackExit.",
+    "The project has historical spelling such as ftSeak in paths/symbols; this PR preserves that existing convention rather than normalizing it to Sheik."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replace repeated r4 setup plus two func_800704F0 calls with an inline helper to reproduce call order and constants.",
+    "For enter callbacks, match the lfs 0x40400000 constant as 3.0f; for exit callbacks, match 0x00000000 as 0.0f.",
+    "For Fox and Yoshi, match the extra ftAnim_ApplyPartAnim calls after Fighter_OnKnockbackEnter/Exit: enter uses part IDs 3 and 4 with mode/state 3; exit uses part IDs 3 and 4 with mode/state 2.",
+    "For Mewtwo, preserve the assembly-observed argument 2 rather than using the more common argument 1.",
+    "Remove obsolete .sdata2 labels only after their float constants are represented by C literals/helper output.",
+    "When a formerly asm-only function is moved to C and renamed, update any remaining asm callsites or function-pointer loads to the new symbol, as with ftLink_800EB334."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "RevoSucks",
+      "state": "APPROVED",
+      "submitted_at": "2022-07-10T19:23:40Z",
+      "body": "",
+      "notes": "No inline review comments or textual feedback were present in the slice."
+    }
+  ],
+  "searchable_terms": [
+    "pr410",
+    "snuffysasa",
+    "OnKnockbackEnter",
+    "OnKnockbackExit",
+    "Fighter_OnKnockbackEnter",
+    "Fighter_OnKnockbackExit",
+    "func_800704F0",
+    "ftAnim_ApplyPartAnim",
+    "ftdata.s",
+    "ftMewTwo_OnKnockbackEnter",
+    "ftMewTwo_OnKnockbackExit",
+    "ftMewtwo capitalization",
+    "ftDonkey_OnKnockbackEnter",
+    "ftFox_OnKnockbackEnter",
+    "ftYoshi_OnKnockbackEnter",
+    "ftIceClimber_OnKnockbackExit",
+    "ftLink_800EB334",
+    "ftLinkAttributes xD8",
+    "fighter.h inline helper",
+    "sdata2 float constants",
+    "0x40400000",
+    "3.0f",
+    "0.0f"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename func_800704F0 or document what Fighter_OnKnockbackEnter/Exit semantically control.",
+    "Check whether commented Kirby OnKnockbackEnter/Exit stubs in ftkirby.c were later matched or deliberately left disabled.",
+    "Search for remaining OnKnockbackEnter/Exit asm after PR 410 to identify fighters not fully covered by this slice.",
+    "Inspect later ftLink PRs for further naming or struct cleanup around ftLink_800EB334 and ftLinkAttributes.xD8.",
+    "Search for ftMewtwo versus ftMewTwo naming consistency fixes in callback tables and headers."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

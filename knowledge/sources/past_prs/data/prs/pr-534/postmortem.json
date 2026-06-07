@@ -1,0 +1,130 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-534",
+  "pr": {
+    "number": 534,
+    "title": "Fix SetScaleHack by making HSD_JObjSetMtxDirty a macro.",
+    "url": "https://github.com/doldecomp/melee/pull/534",
+    "state": "MERGED",
+    "author": "RevoSucks",
+    "created_at": "2022-09-03T15:44:41Z",
+    "merged_at": "2022-09-03T15:59:16Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Replaced the inline HSD_JObjSetMtxDirty helper in jobj.h with a preprocessor macro, allowing fighter.c to remove a local HSD_JObjSetScale_Hack workaround and call the normal HSD_JObjSetScale path. The PR notes this affected at least two functions and also HSD_JObjSetFlagsAll because previous matching required manual inlining. The important decomp insight was that HSD_JObjSetMtxDirty appears to behave like a macro in the original build rather than a normal inline function, even though that is unusual relative to neighboring HSD_JObj helpers.",
+  "change_classification": {
+    "primary_type": "decomp-matching fix",
+    "categories": [
+      "decomp-matching",
+      "fix",
+      "headers",
+      "inline-to-macro cleanup",
+      "workaround removal"
+    ],
+    "systems": [
+      "fighter",
+      "include",
+      "sysdolphin",
+      "baselib",
+      "jobj"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "include/sysdolphin/baselib/jobj.h",
+      "role": "Changed HSD_JObjSetMtxDirty from an inline function under always_inline pragmas into a macro and removed the surrounding pragma push/pop."
+    },
+    {
+      "path": "src/melee/ft/fighter.c",
+      "role": "Removed the local HSD_JObjSetScale_Hack workaround and restored Fighter_UpdateModelScale to call HSD_JObjSetScale."
+    }
+  ],
+  "what_changed": [
+    "Removed `#pragma push`, `#pragma always_inline on`, and `#pragma pop` around the inline HSD_JObj helper region in `include/sysdolphin/baselib/jobj.h`.",
+    "Converted `inline void HSD_JObjSetMtxDirty(HSD_JObj* jobj)` into `#define HSD_JObjSetMtxDirty(jobj) { ... }` with the same null-check, dirty-check, and `HSD_JObjSetMtxDirtySub(jobj)` call body.",
+    "Deleted the `HSD_JObjSetScale_Hack` inline workaround from `src/melee/ft/fighter.c`, including its manually inlined dirty-matrix logic.",
+    "Changed `Fighter_UpdateModelScale` from `HSD_JObjSetScale_Hack(jobj, &scale);` back to `HSD_JObjSetScale(jobj, &scale);`.",
+    "Kept an explanatory uncertainty comment in the header: `Why does this seem to be a define while the others are inline functions?`"
+  ],
+  "smart_moves": [
+    "Fixed the matching problem at the shared header abstraction instead of preserving a fighter-specific hack.",
+    "Used a macro to reproduce the apparent call-site expansion behavior needed by multiple functions, rather than forcing one manually inlined copy in `fighter.c`.",
+    "Removed duplicated hand-inlined matrix-dirty logic once the underlying helper expanded correctly.",
+    "Recognized that the local `HSD_JObjSetScale_Hack` was compensating for incorrect inline depth and that the better fix was to model `HSD_JObjSetMtxDirty` more accurately."
+  ],
+  "decomp_lessons": [
+    "If several functions only match when a helper is manually inlined, the original SDK/header construct may have been a macro rather than an inline function.",
+    "Do not solve shared inline-depth problems with per-file hacks if a header-level macro or inline declaration better explains multiple call sites.",
+    "Adjacent helpers in a header do not necessarily share the same implementation form; one JObj helper may be a macro while surrounding helpers remain inline functions.",
+    "Removing artificial `always_inline` pressure can be part of matching when the actual source model is selective macro expansion rather than blanket forced inlining.",
+    "A workaround comment about compiler inline depth is useful evidence, but once a cleaner header model is found, prefer deleting the workaround to avoid fossilized fake APIs."
+  ],
+  "naming_conventions": [
+    {
+      "name": "HSD_JObjSetMtxDirty",
+      "lesson": "Kept the SDK-style exported helper name but implemented it as a macro, preserving call-site source spelling."
+    },
+    {
+      "name": "HSD_JObjSetScale_Hack",
+      "lesson": "Temporary decomp workaround names with `_Hack` should be removed when the real header behavior is understood."
+    },
+    {
+      "name": "getHSDJObj",
+      "lesson": "Unaffected local helper in `fighter.c`; no naming feedback was provided for it in this PR."
+    }
+  ],
+  "assembly_or_matching_tactics": [
+    "Modeled `HSD_JObjSetMtxDirty` as a macro to force expansion at the call site without relying on compiler inline heuristics.",
+    "Removed manual expansion from `HSD_JObjSetScale_Hack` after the macro made the normal `HSD_JObjSetScale` call path produce the desired code.",
+    "Addressed a known inline-depth issue where automatic inlining preferred a depth that did not match the target assembly.",
+    "The PR body states the change also affects `HSD_JObjSetFlagsAll`, implying the macro fixed more than the visible `fighter.c` workaround."
+  ],
+  "review_feedback": [
+    {
+      "source": "issue_comment",
+      "feedback": "A reviewer asked whether the change allowed the workaround at `include/sysdolphin/baselib/jobj.h#L147` to be removed.",
+      "outcome": "The author replied `Yes.` and the diff removed the pragma-based workaround region."
+    }
+  ],
+  "searchable_terms": [
+    "pr-534",
+    "RevoSucks",
+    "SetScaleHack",
+    "HSD_JObjSetMtxDirty",
+    "HSD_JObjSetScale",
+    "HSD_JObjSetScale_Hack",
+    "HSD_JObjSetFlagsAll",
+    "HSD_JObjMtxIsDirty",
+    "HSD_JObjSetMtxDirtySub",
+    "HSD_JObjSetupMatrix",
+    "HSD_JObjGetRObj",
+    "HSD_JObjSetRotation",
+    "jobj.h",
+    "fighter.c",
+    "Fighter_UpdateModelScale",
+    "Fighter_InitScale",
+    "always_inline",
+    "inline depth",
+    "macro",
+    "manual inlining",
+    "matrix dirty",
+    "sysdolphin",
+    "baselib",
+    "fighter"
+  ],
+  "follow_up_queries": [
+    "Find other JObj helper functions that only match when manually inlined and check whether they should be macros.",
+    "Search for remaining `_Hack` helpers that duplicate SDK header logic and may be removable via better macro or inline modeling.",
+    "Inspect `HSD_JObjSetFlagsAll` matching history to confirm exactly how the `HSD_JObjSetMtxDirty` macro affected it.",
+    "Audit uses of `#pragma always_inline on` in headers to see whether they are masking more precise original macro behavior."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

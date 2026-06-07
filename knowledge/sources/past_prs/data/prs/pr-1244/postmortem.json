@@ -1,0 +1,143 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1244",
+  "pr": {
+    "number": 1244,
+    "title": "Match 34.05% of `ftcoll` (23.89 KB)",
+    "url": "https://github.com/doldecomp/melee/pull/1244",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-02-18T01:18:25Z",
+    "merged_at": "2024-02-18T01:22:56Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large f_ighter collision decompilation PR that raised `src/melee/ft/ftcoll.c` to a reported 34.05% match over 23.89 KB. It replaced many `NOT_IMPLEMENTED`/scratch-backed regions with C for early and mid `ftColl` routines, introduced typed damage-log storage, repaired collision/fighter field names and prototypes across related fighter/common/lb files, and updated symbols/scratches to reflect newly matched or better-understood code. There were no review comments in the slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-typing",
+      "symbol-renaming",
+      "scratch-cleanup"
+    ],
+    "systems": [
+      "fighter",
+      "ftcoll",
+      "collision",
+      "lb",
+      "item",
+      "config",
+      "asm"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/ftcoll.c",
+    "src/melee/ft/ftcoll.h",
+    "src/melee/ft/types.h",
+    "src/melee/lb/types.h",
+    "src/melee/lb/lbcollision.c",
+    "config/GALE01/symbols.txt",
+    "config/GALE01/scratches.txt",
+    "asm/melee/ft/ftcoll.s",
+    "src/melee/ft/ftdevice.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Bury.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Shouldered.c"
+  ],
+  "what_changed": [
+    "Matched a reported 34.05% of `melee/ft/ftcoll.c`; the PR body lists many 100% functions including `ftColl_8007699C`, `ftColl_80076CBC`, `ftColl_80076640`, `ftColl_GetWindOffsetVec`, `ftColl_CreateReflectHit`, and `ftColl_CreateAbsorbHit`.",
+    "Added substantial C implementations in `src/melee/ft/ftcoll.c`, including functions such as `ftColl_80076640`, `ftColl_80076764`, `ftColl_80076808`, `ftColl_800768A0`, and matching helpers/inlines around hit/hurt collision handling.",
+    "Modeled the former anonymous ftcoll BSS/SBSS objects as damage logs: `ftColl_80459278`/`ftColl_80459598` became `dmg_log0`/`dmg_log1`, and `ftColl_804D6558`/`ftColl_804D655C` became `dmg_log0_idx`/`dmg_log1_idx`; `ftcoll.c` defines a `DmgLogEntry` with `STATIC_ASSERT(sizeof(DmgLogEntry) == 0x28)` and arrays of 20 entries.",
+    "Renamed and propagated fighter collision fields: `x119E_hurtboxNum` to `hurt_capsules_len`, `x11A0_fighterHurtbox` to `hurt_capsules`, `dmg.x1844_direction` to `dmg.facing_dir_1`, and `dmg.x1920` to `dmg.facing_dir` in `src/melee/ft/types.h` and multiple call sites.",
+    "Renamed collision struct fields and parameters toward semantic names, including use of `HurtCapsuleState`, `HitCapsule_Disabled`, `HitCapsule_Enabled`, `hit->unk_count`, and `scale` instead of older placeholders such as `scl`/`single_float` in affected lb and fighter code.",
+    "Repaired several function prototypes as type information improved, such as `ftCo_800C08A0` taking an `ftCo_GObj*` argument, `ftCo_80094138` returning `void` and taking `ftCo_Fighter*`, `ftColl_80076CBC` returning `void`, and `ftColl_80076ED8` taking a `HitCapsule*` fourth argument in the header.",
+    "Updated `config/GALE01/scratches.txt` entries for many f_tcoll functions from `100%` to `OK`, and updated `config/GALE01/symbols.txt` names/scopes for the damage-log objects and `ftDevice_BuryThings`/`ftDevice_BuryThingCount`.",
+    "The assembly dump for `asm/melee/ft/ftcoll.s` was rebased from relative scratch addresses to real addresses such as `0x800763C0 - 0x8007C114`, with labels like `.L_800763EC` and resolved references to symbols like `p_ftCommonData`, `HSD_GObj_Entities`, `dmg_log0_idx`, and `dmg_log1_idx`."
+  ],
+  "smart_moves": [
+    "Converted opaque BSS blobs into a concrete `DmgLogEntry` array with a size assertion, which both documents the layout and gives the compiler enough shape to match damage-log access patterns.",
+    "Preserved assert/report behavior in the C implementation: `ftColl_80076640` emits `OSReport(\"attack power over 500!! %f\\n\", ...)` and `HSD_ASSERT`, and the damage-log overflow paths report `damage log over %d!!` / `tip log over %d!!` style messages visible in the original data.",
+    "Propagated field renames across users rather than confining them to `ftcoll.c`, reducing future mismatch risk from stale aliases and making later fighter collision work more readable.",
+    "Used `ARRAY_SIZE`, `size_t`, `bool`, named enum states, and typed `Fighter_GObj*`/`HurtCapsule*`/`HitCapsule*` parameters to encode facts recovered during matching.",
+    "Kept unused-but-layout-relevant data with `UNUSED` qualifiers instead of deleting it, preserving evidence for string/data placement while avoiding warnings.",
+    "Introduced small local helpers/inlines such as `getEnvDmg`, `inlineA0`, `inlineA1`, and collision log helpers to express repeated assembly patterns while still allowing matching."
+  ],
+  "decomp_lessons": [
+    "For large fighter collision files, modeling adjacent global log buffers and their indices can unlock many call sites at once; here naming `dmg_log0`, `dmg_log1`, `dmg_log0_idx`, and `dmg_log1_idx` clarified repeated BSS/SBSS access sequences.",
+    "Field names should follow observed semantics from all call sites: hurtbox fields became `hurt_capsules_len`/`hurt_capsules`, and damage direction fields were separated into `facing_dir_1` and `facing_dir` only after usage patterns in damage, rebound, shouldered, and collision code were evident.",
+    "When a scratch function matches, update both `scratches.txt` and `symbols.txt`; leaving old placeholder object names or `100%` scratch status behind makes future matching/search misleading.",
+    "Collision decomp often requires synchronized header work in `ft/types.h`, `lb/types.h`, `ftcoll.h`, and action-specific source files, because a single capsule field or prototype change ripples through many fighter states.",
+    "Use size assertions for newly inferred structs whose size is crucial to BSS layout; `DmgLogEntry` was asserted to 0x28, matching the 0x320 storage as 20 entries.",
+    "Named enum states like `HurtCapsule_Enabled`/`HurtCapsule_Disabled` and existing hit capsule state names are better than raw 0/1 checks, but casts may still be needed where the original code mixed hit and hurt capsule storage in hard-to-type ways."
+  ],
+  "naming_conventions": [
+    "`ftColl_*` function names remain address-based unless a strong semantic name exists, while globals can be renamed semantically when usage is clear, e.g. `dmg_log0`, `dmg_log1`, `dmg_log0_idx`, `dmg_log1_idx`.",
+    "Fighter hurtbox storage was normalized to `hurt_capsules_len` and `hurt_capsules`, matching the `HurtCapsule` type rather than using `hurtbox` placeholder names.",
+    "Collision capsule scalar fields use `scale` instead of abbreviations like `scl` or placeholder names like `single_float`.",
+    "Hit capsule count-like fields were renamed to `unk_count` where the exact semantic role was still uncertain; this is a cautious intermediate name rather than overclaiming.",
+    "Damage direction fields were renamed from offset names to directional names, including `dmg.facing_dir_1` and `dmg.facing_dir`, reflecting call-site behavior while retaining distinction between nearby fields.",
+    "Recovered ftdevice globals were named `ftDevice_BuryThings` and `ftDevice_BuryThingCount`, replacing anonymous `ft_80459A74`/`ft_804D6574` symbols."
+  ],
+  "assembly_or_matching_tactics": [
+    "Updated assembly listings from scratch-local offsets such as `0x00000000` and `.L_0000002C` to real text addresses and labels such as `0x800763C0` and `.L_800763EC`, improving cross-reference accuracy.",
+    "Resolved small-data and BSS symbol references in assembly output, e.g. `p_ftCommonData@sda21`, `HSD_GObj_Entities@sda21`, `dmg_log0_idx@sda21`, and `dmg_log1_idx@sda21`, after symbol renaming.",
+    "Used `PAD_STACK(4)` in the C for `ftColl_80076640`, indicating stack-shape tuning was needed for a match.",
+    "Kept casts between `int`, `size_t`, `u8`, and pointer types in hot collision loops where the original code's signedness and capsule typing affected codegen.",
+    "Factored repeated hit-capsule copy and victim-log scans into static/inlined helpers, a common tactic for matching repeated compiler output without duplicating large blocks manually.",
+    "The scratch status update from `100%` to `OK` for matched functions records that these snippets were accepted into source rather than only existing as standalone scratch results."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice, so there is no direct reviewer feedback to extract."
+  ],
+  "searchable_terms": [
+    "pr-1244",
+    "ribbanya",
+    "ftcoll",
+    "ftColl_80076640",
+    "ftColl_80076764",
+    "ftColl_80076808",
+    "ftColl_800768A0",
+    "ftColl_8007699C",
+    "ftColl_80076CBC",
+    "ftColl_80076ED8",
+    "ftColl_CreateReflectHit",
+    "ftColl_CreateAbsorbHit",
+    "ftColl_GetWindOffsetVec",
+    "DmgLogEntry",
+    "dmg_log0",
+    "dmg_log1",
+    "dmg_log0_idx",
+    "dmg_log1_idx",
+    "hurt_capsules_len",
+    "hurt_capsules",
+    "HurtCapsuleState",
+    "HitCapsule",
+    "HurtCapsule",
+    "HitCapsule_Disabled",
+    "HitCapsule_Enabled",
+    "facing_dir_1",
+    "facing_dir",
+    "unk_count",
+    "scale",
+    "ftDevice_BuryThings",
+    "ftDevice_BuryThingCount",
+    "config/GALE01/scratches.txt",
+    "config/GALE01/symbols.txt"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that finish or rename remaining `ftColl_80078C70`, `ftColl_80078A2C`, `ftColl_80076ED8`, `ftColl_8007AB48`, and `ftColl_8007B0C0` work.",
+    "Search for later refinements of `DmgLogEntry` fields `x0`, `x20`, `size_of_xC`, and the fake-union comments.",
+    "Search for later renames of `hit->unk_count`, `dmg.facing_dir_1`, and `dmg.facing_dir` to see whether their semantics were confirmed.",
+    "Audit later collision PRs for removal of casts between `HurtCapsule*` and `HitCapsule*` around `ftColl_80076ED8`.",
+    "Check whether `ftColl_804D6560` as `s8[8]` was later given a semantic name."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,142 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1173",
+  "pr": {
+    "number": 1173,
+    "title": "Match CObj setupTopHalfCamera, bring in existing matches for CObjEraseScreen and CObjLoad",
+    "url": "https://github.com/doldecomp/melee/pull/1173",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-02-01T16:25:14Z",
+    "merged_at": "2024-02-01T17:58:26Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched more of sysdolphin baselib camera-object code by replacing CObj assembly/NOT_IMPLEMENTED areas with C, especially setupTopHalfCamera, HSD_CObjEraseScreen, and CObjLoad. The PR also reshaped CObj descriptor/header types into common/frustum/perspective camera-desc structs, renamed viewport fields from left/right/top/bottom to xmin/xmax/ymin/ymax, updated dependent users in lbvector and grIzumi, and made setup camera helpers static C-file internals.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-cleanup",
+      "camera"
+    ],
+    "systems": [
+      "sysdolphin/baselib",
+      "melee/lb",
+      "melee/gr"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/cobj.c",
+    "src/sysdolphin/baselib/cobj.h",
+    "src/sysdolphin/baselib/forward.h",
+    "src/melee/lb/lbvector.c",
+    "src/melee/lb/lb_00F9.h",
+    "src/melee/gr/grizumi.c"
+  ],
+  "what_changed": [
+    "Replaced the previous MUST_MATCH inline assembly block for HSD_CObjEraseScreen with C code that early-returns on null CObj or no enabled erase channels, computes mid-depth from near/far, handles perspective/frustum/ortho projection cases, and calls HSD_EraseRect.",
+    "Implemented setupTopHalfCamera as a static bool helper using HSD_VIGetRenderMode, viewport clipping against efbHeight, GXSetScissor, GXSetViewport, C_MTXFrustum/C_MTXOrtho, and GXSetProjection.",
+    "Implemented setupBottomHalfCamera similarly for bottom render-pass behavior, including screen_top = efbHeight - 8 clipping and adjusted projection math.",
+    "Converted setupNormalCamera and setupBottomHalfCamera prototypes from exported int helpers to static bool helpers local to cobj.c; corresponding declarations were removed from cobj.h.",
+    "Implemented CObjLoad from a descriptor: reset flags, set viewport/scissor, initialize eye/interest WObjs, set near/far, choose up-vector vs roll, and dispatch projection setup for perspective, ortho, or frustum.",
+    "Refactored CObj descriptor layout in cobj.h: HSD_CObjDesc became a union over HSD_CameraDescCommon, HSD_CameraDescFrustum, and HSD_CameraDescPerspective; forward.h was updated to forward-declare the union and new structs.",
+    "Introduced reusable HSD_RectS16, HSD_RectF32, and Scissor typedefs, and changed HSD_CObj.viewport to HSD_RectF32 and scissor to Scissor.",
+    "Renamed viewport field users from left/right/top/bottom to xmin/xmax/ymin/ymax in CObj setup code and lbVector_WorldToScreen.",
+    "Changed grIzumi ReflectCObjDesc and lb_80013B14 prototype to use HSD_CameraDescPerspective rather than the generic HSD_CObjDesc layout.",
+    "Cleaned up several cobj.c matching aids by using literal constants such as 0.0f, 1.0f, -1.0f, FLT_MIN, and direct HSD_ASSERT/HSD_Panic calls instead of local string/float extern aliases."
+  ],
+  "smart_moves": [
+    "Made the descriptor model match observed data more explicitly: perspective descriptors no longer fake a generic union initializer and instead use a HSD_CameraDescPerspective type with fov/aspect fields.",
+    "Centralized rectangle semantics by using xmin/xmax/ymin/ymax for viewport rectangles, reducing ambiguity compared with left/right/top/bottom when the same code computes widths and heights.",
+    "Kept matching-sensitive helpers static in cobj.c instead of exposing internal setupNormalCamera/setupTopHalfCamera/setupBottomHalfCamera prototypes through the header.",
+    "Preserved matching artifacts where useful, such as unused stack arrays and unusual assignments in setupTopHalfCamera, rather than over-cleaning the C into nonmatching idiomatic code.",
+    "Removed large inline assembly for HSD_CObjEraseScreen once the C formulation matched, improving maintainability while retaining projection-specific behavior.",
+    "Used CObjLoad to drive descriptor interpretation through typed common/perspective/frustum/ortho views, making future descriptor matches less dependent on raw offsets."
+  ],
+  "decomp_lessons": [
+    "For baselib camera code, descriptor structs may need to be split by projection flavor instead of represented as one broad struct with an imprecise union; callers like grIzumi can reveal which concrete descriptor form is correct.",
+    "Viewport naming matters for matching and readability: xmin/xmax/ymin/ymax makes width/height calculations and screen clipping code clearer than generic left/right/top/bottom.",
+    "Internal setup helpers that are not real exported APIs should stay static in the .c file; exporting them in headers can misrepresent linkage and invite incorrect dependencies.",
+    "Replacing assembly with C may require matching-oriented control flow, return style, and temporary variables, not just equivalent high-level behavior.",
+    "When CObj code references projection fields by union offset, verify the projection case before assigning semantic field names; the top/bottom camera implementation still uses perspective-named fields in frustum/ortho formulas because that is what the observed layout/diff supported.",
+    "Header cleanup can be part of matching work: typedefs, forward declarations, method macros, and exact function signatures all affect downstream code and decomp accuracy."
+  ],
+  "naming_conventions": [
+    "Use HSD_RectS16 for signed 16-bit rectangle descriptor values with xmin, xmax, ymin, ymax.",
+    "Use HSD_RectF32 for float viewport rectangles with xmin, xmax, ymin, ymax.",
+    "Use Scissor for u16 scissor rectangles with left, right, top, bottom.",
+    "Use HSD_CameraDescCommon, HSD_CameraDescFrustum, and HSD_CameraDescPerspective for projection-specific camera descriptor layouts.",
+    "HSD_CObjDesc is a union, not a struct, when it needs to provide common, frustum, ortho, and perspective views.",
+    "Use nnear and ffar field names in camera descriptor structs to avoid colliding with near/far identifiers while preserving meaning.",
+    "Name CObj casting/method macros as HSD_COBJ, HSD_COBJ_INFO, and HSD_COBJ_METHOD."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed a MUST_MATCH asm implementation of HSD_CObjEraseScreen after finding C that matched the projection switch and HSD_EraseRect argument order.",
+    "Used early return structure in HSD_CObjEraseScreen for null/no-enabled-channel cases, matching the assembly branch pattern more directly than nesting the whole function body.",
+    "Used literal constants directly where they produced matching code, replacing extern float aliases such as HSD_CObj_804DE478/HSD_CObj_804DE47C in viewport setup.",
+    "Kept unused local arrays in camera setup functions, apparently as stack-layout/codegen aids.",
+    "Converted helper return types from int to bool while still returning 0/true where the original branch shape required it.",
+    "Used static inline helper CObjResetFlags and HSD_CObjGetViewingMtxPtrDirect to express small operations in a way compatible with matching and header organization."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "ribbanya",
+      "submitted_at": "2024-02-01T17:48:42Z",
+      "feedback": "Move static functions from the .h to the top of the .c; put the static keyword on the declaration, and either keep or omit it on the definition."
+    },
+    {
+      "reviewer": "agent",
+      "feedback": "No line-level review comments or PR body were present in the slice, so intent beyond the title, diff, and single review note is limited."
+    }
+  ],
+  "searchable_terms": [
+    "PR1173",
+    "PsiLupan",
+    "CObj",
+    "HSD_CObj",
+    "setupTopHalfCamera",
+    "setupBottomHalfCamera",
+    "setupNormalCamera",
+    "HSD_CObjEraseScreen",
+    "CObjLoad",
+    "HSD_CObjLoadDesc",
+    "HSD_CObjDesc",
+    "HSD_CameraDescCommon",
+    "HSD_CameraDescFrustum",
+    "HSD_CameraDescPerspective",
+    "HSD_RectS16",
+    "HSD_RectF32",
+    "Scissor",
+    "viewport xmin xmax ymin ymax",
+    "lbVector_WorldToScreen",
+    "ReflectCObjDesc",
+    "grIzumi_801CCD98",
+    "lb_80013B14",
+    "GXSetViewport",
+    "GXSetScissor",
+    "GXSetProjection",
+    "C_MTXFrustum",
+    "C_MTXOrtho",
+    "HSD_EraseRect",
+    "PROJ_PERSPECTIVE",
+    "PROJ_FRUSTUM",
+    "PROJ_ORTHO"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching HSD_CObjSetUpVector or HSD_CObjGetUpVector, which remained NOT_IMPLEMENTED in this slice.",
+    "Search for remaining users of old viewport.left/right/top/bottom field names after the HSD_RectF32 rename.",
+    "Search for other HSD_CObjDesc initializers that should be converted to HSD_CameraDescPerspective or HSD_CameraDescFrustum.",
+    "Check subsequent cobj.c PRs for cleanup or validation of setupBottomHalfCamera projection field names and matching artifacts.",
+    "Look for remaining MUST_MATCH assembly blocks in sysdolphin/baselib that can be replaced with C using the same constant and control-flow tactics."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

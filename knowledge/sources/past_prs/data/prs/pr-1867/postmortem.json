@@ -1,0 +1,130 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1867",
+  "pr": {
+    "number": 1867,
+    "title": "Improve ftdrawcommon matches",
+    "url": "https://github.com/doldecomp/melee/pull/1867",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-08-24T05:17:00Z",
+    "merged_at": "2025-08-24T05:21:05Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Refactored fighter draw/common rendering and collision-debug draw code to improve ftdrawcommon matching. The PR made ftDrawCommon_8008051C and ftDrawCommon_80080E18 fully match, improved ftDrawCommon_800805C8 and ftDrawCommon_80080C28 to 99.90%, and cleaned up related fighter and lb collision/dynamics types so call sites use typed arrays and bool parameters instead of placeholder pointers and decompiler-style pointer arithmetic.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "type-refinement",
+      "control-flow-cleanup",
+      "stack-matching"
+    ],
+    "systems": [
+      "fighter",
+      "ftdrawcommon",
+      "library",
+      "collision",
+      "rendering"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/ftdrawcommon.c",
+    "src/melee/ft/ftdrawcommon.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/forward.h",
+    "src/melee/lb/lbcollision.c",
+    "src/melee/lb/lbcollision.h",
+    "src/melee/lb/lb_00F9.c",
+    "src/melee/lb/lb_00F9.h"
+  ],
+  "what_changed": [
+    "Changed ftDrawCommon_800805C8 signature from taking s32 arg2 to bool arg2 in ftdrawcommon.c and ftdrawcommon.h, and updated callers in ftDrawCommon_80080E18 to pass true/false explicitly.",
+    "Replaced much of ftDrawCommon_800805C8's decompiler-style temporaries and pointer stepping with typed fighter access via GET_FIGHTER, for loops over x914, hurt_capsules, x1670, dynamic_bone_sets, and x1614, and a named do_invalidate flag before HSD_StateInvalidate(-1).",
+    "Factored repeated view-matrix setup into ftDrawCommon_8008051C and reused it from ftDrawCommon_800805C8, ftDrawCommon_80080C28, and new ftDrawCommon_80080E18 helper inlines.",
+    "Introduced static const GXColor values ftDrawCommon_804D836C and ftDrawCommon_804D8370 instead of extern s32 arrays, and passed them as GXColor pointers to lb_800117F4.",
+    "Split ftDrawCommon_80080E18's repeated draw paths into static inline helpers ftDrawCommon_80080E18_inline0, ftDrawCommon_80080E18_inline1, and ftDrawCommon_80080E18_inline2 while preserving camera-mode branching.",
+    "Refined Fighter layout around offsets 0x1614 and 0x1670: x1614 became an array of two 0x2C-byte structs; x166C was documented as the number of valid x1670 entries; x1670 became a Fighter_x1670_t array with Vec3, float, HSD_JObj pointer, and padding.",
+    "Added a forward declaration for Fighter_x1670_t in ft/forward.h and moved lbColl_8000A460's parameter from a local lbcollision Foo placeholder to Fighter_x1670_t*.",
+    "Changed lb_800117F4's third argument type from UNK_T to GXColor* in lb_00F9.c/h and simplified a goto-based branch into an else-if guard."
+  ],
+  "smart_moves": [
+    "Using ARRAY_SIZE for fixed fighter arrays such as x914 and x1614 made loop bounds explicit and avoided fragile pointer-increment patterns.",
+    "Introducing Fighter_x1670_t at the fighter layout site let lbcollision.h drop the local Foo placeholder while keeping lbColl_8000A460 accurately typed against fighter data.",
+    "Reusing ftDrawCommon_8008051C for view-matrix construction reduced duplicated stack-sensitive matrix code in multiple draw routines and helped ftDrawCommon_8008051C reach 100%.",
+    "Changing local color storage in ftDrawCommon_800805C8 from float-like temporaries to GXColor variables aligned the caller with lb_800117F4's actual color-pointer usage.",
+    "Splitting ftDrawCommon_80080E18 into static inline helpers preserved inlining-sensitive code shape while making the camera-case rendering paths easier to reason about.",
+    "Replacing magic integer truth values with bool parameters and true/false call sites clarified that ftDrawCommon_800805C8's third parameter controls draw behavior, not a numeric render mode."
+  ],
+  "decomp_lessons": [
+    "When an unmatched function repeatedly constructs the same view matrix, factor the construction into a shared helper only if the resulting call/inlining behavior matches; here ftDrawCommon_8008051C became the reusable matching primitive.",
+    "Struct layout refinements can unlock cleaner matching: defining x1614 and x1670 arrays in Fighter removed misleading arithmetic such as fighter + 0x28 or fighter + 0x4C style stepping.",
+    "Do not leave placeholder types in unrelated library headers when the data is owned by a concrete system; forward-declare the owning type and point APIs at that type.",
+    "For match-sensitive rendering code, static inline helper extraction can reproduce repeated source patterns without necessarily adding call overhead.",
+    "Replacing gotos with structured conditionals is viable when it preserves branch semantics; lb_800117F4 kept the same arg4 behavior while removing block_5.",
+    "Small type corrections, such as UNK_T to GXColor* and s32 to bool, can improve both readability and match quality across caller/callee boundaries."
+  ],
+  "naming_conventions": [
+    "New fighter substructure followed the existing offset-derived placeholder style: Fighter_x1670_t for the struct stored at Fighter offset 0x1670.",
+    "Unknown fighter fields retained x-offset names such as x166C, x1670, x21FC_flag, x2223_b2, and x2227_b7, with comments documenting known meaning where available.",
+    "Temporary matching helper names remained local and descriptive but provisional, e.g. mtx_thing_2 and ftDrawCommon_80080E18_inline0/inline1/inline2.",
+    "Boolean locals and parameters were named for behavior where known, e.g. do_invalidate and bool arg2, even when the public function name stayed address-based."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed a #pragma dont_inline wrapper around ftDrawCommon_8008051C after rewriting the matrix helper and locals into a naturally matching form.",
+    "Used explicit PAD_STACK calls and carefully placed local matrices/GXColor variables to maintain stack layout in match-sensitive draw functions.",
+    "Replaced pointer-induction variables from decompiler output with indexed for loops over typed arrays while preserving bounds casts such as (unsigned) fighter->hurt_capsules_len and (unsigned) fighter->x166C.",
+    "Centralized PSMTXIdentity, translation-column writes, HSD_CObjGetCurrent()->view_mtx access, and PSMTXConcat in ftDrawCommon_8008051C.",
+    "Changed ftDrawCommon_800805C8 to early-return when x21FC_flag.b7 is false, simplifying nested control flow while keeping the draw-path behavior.",
+    "Used static const GXColor objects for rodata/data matching instead of extern s32 arrays for ftDrawCommon_804D836C and ftDrawCommon_804D8370."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided slice.",
+    "decomp.dev bot reported matched code improved by +940 bytes overall: ftDrawCommon_8008051C reached 100% from 67.19%, ftDrawCommon_80080E18 reached 100% from 99.96%, ftDrawCommon_800805C8 improved from 89.76% to 99.90%, and ftDrawCommon_80080C28 improved from 99.03% to 99.90%."
+  ],
+  "searchable_terms": [
+    "ftdrawcommon",
+    "ftDrawCommon_8008051C",
+    "ftDrawCommon_800805C8",
+    "ftDrawCommon_80080C28",
+    "ftDrawCommon_80080E18",
+    "ftDrawCommon_80080E18_inline0",
+    "ftDrawCommon_80080E18_inline1",
+    "ftDrawCommon_80080E18_inline2",
+    "Fighter_x1670_t",
+    "x1670",
+    "x1614",
+    "x166C",
+    "hurt_capsules",
+    "dynamic_bone_sets",
+    "lbColl_8000A460",
+    "lb_800117F4",
+    "GXColor",
+    "GET_FIGHTER",
+    "GET_JOBJ",
+    "PAD_STACK",
+    "ARRAY_SIZE",
+    "HSD_StateInvalidate",
+    "PSMTXConcat",
+    "HSD_JObjDispAll",
+    "Camera_80031060",
+    "ftafterimage"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that resolve the @todo for the proper size or real name of Fighter_x1670_t.",
+    "Search for subsequent work bringing ftDrawCommon_800805C8 and ftDrawCommon_80080C28 from 99.90% to 100%.",
+    "Audit other lbcollision APIs for placeholder structs similar to the removed Foo type.",
+    "Check whether ftDrawCommon_80080E18_inline0/1/2 later received semantic names or were folded into named draw-mode helpers.",
+    "Search for other callers of lb_800117F4 to confirm the GXColor* third argument remained stable."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

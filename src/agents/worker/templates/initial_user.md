@@ -27,6 +27,12 @@
         Use only resources that exist in this checkout or are listed above. If a
         path or command is unavailable, report that exact blocker.
 
+        If `current_state.repair_request` is present, the runner rejected your
+        previous return. Read the referenced gate artifact, fix the named
+        regression/validation issues, remove only your own unsafe retained
+        hunks when needed, and return the corrected final JSON report. Do not
+        ignore the repair request or switch targets.
+
         Only edit files listed in `current_state.lease.write_set`. In dry-run
         smoke mode, respect the configured one-report stop rule. In live mode,
         use the configured depth budget: understand the file before editing,
@@ -44,7 +50,10 @@
         target, breaks a previously matched local check, or makes a relevant
         neighbor worse, undo only your own attempt hunks before continuing. Do
         not return `progress` or `score_candidate` while a retained edit has an
-        unresolved local regression.
+        unresolved local regression. The orchestrator accepts those report
+        types only when the final JSON includes a passed
+        `local_regression_check` with no target or neighbor regression and with
+        baseline/final validation artifacts present on disk.
 
         Do not run global progress-report refresh commands from a worker:
         `ninja build/GALE01/report.json`,

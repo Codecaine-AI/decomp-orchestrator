@@ -1,0 +1,138 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-190",
+  "pr": {
+    "number": 190,
+    "title": "Start sysdolphin's controller, add header w/ struct, match first 2 functions",
+    "url": "https://github.com/doldecomp/melee/pull/190",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-14T04:54:55Z",
+    "merged_at": "2021-12-14T04:55:04Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Started decompilation of sysdolphin/baselib/controller by adding controller.c and controller.h, matching the first two controller functions, and naming the main HSD pad globals throughout assembly references. The PR also introduced a minimal Dolphin PADStatus header and wired the new controller source object into the build. Most of the large diff is mechanical symbol replacement from lbl_804C1F78/lbl_804C1FAC/lbl_804C20BC/lbl_804C21CC to HSD_PadLibData/HSD_PadMasterStatus/HSD_PadCopyStatus/HSD_PadRumbleData across many asm files.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "symbol-naming",
+      "build-wiring"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "controller",
+      "rumble",
+      "dolphin-pad",
+      "asm",
+      "include"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/controller.c",
+    "src/sysdolphin/baselib/controller.h",
+    "asm/sysdolphin/baselib/controller.s",
+    "asm/sysdolphin/baselib/rumble.s",
+    "include/dolphin/pad/pad.h",
+    "include/functions.h",
+    "include/variables.h",
+    "obj_files.mk",
+    "e_files.mk",
+    "asm/melee/gm/code_801601C4.s",
+    "asm/melee/db/code_80225374.s",
+    "asm/melee/ft/fighter.s"
+  ],
+  "what_changed": [
+    "Added src/sysdolphin/baselib/controller.c with matched implementations of HSD_PadGetRawQueueCount and HSD_PadGetResetSwitch.",
+    "Removed the corresponding two assembly implementations from asm/sysdolphin/baselib/controller.s so the new C object supplies those symbols.",
+    "Added src/sysdolphin/baselib/controller.h defining HSD_FlushType, RumbleCommand, HSD_Rumble, HSD_RumbleData, HSD_PadRumbleListData, HSD_PadData, HSD_PadStatus, and PadLibData.",
+    "Added include/dolphin/pad/pad.h with a minimal PADStatus definition containing button, stick, substick, trigger, analog, and err fields.",
+    "Renamed/commented four controller-related BSS globals in variables.h and controller.s: lbl_804C1F78 to HSD_PadLibData, lbl_804C1FAC to HSD_PadMasterStatus, lbl_804C20BC to HSD_PadCopyStatus, and lbl_804C21CC to HSD_PadRumbleData.",
+    "Propagated the named pad globals into many assembly files that index pad status or rumble data, including game-mode, fighter, menu, stage, debug, camera, and text assembly files.",
+    "Updated include/functions.h comment from func_803769D8 to HSD_PadGetResetSwitch while HSD_PadGetRawQueueCount was already named in the surrounding declarations.",
+    "Added src/sysdolphin/baselib/controller.o to obj_files.mk and e_files.mk near the existing asm sysdolphin controller object."
+  ],
+  "smart_moves": [
+    "Matched small leaf/bootstrap functions first before attempting the rest of the controller module, reducing asm size while establishing the module's types and globals.",
+    "Used the observed BSS layout to infer a coherent PadLibData structure: qcount at offset 0x03 supports HSD_PadGetRawQueueCount, and reset_switch at offset 0x2B supports HSD_PadGetResetSwitch.",
+    "Kept the remaining unmatched controller code in asm/sysdolphin/baselib/controller.s while adding a source object before it in the object list, allowing incremental decompilation without requiring the whole file to be converted.",
+    "Named shared globals globally rather than only inside controller.s, making later decomp work in fighter, menu, debug, rumble, and game-mode code easier to read.",
+    "Introduced a Dolphin PADStatus header separately from HSD_PadStatus, preserving the distinction between raw Dolphin pad data and HSD-normalized pad status."
+  ],
+  "decomp_lessons": [
+    "For baselib modules with many cross-module data users, naming globals can be as useful as matching functions because it exposes array stride and field-offset meaning across the whole codebase.",
+    "A small matched function can validate struct offsets: HSD_PadGetRawQueueCount reads PadLibData.qcount under OSDisableInterrupts/OSRestoreInterrupts, while HSD_PadGetResetSwitch reads PadLibData.reset_switch and normalizes it to TRUE/FALSE.",
+    "When migrating only the first functions of an assembly file, remove just those labels from the asm file and add a matching C object beside the remaining asm object in build lists.",
+    "Pad status arrays appear to use a 0x44-byte stride in many assembly sites, consistent with HSD_PadStatus as defined in controller.h.",
+    "Rumble data references can be separated from pad status arrays by naming HSD_PadRumbleData independently, even though related code often indexes all of them by controller port."
+  ],
+  "naming_conventions": [
+    "HSD_PadGetRawQueueCount for the function at 0x8037699C.",
+    "HSD_PadGetResetSwitch for the former func_803769D8 at 0x803769D8.",
+    "HSD_PadLibData for the former lbl_804C1F78 BSS object.",
+    "HSD_PadMasterStatus for the former lbl_804C1FAC BSS object.",
+    "HSD_PadCopyStatus for the former lbl_804C20BC BSS object.",
+    "HSD_PadRumbleData for the former lbl_804C21CC BSS object.",
+    "HSD-prefixed typedefs are used for baselib controller abstractions, while PADStatus remains a Dolphin SDK-style type.",
+    "The added header uses internal tagged type names such as struct _HSD_PadStatus and typedef names such as HSD_PadStatus."
+  ],
+  "assembly_or_matching_tactics": [
+    "HSD_PadGetRawQueueCount matches by storing HSD_PadLibData.qcount while interrupts are disabled, then restoring interrupts before returning the u8 count.",
+    "HSD_PadGetResetSwitch matches the original branch shape semantically as a ternary returning TRUE when reset_switch is nonzero and FALSE otherwise.",
+    "Assembly references were updated from anonymous labels to named globals using the same @ha/@l relocations, preserving generated addresses while improving symbol readability.",
+    "BSS labels in asm/sysdolphin/baselib/controller.s were renamed in place with identical .skip sizes: HSD_PadLibData .skip 0x34, HSD_PadMasterStatus .skip 0x110, HSD_PadCopyStatus .skip 0x110, and HSD_PadRumbleData .skip 0x114.",
+    "Repeated mulli-by-0x44 access patterns across asm files were tied to HSD_PadStatus arrays."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR190",
+    "PsiLupan",
+    "sysdolphin",
+    "baselib",
+    "controller",
+    "controller.c",
+    "controller.h",
+    "HSD_PadGetRawQueueCount",
+    "HSD_PadGetResetSwitch",
+    "PadLibData",
+    "HSD_PadLibData",
+    "HSD_PadMasterStatus",
+    "HSD_PadCopyStatus",
+    "HSD_PadRumbleData",
+    "HSD_PadStatus",
+    "HSD_PadData",
+    "HSD_RumbleData",
+    "HSD_PadRumbleListData",
+    "HSD_FlushType",
+    "PADStatus",
+    "include/dolphin/pad/pad.h",
+    "lbl_804C1F78",
+    "lbl_804C1FAC",
+    "lbl_804C20BC",
+    "lbl_804C21CC",
+    "OSDisableInterrupts",
+    "OSRestoreInterrupts",
+    "qcount",
+    "reset_switch",
+    "0x44 pad status stride"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that continue matching asm/sysdolphin/baselib/controller.s after HSD_PadGetResetSwitch.",
+    "Search for refinements to PadLibData, HSD_PadStatus, and HSD_RumbleData field names or sizes.",
+    "Check whether include/dolphin/pad/pad.h was later expanded to match the Dolphin SDK PADStatus header more fully.",
+    "Look for later review or commits that convert HSD_PadMasterStatus and HSD_PadCopyStatus extern declarations from comments to typed declarations.",
+    "Search for HSD_PadRumbleData usage in later rumble decompilation work."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

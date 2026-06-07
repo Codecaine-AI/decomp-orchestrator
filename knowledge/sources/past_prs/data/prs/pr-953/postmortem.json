@@ -1,0 +1,132 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-953",
+  "pr": {
+    "number": 953,
+    "title": "Match itparasol",
+    "url": "https://github.com/doldecomp/melee/pull/953",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-07-02T07:45:50Z",
+    "merged_at": "2023-07-02T09:16:01Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Parasol item module by replacing asm/melee/it/items/itparasol.s with src/melee/it/items/itparasol.c and wiring the C object into obj_files.mk. The new C file reconstructs the item state table, state-transition callbacks, physics/deceleration behavior, collision callbacks, animation-speed wrappers, and a JObj rotation update path. One difficult function, it_8028B1A4, keeps a MUST_MATCH inline-assembly version while also providing a readable C version outside MUST_MATCH. The PR also added itparasol.h prototypes, exposed itColl_BounceOffVictim in it_266F.h, and added HSD_JObjGetRotationY to jobj.h to support the decompiled code.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "build-wiring",
+      "inline-helper"
+    ],
+    "systems": [
+      "item",
+      "itparasol",
+      "sysdolphin-baselib",
+      "jobj",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "asm/melee/it/items/itparasol.s",
+    "src/melee/it/items/itparasol.c",
+    "src/melee/it/items/itparasol.h",
+    "src/melee/it/it_266F.h",
+    "src/sysdolphin/baselib/jobj.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted the 739-line assembly implementation asm/melee/it/items/itparasol.s.",
+    "Added a 421-line C implementation at src/melee/it/items/itparasol.c.",
+    "Updated obj_files.mk to build $(BUILD_DIR)/src/melee/it/items/itparasol.c.o instead of the old asm object.",
+    "Added an itparasol.h header with prototypes for the it_8028B08C through it_8028B8B8 Parasol functions.",
+    "Defined ItemStateTable it_803F5AB0 in C, with state entries that dispatch to callbacks such as it_8028B144, it_8028B1A4, it_8028B2EC, it_8028B42C, it_8028B5B4, it_8028B60C, and it_8028B614.",
+    "Implemented item behavior around GET_ITEM, Item_80268E5C state changes, it_8026B390 reset logic, fall-speed updates through it_80272860, x40_vel deceleration, bounce-off-victim/shield collision callbacks, and animation frame speed updates.",
+    "Added a prototype for bool itColl_BounceOffVictim(Item_GObj*) in src/melee/it/it_266F.h, mirroring the existing itColl_BounceOffShield declaration.",
+    "Added static inline f32 HSD_JObjGetRotationY(HSD_JObj* jobj) to src/sysdolphin/baselib/jobj.h with HSD_ASSERT(730, jobj) and return jobj->rotate.y."
+  ],
+  "smart_moves": [
+    "Used small local inline helpers, including fabsf, jobj_child, decelerateItemX, and animSpeed, to express repeated assembly patterns without spreading duplicated control flow across many callbacks.",
+    "Kept the hard-to-match JObj rotation callback it_8028B1A4 under #ifdef MUST_MATCH as inline assembly while also providing a readable C implementation for non-MUST_MATCH builds. This preserved matching pressure without losing maintainability.",
+    "Recreated HSD assertion strings for the MUST_MATCH assembly path, including \"jobj.h\", \"jobj\", and \"!(jobj->flags & JOBJ_USE_QUATERNION)\", so the inlined baselib-style checks could match original codegen/data references.",
+    "Moved a generally useful JObj accessor, HSD_JObjGetRotationY, into jobj.h rather than open-coding all rotation-y access in the item module.",
+    "Factored nearly identical animation state entry functions through animSpeed(item_gobj, speed, statenum), covering it_8028B618, it_8028B648, it_8028B6B0, it_8028B718, it_8028B780, it_8028B7E8, and it_8028B850."
+  ],
+  "decomp_lessons": [
+    "For item modules, matching often means reconstructing both the state table and many small callback wrappers, not just the visibly complex physics functions.",
+    "When an HSD_JObj inline setter/getter sequence is involved, adding a precise baselib inline helper can be preferable to forcing item-local pointer field accesses.",
+    "MUST_MATCH guarded inline assembly can be a pragmatic bridge for one stubborn function while the rest of an item file moves from asm to C.",
+    "Small hand-written math helpers like fabsf may be needed to reproduce original float compare/fneg control flow instead of relying on library calls or compiler builtins.",
+    "Repeated item state wrappers should be factored carefully only when the helper shape still preserves the original call order, constants, and generated code.",
+    "Header work is part of matching: exposing itColl_BounceOffVictim and declaring item-local functions allowed the new C file to replace the assembly object cleanly."
+  ],
+  "naming_conventions": [
+    "Unidentified functions kept address-based names such as it_8028B08C, it_8028B1A4, it_8028B5B4, and it_8028B8B8.",
+    "Collision helpers use the existing item collision naming pattern itColl_BounceOffShield and itColl_BounceOffVictim.",
+    "The new item header follows the module name itparasol.h and include guard MELEE_IT_ITPARASOL_H.",
+    "Item state table/static data retained address-style symbols such as it_803F5AB0 and it_803F5B60.",
+    "Local helpers use descriptive lowercase names where they are not original symbols, including jobj_child, decelerateItemX, animSpeed, and fabsf."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed the old assembly file only after substituting a C object in obj_files.mk.",
+    "Used #ifdef MUST_MATCH around asm bool it_8028B1A4(Item_GObj* item_gobj), including nofralloc and explicit labels, for exact matching of the JObj rotation update path.",
+    "Provided a non-MUST_MATCH C version of it_8028B1A4 that reads item special attributes, gets the child JObj, reads rotation Y, adds a deg_to_rad scaled velocity/facing adjustment, and writes the rotation back with HSD_JObjSetRotationY.",
+    "Encoded the old small-data/assert strings used by the inline assembly path as static char arrays.",
+    "Used inline helpers to shape codegen for absolute value, null-child JObj access, X velocity deceleration, and repeated animation-state transitions.",
+    "Preserved item transition constants and flags such as ITEM_ANIM_UPDATE, ITEM_DROP_UPDATE, state IDs 0 through 10, and Item_8026AE84 arguments 0xF7, 0x7F, 0x40."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the PR context slice, so no human review feedback can be extracted."
+  ],
+  "searchable_terms": [
+    "pr-953",
+    "Match itparasol",
+    "r-burns",
+    "itparasol",
+    "asm/melee/it/items/itparasol.s",
+    "src/melee/it/items/itparasol.c",
+    "src/melee/it/items/itparasol.h",
+    "it_8028B08C",
+    "it_8028B0B8",
+    "it_8028B0EC",
+    "it_8028B1A4",
+    "it_8028B2EC",
+    "it_8028B42C",
+    "it_8028B5B4",
+    "it_8028B618",
+    "it_8028B8B8",
+    "it_803F5AB0",
+    "it_803F5B60",
+    "itColl_BounceOffVictim",
+    "itColl_BounceOffShield",
+    "HSD_JObjGetRotationY",
+    "HSD_JObjSetRotationY",
+    "HSD_JObjSetMtxDirtySub",
+    "MUST_MATCH",
+    "Item_80268E5C",
+    "Item_8026AE84",
+    "ITEM_ANIM_UPDATE",
+    "ITEM_DROP_UPDATE",
+    "decelerateItemX",
+    "animSpeed",
+    "jobj_child",
+    "deg_to_rad"
+  ],
+  "follow_up_queries": [
+    "Can the MUST_MATCH inline assembly version of it_8028B1A4 be eliminated after improving HSD_JObj inline/assert matching?",
+    "Should the itparasol.h extern ItemStateTable declaration be audited against the C symbol name it_803F5AB0, since the slice shows an extern named it_803F70B8?",
+    "Are there other item modules that can reuse HSD_JObjGetRotationY or the same JObj rotation-y matching pattern?",
+    "Can the local fabsf or decelerateItemX patterns be standardized if repeated in nearby item decompilations?"
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

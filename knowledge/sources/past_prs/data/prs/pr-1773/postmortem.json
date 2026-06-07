@@ -1,0 +1,137 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1773",
+  "pr": {
+    "number": 1773,
+    "title": "Match lb_80011AC4 with new LightList type",
+    "url": "https://github.com/doldecomp/melee/pull/1773",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-07-30T04:14:26Z",
+    "merged_at": "2025-07-30T04:20:58Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Introduced a typed SceneDesc light-list representation and used it to fully match lb_80011AC4. The PR replaces ad hoc HSD_LightDesc**/UNK_T/fake node structs with LightList and LightList** across library, scene, fighter, menu, title, and ground code. lb_80011AC4 now constructs an HSD_LObj linked list from a NULL-terminated LightList** array, loads each HSD_LightDesc, attaches the first HSD_LightAnim when present, and links the resulting HSD_LObj nodes. The decomp.dev report confirms lb_80011AC4 became a new 100% match worth 176 bytes and Ground_801C466C improved from 82.09% to 83.50%.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "light-data",
+      "scene-data"
+    ],
+    "systems": [
+      "library",
+      "scene",
+      "ground",
+      "fighter",
+      "game-mode",
+      "menu",
+      "melee-core"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/lb_00F9.c",
+    "src/melee/lb/lb_00F9.h",
+    "src/melee/lb/lb_00F9.dox",
+    "src/melee/sc/types.h",
+    "src/melee/sc/forward.h",
+    "src/melee/gr/ground.c",
+    "src/melee/gr/ground.h",
+    "src/melee/ft/chara/ftCommon/ftCo_09F4.c",
+    "src/melee/gm/gmtitle.c",
+    "src/melee/mn/mnmain.c"
+  ],
+  "what_changed": [
+    "Added a forward declaration for struct LightList in src/melee/sc/forward.h.",
+    "Named the scene light-list entry struct as struct LightList in src/melee/sc/types.h, with fields HSD_LightDesc* desc and HSD_LightAnim** anims.",
+    "Changed SceneDesc lights-related users from HSD_LightDesc** or UNK_T to LightList** where the data is a NULL-terminated array of pointers to LightList entries.",
+    "Implemented lb_80011AC4(LightList** list) in src/melee/lb/lb_00F9.c instead of leaving it as a TODO/unknown prototype.",
+    "Updated lb_80011AC4 declarations in lb_00F9.h and lb_00F9.dox from UNK_T/HSD_GObj* style placeholders to HSD_LObj* lb_80011AC4(LightList**).",
+    "Replaced fake local node1_t/node2_t structs in ftCo_09F4.c with a static LightList node1 and a static LightList* node2[] array, allowing ftCo_8009F578 to call lb_80011AC4(node2) without a cast.",
+    "Updated ground light-return paths and locals, including Ground_801C466C_inline and Ground_801C49B4, to return LightList**.",
+    "Adjusted Ground_801C466C field usage from next/class_name assumptions to the new LightList anims field, checking (*var_r28_2)->anims and passing (*var_r27_2)->anims[0] to Ground_801C43C4.",
+    "Changed gmTitle_804D670C and MenMain_lights to LightList**."
+  ],
+  "smart_moves": [
+    "The core matching move was to identify that the scene light payload was not a raw HSD_LightDesc** but a list node pairing a light descriptor with optional light animations.",
+    "By promoting the anonymous SceneDesc light entry to a named LightList type, the PR removed casts and fake node structs while also improving type propagation through unrelated callers.",
+    "The ftCo_09F4 cleanup demonstrates a reusable pattern: replace locally invented fake resource structs with the shared archive/scene type once the format is understood.",
+    "The implementation of lb_80011AC4 mirrors the data shape directly: iterate over a NULL-terminated LightList** array, load each desc with HSD_LObjLoadDesc, optionally add anims[0], then link HSD_LObj::next.",
+    "In Ground_801C466C_inline, introducing a named UnkArchiveStruct* archive local made a previously suspicious Ground_801C20E0(0, grDatFiles_801C6330(i)->...) expression type-correct and helped matching."
+  ],
+  "decomp_lessons": [
+    "When a function consumes archive scene data, inspect the owning scene struct before settling for HSD_* pointer aliases; the correct match may require naming the intermediate resource-list node.",
+    "A NULL-terminated array of pointers to resource entries can decompile more cleanly as Type** than as a casted descriptor pointer array.",
+    "Typed headers can unlock matches across multiple systems because scene archive fields are shared by fighter setup, ground/stage loading, menus, and title screens.",
+    "Fake local structs are useful temporary scaffolding, but once their shape matches a shared resource format they should be collapsed into the canonical project type.",
+    "Light animation data belongs beside light descriptors in LightList::anims; future light-loading code should not treat the second field as generic UNK_T unless evidence is missing.",
+    "Propagating one precise type through function prototypes, globals, and static arrays can remove casts and reveal field accesses that better match original code generation."
+  ],
+  "naming_conventions": [
+    "Use LightList for the scene light-entry struct containing desc and anims.",
+    "Use LightList** for pointers to NULL-terminated arrays of LightList* entries, including SceneDesc::lights and light-loading globals.",
+    "Use desc for HSD_LightDesc* inside LightList.",
+    "Use anims for HSD_LightAnim** inside LightList.",
+    "Keep the existing address-based function names lb_80011AC4, Ground_801C466C_inline, and Ground_801C49B4 where no semantic names were introduced."
+  ],
+  "assembly_or_matching_tactics": [
+    "The matched lb_80011AC4 loop uses while (*list != NULL) and increments list++ over a pointer array.",
+    "HSD_LObjLoadDesc((*list)->desc) produces each light object from the LightList descriptor field.",
+    "The optional animation path loads temp_r4 = (*list)->anims and calls HSD_LObjAddAnimAll(curr, temp_r4[0]) only when anims is non-NULL.",
+    "The linked-list construction preserves a prev pointer, assigns first for the initial node, and links later nodes through prev->next = curr.",
+    "Leaving the apparently redundant nested if (prev == NULL) __assert(\"lobj.h\", 0x136, \"lobj\") inside the prev != NULL branch was part of the matched decomp output in the diff.",
+    "Changing ftCo_09F4 static data from a wrapper struct with x0/x4 to LightList plus LightList*[] removed a forced cast at the lb_80011AC4 call site."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided PR slice.",
+    "The decomp.dev bot reported 1 new match: main/melee/lb/lb_00F9 lb_80011AC4, +176 bytes, 0.00% to 100.00%.",
+    "The decomp.dev bot also reported Ground_801C466C improved by +12 bytes, from 82.09% to 83.50%."
+  ],
+  "searchable_terms": [
+    "pr-1773",
+    "lb_80011AC4",
+    "LightList",
+    "struct LightList",
+    "SceneDesc lights",
+    "HSD_LightDesc",
+    "HSD_LightAnim",
+    "HSD_LObjLoadDesc",
+    "HSD_LObjAddAnimAll",
+    "HSD_LObj",
+    "lobj",
+    "Ground_801C466C",
+    "Ground_801C466C_inline",
+    "Ground_801C49B4",
+    "Ground_801C20E0",
+    "Ground_801C43C4",
+    "ftCo_09F4",
+    "ftCo_8009F578",
+    "node1_t",
+    "node2_t",
+    "gmTitle_804D670C",
+    "MenMain_lights",
+    "src/melee/sc/types.h",
+    "src/melee/lb/lb_00F9.c",
+    "scene light list",
+    "light descriptor animations",
+    "fake types removed"
+  ],
+  "follow_up_queries": [
+    "Find other HSD_LightDesc** or UNK_T light globals that should become LightList**.",
+    "Search for remaining fake node structs around scene resource lists that can be replaced by named SceneDesc subtypes.",
+    "Audit other SceneDesc arrays for descriptor-plus-animation patterns similar to LightList.",
+    "Investigate whether Ground_801C466C can be further improved now that LightList::anims has a concrete type.",
+    "Search for callers of lb_80011AC4 to ensure they all pass LightList** without casts."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,138 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1761",
+  "pr": {
+    "number": 1761,
+    "title": "Replace fabs_inline with ABS macro",
+    "url": "https://github.com/doldecomp/melee/pull/1761",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-07-29T00:55:13Z",
+    "merged_at": "2025-07-29T01:01:18Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Replaced the project-specific fabs_inline pattern with the existing ABS(x) macro across 27 files, deleted duplicated inline absolute-value helpers from src/MSL/math.h and local modules, and cleaned up a few matching-sensitive expressions while preserving absolute-value semantics. The change primarily consolidated math/header usage and improved decomp matching in several unmatched functions, with the decomp.dev bot reporting improvements in ftCo_8009F834, ftAction_80072B3C, and Camera_800307D0.",
+  "change_classification": {
+    "primary_type": "header/math macro consolidation for decomp matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "math-helper-cleanup",
+      "mechanical-refactor"
+    ],
+    "systems": [
+      "MSL",
+      "camera",
+      "debug-camera",
+      "fighter",
+      "fighter-common",
+      "Pikachu",
+      "Ness",
+      "Peach",
+      "Link",
+      "items",
+      "collision",
+      "stage",
+      "game-mode"
+    ]
+  },
+  "key_files": [
+    "src/MSL/math.h",
+    "src/melee/ft/ftcommon.c",
+    "src/melee/cm/camera.c",
+    "src/melee/ft/chara/ftNess/ftNs_SpecialHi.c",
+    "src/melee/ft/chara/ftPikachu/ftPk_SpecialLw.c",
+    "src/melee/ft/chara/ftPikachu/ftPk_SpecialHi.c",
+    "src/melee/ft/chara/ftPeach/ftPe_SpecialHi.c",
+    "src/melee/ft/fighter.c",
+    "src/melee/mp/mpcoll.c",
+    "src/melee/it/items/itlinkbomb.c"
+  ],
+  "what_changed": [
+    "Removed static inline f32 fabs_inline(f32 x) from src/MSL/math.h, leaving #define ABS(x) ((x) < 0 ? -(x) : (x)) as the shared absolute-value helper.",
+    "Removed a local M_PI/ABS/fabs_inline block from src/melee/ft/ftcommon.c and replaced it with #include <math.h>, then converted many ftCommon friction, velocity, and drift comparisons from fabs_inline(...) to ABS(...).",
+    "Converted many fighter input and movement checks to ABS(...), including stick deadzones, run/runbrake velocity thresholds, jump horizontal speed clamping, fall drift animation selection, item throw input thresholds, and boss position correction.",
+    "Converted character-specific code in Ness, Peach, Pikachu, and Link from fabs_inline or local fabs helper functions to ABS(...).",
+    "Deleted the local fabs_inline_ness helper in ftNs_SpecialHi.c and used ABS(pos->x - pair->x) / ABS(pos->y - pair->y) in check_distance.",
+    "Deleted the local nested_sum_fabs helper in ftPk_SpecialLw.c and expressed its result directly as ABS(fp->cur_pos.y + ABS(pika_attr->xBC) - vec.y).",
+    "Changed ftPk_SpecialLw_8012765C from direct gobj->user_data access to GET_FIGHTER(gobj), a small style/consistency cleanup adjacent to the ABS conversion.",
+    "Updated camera math in src/melee/cm/camera.c, replacing fabs_inline calls with ABS in Camera_8002958C, compute_edge, and Camera_800307D0.",
+    "Camera_800307D0 also had matching-sensitive expression cleanup: inlined HSD_CObjGetAspect into the half_fov calculation, changed PAD_STACK(8) to PAD_STACK(0x10), and collapsed nested ABS threshold checks into a single condition.",
+    "A decomp.dev bot comment reported 3 unmatched-function improvements: ftCo_8009F834 from 24.77% to 27.00%, ftAction_80072B3C from 52.63% to 94.44%, and Camera_800307D0 from 87.50% to 88.75%."
+  ],
+  "smart_moves": [
+    "Consolidated an obviously duplicated fake/helper absolute-value implementation into the existing ABS macro instead of keeping module-local inline functions with near-identical bodies.",
+    "Removed the explicit TODO in math.h questioning whether fabs_inline was fake by making ABS the canonical spelling, reducing future uncertainty for decomp authors.",
+    "Used macro expansion to preserve the source-level expression shape decompilers often need, especially for simple comparisons like ABS(x) < threshold and ABS(x) > threshold.",
+    "Eliminated local helper functions whose names encoded file-specific workarounds, such as fabs_inline_ness and nested_sum_fabs, making the decompiled code more idiomatic and searchable.",
+    "In ftPk_SpecialLw, replaced a helper whose parameters partly duplicated recomputable expressions with a single direct ABS expression, reducing noise around the actual game logic.",
+    "Paired mechanical ABS replacement with small matching-sensitive cleanup where evidence showed it helped, especially in Camera_800307D0."
+  ],
+  "decomp_lessons": [
+    "Prefer the shared ABS(x) macro in math.h over inventing static inline fabs_inline variants when matching absolute-value idioms in Melee C code.",
+    "If a helper exists only to force a specific inline absolute-value shape, test whether a macro gives the same or better codegen before adding another function-like workaround.",
+    "Local duplicate definitions of common math helpers make the codebase harder to search and can hide project-wide matching improvements; centralize them when possible.",
+    "Expression shape matters: direct ABS(a + ABS(b) - c) can be preferable to a named helper if the original codegen corresponds to nested comparisons/negations rather than a real call.",
+    "Small stack and temporary-variable changes can interact with macro substitutions. Camera_800307D0 needed PAD_STACK and expression reshaping alongside replacing fabs_inline.",
+    "Bot-reported percentage changes are useful evidence for broad mechanical cleanups; even a seemingly stylistic macro replacement produced measurable improvements in unmatched functions."
+  ],
+  "naming_conventions": [
+    "Use ABS(x) for absolute-value macro spelling; do not introduce new fabs_inline or fabs_inline_<module> helpers without strong evidence.",
+    "Use #include <math.h> to obtain shared math macros/constants rather than redefining ABS or M_PI in individual C files.",
+    "Prefer GET_FIGHTER(gobj) over direct gobj->user_data access where surrounding code follows that convention, as seen in ftPk_SpecialLw_8012765C.",
+    "Keep temporary names that describe absolute values when useful, such as abs_lstick_x, abs_lstick_angle, and abs_x_diff, but compute them with ABS(...)."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replacing inline functions with ABS(x) can alter the compiler's emitted compare/negate expression shape enough to improve matching.",
+    "For nested absolute-value logic, write the expression directly with nested ABS calls rather than introducing a helper that may affect inlining, temporaries, or register allocation.",
+    "In Camera_800307D0, inlining HSD_CObjGetAspect into the half_fov expression and adjusting PAD_STACK from 8 to 0x10 accompanied a small matching improvement reported by the bot.",
+    "Collapsing nested threshold checks like if (ABS(forward.x) > 1e-4 && ABS(forward.z) > 1e-4) can match better than nested if blocks when the generated control flow expects one combined condition.",
+    "Mechanical substitutions should still be checked against generated code; the bot report showed improvements but the PR dump contains no human explanation for every local expression adjustment."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided PR slice.",
+    "The only issue comment was from decomp.dev bot, reporting improvements in three unmatched functions: ftCo_8009F834, ftAction_80072B3C, and Camera_800307D0.",
+    "The PR merged quickly, about six minutes after creation, but the slice does not include human rationale or reviewer discussion."
+  ],
+  "searchable_terms": [
+    "pr-1761",
+    "fabs_inline",
+    "ABS macro",
+    "math.h",
+    "absolute value",
+    "fake inline",
+    "decomp matching",
+    "ftcommon.c",
+    "ftCommon_8007C930",
+    "ftCommon_8007CF58",
+    "Camera_800307D0",
+    "compute_edge",
+    "PAD_STACK",
+    "GET_FIGHTER",
+    "nested_sum_fabs",
+    "fabs_inline_ness",
+    "ftPk_SpecialLw_8012765C",
+    "ftNs_SpecialHi check_distance",
+    "ftPe_SpecialHiStart_IASA",
+    "Fighter_Spaghetti_8006AD10",
+    "ftAction_80072B3C",
+    "ftCo_8009F834",
+    "decomp.dev bot"
+  ],
+  "follow_up_queries": [
+    "Search for remaining fabs_inline or fabs_inline_* helpers after PR 1761.",
+    "Search for local #define ABS or #define M_PI blocks outside math.h that should be replaced by #include <math.h>.",
+    "Audit other simple static inline math helpers that may be fake and better represented as macros.",
+    "Check Camera_800307D0 history for why cm_804D7EE8 and 1e-4 are interchangeable or whether that constant should be named/documented.",
+    "Look for direct gobj->user_data accesses in fighter code that should use GET_FIGHTER(gobj) for consistency."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

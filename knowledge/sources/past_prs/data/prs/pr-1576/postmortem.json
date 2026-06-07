@@ -1,0 +1,131 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1576",
+  "pr": {
+    "number": 1576,
+    "title": "Cut down on auto splits",
+    "url": "https://github.com/doldecomp/melee/pull/1576",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-07T02:13:50Z",
+    "merged_at": "2025-06-07T02:19:38Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "PR 1576 reduced dtk auto-generated splits by explicitly adding previously implicit Runtime and sysdolphin sections to config/GALE01/splits.txt and matching small Runtime objects that were easy to recover. It added split entries for Runtime/global_destructor_chain.c, Runtime/__init_cpp_exceptions.c, and a missing hsd_40FF.c .sdata2 range, then adjusted Runtime code to emit ctor/dtor section references using a new SECTION_DTORS macro. The PR body says the only remaining auto-split after this was MetroTRK exception.s, which was acceptable because it is assembly.",
+  "change_classification": {
+    "primary_type": "splits-config-cleanup",
+    "categories": [
+      "decomp-matching",
+      "splits",
+      "headers",
+      "runtime-sections",
+      "types-structs"
+    ],
+    "systems": [
+      "config",
+      "Runtime",
+      "sysdolphin/baselib"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "config/GALE01/splits.txt",
+      "role": "Added explicit split ranges for Runtime/global_destructor_chain.c, Runtime/__init_cpp_exceptions.c, and sysdolphin/baselib/hsd_40FF.c .sdata2 to eliminate auto-generated split objects."
+    },
+    {
+      "path": "src/Runtime/__init_cpp_exceptions.c",
+      "role": "Renamed the extern from the temporary _eti_init_info_ hack to _eti_init_info and added ctor/dtor section references for exception init/fini and global destructor chain functions."
+    },
+    {
+      "path": "src/Runtime/platform.h",
+      "role": "Introduced SECTION_DTORS, mirroring section macro style for Metrowerks builds while remaining empty for m2ctx/non-MWERKS contexts."
+    },
+    {
+      "path": "src/Runtime/global_destructor_chain.c",
+      "role": "Added a SECTION_DTORS reference to __destroy_global_chain so the destructor chain object can be represented explicitly."
+    },
+    {
+      "path": "src/Runtime/__init_cpp_exceptions.h",
+      "role": "Exposed __destroy_global_chain so __init_cpp_exceptions.c can reference it."
+    }
+  ],
+  "what_changed": [
+    "Added an explicit Runtime/global_destructor_chain.c split with .text 0x80322714-0x8032275C, .dtors 0x803B7268-0x803B726C, and .sbss 0x804D7058-0x804D705C.",
+    "Added an explicit Runtime/__init_cpp_exceptions.c split with .text 0x80322F20-0x80322F9C, .ctors 0x803B7240-0x803B7244, .dtors 0x803B7260-0x803B7268, and .sdata 0x804D5B40-0x804D5B44.",
+    "Added the missing sysdolphin/baselib/hsd_40FF.c .sdata2 range 0x804DEB10-0x804DEC00.",
+    "Replaced the prior _eti_init_info_ workaround in __init_cpp_exceptions.c with the intended _eti_init_info symbol and passed it to __register_fragment.",
+    "Added SECTION_CTORS/SECTION_DTORS pointer references for __init_cpp_exceptions, __destroy_global_chain, and __fini_cpp_exceptions so ctor/dtor entries are emitted as normal source-backed data rather than auto splits.",
+    "Added SECTION_DTORS to platform.h with __declspec(section \".dtors\") under Metrowerks except when M2CTX is defined.",
+    "Declared __destroy_global_chain in __init_cpp_exceptions.h."
+  ],
+  "smart_moves": [
+    "Turned auto-split artifacts into explicit split entries and source-backed section references, making the object layout more intentional and searchable.",
+    "Kept section macros compiler-aware: SECTION_DTORS expands to a Metrowerks section declaration only for real MWERKS builds and stays empty for tooling/non-MWERKS contexts.",
+    "Removed a documented temporary linker naming workaround for _eti_init_info_ once the split/source arrangement allowed the intended _eti_init_info name.",
+    "Handled both code and data/section boundaries: the PR did not only add functions, it also accounted for .ctors, .dtors, .sdata, .sbss, and .sdata2 ranges that dtk had been generating implicitly."
+  ],
+  "decomp_lessons": [
+    "When dtk auto-generates split objects, check whether the content is small source-recoverable Runtime data or a missing section range before leaving it as an auto split.",
+    "Ctor and dtor table entries can often be modeled as section-placed function pointer references in C, reducing generated data fragments.",
+    "For Runtime startup/teardown code, matching may require representing special sections such as .ctors and .dtors in both splits.txt and source annotations.",
+    "If a symbol name is being worked around because the linker cannot generate it, revisit the workaround after adding the correct split sections; the intended symbol name may become usable.",
+    "Missing SDA/SDA2 ranges can appear as auto-splits; adding the correct .sdata2 range in splits.txt can eliminate a generated object without needing new C code."
+  ],
+  "naming_conventions": [
+    "Use the real Runtime exception table symbol name _eti_init_info instead of a temporary suffixed workaround such as _eti_init_info_ when the linker/split setup supports it.",
+    "Section reference symbols in this diff used descriptive names ending in _reference, e.g. __init_cpp_exceptions_reference, __destroy_global_chain_reference, and __fini_cpp_exceptions_reference.",
+    "Section macros follow the existing uppercase SECTION_* style, with SECTION_DTORS added alongside existing section annotation macros."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use __declspec(section \".dtors\") through a SECTION_DTORS wrapper to place destructor references in the exact .dtors section for MWERKS builds.",
+    "Use SECTION_CTORS and SECTION_DTORS function pointer constants to force ctor/dtor table entries from C source.",
+    "For MWERKS_GEKKO, __init_cpp_exceptions keeps the inline assembly GetR2 helper and registers the fragment with __register_fragment(_eti_init_info, GetR2()).",
+    "The PR body explicitly notes that MetroTRK exception.s remained as the only auto-split and was likely acceptable because it is assembly."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "The PR body explains the motivation: unspecified code/data in splits.txt is auto-generated by dtk, some generated objects were easy to match, and another was a missing sda2 segment."
+  ],
+  "searchable_terms": [
+    "auto splits",
+    "dtk auto-generated",
+    "splits.txt",
+    "GALE01",
+    "Runtime/global_destructor_chain.c",
+    "Runtime/__init_cpp_exceptions.c",
+    "SECTION_DTORS",
+    "SECTION_CTORS",
+    ".dtors",
+    ".ctors",
+    ".sdata",
+    ".sbss",
+    ".sdata2",
+    "_eti_init_info",
+    "_eti_init_info_",
+    "__register_fragment",
+    "GetR2",
+    "__destroy_global_chain",
+    "__init_cpp_exceptions",
+    "__fini_cpp_exceptions",
+    "hsd_40FF.c",
+    "MetroTRK exception.s",
+    "MWERKS_GEKKO",
+    "M2CTX"
+  ],
+  "follow_up_queries": [
+    "remaining auto-split MetroTRK exception.s",
+    "SECTION_DTORS usage Runtime",
+    "_eti_init_info linker workaround",
+    "explicit .ctors .dtors splits Runtime",
+    "missing .sdata2 auto split hsd_40FF"
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

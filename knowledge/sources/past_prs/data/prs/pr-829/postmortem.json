@@ -1,0 +1,151 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-829",
+  "pr": {
+    "number": 829,
+    "title": "Partially match all of `ftPe_FloatFall`",
+    "url": "https://github.com/doldecomp/melee/pull/829",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-04-30T10:14:16Z",
+    "merged_at": "2023-04-30T10:23:30Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Moved Peach FloatFall routines out of ftPe_Init.s into a new C translation unit, partially matching the ftPe_FloatFall action callbacks and helper logic while leaving the harder ftPe_8011BE80 path guarded with inline asm for MUST_MATCH. The PR also introduced a Peach-specific motion-vars union, refined fighter input and motion-id types, added needed ft prototypes, and updated obj_files.mk so the new source participates in the build.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "type-refinement",
+      "asm-to-c",
+      "fighter-motion"
+    ],
+    "systems": [
+      "fighter",
+      "ftPeach",
+      "asm",
+      "build"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftPeach/ftPe_FloatFall.c",
+    "src/melee/ft/chara/ftPeach/ftPe_FloatFall.h",
+    "asm/melee/ft/chara/ftPe_Init.s",
+    "src/melee/ft/chara/ftPeach/types.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/forward.h",
+    "src/melee/ft/ft_0877.h",
+    "obj_files.mk",
+    "src/melee/ft/chara/ftPeach/ftPe_Float.c",
+    "src/melee/ft/chara/ftPeach/ftPe_Float.h"
+  ],
+  "what_changed": [
+    "Deleted the ftPe_FloatFall_Anim, ftPe_FloatFall_IASA, ftPe_FloatFall_Phys, ftPe_FloatFall_Coll, ftPe_8011BE80, and ftPe_8011BF34 assembly bodies from asm/melee/ft/chara/ftPe_Init.s.",
+    "Added src/melee/ft/chara/ftPeach/ftPe_FloatFall.c with C implementations for the simple FloatFall callbacks: Anim checks ftAnim_IsFramesRemaining and calls ft_800CCDA8, IASA is empty, Phys calls ft_800CC6C8, and Coll calls ft_800831CC with ft_80096CC8 and ft_80082B1C.",
+    "Added a partially matched C version of ftPe_8011BE80 that reads GET_FIGHTER(gobj), checks fp->input.x668 & HSD_Pad_A or ft_800DF478(fp), tests fp->fv.pe.x4 > 0, handles a held item case with it_8026B30C == 3 and ft_800CDDA0, otherwise calls ftPe_8011BF34.",
+    "Kept ftPe_8011BE80 under a MUST_MATCH/WIP split: the non-WIP MUST_MATCH path uses inline asm with nofralloc and explicit labels, while the C path includes a documented unused stack workaround under MUST_MATCH.",
+    "Implemented static ftPe_8011BF34 in C, setting fp->mv.pe.floatfall.x0 to 0 and changing motion via ft_8008CFAC(gobj, msid + ftCo_MS_CaptureDamageKoopa).",
+    "Added ftPe_FloatFall.h declarations and moved the ftPe_8011BE80 declaration out of ftPe_Float.h into the new header.",
+    "Included ftPe_FloatFall.h from ftPe_Float.c, indicating existing Float code now depends on the FloatFall helper declaration.",
+    "Added the new ftPe_FloatFall.c object to obj_files.mk before the remaining ftPe_Init.s object.",
+    "Added union ftPe_MotionVars with a floatfall struct at fp+2340 containing int x0, and inserted union ftPe_MotionVars pe into Fighter::mv.",
+    "Introduced typedef enum_t FtMotionId in ft/forward.h, changed Fighter.motion_id to FtMotionId, changed ft_8008CE68 to return FtMotionId, and updated a Game & Watch aerial local variable from enum_t to FtMotionId.",
+    "Typed Fighter input fields x65C_heldInputs and x668 as HSD_Pad instead of raw integer types, enabling named pad-bit checks such as HSD_Pad_A.",
+    "Renamed the moved sdata2 constants for 0.0 and 1.0 from local asm labels .L_804D97D0/.L_804D97D4 to C-visible lbl_804D97D0/lbl_804D97D4 and updated remaining asm references accordingly.",
+    "Fixed an unrelated offset comment in ftCaptain/types.h: speciallw.x2 is at fp+2342, not fp+2340."
+  ],
+  "smart_moves": [
+    "Separated the easy exact C matches from the difficult helper instead of blocking the whole FloatFall extraction; this reduced asm while preserving a MUST_MATCH inline-asm fallback for the stubborn function.",
+    "Created a dedicated ftPe_FloatFall.c/.h pair rather than continuing to accumulate Peach FloatFall code in ftPe_Init.s or ftPe_Float.h, improving organization around the action state.",
+    "Used fighter-specific motion vars, fp->mv.pe.floatfall.x0, instead of leaving fp+2340 as an untyped raw store, making the ftPe_8011BF34 behavior reusable for future Peach motion work.",
+    "Introduced FtMotionId as a semantic alias for motion-state IDs and propagated it through ft_8008CE68 and Fighter.motion_id, improving type intent without changing the underlying enum_t representation.",
+    "Typed input bitfields as HSD_Pad so checks like fp->input.x668 & HSD_Pad_A become self-documenting instead of magic integer masks.",
+    "Preserved sdata2 constant addresses by defining lbl_804D97D0 and lbl_804D97D4 in the new C file and updating remaining asm references to the new symbol names."
+  ],
+  "decomp_lessons": [
+    "When a contiguous asm region contains both simple callbacks and one stubborn function, extract the callbacks and use a conditional inline-asm bridge for the unmatched helper; partial file progress is still valuable.",
+    "For motion-state decompilation, model fp+2340 through the fighter-specific motion-vars union as soon as a store is understood, even if the field name remains generic.",
+    "Semantic typedefs such as FtMotionId can clarify APIs like ft_8008CE68 and local variables without requiring the full enum to be known.",
+    "Replacing raw input integers with pad flag types unlocks readable bit checks and helps future reviewers verify controller-related branches.",
+    "When moving assembly constants into C, update remaining asm users to reference the new lbl_* symbols so object layout and relocations stay consistent.",
+    "Inline asm guarded by MUST_MATCH can coexist with a readable C implementation under non-strict builds, and an explicit comment like '@todo Unused stack' records the remaining matching issue."
+  ],
+  "naming_conventions": [
+    "New Peach FloatFall files use the fighter/action naming pattern ftPe_FloatFall.c and ftPe_FloatFall.h.",
+    "Action callback names follow the established suffixes ftPe_FloatFall_Anim, ftPe_FloatFall_IASA, ftPe_FloatFall_Phys, and ftPe_FloatFall_Coll.",
+    "Unknown but address-identified helpers retain address-based names such as ftPe_8011BE80 and ftPe_8011BF34.",
+    "C-visible float constants are named lbl_804D97D0 and lbl_804D97D4 rather than local asm-style .L_ labels.",
+    "Fighter-specific motion vars are grouped as union ftPe_MotionVars and accessed through fp->mv.pe.floatfall.",
+    "Motion IDs are represented with the semantic alias FtMotionId rather than plain enum_t where evidence indicates motion-state use.",
+    "Controller input fields use HSD_Pad-typed names such as x65C_heldInputs and x668, with named flags like HSD_Pad_A."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed matched assembly from ftPe_Init.s while leaving later unrelated Peach assembly in the same file.",
+    "Used `#if defined(MUST_MATCH) && !defined(WIP)` to select an inline assembly implementation of ftPe_8011BE80 for strict matching.",
+    "Used `#pragma push`, `asm bool ftPe_8011BE80(HSD_GObj*)`, `nofralloc`, and explicit `lbl_8011...` labels to preserve the original codegen for the unmatched helper.",
+    "Provided a C implementation of ftPe_8011BE80 in the non-inline-asm branch for readability and future matching work.",
+    "Added an unused stack byte array under MUST_MATCH in the C branch to document and potentially influence stack layout, but the PR still title-labels the work as only partial matching.",
+    "Kept constants as static float const symbols in the C file and adjusted remaining asm references from .L_804D97D0/.L_804D97D4 to lbl_804D97D0/lbl_804D97D4."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review records were present in the provided PR context.",
+    "The only human-text body evidence was an embedded image; no textual rationale beyond the title was available."
+  ],
+  "searchable_terms": [
+    "pr-829",
+    "ftPe_FloatFall",
+    "Peach FloatFall",
+    "ftPe_FloatFall_Anim",
+    "ftPe_FloatFall_IASA",
+    "ftPe_FloatFall_Phys",
+    "ftPe_FloatFall_Coll",
+    "ftPe_8011BE80",
+    "ftPe_8011BF34",
+    "ftPe_FloatFall.c",
+    "ftPe_FloatFall.h",
+    "ftPe_Init.s",
+    "MUST_MATCH",
+    "WIP",
+    "nofralloc",
+    "unused stack",
+    "lbl_804D97D0",
+    "lbl_804D97D4",
+    "ftAnim_IsFramesRemaining",
+    "ft_800CCDA8",
+    "ft_800CC6C8",
+    "ft_800831CC",
+    "ft_80096CC8",
+    "ft_80082B1C",
+    "ft_800DF478",
+    "ft_8008CE68",
+    "ft_800CDDA0",
+    "ft_8008CFAC",
+    "it_8026B30C",
+    "HSD_Pad_A",
+    "HSD_Pad",
+    "FtMotionId",
+    "ftPe_MotionVars",
+    "fp+2340",
+    "fp->mv.pe.floatfall.x0",
+    "x1974_heldItem",
+    "ftCo_MS_CaptureDamageKoopa",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match ftPe_8011BE80 or remove its MUST_MATCH inline asm fallback.",
+    "Search for subsequent cleanup of duplicate ft_800CC6C8 prototypes in ft_0877.h.",
+    "Look for later renames of ftPe_8011BF34 or ftPe_MotionVars.floatfall.x0 once the field purpose became known.",
+    "Check whether FtMotionId was expanded from a typedef alias into a real enum in later fighter decomp work.",
+    "Search later Peach PRs for continued extraction of ftPe_Init.s after ftPe_FloatFall.c was added."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

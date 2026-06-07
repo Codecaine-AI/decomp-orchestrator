@@ -38,6 +38,11 @@ src/agents/
 |   +-- prompt.ts
 |   +-- schema.json
 |   +-- templates/
++-- knowledge-curator/
+|   +-- index.ts
+|   +-- prompt.ts
+|   +-- schema.json
+|   +-- templates/
 +-- runtime/
     +-- artifacts.ts
     +-- index.ts
@@ -67,4 +72,5 @@ src/agents/
 
 - [Director and worker agents](10-director-worker.md)
 - [PR-review agent](20-pr-review.md)
+- [Knowledge-curator agent](25-knowledge-curator.md)
 - [Agent runtime](30-runtime.md)

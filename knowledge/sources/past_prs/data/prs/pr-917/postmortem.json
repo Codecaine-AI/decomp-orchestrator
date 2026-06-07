@@ -1,0 +1,146 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-917",
+  "pr": {
+    "number": 917,
+    "title": "Partially match `ftColl_80078C70`",
+    "url": "https://github.com/doldecomp/melee/pull/917",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-06-02T22:08:55Z",
+    "merged_at": "2023-06-02T22:23:02Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Partially decompiled and matched `ftColl_80078C70` in fighter collision code, replacing a `NOT_IMPLEMENTED` WIP C stub with a large structured C translation while keeping the original assembly under `MUST_MATCH`. The PR also renamed the local hit capsule accessor from `ftHitGetPtr` to `HitCapsuleGetPtr` and updated `HitCapsule` layout in `lbcollision.h` with a union exposing the same storage as either `owner` or the bitfield `hit_grabbed_victim_only`. The body reports this resolved part of issue #595 and improved `ftColl_80078C70` to 80.46% match, but the PR contains no review comments.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "partial-function-decompilation",
+      "struct-layout"
+    ],
+    "systems": [
+      "fighter",
+      "collision",
+      "library"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/ftcoll.c",
+    "src/melee/lb/lbcollision.h"
+  ],
+  "what_changed": [
+    "Changed the helper `ftHitGetPtr(Fighter* fp, u32 i)` to `HitCapsuleGetPtr(Fighter* fp, u32 i)` and updated call sites in `ftColl_80078A2C` and the new WIP body for `ftColl_80078C70`.",
+    "Replaced the non-implemented WIP body of `ftColl_80078C70(Fighter_GObj* gobj)` with a large partial C implementation using `this_gobj`, `this_fp`, `victim_gobj`, and `victim_fp` terminology.",
+    "Implemented traversal of `HSD_GObj_Entities->fighters` to compare the current fighter against possible victim fighters, including self-skip/self-order tracking through `is_same_gobj` and `next_gobj` control flow.",
+    "Added logic for player/team filtering using `gm_8016B1C4`, `gm_8016B168`, `gm_8016B0D4`, `player_id`, `x61B_team`, `x119C_teamUnk`, `x2225_b4`, and thrown-hitbox ownership fields.",
+    "Added hitbox eligibility checks over `Fighter.x914` hit capsules, including disabled/catch/inert element checks, ground/air masks, `x40_b0`, `x40_b2`, `x40_b3`, `x42_b5`, `x43_b2`, and `lbColl_8000ACFC` gating.",
+    "Added collision paths for hitbox-vs-hitbox, shield collision, and hurtbox collision using calls such as `lbColl_80007AFC`, `ftColl_8007699C`, `lbColl_80007BCC`, `lbColl_8000805C`, `ftColl_80076CBC`, and `ftColl_80076ED8`.",
+    "Added handling for inert hit elements by setting fields such as `victim_fp->x221C_b5` and `victim_fp->unk_gobj` rather than following normal hit reaction paths.",
+    "Added hit sound/effect related logic through `ft_80088148`, local static `hit_sfx[20]`, `lbColl_80005BB0`, `x215C`, `x2160`, `sfx_kind`, and `sfx_severity`.",
+    "Modified `struct HitCapsule` in `lbcollision.h` so the previous `HSD_GObj* owner` member is represented in a union with a `u8 hit_grabbed_victim_only : 1` bitfield overlay."
+  ],
+  "smart_moves": [
+    "Kept the decompiled body under `#if !defined(MUST_MATCH) || defined(WIP)` while retaining the original assembly in the `#else` branch, allowing partial progress without claiming a full non-WIP match.",
+    "Used `sizeof(this_fp->x914) / sizeof(HitCapsule)` instead of hard-coding the hit capsule count in new loops, making the code more resilient to array-size knowledge encoded in the struct.",
+    "Introduced `HitCapsuleGetPtr` as a more type/descriptive accessor name than `ftHitGetPtr`, matching the data type being returned rather than tying the helper to a specific subsystem prefix.",
+    "Modeled an observed overlapping field in `HitCapsule` with a union between `owner` and `hit_grabbed_victim_only`, preserving existing access while enabling the decompiled collision logic to refer to the bit interpretation needed by `ftColl_80078C70`.",
+    "Used explicit `goto` labels such as `next_gobj`, `block_16`, `block_66`, and `block_81` to preserve difficult compiler control flow in a partial match instead of prematurely rewriting into cleaner but less matchable structured C.",
+    "Preserved questionable or unresolved regions with comments, including the phantom-hit/hurtbox-priority comment block, making uncertainty visible for later cleanup."
+  ],
+  "decomp_lessons": [
+    "For large fighter-collision routines, partial matching may require accepting messy control flow, temporaries, casts, and labels before attempting semantic cleanup.",
+    "When an assembly field appears to be used both as a pointer and as a flag/bitfield, a union in the shared header can expose both interpretations without changing offsets.",
+    "Renaming helpers to describe the returned data structure, such as `HitCapsuleGetPtr`, can make newly decompiled code easier to search and reuse across nearby collision routines.",
+    "Ground/air gating and disabled/catch/inert hit-element checks recur heavily in fighter collision code; matching future functions should reuse the same condition patterns and enum names where evidence supports them.",
+    "The function body shows that hitbox, shield, and hurtbox collision paths are intertwined; future decomp work should avoid isolating these too early if doing so changes compiler branch shape.",
+    "For WIP decompilation, keeping static tables such as `hit_sfx[20]` declared locally can help express known data references even when the exact initializer or symbol provenance is not yet resolved."
+  ],
+  "naming_conventions": [
+    {
+      "observed": "`this_gobj`, `this_fp`, `victim_gobj`, and `victim_fp`",
+      "lesson": "Use explicit current-fighter versus victim-fighter naming in collision routines to keep nested fighter traversal understandable."
+    },
+    {
+      "observed": "`HitCapsuleGetPtr`",
+      "lesson": "Accessor names can be centered on the struct type being accessed rather than the older subsystem-specific helper name `ftHitGetPtr`."
+    },
+    {
+      "observed": "`hit_grabbed_victim_only`",
+      "lesson": "Bitfield names should encode the inferred gameplay meaning when the header needs to expose a flag overlaying an existing storage slot."
+    },
+    {
+      "observed": "`block_16`, `block_66`, `block_81`, `next_gobj`",
+      "lesson": "Compiler-block labels are acceptable in WIP matching code when they preserve branch layout and communicate that the structure is not yet cleaned up."
+    }
+  ],
+  "assembly_or_matching_tactics": [
+    "Retained the original `ASM` implementation for `ftColl_80078C70` behind the `MUST_MATCH` path while adding a C body for WIP/non-MUST_MATCH builds.",
+    "Used many explicit casts to `u8`, `u32`, and `s32` around bitfields, enum comparisons, and boolean tests to influence generated code shape.",
+    "Preserved temporary-style variables such as `var_r0_2`, `var_r22`, `var_r17`, `var_r4`, `var_r3`, `temp_r23`, and `temp_r16`, suggesting register/assembly-guided translation rather than fully cleaned source.",
+    "Used `goto` labels to reproduce branch targets and avoid over-structuring a complex collision routine.",
+    "Added a header union to make a bitfield access compile against the same offset as an existing pointer field, a struct-layout tactic for matching code that treats the same memory in different ways.",
+    "The PR report says `ftColl_80078C70` reached 80.46% with score `7,406` of max `37,900`, indicating a partial rather than complete match."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-917",
+    "ftColl_80078C70",
+    "ftColl_80078A2C",
+    "ftColl_80078998",
+    "ftcoll.c",
+    "lbcollision.h",
+    "HitCapsule",
+    "HitCapsuleGetPtr",
+    "ftHitGetPtr",
+    "hit_grabbed_victim_only",
+    "HSD_GObj_Entities",
+    "fighters",
+    "Fighter_GObj",
+    "Fighter",
+    "x914",
+    "HitCapsule_Disabled",
+    "HitElement_Catch",
+    "HitElement_Inert",
+    "GA_Air",
+    "GA_Ground",
+    "lbColl_8000ACFC",
+    "lbColl_80007AFC",
+    "lbColl_80007BCC",
+    "lbColl_8000805C",
+    "lbColl_80005BB0",
+    "ftColl_8007699C",
+    "ftColl_80076CBC",
+    "ftColl_80076ED8",
+    "ftCommon_8007F804",
+    "ft_80088148",
+    "gm_8016B1C4",
+    "gm_8016B168",
+    "gm_8016B0D4",
+    "thrownHitbox",
+    "shield_hit",
+    "hurtbox",
+    "phantom hit",
+    "MUST_MATCH",
+    "WIP",
+    "NOT_IMPLEMENTED",
+    "issue 595"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match or further clean up `ftColl_80078C70`.",
+    "Search for subsequent changes to `HitCapsule` union fields `owner` and `hit_grabbed_victim_only` to confirm whether the overlay survived later review.",
+    "Look for later renames or uses of `HitCapsuleGetPtr` across fighter collision files.",
+    "Investigate issue #595 to understand the broader set of fighter collision functions this PR was resolving.",
+    "Compare later versions of the phantom-hit comment in `ftColl_80078C70` to see whether that control-flow uncertainty was resolved."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

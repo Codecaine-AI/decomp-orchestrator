@@ -1,0 +1,139 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1291",
+  "pr": {
+    "number": 1291,
+    "title": "Match grtganon",
+    "url": "https://github.com/doldecomp/melee/pull/1291",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-02-21T05:08:07Z",
+    "merged_at": "2024-02-21T05:11:55Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the target stage Ganon ground module by replacing asm/melee/gr/grtganon.s with C in src/melee/gr/grtganon.c and adding src/melee/gr/grtganon.h. The build was switched from the assembly object to the C object and configure.py marked grtganon.c as Matching. The implementation reconstructs the stage callback table, StageData, stage initialization, gobj creation/setup, animation callbacks, map-collision callback lookup, and small stub callbacks.",
+  "change_classification": {
+    "primary_type": "decompilation_match",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "build-configuration",
+      "stage-data-reconstruction"
+    ],
+    "systems": [
+      "stage",
+      "ground",
+      "asm",
+      "build-system",
+      "headers"
+    ]
+  },
+  "key_files": [
+    "asm/melee/gr/grtganon.s",
+    "src/melee/gr/grtganon.c",
+    "src/melee/gr/grtganon.h",
+    "src/melee/gr/grtgamewatch.h",
+    "configure.py",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted the 332-line assembly implementation asm/melee/gr/grtganon.s.",
+    "Added a 215-line C implementation for src/melee/gr/grtganon.c.",
+    "Added src/melee/gr/grtganon.h with prototypes for grTGanon_802246D8 through grTGanon_80224A4C and forward includes for HSD_GObj, HSD_JObj, Vec3, and lb_UnkAnimStruct.",
+    "Changed configure.py from Object(NonMatching, \"melee/gr/grtganon.c\") to Object(Matching, \"melee/gr/grtganon.c\").",
+    "Changed obj_files.mk to build $(BUILD_DIR)/src/melee/gr/grtganon.c.o instead of $(BUILD_DIR)/asm/melee/gr/grtganon.s.o.",
+    "Adjusted src/melee/gr/grtgamewatch.h by removing the unused parameter name from grTGameWatch_802243E4(int unused), leaving grTGameWatch_802243E4(int).",
+    "Recreated grTGn_803E9880 as a StageCallbacks array, grTGn_803E98DC as StageData with stage id 65 and asset path \"/GrTGn.dat\", and grTGn_804D6B18 as a special-params pointer.",
+    "Implemented stage startup logic that stores Ground_801C49F8() in grTGn_804D6B18, edits stage_info.unk8C.b4/b5, creates three ground gobjs via grTGanon_80224784(0), (1), and (2), and calls standard Ground_801C39C0/3BB4/4210/42AC setup routines.",
+    "Implemented grTGanon_80224784 as the common gobj setup helper using Ground_801C14D0, HSD_GObjGetUserData, GObj_SetupGXLink, optional StageCallbacks callback0/callback2/callback3 handling, HSD_GObjProc_8038FD54, and an OSReport failure path.",
+    "Implemented grTGanon_802249B4 as a map-collision/special-params lookup using mpLib_80056B6C and mpLib_80054C6C, returning x0/x4/x8 for bit values 1 << 1, 1 << 2, and 1 << 3 respectively."
+  ],
+  "smart_moves": [
+    "Translated the raw .data table into typed StageCallbacks and StageData initializers, making the original function-pointer layout searchable and reusable by later stage decomp work.",
+    "Introduced a small grTGnSpecialParams struct with x0/x4/x8 lb_UnkAnimStruct pointers to model the three special-parameter loads previously done through raw offsets 0, 4, and 8 from grTGn_804D6B18.",
+    "Used stage_info.unk8C.b4 and b5 bitfields to express the rlwimi byte manipulation in initialization, preserving behavior while improving readability.",
+    "Kept the original OSReport string and source line value in the gobj setup failure branch, which is often necessary for matching string pools and immediate constants.",
+    "Used the existing GET_GROUND(gobj) helper in animation/setup callbacks while still matching functions that access gobj user data.",
+    "Used PAD_STACK(8) in callbacks that call Ground_801C2ED0 and grAnime_801C8138, indicating a stack-shaping tactic needed for matching those functions.",
+    "Completed the integration cleanly by updating both configure.py matching status and obj_files.mk object selection."
+  ],
+  "decomp_lessons": [
+    "For target-stage modules, a successful asm-to-C match may require reconstructing both code and data: StageCallbacks arrays, StageData metadata, asset path strings, and sbss globals all move from .s into C.",
+    "When matching stage gobj creation helpers, preserve the exact callback ordering: clear Ground x8/xC callbacks, setup GX link, optionally assign x1C_callback from callback3, call callback0, then register callback2 as an HSD_GObj proc.",
+    "Small do-nothing and constant-return callbacks should still be declared and implemented because they are referenced by StageData and StageCallbacks tables.",
+    "Bitfield names on shared structs such as stage_info.unk8C can replace hand-written rlwimi assembly patterns and are important for readable matched C.",
+    "Map or collision lookup helpers may match more cleanly when sentinel values are kept explicit, as in checking arg0 != -1 and mpLib_80056B6C(arg0) != -1 before calling mpLib_80054C6C.",
+    "Header hygiene matters during matching: prototypes should use established project types and forward headers rather than pulling in full definitions when only pointers are needed.",
+    "Evidence from this PR is mostly the diff; there were no PR body notes or review comments explaining author intent."
+  ],
+  "naming_conventions": [
+    "Functions use the module prefix grTGanon_ followed by the original address, for example grTGanon_80224784 and grTGanon_802249B4.",
+    "Data globals use the shortened stage prefix grTGn_, for example grTGn_803E9880, grTGn_803E98DC, and grTGn_804D6B18.",
+    "The stage asset path is preserved as the exact string \"/GrTGn.dat\".",
+    "The local special-parameter struct is named grTGnSpecialParams and keeps offset-style fields x0, x4, and x8 because their semantic names were not established in the PR.",
+    "The new header uses the guard _grtganon_h_.",
+    "Nearby header cleanup removed an unused parameter name from grTGameWatch_802243E4, suggesting bare parameter types are acceptable for unnamed or unused prototype parameters."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced a whole assembly file with C and switched the build from asm/melee/gr/grtganon.s.o to src/melee/gr/grtganon.c.o.",
+    "Marked the object Matching in configure.py only after the C implementation was in place.",
+    "Preserved callback-table ordering and NULL entries from the assembly .data section in a typed StageCallbacks array.",
+    "Preserved StageData constants including stage id 65, flags (1 << 0), and callback function slots.",
+    "Used PAD_STACK(8) in grTGanon_802248A8 and grTGanon_80224938 to shape the stack for matching.",
+    "Preserved exact OSReport format text \"%s:%d: couldn t get gobj(id=%d)\\n\", filename \"grtganon.c\", and line constant 201.",
+    "Expressed assembly comparisons against constants 2, 4, and 8 as bit-shift forms (1 << 1), (1 << 2), and (1 << 3)."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR context."
+  ],
+  "searchable_terms": [
+    "pr-1291",
+    "Match grtganon",
+    "PsiLupan",
+    "grtganon",
+    "grTGanon",
+    "grTGn",
+    "grTGn_803E9880",
+    "grTGn_803E98DC",
+    "grTGn_804D6B18",
+    "grTGnSpecialParams",
+    "StageCallbacks",
+    "StageData",
+    "GrTGn.dat",
+    "Ground_801C49F8",
+    "stage_info.unk8C.b4",
+    "stage_info.unk8C.b5",
+    "Ground_801C14D0",
+    "GObj_SetupGXLink",
+    "grDisplay_801C5DB0",
+    "HSD_GObjProc_8038FD54",
+    "grAnime_801C8138",
+    "Ground_801C2ED0",
+    "Ground_801C2FE0",
+    "grZakoGenerator_801CAE04",
+    "mpLib_80056B6C",
+    "mpLib_80054C6C",
+    "lb_800115F4",
+    "PAD_STACK",
+    "asm-to-c stage match",
+    "obj_files.mk",
+    "configure.py Matching"
+  ],
+  "follow_up_queries": [
+    "Check whether src/melee/gr/grtganon.h intentionally contains duplicate prototypes for grTGanon_802248A8.",
+    "Compare grtganon.c against nearby target-stage modules such as grtgamewatch.c and grtemblem.c for shared StageCallbacks and StageData patterns.",
+    "Look for later PRs that rename grTGnSpecialParams fields x0/x4/x8 or identify the semantics of the returned lb_UnkAnimStruct pointers.",
+    "Search for other uses of stage_info.unk8C.b4 and stage_info.unk8C.b5 to clarify the meaning of the initialization flags.",
+    "Search for other target-stage OSReport strings with \"couldn t get gobj\" to reuse matching line-number/string-pool tactics."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

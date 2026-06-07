@@ -1,0 +1,135 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1938",
+  "pr": {
+    "number": 1938,
+    "title": "Match ftKirby's Game&Watch callbacks",
+    "url": "https://github.com/doldecomp/melee/pull/1938",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-09-25T01:33:43Z",
+    "merged_at": "2025-09-25T01:43:03Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched a large set of ftKirby Game & Watch neutral-special callback and transition routines, replacing many placeholder asm markers in ftKb_Init.c with C implementations. The PR also fixed/filled related callback wiring for Kirby's copied Peach and Game & Watch specials, added item headers for Game & Watch chef/pan interactions, and refined ftKirby fighter var field types for the copied Peach toad and Game & Watch pan item handles.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "callbacks",
+      "headers",
+      "fighter-vars",
+      "item-integration"
+    ],
+    "systems": [
+      "fighter",
+      "ftKirby",
+      "items",
+      "Game & Watch copy ability",
+      "Peach copy ability"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftKirby/ftKb_Init.c",
+    "src/melee/ft/chara/ftKirby/ftKb_Init.h",
+    "src/melee/ft/chara/ftKirby/types.h"
+  ],
+  "what_changed": [
+    "Added includes for itgamewatchchef.h and itkirbygamewatchchefpan.h so ftKirby Game & Watch copied-special code can call the relevant item routines directly.",
+    "Implemented ftKb_SpecialNPe_8010C3F4, which clears Kirby Peach-special item state by calling it_802BDF40 on fp->fv.kb.xD0 and then ftKb_SpecialNPe_8010C3C0.",
+    "Changed ftKb_SpecialNPe_8010C47C to call it_802BDFC0 instead of it_802BDFA0 when fp->fv.kb.xD0 is present.",
+    "Implemented multiple Game & Watch copied-special item callbacks around fp->fv.kb.xDC, including pan spawn/setup, cleanup, hitlag enter/exit item forwarding, and action-state validity checks.",
+    "Implemented grounded and aerial Game & Watch copied neutral-special animation callbacks, IASA callbacks, collision callbacks, and ground/air transition helpers.",
+    "Implemented repeat-loop helpers ftKb_SpecialNGw_8010D660 and ftKb_SpecialNGw_8010D6D0 with an f32 frame argument used to restart the motion at specialn_gw_frame_on_repeat - 1.0F.",
+    "Added a shared inline helper that resets cmd_vars[1], cmd_vars[2], isChefLoopDisable, and accessory4_cb when repeating the Game & Watch chef loop.",
+    "Updated ftKb_Init.h declarations by adding fn_8010D100 and changing ftKb_SpecialNGw_8010D660/ftKb_SpecialNGw_8010D6D0 prototypes to accept a float argument.",
+    "Updated ftKirby/types.h field knowledge: xD0 is documented as a Peach toad Item_GObj pointer, xDC as a Game & Watch pan Item_GObj pointer, and xD4/xD8 as int rather than UNK_T."
+  ],
+  "smart_moves": [
+    "Reused existing Game & Watch copied-special state variables and callbacks rather than introducing new state, preserving the original callback-driven item lifecycle pattern.",
+    "Modeled the Game & Watch pan as an Item_GObj pointer in ftKb_FighterVars, which made null checks and item callback forwarding explicit and type-safe.",
+    "Kept ground and air versions parallel: animation callbacks differ only in repeat target and ending action, IASA callbacks share the same B-button loop-disable logic, and repeat helpers share an inline reset routine.",
+    "Used the fighter's left thumb bone via ftParts_GetBoneIndex(fp, FtPart_LThumbNb) and lb_8000B1CC to spawn the Kirby Game & Watch pan item at the correct bone-derived position.",
+    "Preserved callback cleanup conventions: pan item callbacks are nulled/forwarded through death, damage, pre-hitlag, post-hitlag, and accessory callbacks depending on item lifetime.",
+    "Used PAD_STACK annotations in matched functions, indicating stack-shape adjustments were necessary for matching."
+  ],
+  "decomp_lessons": [
+    "Copied-character special moves may need both fighter callback matching and item lifecycle matching; the item handle fields in fighter vars should be typed once their meaning is known.",
+    "When matching callback-heavy fighter code, identify the item pointer field first, then implement the clear, remove, pre-hitlag, post-hitlag, and accessory callback functions as a coherent lifecycle set.",
+    "For repeated animation loops, command variables can be the key control path: here cmd_vars[1] and cmd_vars[2] gate B-button repeat behavior and chef-loop continuation.",
+    "Ground/air transition helpers can preserve animation continuity by passing fp->cur_anim_frame into Fighter_ChangeMotionState and restoring accessory callbacks afterward.",
+    "Header prototypes must be updated when previously unknown functions are discovered to take additional frame/timing parameters.",
+    "Inline helpers can be useful for matching repeated small state-reset sequences across ground and air variants."
+  ],
+  "naming_conventions": [
+    "Address-based ftKirby copied-special names were retained, e.g. ftKb_SpecialNGw_8010D660 and ftKb_SpecialNGw_8010D6D0.",
+    "Game & Watch copied-special functions use the ftKb_SpecialNGw and ftKb_GwSpecialN/GwSpecialAirN naming pattern.",
+    "Unidentified local callback functions still use fn_ address names such as fn_8010CE5C, fn_8010CFB0, and fn_8010D100.",
+    "Fighter var fields remain offset-style names, but comments document discovered item ownership: xD0 is Peach toad item and xDC is Game & Watch pan item.",
+    "The shared helper is named generically as inline1, signaling a matching-oriented inline rather than a semantically finalized API name."
+  ],
+  "assembly_or_matching_tactics": [
+    "Added PAD_STACK(0x20) in the Game & Watch animation callbacks and PAD_STACK(0x8) in IASA/repeat helpers to satisfy stack layout requirements.",
+    "Used a forward declaration for fn_8010CE5C before assigning it as accessory4_cb from fn_8010CFB0, avoiding declaration-order issues while preserving function order.",
+    "Repeated motion restart functions call Fighter_ChangeMotionState with arg1 - 1.0F and then ftAnim_8006EBA4, matching the frame-repeat behavior implied by specialn_gw_frame_on_repeat.",
+    "The ground/air repeat functions share a static inline helper to reproduce identical state-reset code in both call sites.",
+    "Condition ordering in ground and air animation callbacks is kept slightly different but equivalent around maxSausage and isChefLoopDisable, likely because source-level expression ordering affected matching.",
+    "Motion-state transition flags such as 0x0C4C508C were preserved as constants in the matched helpers."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "The PR appears to have merged quickly with one issue comment recorded but no review-comment excerpt available, so reviewer rationale cannot be inferred from the slice."
+  ],
+  "searchable_terms": [
+    "PR1938",
+    "ftKirby",
+    "Kirby",
+    "Game & Watch",
+    "Mr Game and Watch",
+    "callbacks",
+    "ftKb_Init.c",
+    "ftKb_Init.h",
+    "types.h",
+    "ftKb_SpecialNGw",
+    "ftKb_GwSpecialN_Anim",
+    "ftKb_GwSpecialAirN_Anim",
+    "ftKb_GwSpecialN_IASA",
+    "ftKb_GwSpecialAirN_IASA",
+    "ftKb_GwSpecialN_Coll",
+    "ftKb_GwSpecialAirN_Coll",
+    "ftKb_SpecialNGw_8010D660",
+    "ftKb_SpecialNGw_8010D6D0",
+    "ftKb_SpecialNGw_8010D580",
+    "ftKb_SpecialNGw_8010D5F0",
+    "fn_8010CFB0",
+    "fn_8010D100",
+    "fp->fv.kb.xDC",
+    "Game Watch pan item",
+    "itkirbygamewatchchefpan",
+    "itgamewatchchef",
+    "specialn_gw_max_sausages_per_use",
+    "specialn_gw_frame_on_repeat",
+    "isChefLoopDisable",
+    "maxSausage",
+    "cmd_vars",
+    "PAD_STACK",
+    "Fighter_ChangeMotionState",
+    "ftAnim_8006EBA4"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or further type ftKirby fv.kb.xD0/xDC fields.",
+    "Search for equivalent ftGameWatch_SpecialN implementations to compare callback structure and possible naming upgrades.",
+    "Look for PRs matching other Kirby copied-special item lifecycles using death2_cb, take_dmg_cb, pre_hitlag_cb, post_hitlag_cb, and accessory4_cb.",
+    "Check whether fn_8010CE5C, fn_8010CFB0, and fn_8010D100 receive semantic names in later cleanup PRs.",
+    "Search for use of PAD_STACK in ftKirby callbacks to identify other matching-sensitive copied-special routines."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

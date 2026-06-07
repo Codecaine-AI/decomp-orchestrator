@@ -1,0 +1,135 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1856",
+  "pr": {
+    "number": 1856,
+    "title": "Link `ftCo_BarrelWait`",
+    "url": "https://github.com/doldecomp/melee/pull/1856",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2025-08-20T01:50:24Z",
+    "merged_at": "2025-08-20T01:54:05Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Linked the common fighter BarrelWait unit by matching `ftCo_8009EC70` and switching `ftCo_BarrelWait.c` from NonMatching to Matching in `configure.py`. The fix was primarily a stack/layout-sensitive decomp adjustment: replacing ad-hoc zeroed stack arrays with `PAD_STACK`, using precise float literals, exposing `ftCo_8009EC70` in the header, and introducing a temporary `SmallerHitCapsule` fake struct to model only the accessed hit-capsule fields while preserving stack/object layout. decomp.dev reported one new match: `ftCo_8009EC70` moved from 99.94% to 100.00%, with +308 matched bytes and +652 linked bytes.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "build-config",
+      "stack-layout",
+      "temporary-struct-modeling"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "barrel-wait",
+      "collision",
+      "damage",
+      "camera",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "configure.py",
+    "src/melee/ft/chara/ftCommon/ftCo_BarrelWait.c",
+    "src/melee/ft/chara/ftCommon/ftCo_BarrelWait.h"
+  ],
+  "what_changed": [
+    "`configure.py` changed `melee/ft/chara/ftCommon/ftCo_BarrelWait.c` from `Object(NonMatching, ...)` to `Object(Matching, ...)`.",
+    "`ftCo_8009EB18` now gets the fighter with `GET_FIGHTER(gobj)` instead of directly using `gobj->user_data`, uses `PAD_STACK(4)`, and passes explicit float constants `0.0f`, `1.0f`, `0.0f` to `Fighter_ChangeMotionState`.",
+    "Removed the local static forward declaration for `ftCo_8009EC70` from the C file and added a public declaration for it to `ftCo_BarrelWait.h`.",
+    "`ftCo_BarrelWait.h` switched its forward include from `ftCommon/forward.h` to `ft/forward.h`, presumably to obtain the needed forward declarations for the exported function signature.",
+    "`ftCo_8009EC44` replaced a dummy zeroed stack array with `PAD_STACK(4)` before calling `Ground_801C4DA0`.",
+    "`ftCo_8009EC70` was rewritten with explicit inner scopes, a temporary `struct SmallerHitCapsule`, casts to `HitCapsule*` for `lbColl_80008D30` and `ftColl_80079EA8`, and `PAD_STACK(4)` near the stack-local hit capsule.",
+    "`ftCo_8009EC70` preserved the existing gameplay logic: set bury timer and position, update collision and camera, load hit-capsule collision data, refresh fighter collision, normalize negative knockback angles, mirror the angle based on facing direction, write damage fields, call `Fighter_UnkTakeDamage_8006CC30`, and finish with `ftCo_8008DCE0(gobj, 91, 0)`."
+  ],
+  "smart_moves": [
+    "Used `PAD_STACK(4)` instead of fake zero-initialized byte arrays to express stack padding directly and make the matching intent clearer.",
+    "Introduced a narrowly scoped fake `SmallerHitCapsule` with a `@todo` note rather than pretending the real `HitCapsule` size/layout was fully known.",
+    "Placed the fake hit-capsule local inside an inner block, likely to force the desired stack lifetime/layout for matching.",
+    "Kept external APIs typed as `HitCapsule*` via casts while allowing the local stack object to use the smaller temporary layout needed by the decomp.",
+    "Changed integer-looking float arguments and comparisons to explicit float literals, which can matter for matching generated code and documents the intended types.",
+    "Moved `ftCo_8009EC70` to the header when the unit became linked, making the symbol available outside the C file instead of keeping it as a local-only declaration."
+  ],
+  "decomp_lessons": [
+    "When a unit is nearly matching, stack object size can be the last blocker; a temporary fake struct with documented unknown padding may be preferable to misusing the presumed full struct.",
+    "Prefer `PAD_STACK(n)` over anonymous `u8 _[n] = { 0 }` padding when the bytes are only present to reproduce stack layout.",
+    "Use explicit float constants in motion-state and arithmetic-sensitive calls to avoid accidental integer constant codegen differences.",
+    "Inner scopes can be a valid matching tactic for controlling where locals are allocated and when stack storage is considered live.",
+    "If a formerly local function needs to be linked/exported, update the header and forward include path at the same time as the matching change.",
+    "Marking a file Matching in `configure.py` should be backed by decomp.dev/report evidence; here the bot confirmed the only remaining function reached 100.00%."
+  ],
+  "naming_conventions": [
+    "Common fighter action files use the `ftCo_` prefix, e.g. `ftCo_BarrelWait.c`, `ftCo_BarrelWait_IASA`, `ftCo_BarrelWait_Phys`, and `ftCo_BarrelWait_Coll`.",
+    "Unknown-address functions retain address-style names such as `ftCo_8009EB18`, `ftCo_8009EC44`, and `ftCo_8009EC70`.",
+    "Motion-state enum naming follows `ftCo_MS_BarrelWait`.",
+    "Temporary or fake layout helpers should be explicitly named and documented; this PR used `struct SmallerHitCapsule` with a `@todo Fake` comment.",
+    "Damage subfields remain address/offset-style where not yet semantically named, e.g. `x1848_kb_angle`, `x184c_damaged_hurtbox`, `x1854_collpos`, and `x1860_element`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced dummy stack arrays with `PAD_STACK(4)` in two functions to preserve stack shape without inventing real variables.",
+    "Used a fake smaller stack struct for hit-capsule data and cast it to `HitCapsule*` at API boundaries.",
+    "Introduced nested blocks around `Fighter* fp` and `struct SmallerHitCapsule hit` in `ftCo_8009EC70`, likely to influence stack allocation/order.",
+    "Used explicit `0.0f`, `1.0f`, and `180.0f` float literals and `fp->facing_dir < 0.0f` to better match floating-point code generation.",
+    "Kept the knockback-angle adjustment as `if (kb_angle < 0) { kb_angle += 360; }` followed by facing-direction mirroring, preserving the original control flow while improving type precision.",
+    "Bot evidence showed `ftCo_8009EC70` improved from 99.94% to 100.00%, enabling the whole object to be linked."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided slice.",
+    "decomp.dev bot reported GALE01 progress: matched code 38.96% (+0.01%, +308 bytes), linked code 25.89% (+0.02%, +652 bytes), and one new match for `main/melee/ft/chara/ftCommon/ftCo_BarrelWait` / `ftCo_8009EC70`."
+  ],
+  "searchable_terms": [
+    "pr-1856",
+    "ftCo_BarrelWait",
+    "ftCo_8009EC70",
+    "ftCo_8009EB18",
+    "ftCo_8009EC44",
+    "SmallerHitCapsule",
+    "HitCapsule",
+    "PAD_STACK",
+    "GET_FIGHTER",
+    "Fighter_ChangeMotionState",
+    "ftCo_MS_BarrelWait",
+    "Ft_MF_None",
+    "lbColl_80008D30",
+    "ftColl_800788D4",
+    "ftColl_80079EA8",
+    "Fighter_UnkTakeDamage_8006CC30",
+    "mpColl_80043680",
+    "ftCamera_80076064",
+    "Ground_801C4DA0",
+    "bury_timer_2",
+    "p_ftCommonData",
+    "kb_angle",
+    "facing_dir",
+    "kb_applied",
+    "x1848_kb_angle",
+    "x184c_damaged_hurtbox",
+    "x1854_collpos",
+    "x1860_element",
+    "configure.py",
+    "Object(Matching)",
+    "Object(NonMatching)",
+    "GALE01",
+    "linked code",
+    "matched code"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that replace `SmallerHitCapsule` with the real `HitCapsule` size/layout.",
+    "Search for other uses of `PAD_STACK` replacing dummy `u8 _[]` arrays in fighter common action files.",
+    "Look for other near-matching functions blocked by stack-local collision or hit-capsule struct layout.",
+    "Audit headers that still include `ftCommon/forward.h` where `ft/forward.h` may be the correct broader forward declaration source.",
+    "Search for subsequent renames of `ftCo_8009EC70` or damage fields such as `x1848_kb_angle` and `x1860_element`."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

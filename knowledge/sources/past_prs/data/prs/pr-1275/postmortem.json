@@ -1,0 +1,128 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1275",
+  "pr": {
+    "number": 1275,
+    "title": "Match ittogepy",
+    "url": "https://github.com/doldecomp/melee/pull/1275",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-02-20T16:46:53Z",
+    "merged_at": "2024-02-20T16:49:02Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Togepi Pokémon item source by replacing asm/melee/it/items/ittogepy.s with a C implementation in src/melee/it/items/ittogepy.c, updating the build to compile the C object, expanding the local item header declarations, and adding the missing x18 field to itPokemonAttributes needed by the random state-selection logic. The PR had no body or review comments, so intent is inferred from the title and diff.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "build-config",
+      "symbol-map"
+    ],
+    "systems": [
+      "item",
+      "pokemon-items",
+      "ittogepy",
+      "build-system",
+      "symbols"
+    ]
+  },
+  "key_files": [
+    "asm/melee/it/items/ittogepy.s",
+    "src/melee/it/items/ittogepy.c",
+    "src/melee/it/items/ittogepy.h",
+    "src/melee/it/itCommonItems.h",
+    "src/melee/it/items/itpippi.c",
+    "config/GALE01/symbols.txt",
+    "configure.py",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted the 385-line hand-written assembly file asm/melee/it/items/ittogepy.s.",
+    "Added a 181-line C implementation for ittogepy, including the ItemStateTable it_803F8058 and functions it_802D36B0 through it_802D3AF0.",
+    "Changed configure.py entry for melee/it/items/ittogepy.c from NonMatching to Matching.",
+    "Changed obj_files.mk to build src/melee/it/items/ittogepy.c.o instead of asm/melee/it/items/ittogepy.s.o.",
+    "Expanded src/melee/it/items/ittogepy.h with platform/item includes and prototypes for all newly implemented local functions.",
+    "Added s32 x18 to itPokemonAttributes in src/melee/it/itCommonItems.h, matching the extra probability/threshold field used by Togepi's random state selection.",
+    "Adjusted config/GALE01/symbols.txt for the rodata symbol at 0x803B86F8 from global it_803B86F8 size 0x10 to local @183 size 0xC.",
+    "Cleaned up src/melee/it/items/itpippi.c includes by removing unused ef headers and adding <baselib/gobj.h>."
+  ],
+  "smart_moves": [
+    "Kept address-based symbol names such as it_802D36B0 and it_803F8058, minimizing naming risk while the surrounding item code remains largely address-oriented.",
+    "Modeled the assembly state table directly as an ItemStateTable array, preserving state IDs 0 through 6 and their callback layout.",
+    "Used the shared itPokemonAttributes struct instead of introducing a Togepi-only attribute struct, but extended it with x18 when the assembly showed an additional 0x18 field read.",
+    "Preserved item transition behavior with existing helpers such as Item_80268E5C, Item_80268D34, it_8026E15C, it_8026D62C, it_80272860, and it_8027A118.",
+    "Included PAD_STACK(8) in it_802D3848, indicating an explicit stack-shape tactic was needed for matching.",
+    "Updated all required integration points together: source file, object list, matching status, header prototypes, shared struct, and symbol map."
+  ],
+  "decomp_lessons": [
+    "For Pokémon item matches, verify special attribute struct width against every load in the assembly; here x18 was required for the final random threshold bucket.",
+    "When replacing an asm item with C, update both configure.py matching status and obj_files.mk object selection in the same PR.",
+    "State-table conversion is often a reliable anchor: translate the .data callback table first, then implement functions to satisfy the table signatures.",
+    "Hitlag callbacks may need to be explicitly nulled after state changes; this implementation repeatedly sets entered_hitlag and exited_hitlag to NULL after Item_80268E5C transitions.",
+    "Small rodata symbol corrections may be part of matching a file; this PR converted it_803B86F8 into local @183 and corrected its size to 0xC.",
+    "Include hygiene matters for matching and type correctness: C item files that use Item_GObj/HSD_GObj may need <baselib/gobj.h> instead of unrelated effect headers."
+  ],
+  "naming_conventions": [
+    "Unidentified functions retained address-style names: it_802D36B0, it_802D3728, it_802D372C, it_802D374C, it_802D37C0, it_802D37FC, it_802D3848, it_802D390C, it_802D3970, it_802D39AC, it_802D39F8, it_802D3A68, it_802D3A8C, it_802D3AF0.",
+    "Unidentified global state table retained address-style name it_803F8058.",
+    "Struct fields follow existing offset-style placeholders such as xC4_article_data, x4_specialAttributes, xDD4_itemVar.pokemon.timer, xDAC_itcmd_var0, xDB0_itcmd_var1, xDB4_itcmd_var2, xD0_itemStateDesc, and xCC_item_attr.",
+    "The newly added itPokemonAttributes field uses placeholder offset naming x18, consistent with nearby xC, x10, and x14 fields.",
+    "Local rodata in symbols.txt can use generated local labels like @183 when a formerly named global is not truly global."
+  ],
+  "assembly_or_matching_tactics": [
+    "Recreated the assembly's random branch ladder in it_802D3848 using HSD_Randi(sa->max), cumulative thresholds sa->xC, sa->x10, sa->x14, and sa->x18, and selected states 2 through 6.",
+    "Used PAD_STACK(8) in it_802D3848 to reproduce stack layout.",
+    "Matched void no-op callback it_802D3728 as an explicit return-only function.",
+    "Matched airborne/grounded callback choice by branching on ground_or_air == GA_Air and calling it_8026E15C for air or it_8026D62C for ground with it_802D3728 as callback.",
+    "Matched physics updates by calling it_80272860 with x10_fall_speed and x14_fall_speed_max only when the item is airborne.",
+    "Preserved state animation updates with Item_80268E5C(gobj, state, ITEM_ANIM_UPDATE) rather than open-coded constants except where the original state IDs are still visible."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice."
+  ],
+  "searchable_terms": [
+    "pr-1275",
+    "Match ittogepy",
+    "PsiLupan",
+    "ittogepy",
+    "Togepi",
+    "Pokemon item",
+    "ItemStateTable",
+    "it_803F8058",
+    "it_802D36B0",
+    "it_802D3848",
+    "it_802D39F8",
+    "it_802D3AF0",
+    "itPokemonAttributes",
+    "x18",
+    "HSD_Randi",
+    "PAD_STACK",
+    "Item_80268E5C",
+    "ITEM_ANIM_UPDATE",
+    "Item_80268D34",
+    "it_8026E15C",
+    "it_8026D62C",
+    "it_80272860",
+    "configure.py Matching",
+    "obj_files.mk src object",
+    "symbols.txt @183"
+  ],
+  "follow_up_queries": [
+    "Find other Pokémon item PRs that extend itPokemonAttributes or use x18 probability thresholds.",
+    "Search for PRs matching itmew, ithitodeman, or ithouou to compare Togepi state-table patterns.",
+    "Look for uses of PAD_STACK in item decomp matches to identify recurring stack-shape fixes.",
+    "Audit nearby rodata symbols it_803B86BC through it_803B8724 for local/global size corrections."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

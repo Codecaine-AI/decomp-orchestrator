@@ -1,14 +1,35 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
-import { activeWorkerCount, addEvent, getLatestRun, getRun, nextUnhandledEvent, openState, type StateStore } from "../../state/index.js";
+import { loadBoardSnapshot } from "../../board/index.js";
+import {
+  activeWorkerCount,
+  addEvent,
+  blockedQueuedTargetCount,
+  getLatestRun,
+  getRun,
+  nextUnhandledEvent,
+  openState,
+  queuedTargetCount,
+  refillQueuedTargets,
+  schedulableTargetCount,
+  unhandledEventCount,
+  unhandledPoolEventCount,
+  type QueueRefillResult,
+  type StateStore,
+} from "../../state/index.js";
 import { withBusyRetry } from "../../state/db.js";
 import { booleanArg, numberArg, stringArg, workerReportTypeArg, type GlobalArgs } from "../args.js";
 import { assertSchedulableRun } from "./shared.js";
 import { runDirectorTick, type DirectorTickResult } from "./tick.js";
 import type { WorkerCycleResult } from "./worker.js";
+import { runKnowledgeMaintenance } from "./kg.js";
 
 interface WorkerError {
   workerId: string;
+  error: string;
+}
+
+interface KnowledgeMaintenanceError {
   error: string;
 }
 
@@ -16,9 +37,11 @@ interface QueuePressureSnapshot {
   activeWorkers: number;
   blockedQueuedTargets: number;
   candidateLimit: number;
+  candidateWindow: number;
   maxWorkers: number;
   openSlots: number;
   queuedTargets: number;
+  queueTargetSize: number;
   runningWorkers: number;
   schedulableTargets: number;
 }
@@ -34,6 +57,7 @@ interface ReplanPolicy {
 }
 
 interface ReplanState {
+  lastQueueRefill?: QueueRefillResult | null;
   lastPeriodicReplanMs: number;
   lastReplanRequestMs: number;
   longTailSinceMs: number | null;
@@ -46,7 +70,9 @@ export interface ReplanDecision {
     | "blocked_queue_pressure"
     | "long_tail_timeout"
     | "periodic_replan"
+    | "queue_refill_exhausted"
     | "queue_low_watermark"
+    | "schedulable_refill_exhausted"
     | "schedulable_low_watermark";
   longTailSinceMs: number | null;
 }
@@ -60,9 +86,14 @@ export interface TriggerAgentResult {
   desiredWorkers: number;
   maxWorkers: number;
   directorTicks: number;
+  queueRefills: number;
+  queueTargetsAdded: number;
+  lastQueueRefill?: QueueRefillResult;
   workersStarted: number;
   workerResults: WorkerCycleResult[];
   workerErrors: WorkerError[];
+  knowledgeMaintenanceRuns: Record<string, unknown>[];
+  knowledgeMaintenanceErrors: KnowledgeMaintenanceError[];
   dryRun: boolean;
   finalStatus: {
     activeWorkers: number;
@@ -76,67 +107,6 @@ export interface TriggerAgentResult {
 function sleep(ms: number): Promise<void> {
   if (ms <= 0) return Promise.resolve();
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function scalar(store: StateStore, sql: string, runId: string): number {
-  const row = withBusyRetry(() => store.db.query(sql).get(runId) as Record<string, unknown>);
-  return Number(row.count ?? 0);
-}
-
-function queuedTargetCount(store: StateStore, runId: string): number {
-  return scalar(store, "SELECT COUNT(*) AS count FROM queue WHERE run_id = ? AND status = 'queued'", runId);
-}
-
-function schedulableTargetCount(store: StateStore, runId: string): number {
-  return scalar(
-    store,
-    `
-      SELECT COUNT(DISTINCT targets.source_path) AS count
-      FROM queue
-      JOIN targets ON targets.id = queue.target_id
-      WHERE queue.run_id = ?
-        AND queue.status = 'queued'
-        AND targets.source_path IS NOT NULL
-        AND NOT EXISTS (
-          SELECT 1
-          FROM file_locks
-          JOIN leases AS lock_leases ON lock_leases.id = file_locks.lease_id
-          WHERE file_locks.path = targets.source_path
-            AND lock_leases.status = 'active'
-        )
-    `,
-    runId,
-  );
-}
-
-function blockedQueuedTargetCount(store: StateStore, runId: string): number {
-  return scalar(
-    store,
-    `
-      SELECT COUNT(*) AS count
-      FROM queue
-      JOIN targets ON targets.id = queue.target_id
-      WHERE queue.run_id = ?
-        AND queue.status = 'queued'
-        AND targets.source_path IS NOT NULL
-        AND EXISTS (
-          SELECT 1
-          FROM file_locks
-          JOIN leases AS lock_leases ON lock_leases.id = file_locks.lease_id
-          WHERE file_locks.path = targets.source_path
-            AND lock_leases.status = 'active'
-        )
-    `,
-    runId,
-  );
-}
-
-function unhandledEventCount(store: StateStore, runId: string): number {
-  return scalar(store, "SELECT COUNT(*) AS count FROM events WHERE run_id = ? AND handled_at IS NULL", runId);
-}
-
-function unhandledPoolEventCount(store: StateStore, runId: string): number {
-  return scalar(store, "SELECT COUNT(*) AS count FROM events WHERE run_id = ? AND event_type = 'pool_below_target' AND handled_at IS NULL", runId);
 }
 
 function activeLocalWorkerCount(store: StateStore, runId: string, workerIds: Set<string>): number {
@@ -190,16 +160,93 @@ function nonNegativeInt(value: number): number {
   return Math.max(0, Math.floor(value));
 }
 
-function replanPolicy(args: Map<string, string | true>, params: { candidateLimit: number; maxWorkers: number }): ReplanPolicy {
+function queueTargetSizeArg(args: Map<string, string | true>, candidateLimit: number): number {
+  return nonNegativeInt(numberArg(args, "--queue-target-size", candidateLimit));
+}
+
+function candidateWindowArg(args: Map<string, string | true>, params: { candidateLimit: number; queueTargetSize: number }): number {
+  const fallback = Math.max(params.candidateLimit, params.queueTargetSize * 4);
+  return Math.max(params.candidateLimit, params.queueTargetSize, nonNegativeInt(numberArg(args, "--candidate-window", fallback)));
+}
+
+function replanPolicy(args: Map<string, string | true>, params: { maxWorkers: number; queueTargetSize: number }): ReplanPolicy {
   return {
     activeLowWatermark: nonNegativeInt(numberArg(args, "--active-low-watermark", Math.ceil(params.maxWorkers * 0.75))),
     blockedQueueReplan: !booleanArg(args, "--no-blocked-queue-replan"),
     longTailReplanMs: nonNegativeInt(numberArg(args, "--long-tail-replan-ms", 5 * 60_000)),
-    queueLowWatermark: nonNegativeInt(numberArg(args, "--queue-low-watermark", Math.ceil(params.candidateLimit * 0.25))),
+    queueLowWatermark: nonNegativeInt(numberArg(args, "--queue-low-watermark", Math.ceil(params.queueTargetSize * 0.25))),
     replanCooldownMs: nonNegativeInt(numberArg(args, "--replan-cooldown-ms", 5 * 60_000)),
     replanIntervalMs: nonNegativeInt(numberArg(args, "--replan-interval-ms", 0)),
     schedulableLowWatermark: nonNegativeInt(numberArg(args, "--schedulable-low-watermark", params.maxWorkers)),
   };
+}
+
+function queueSnapshot(params: {
+  candidateLimit: number;
+  candidateWindow: number;
+  maxWorkers: number;
+  queueTargetSize: number;
+  runningWorkers: Set<Promise<void>>;
+  runningWorkerIds: Set<string>;
+  runId: string;
+  store: StateStore;
+}): QueuePressureSnapshot {
+  const activeWorkers = activeWorkerCount(params.store, params.runId);
+  const activeLocalWorkers = activeLocalWorkerCount(params.store, params.runId, params.runningWorkerIds);
+  const openSlots = workerOpenSlots({
+    maxWorkers: params.maxWorkers,
+    activeWorkers,
+    runningWorkers: params.runningWorkers.size,
+    activeLocalWorkers,
+  });
+  return {
+    activeWorkers,
+    blockedQueuedTargets: blockedQueuedTargetCount(params.store, params.runId),
+    candidateLimit: params.candidateLimit,
+    candidateWindow: params.candidateWindow,
+    maxWorkers: params.maxWorkers,
+    openSlots,
+    queuedTargets: queuedTargetCount(params.store, params.runId),
+    queueTargetSize: params.queueTargetSize,
+    runningWorkers: params.runningWorkers.size,
+    schedulableTargets: schedulableTargetCount(params.store, params.runId),
+  };
+}
+
+function shouldAttemptQueueRefill(snapshot: QueuePressureSnapshot, policy: ReplanPolicy): boolean {
+  const blockedPressure =
+    policy.blockedQueueReplan && snapshot.blockedQueuedTargets > 0 && snapshot.openSlots > 0 && snapshot.schedulableTargets < snapshot.openSlots;
+  return (
+    snapshot.queuedTargets < snapshot.queueTargetSize ||
+    snapshot.schedulableTargets < Math.min(snapshot.maxWorkers, policy.schedulableLowWatermark) ||
+    blockedPressure
+  );
+}
+
+function refillQueueFromBoard(params: {
+  globals: GlobalArgs;
+  policy: ReplanPolicy;
+  runId: string;
+  snapshot: QueuePressureSnapshot;
+  store: StateStore;
+}): QueueRefillResult | null {
+  if (!shouldAttemptQueueRefill(params.snapshot, params.policy)) return null;
+  const board = loadBoardSnapshot(params.globals.repoRoot, params.snapshot.candidateWindow);
+  return refillQueuedTargets(params.store, params.runId, board.candidates, {
+    targetSize: params.snapshot.queueTargetSize,
+    minSchedulableSources: Math.min(params.snapshot.maxWorkers, params.policy.schedulableLowWatermark),
+  });
+}
+
+function exhaustedRefillDecision(refill: QueueRefillResult | null | undefined, longTailSinceMs: number | null): ReplanDecision | null {
+  if (!refill) return null;
+  if (refill.schedulableAfter < refill.minSchedulableSources) {
+    return { reason: "schedulable_refill_exhausted", longTailSinceMs };
+  }
+  if (refill.queuedAfter < refill.targetSize) {
+    return { reason: "queue_refill_exhausted", longTailSinceMs };
+  }
+  return null;
 }
 
 export function evaluateReplanDecision(snapshot: QueuePressureSnapshot, policy: ReplanPolicy, state: ReplanState): ReplanDecision | null {
@@ -215,6 +262,8 @@ export function evaluateReplanDecision(snapshot: QueuePressureSnapshot, policy: 
   if (!hasCapacityPressure) return null;
   if (cooldownActive) return null;
 
+  const exhaustedRefill = exhaustedRefillDecision(state.lastQueueRefill, longTailSinceMs);
+  if (exhaustedRefill) return exhaustedRefill;
   if (policy.replanIntervalMs > 0 && state.nowMs - state.lastPeriodicReplanMs >= policy.replanIntervalMs) {
     return { reason: "periodic_replan", longTailSinceMs };
   }
@@ -231,11 +280,19 @@ export function evaluateReplanDecision(snapshot: QueuePressureSnapshot, policy: 
   return null;
 }
 
-function writeReplanEvent(store: StateStore, runId: string, decision: ReplanDecision, snapshot: QueuePressureSnapshot, policy: ReplanPolicy): string {
+function writeReplanEvent(
+  store: StateStore,
+  runId: string,
+  decision: ReplanDecision,
+  snapshot: QueuePressureSnapshot,
+  policy: ReplanPolicy,
+  refill?: QueueRefillResult | null,
+): string {
   return addEvent(store, runId, "pool_below_target", "trigger-agent", {
     reason: decision.reason,
     snapshot,
     policy,
+    refill: refill ?? null,
     created_by: "trigger-agent",
   });
 }
@@ -246,6 +303,41 @@ function cloneArgs(args: Map<string, string | true>, entries: [string, string | 
   return next;
 }
 
+function knowledgeMaintenanceArgs(args: Map<string, string | true>, runId: string, runPrAgentByDefault: boolean): Map<string, string | true> {
+  const next = new Map<string, string | true>([["--run-id", runId]]);
+  for (const key of [
+    "--agent-state-enrichment",
+    "--curator-agent-record-limit",
+    "--graph-db",
+    "--knowledge-curator-enrichment",
+    "--no-pr-index",
+    "--no-rebuild",
+    "--no-run-pr-agent",
+    "--no-tool-index",
+    "--no-tool-runners",
+    "--progress-only",
+    "--pr-jobs",
+    "--pr-limit",
+    "--rerun-existing-prs",
+    "--run-pr-agent",
+    "--run-curator-agent",
+    "--sources",
+    "--worker-limit",
+  ]) {
+    const value = args.get(key);
+    if (value !== undefined) next.set(key, value);
+  }
+  if (runPrAgentByDefault && !next.has("--run-pr-agent") && !next.has("--no-run-pr-agent")) next.set("--run-pr-agent", true);
+  if (next.has("--run-pr-agent") && !next.has("--pr-limit")) next.set("--pr-limit", "8");
+  return next;
+}
+
+function knowledgeMaintenanceIntervalMs(globals: GlobalArgs, args: Map<string, string | true>): number {
+  if (booleanArg(args, "--no-knowledge-maintenance")) return 0;
+  const fallback = globals.dryRunAgents ? 0 : 5 * 60_000;
+  return Math.max(0, Math.floor(numberArg(args, "--knowledge-maintenance-interval-ms", fallback)));
+}
+
 async function waitForRestingTrigger(runningWorkers: Set<Promise<void>>, idleSleepMs: number): Promise<void> {
   if (runningWorkers.size === 0) {
     await sleep(idleSleepMs);
@@ -254,9 +346,30 @@ async function waitForRestingTrigger(runningWorkers: Set<Promise<void>>, idleSle
   await Promise.race([sleep(idleSleepMs), ...runningWorkers]);
 }
 
+function directorTickArgs(
+  args: Map<string, string | true>,
+  params: { candidateLimit: number; candidateWindow: number; queueTargetSize: number; runId: string },
+): Map<string, string | true> {
+  return cloneArgs(args, [
+    ["--run-id", params.runId],
+    ["--candidate-limit", String(params.candidateLimit)],
+    ["--candidate-window", String(params.candidateWindow)],
+    ["--queue-target-size", String(params.queueTargetSize)],
+  ]);
+}
+
 function workerCommand(
   globals: GlobalArgs,
-  params: { runId: string; workerId: string; reportType: string; baseRev: string; ttlSeconds: number; thinkingLevel: string },
+  params: {
+    runId: string;
+    workerId: string;
+    reportType: string;
+    baseRev: string;
+    ttlSeconds: number;
+    thinkingLevel: string;
+    repairAttempts: number;
+    postReturnCheckCommand: string;
+  },
 ): string[] {
   const packageRoot = resolve(import.meta.dir, "../../..");
   const bin = resolve(packageRoot, "src/bin/decomp-orchestrator.ts");
@@ -288,13 +401,25 @@ function workerCommand(
     params.baseRev,
     "--ttl-seconds",
     String(params.ttlSeconds),
+    "--repair-attempts",
+    String(params.repairAttempts),
   );
+  if (params.postReturnCheckCommand) command.push("--post-return-check-command", params.postReturnCheckCommand);
   return command;
 }
 
 async function runWorkerProcess(
   globals: GlobalArgs,
-  params: { runId: string; workerId: string; reportType: string; baseRev: string; ttlSeconds: number; thinkingLevel: string },
+  params: {
+    runId: string;
+    workerId: string;
+    reportType: string;
+    baseRev: string;
+    ttlSeconds: number;
+    thinkingLevel: string;
+    repairAttempts: number;
+    postReturnCheckCommand: string;
+  },
 ): Promise<WorkerCycleResult> {
   const packageRoot = resolve(import.meta.dir, "../../..");
   const command = workerCommand(globals, params);
@@ -322,8 +447,12 @@ export async function runTriggerAgent(globals: GlobalArgs, args: Map<string, str
   const workerResults: WorkerCycleResult[] = [];
   const workerErrors: WorkerError[] = [];
   const directorResults: DirectorTickResult[] = [];
+  const knowledgeMaintenanceRuns: Record<string, unknown>[] = [];
+  const knowledgeMaintenanceErrors: KnowledgeMaintenanceError[] = [];
   const runningWorkers = new Set<Promise<void>>();
   const runningWorkerIds = new Set<string>();
+  let runningDirector: Promise<void> | null = null;
+  let runningKnowledgeMaintenance: Promise<void> | null = null;
   let stoppedReason = "running";
   let stopRequested = false;
   let iterations = 0;
@@ -345,7 +474,9 @@ export async function runTriggerAgent(globals: GlobalArgs, args: Map<string, str
     if (!run) throw new Error(`Run not found: ${runId}`);
     assertSchedulableRun(run, "trigger-agent");
 
-    const candidateLimit = numberArg(args, "--candidate-limit", 50);
+    const candidateLimit = nonNegativeInt(numberArg(args, "--candidate-limit", 50));
+    const queueTargetSize = queueTargetSizeArg(args, candidateLimit);
+    const candidateWindow = candidateWindowArg(args, { candidateLimit, queueTargetSize });
     const maxIterations = booleanArg(args, "--once") ? 1 : numberArg(args, "--max-iterations", 0);
     const maxIdleIterations = numberArg(args, "--max-idle-iterations", 0);
     const idleSleepMs = numberArg(args, "--idle-sleep-ms", 5_000);
@@ -353,37 +484,70 @@ export async function runTriggerAgent(globals: GlobalArgs, args: Map<string, str
     const reportType = workerReportTypeArg(args, "--report-type", "stalled_no_useful_guess");
     const baseRev = stringArg(args, "--base-rev", "unknown");
     const ttlSeconds = numberArg(args, "--ttl-seconds", 60 * 60);
+    const repairAttempts = Math.max(0, Math.trunc(numberArg(args, "--repair-attempts", globals.dryRunAgents ? 0 : 2)));
+    const postReturnCheckCommand = stringArg(args, "--post-return-check-command", "");
     const exitOnWorkerError = booleanArg(args, "--exit-on-worker-error");
     const workerThinkingLevel = stringArg(args, "--worker-thinking-level", globals.thinkingLevel);
-    const policy = replanPolicy(args, { candidateLimit, maxWorkers });
+    const maintenanceIntervalMs = knowledgeMaintenanceIntervalMs(globals, args);
+    const policy = replanPolicy(args, { maxWorkers, queueTargetSize });
+    let queueRefills = 0;
+    let queueTargetsAdded = 0;
+    let lastQueueRefill: QueueRefillResult | undefined;
     let lastReplanRequestMs = 0;
     let lastPeriodicReplanMs = Date.now();
     let longTailSinceMs: number | null = null;
+    let lastKnowledgeMaintenanceMs = maintenanceIntervalMs > 0 ? 0 : Date.now();
 
     while (!stopRequested) {
       let didWork = false;
 
-      const activeWorkersBeforeDirector = activeWorkerCount(store, runId);
-      const activeLocalWorkersBeforeDirector = activeLocalWorkerCount(store, runId, runningWorkerIds);
-      const queuedTargetsBeforeDirector = queuedTargetCount(store, runId);
-      const schedulableTargetsBeforeDirector = schedulableTargetCount(store, runId);
-      const openSlotsBeforeDirector = workerOpenSlots({
-        maxWorkers,
-        activeWorkers: activeWorkersBeforeDirector,
-        runningWorkers: runningWorkers.size,
-        activeLocalWorkers: activeLocalWorkersBeforeDirector,
-      });
-      const replanSnapshot: QueuePressureSnapshot = {
-        activeWorkers: activeWorkersBeforeDirector,
-        blockedQueuedTargets: blockedQueuedTargetCount(store, runId),
+      if (!runningKnowledgeMaintenance && maintenanceIntervalMs > 0 && Date.now() - lastKnowledgeMaintenanceMs >= maintenanceIntervalMs) {
+        lastKnowledgeMaintenanceMs = Date.now();
+        let task: Promise<void>;
+        task = runKnowledgeMaintenance(globals, knowledgeMaintenanceArgs(args, runId, !globals.dryRunAgents))
+          .then((result) => {
+            knowledgeMaintenanceRuns.push(result);
+          })
+          .catch((error) => {
+            knowledgeMaintenanceErrors.push({ error: error instanceof Error ? error.message : String(error) });
+          })
+          .finally(() => {
+            if (runningKnowledgeMaintenance === task) runningKnowledgeMaintenance = null;
+          });
+        runningKnowledgeMaintenance = task;
+        didWork = true;
+      }
+
+      const beforeRefill = queueSnapshot({
         candidateLimit,
+        candidateWindow,
         maxWorkers,
-        openSlots: openSlotsBeforeDirector,
-        queuedTargets: queuedTargetsBeforeDirector,
-        runningWorkers: runningWorkers.size,
-        schedulableTargets: schedulableTargetsBeforeDirector,
-      };
+        queueTargetSize,
+        runningWorkers,
+        runningWorkerIds,
+        runId,
+        store,
+      });
+      const refill = refillQueueFromBoard({ globals, policy, runId, snapshot: beforeRefill, store });
+      if (refill) {
+        queueRefills += 1;
+        queueTargetsAdded += refill.inserted;
+        lastQueueRefill = refill;
+        if (refill.inserted > 0) didWork = true;
+      }
+
+      const replanSnapshot = queueSnapshot({
+        candidateLimit,
+        candidateWindow,
+        maxWorkers,
+        queueTargetSize,
+        runningWorkers,
+        runningWorkerIds,
+        runId,
+        store,
+      });
       const replanDecision = evaluateReplanDecision(replanSnapshot, policy, {
+        lastQueueRefill: refill,
         lastPeriodicReplanMs,
         lastReplanRequestMs,
         longTailSinceMs,
@@ -391,22 +555,10 @@ export async function runTriggerAgent(globals: GlobalArgs, args: Map<string, str
       });
       longTailSinceMs = nextLongTailSinceMs(replanSnapshot, policy, longTailSinceMs, Date.now());
       if (replanDecision && unhandledPoolEventCount(store, runId) === 0) {
-        writeReplanEvent(store, runId, replanDecision, replanSnapshot, policy);
+        writeReplanEvent(store, runId, replanDecision, replanSnapshot, policy, refill);
         lastReplanRequestMs = Date.now();
         if (replanDecision.reason === "periodic_replan") lastPeriodicReplanMs = lastReplanRequestMs;
         didWork = true;
-      }
-
-      if (nextUnhandledEvent(store, runId)) {
-        const result = await runDirectorTick(
-          globals,
-          cloneArgs(args, [
-            ["--run-id", runId],
-            ["--candidate-limit", String(candidateLimit)],
-          ]),
-        );
-        directorResults.push(result);
-        didWork = result.status !== "no_unhandled_events";
       }
 
       const activeWorkers = activeWorkerCount(store, runId);
@@ -434,6 +586,8 @@ export async function runTriggerAgent(globals: GlobalArgs, args: Map<string, str
             baseRev,
             ttlSeconds,
             thinkingLevel: workerThinkingLevel,
+            repairAttempts,
+            postReturnCheckCommand,
           },
         )
           .then((result) => {
@@ -457,16 +611,37 @@ export async function runTriggerAgent(globals: GlobalArgs, args: Map<string, str
         runningWorkerIds.add(workerId);
       }
 
+      if (!runningDirector && nextUnhandledEvent(store, runId)) {
+        const tickArgs = directorTickArgs(args, { candidateLimit, candidateWindow, queueTargetSize, runId });
+        let task: Promise<void>;
+        task = runDirectorTick(globals, tickArgs)
+          .then((result) => {
+            directorResults.push(result);
+          })
+          .catch((error) => {
+            directorResults.push({
+              runId,
+              directorPiError: error instanceof Error ? error.message : String(error),
+              failed: true,
+            });
+          })
+          .finally(() => {
+            if (runningDirector === task) runningDirector = null;
+          });
+        runningDirector = task;
+        didWork = true;
+      }
+
       if (didWork || runningWorkers.size === 0) iterations += 1;
       if (didWork || runningWorkers.size > 0) idleIterations = 0;
       else idleIterations += 1;
 
-      if (maxIterations > 0 && iterations >= maxIterations && runningWorkers.size === 0) {
-        stoppedReason = "max_iterations";
-        break;
-      }
       if (maxIdleIterations > 0 && idleIterations >= maxIdleIterations) {
         stoppedReason = "idle";
+        break;
+      }
+      if (maxIterations > 0 && iterations >= maxIterations && runningWorkers.size === 0) {
+        stoppedReason = "max_iterations";
         break;
       }
 
@@ -474,6 +649,8 @@ export async function runTriggerAgent(globals: GlobalArgs, args: Map<string, str
     }
 
     if (runningWorkers.size > 0) await Promise.allSettled([...runningWorkers]);
+    if (runningDirector) await runningDirector;
+    if (runningKnowledgeMaintenance) await runningKnowledgeMaintenance;
     if (stoppedReason === "running") stoppedReason = "complete";
 
     return {
@@ -485,9 +662,14 @@ export async function runTriggerAgent(globals: GlobalArgs, args: Map<string, str
       desiredWorkers: run.desiredWorkers,
       maxWorkers,
       directorTicks: directorResults.filter((result) => result.status !== "no_unhandled_events").length,
+      queueRefills,
+      queueTargetsAdded,
+      lastQueueRefill,
       workersStarted,
       workerResults,
       workerErrors,
+      knowledgeMaintenanceRuns,
+      knowledgeMaintenanceErrors,
       dryRun: globals.dryRunAgents,
       finalStatus: {
         activeWorkers: activeWorkerCount(store, runId),

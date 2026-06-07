@@ -1,0 +1,196 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2154",
+  "pr": {
+    "number": 2154,
+    "title": "[WIP] mnsnap decompile",
+    "url": "https://github.com/doldecomp/melee/pull/2154",
+    "state": "MERGED",
+    "author": "malvarezcastillo",
+    "created_at": "2026-02-03T10:43:18Z",
+    "merged_at": "2026-02-04T20:14:42Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large decompilation PR for the snapshot/gallery memory-card menu module `mnsnap`, adding roughly 2.5k lines to `src/melee/mn/mnsnap.c`, updating its header, and replacing a coarse `mnSnap_803F0168` data symbol with more precise local string symbols in `config/GALE01/symbols.txt`. The PR author noted that `fn_802545C4` and `mnSnap_80257F24` remained massive and were only as good as practical for now, while the rest was intended for review. Review focused less on broad behavior and more on decomp hygiene: repeated HSD texture image-descriptor assertion chains likely indicate a shared inline from `tobj.h`, match-percentage comments are noise because objdiff already reports them, and meaningful `@todo` notes should use doc-comment syntax so they appear in generated TODO pages.",
+  "change_classification": {
+    "primary_type": "decompilation",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbols",
+      "memory-card",
+      "menu-ui",
+      "documentation-cleanup"
+    ],
+    "systems": [
+      "melee/mn",
+      "mnsnap",
+      "GALE01 symbols",
+      "baselib",
+      "lbcard",
+      "lbsnap",
+      "SIS text",
+      "HSD JObj/DObj/MObj/TObj"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/mn/mnsnap.c",
+      "reason": "Main newly decompiled implementation; grew from an effectively empty file to about 2572 lines covering snapshot browsing, thumbnail loading, menu state, dialogs, memory-card status, rendering callbacks, animation, and SIS text updates."
+    },
+    {
+      "path": "src/melee/mn/mnsnap.h",
+      "reason": "Header adjusted alongside the new implementation; exact declarations are not visible in the excerpt, but the file had 23 additions and 19 deletions."
+    },
+    {
+      "path": "config/GALE01/symbols.txt",
+      "reason": "Refined data symbols around `.data:0x803F0168`, splitting the prior global `mnSnap_803F0168` object into local string labels `str0` through `str10`, preserving the nearby jump table, and marking `lbl_803F02EC` as string data."
+    }
+  ],
+  "what_changed": [
+    "Added the `mnsnap.c` implementation with includes for baselib object systems, SIS text, gobj callbacks, memory-card libraries, snapshot library functions, language helpers, menu inlines, and `mnmain`.",
+    "Introduced a local `mnSnap_State` struct with explicit offsets from `0x000` through `0x17C`, tracking frame/timer state, main/cursor/sub/warning GObjs, archive joint/animation resources, thumbnail JObjs, menu/dialog JObjs, SIS text handles, current state, photo counts, card status, cursor/menu indices, current page, active slot, pending thumbnail loads, dialog state/result, thumbnail-loaded flags, button pointers, and blank image pointer.",
+    "Added static globals `mnSnap_804A0A10` for module state and `mnSnap_thumb_imgs[4]` for thumbnail image buffers.",
+    "Implemented snapshot thumbnail loading and polling flow around `lbSnap_8001E058`, `lb_8001B6F8`, and `lbSnap_8001DE8C`, including special handling for card result values such as `8`, `11`, `0`, `2`, and `3` as seen in the diff.",
+    "Added page-loading behavior that clears or sets thumbnail display flags, installs either blank images or loaded snapshot images into nested `jobj->u.dobj->next->next->mobj->tobj->imagedesc`, and updates image dimensions such as `0x40 x 0x30` for blank thumbnails and `0x280 x 0x1E0` for loaded snapshots.",
+    "Added SIS text update logic for thumbnail numbers, per-slot photo counts, current page number, and total page count using formatting such as `%03d` and `%d`.",
+    "Added menu animation and navigation helpers, including a grid navigation routine `mnSnap_80253BE0` that interprets directional/trigger button bits, updates cursor position, plays menu audio with `lbAudioAx_80024030(2)`, and distinguishes same-page moves from page changes.",
+    "Added rendering callbacks such as `fn_80253DB4`, `fn_80253DE8`, `fn_80253E1C`, and `fn_80253E5C` that gate `HSD_GObj_JObjCallback` based on the snapshot menu state or dialog activity.",
+    "Added memory-card status query logic using `lbSnap_8001D40C` and `lbSnap_8001D394`, storing success and error categories into `card_status` and `photo_count`.",
+    "Added language-sensitive Yes/No dialog button positioning logic using `lbLang_IsSavedLanguageJP()` and JObj translation updates.",
+    "Cleaned comments during review: match-percentage comments such as `Currently 92.61% match` were removed, while a meaningful inline-related TODO was converted to doc-comment syntax.",
+    "Updated data symbols by replacing one broad mnsnap data symbol with individual local string entries and marking nearby data as string data."
+  ],
+  "smart_moves": [
+    "Kept the decompilation scoped to the mnsnap module after feedback; the author explicitly said they fixed files that were outside the PR scope.",
+    "Used an offset-annotated local state struct to make a large menu module tractable while preserving evidence about field layout and access patterns.",
+    "Documented genuinely useful decomp uncertainty with `/// @todo`, specifically that the repeated HSD_ASSERT/imagedesc access chain is probably an inline from `tobj.h`, rather than leaving transient objdiff match percentages in the code.",
+    "Split `mnSnap_803F0168` into concrete local string symbols, improving data-region readability and future symbol searchability.",
+    "Preserved matching-oriented code where needed, including pointer temporaries, stack padding, recursive/unrolled thumbnail-load flow, and explicit pointer arithmetic in at least one function where the comment says it is required to match.",
+    "Separated broad snapshot menu behavior into many small, named address-based functions with descriptive doc comments, which helps reviewers and future decompilers understand a very large source addition."
+  ],
+  "decomp_lessons": [
+    "Repeated source line numbers in multiple assertion sequences can indicate an inlined helper, not duplicated handwritten code; in this PR, reviewers identified the repeated HSD_ASSERT chain as likely an inline belonging in `tobj.h`.",
+    "Do not leave match-percentage comments in source; objdiff already reports match quality, so those comments become stale noise.",
+    "If a TODO is intended to be tracked by project documentation, use doc-comment syntax such as `/// @todo`; ordinary comments with `@TODO` do not have the same generated-documentation effect according to review feedback.",
+    "For large WIP decompilations, it is acceptable to flag massive functions as currently imperfect when evidence is honest, but avoid inventing explanations beyond known match blockers such as register allocation or known inlines.",
+    "When accessing nested HSD object fields repeatedly, check whether a known baselib inline should be extracted into a header rather than locally duplicating the chain.",
+    "Offset comments in local structs are valuable for menu modules with many packed state fields, especially when later matching requires unusual casts or pointer arithmetic.",
+    "Data-symbol refinement is part of decompilation: replacing a large opaque object symbol with local strings and typed data annotations improves future matching and review context."
+  ],
+  "naming_conventions": [
+    "Module functions retain address-style names such as `mnSnap_80253184`, `mnSnap_80253640`, and `mnSnap_80253BE0` when semantic names are not yet established.",
+    "Local callback-like functions in the excerpt use `fn_` address names, for example `fn_80253DB4`, `fn_80253DE8`, `fn_80253E1C`, and `fn_80253E5C`.",
+    "Static module state follows the address-backed pattern `mnSnap_804A0A10`.",
+    "Local module arrays use descriptive module-prefixed names such as `mnSnap_thumb_imgs`.",
+    "The local state struct is named `mnSnap_State`, with fields named for UI/menu concepts where known: `main_gobj`, `cursor_gobj`, `thumb_jobjs`, `option_jobjs`, `photo_count`, `card_status`, `cur_page`, `active_slot`, `pending_loads`, `dlg_active`, `dlg_type`, and `blank_img`.",
+    "Unknown or weakly understood fields remain conservative, such as `x4E`, `dlg_x36`, and `dlg_x37`, rather than being overnamed.",
+    "New local data symbols in `symbols.txt` use generic names `str0` through `str10` where only string-ness and placement are evident."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `PAD_STACK` in functions where stack shape needed to be preserved, including `PAD_STACK(24)`, `PAD_STACK(28)`, and `PAD_STACK(8)` in the excerpt.",
+    "Introduced local pointer aliases to struct fields, such as `p4F`, `p52`, `p50`, `p57`, `p51`, and `flags`, likely to influence register allocation and match the original access pattern.",
+    "Kept recursive/unrolled thumbnail-loading logic in `mnSnap_80253184` and related polling functions rather than simplifying it, preserving original control flow.",
+    "Used explicit nested HSD object access through `jobj->u.dobj->next->next->mobj->tobj->imagedesc` with assertion chains matching lines 193-199.",
+    "Used explicit casts and pointer arithmetic in `mnSnap_80253F60`; the diff comment states pointer arithmetic was required to match, with `walk[0x94]` reading `card_status[i]` and `(snap + byte_off + 0x98)` accessing slot JObjs.",
+    "Used arithmetic idioms visible in decompiled code, such as `(u32)(result - 2) <= 1`, `next & ~1`, `next & ~3`, and `(photo_count + 3) / 4`, instead of replacing them with higher-level abstractions.",
+    "Kept direct result-code comparisons for memory-card/snapshot operations, including `0`, `8`, `9`, `0xB`, `0xC`, and `0xF`, because the excerpt does not show named enums."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "file": "src/melee/mn/mnsnap.c",
+      "feedback": "Repeated assertion line numbers imply the HSD texture/image descriptor access is an inline function, probably in `tobj.h`."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/melee/mn/mnsnap.c",
+      "feedback": "Match-percentage comments are noise because objdiff already reports match status."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/melee/mn/mnsnap.c",
+      "feedback": "`@TODO` requires doc comments (`///`) to be meaningful for the generated TODO page."
+    },
+    {
+      "author": "malvarezcastillo",
+      "file": "src/melee/mn/mnsnap.c",
+      "feedback": "Author response indicated they removed match-percentage comments and changed the tobj inline note to `/// @todo` syntax."
+    },
+    {
+      "author": "malvarezcastillo",
+      "file": "general",
+      "feedback": "Author noted that files outside the PR scope were fixed and sloppy comments were removed."
+    }
+  ],
+  "searchable_terms": [
+    "pr-2154",
+    "mnsnap decompile",
+    "mnSnap",
+    "src/melee/mn/mnsnap.c",
+    "src/melee/mn/mnsnap.h",
+    "config/GALE01/symbols.txt",
+    "mnSnap_State",
+    "mnSnap_804A0A10",
+    "mnSnap_thumb_imgs",
+    "mnSnap_80253184",
+    "mnSnap_8025329C",
+    "mnSnap_80253640",
+    "mnSnap_80253964",
+    "mnSnap_80253AE4",
+    "mnSnap_80253BE0",
+    "fn_80253DB4",
+    "fn_80253DE8",
+    "fn_80253E1C",
+    "fn_80253E5C",
+    "mnSnap_80253E90",
+    "mnSnap_80253F60",
+    "mnSnap_80254014",
+    "mnSnap_8025409C",
+    "fn_802545C4",
+    "mnSnap_80257F24",
+    "lbSnap_8001E058",
+    "lbSnap_8001DE8C",
+    "lbSnap_8001D40C",
+    "lbSnap_8001D394",
+    "lb_8001B6F8",
+    "lbAudioAx_80024030",
+    "lbLang_IsSavedLanguageJP",
+    "HSD_ASSERT",
+    "HSD_JObj",
+    "HSD_DObj",
+    "HSD_MObj",
+    "HSD_TObj",
+    "imagedesc",
+    "tobj.h inline",
+    "HSD_SisLib_803A7664",
+    "HSD_SisLib_803A6B98",
+    "PAD_STACK",
+    "match percentage comments",
+    "doc comment todo",
+    "/// @todo",
+    "str0",
+    "str10",
+    "lbl_803F02EC",
+    "jumptable_803F028C",
+    "memory card snapshots",
+    "thumbnail loading",
+    "snapshot gallery"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that extract the repeated `jobj->u.dobj->next->next->mobj->tobj->imagedesc` assertion/access sequence into a `tobj.h` inline.",
+    "Search for subsequent cleanup or matching improvements to `fn_802545C4` and `mnSnap_80257F24`.",
+    "Check whether result codes used by `lbSnap` and card APIs were later replaced with named constants or enums.",
+    "Look for later renames of unknown `mnSnap_State` fields such as `x4E`, `dlg_x36`, and `dlg_x37`.",
+    "Compare later `symbols.txt` changes around `.data:0x803F0168` and `.data:0x803F02EC` to see whether generic `str0`-style names were refined."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

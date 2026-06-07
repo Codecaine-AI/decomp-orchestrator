@@ -1,0 +1,132 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-794",
+  "pr": {
+    "number": 794,
+    "title": "Clean up `ftKoopa` and `ftGigaKoopa` motion definitions",
+    "url": "https://github.com/doldecomp/melee/pull/794",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-04-22T14:50:08Z",
+    "merged_at": "2023-04-22T15:02:30Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Replaced raw hexadecimal motion-state flags and move-id values in Koopa and Giga Koopa motion tables with named constants and expressions. Added a shared `ftKp_MotionFlags` enum in `ftKoopa/forward.h`, then used those names in both `ftKp_Init_MotionStateTable` and `ftGk_Init_MotionStateTable`, making the motion definitions easier to read and reuse.",
+  "change_classification": {
+    "primary_type": "motion_table_cleanup",
+    "categories": [
+      "headers",
+      "symbolic_constants",
+      "readability",
+      "fighter_motion_states"
+    ],
+    "systems": [
+      "fighter",
+      "ftKoopa",
+      "ftGigaKoopa",
+      "ftCommon"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/chara/ftKoopa/forward.h",
+      "role": "Added the `ftKp_MotionFlags` enum, composing Koopa-specific motion flag constants from existing `FtStateChange_*` bits."
+    },
+    {
+      "path": "src/melee/ft/chara/ftKoopa/ftKp_Init.c",
+      "role": "Replaced raw motion-state flag words and raw move-id words in `ftKp_Init_MotionStateTable` with `ftKp_MF_*` constants and `FtMoveId_* * (1 << 24)` expressions."
+    },
+    {
+      "path": "src/melee/ft/chara/ftGigaKoopa/ftGk_Init.c",
+      "role": "Applied the same symbolic Koopa motion flags and move-id expressions to Giga Koopa's motion table, which reuses Koopa special-move callbacks."
+    }
+  ],
+  "what_changed": [
+    "Added `#include \"ft/forward.h\"` to `ftKoopa/forward.h` so the new Koopa motion-flag enum can refer to `FtStateChange_*` constants.",
+    "Added `typedef enum ftKp_MotionFlags` with grouped names such as `ftKp_MF_Special`, `ftKp_MF_SpecialN`, `ftKp_MF_SpecialS`, `ftKp_MF_SpecialHi`, `ftKp_MF_SpecialLwStart`, and airborne variants.",
+    "Converted raw flag values like `0x00340011`, `0x003C0011`, `0x00340411`, `0x00340412`, `0x00340213`, and `0x00340613` into named `ftKp_MF_*` constants.",
+    "Converted raw move-id encodings like `0x12000000`, `0x13000000`, `0x14000000`, and `0x15000000` into expressions such as `FtMoveId_SpecialN * (1 << 24)`, `FtMoveId_SpecialS * (1 << 24)`, `FtMoveId_SpecialHi * (1 << 24)`, and `FtMoveId_SpecialLw * (1 << 24)`.",
+    "Updated both Koopa and Giga Koopa init files consistently, reflecting that Giga Koopa's special-move motion table entries use the same Koopa callback functions and compatible flags.",
+    "In `ftGk_Init.c`, raw `-1` motion-state ids for some wait entries were replaced with `ftCo_MS_None`, while corresponding flags and move ids were also made symbolic.",
+    "Added includes in `ftGk_Init.c` for `ftCommon/forward.h` and `ftKoopa/forward.h`, and added `#include \"forward.h\"` in `ftKp_Init.c` to make the new symbols available."
+  ],
+  "smart_moves": [
+    "Factored repeated bit patterns into a small hierarchy of named constants instead of assigning a separate opaque name to every raw hex value.",
+    "Built airborne variants by OR-ing in `FtStateChange_SkipUpdateParasol`, making the relationship between ground and air motion flags explicit.",
+    "Kept Koopa motion flags in `ftKoopa/forward.h`, allowing both `ftKp_Init.c` and `ftGk_Init.c` to share the same definitions without duplicating magic numbers.",
+    "Used existing global names like `FtMoveId_SpecialN` and `ftCo_MS_None` rather than introducing redundant local names.",
+    "Preserved the table layout and callback ordering while replacing only the opaque literals, minimizing behavioral risk."
+  ],
+  "decomp_lessons": [
+    "MotionState table cleanup can be done safely by replacing magic hex fields with named enum values while leaving row order and function pointers untouched.",
+    "When a fighter variant reuses another fighter's callbacks, shared forward/header definitions can reduce duplication and make semantic equivalence visible.",
+    "Raw move-id encodings in motion tables may correspond to `FtMoveId_* * (1 << 24)` rather than standalone bespoke constants.",
+    "Repeated state-change bitmasks are good candidates for composed enum constants; this documents which state-change properties define each move family.",
+    "Use common symbolic sentinels such as `ftCo_MS_None` instead of raw `-1` when motion-state IDs intentionally mean no common motion state."
+  ],
+  "naming_conventions": [
+    "`ftKp_MF_*` is used for Koopa-specific motion flag constants.",
+    "`ftKp_MF_Special` is the base flag combination for Koopa specials, with move-specific variants such as `ftKp_MF_SpecialN`, `ftKp_MF_SpecialS`, `ftKp_MF_SpecialHi`, and `ftKp_MF_SpecialLwStart`.",
+    "Airborne motion flag variants use `SpecialAir` in the name, e.g. `ftKp_MF_SpecialAirS`, `ftKp_MF_SpecialAirHi`, `ftKp_MF_SpecialAirLw`, and `ftKp_MF_SpecialAirNLoop`.",
+    "Loop-specific neutral special flags use `Loop` suffixes, e.g. `ftKp_MF_SpecialNLoop` and `ftKp_MF_SpecialAirNLoop`.",
+    "Move-id fields are expressed with existing `FtMoveId_SpecialN`, `FtMoveId_SpecialS`, `FtMoveId_SpecialHi`, and `FtMoveId_SpecialLw` names shifted by multiplication with `(1 << 24)`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use enum constants and constant expressions to replace literals while preserving the same compile-time values needed by static motion tables.",
+    "Express bitmask values as OR-compositions of existing `FtStateChange_*` flags to document the bit layout without changing generated data.",
+    "For encoded high-byte move ids, `FtMoveId_* * (1 << 24)` is a readable tactic that should still resolve to the same constant word as the original hex literal.",
+    "Apply identical symbolic substitutions across related fighter tables to avoid accidental divergence between base fighter and variant definitions."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-794",
+    "ftKoopa",
+    "ftGigaKoopa",
+    "ftKp_Init_MotionStateTable",
+    "ftGk_Init_MotionStateTable",
+    "ftKp_MotionFlags",
+    "ftKp_MF_Special",
+    "ftKp_MF_SpecialN",
+    "ftKp_MF_SpecialNLoop",
+    "ftKp_MF_SpecialNStart",
+    "ftKp_MF_SpecialAirNLoop",
+    "ftKp_MF_SpecialS",
+    "ftKp_MF_SpecialAirS",
+    "ftKp_MF_SpecialHi",
+    "ftKp_MF_SpecialAirHi",
+    "ftKp_MF_SpecialLwStart",
+    "ftKp_MF_SpecialAirLw",
+    "FtStateChange_SkipUpdateModel",
+    "FtStateChange_SkipUpdateItemVis",
+    "FtStateChange_Unk_UpdatePhys",
+    "FtStateChange_FreezeState",
+    "FtStateChange_PreserveFastFall",
+    "FtStateChange_PreserveGfx",
+    "FtStateChange_PreserveSfx",
+    "FtStateChange_SkipUpdateParasol",
+    "FtStateChange_Unk_19",
+    "FtMoveId_SpecialN",
+    "FtMoveId_SpecialS",
+    "FtMoveId_SpecialHi",
+    "FtMoveId_SpecialLw",
+    "ftCo_MS_None",
+    "MotionState",
+    "motion definitions",
+    "magic numbers",
+    "hex flags"
+  ],
+  "follow_up_queries": [
+    "Find other fighter `MotionState` tables still using raw hex motion flags like `0x00340011` or encoded move ids like `0x12000000`.",
+    "Check whether other character variants that reuse base fighter callbacks can share base fighter motion flag enums in their forward headers.",
+    "Audit remaining raw `-1` motion-state IDs in fighter motion tables and replace intentional none values with `ftCo_MS_None` where appropriate."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

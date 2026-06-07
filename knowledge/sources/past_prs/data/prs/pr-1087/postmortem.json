@@ -1,0 +1,122 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1087",
+  "pr": {
+    "number": 1087,
+    "title": "Parse `symbols.txt` in `config-dtk`",
+    "url": "https://github.com/doldecomp/melee/pull/1087",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-01-20T14:46:05Z",
+    "merged_at": "2024-01-20T15:05:14Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added parsing of DTK-style `config/GALE01/symbols.txt` to the Rust `tools/config-dtk` tool while retaining map-file parsing/output generation. The PR introduced a new `dtk_config` parser module using `nom`/`nom-supreme`, renamed the existing CodeWarrior map parsing context to `Parser`, and adjusted `main.rs` to read both the generated map and the checked-in config symbols file. This progresses issue #1082. There was no recorded review feedback in the provided slice.",
+  "change_classification": {
+    "primary_type": "tooling",
+    "categories": [
+      "tooling",
+      "parser",
+      "symbols",
+      "naming"
+    ],
+    "systems": [
+      "tools/config-dtk",
+      "repo-root",
+      "Rust tooling",
+      "DTK config"
+    ]
+  },
+  "key_files": [
+    "tools/config-dtk/src/dtk_config.rs",
+    "tools/config-dtk/src/main.rs",
+    "tools/config-dtk/src/cw_map.rs",
+    "tools/config-dtk/Cargo.toml",
+    "Cargo.lock"
+  ],
+  "what_changed": [
+    "Added `tools/config-dtk/src/dtk_config.rs`, defining a `Symbol<'a>` struct for parsed symbols with fields for name, address, section, optional size, align, type, data, scope, and hidden status.",
+    "Implemented `dtk_config::Parser::parse_symbols`, which parses `symbols.txt` lines in parallel with Rayon and stores symbols in a `BTreeMap<u32, Symbol<'a>>` keyed by address.",
+    "Implemented a `nom` parser for lines of the form `name = section:0xADDR; // attr:value ...`, including attributes such as `size`, `align`, `type`, `data`, `scope`, and `hidden`.",
+    "Updated `tools/config-dtk/src/main.rs` to read `build/ssbm.us.1.2/GALE01.map`, output to `build/GALE01/symbols.txt`, and additionally read `config/GALE01/symbols.txt` for parsing.",
+    "Refactored path handling in `main.rs` through a `root_path` helper that joins paths against `melee_utils::ROOT` and canonicalizes them.",
+    "Renamed the existing `cw_map::Context<'a>` type to `cw_map::Parser<'a>` to avoid a generic-sounding parser state name and to align with the new `dtk_config::Parser` module.",
+    "Simplified `cw_map::Parser::new` from returning `Result<Self>` to returning `Self`, because construction no longer had fallible work.",
+    "Replaced memory-mapped file reading in `config-dtk` with `fs::read_to_string` for the map and symbols input files.",
+    "Updated `tools/config-dtk/Cargo.toml`: added `nom` and `nom-supreme`, bumped `env_logger` to `0.11.0`, and removed unused dependencies including `globset`, `lazy_static`, `memmap2`, and `string-interner` from this tool.",
+    "Updated `Cargo.lock` for dependency changes, including a newer `cwparse` git revision and new transitive dependencies for `nom-supreme` and `env_logger 0.11.0`."
+  ],
+  "smart_moves": [
+    "Separated parsing responsibilities into modules: `cw_map` now parses the CodeWarrior map, while the new `dtk_config` module parses DTK `symbols.txt` content.",
+    "Used `nom-supreme::error::ErrorTree` and converted parser failures through `anyhow` with context, giving more structured parse errors than ad hoc string splitting would provide.",
+    "Preserved lifetimes by parsing symbol names and attributes as `&'a str` slices instead of eagerly allocating strings.",
+    "Stored parsed config symbols in a `BTreeMap` keyed by address, which provides deterministic address-ordered traversal useful for config generation and comparisons.",
+    "Parsed lines with Rayon `par_lines`, mirroring the existing tool’s parallel parsing style and keeping the approach scalable for large symbol files.",
+    "Used Rust raw identifier syntax `r#type` for the `type` attribute, retaining the file format’s terminology without conflicting with the Rust keyword.",
+    "Made the existing map parser type name less ambiguous by changing `Context` to `Parser`, especially important after adding a second parser module."
+  ],
+  "decomp_lessons": [
+    "When adding tooling for decomp config files, isolate file-format parsers by source format rather than mixing generated map parsing and checked-in config parsing in one context object.",
+    "For symbol files, parse and retain structured attributes instead of treating comment text as opaque; later tooling can then compare size, alignment, scope, hidden status, and section data directly.",
+    "Prefer deterministic containers such as `BTreeMap` when output order or address-order analysis matters.",
+    "A small helper for repository-root-relative paths reduces duplicated `melee_utils::ROOT.join(...).canonicalize()` logic and makes tool entry points easier to audit.",
+    "Parser naming matters in multi-format tools: avoid generic names like `Context` once the tool has more than one parsing state.",
+    "Use parser combinators for strict config syntax when the expected line format is well-defined; this catches malformed `symbols.txt` entries early.",
+    "Removing stale dependencies from tool-specific `Cargo.toml` keeps Rust decomp tooling easier to build and maintain."
+  ],
+  "naming_conventions": [
+    "`cw_map::Context` was renamed to `cw_map::Parser`, matching its role and aligning with the new `dtk_config::Parser`.",
+    "The new module name `dtk_config` identifies parsing of DTK config files rather than generated CodeWarrior map output.",
+    "The parsed symbol type is named `Symbol<'a>` and its attribute enum is named `SymbolAttribute<'a>`.",
+    "The parser method is named `parse_symbols`, explicitly tying it to `symbols.txt` rather than a generic config parse.",
+    "Symbol fields mirror DTK attribute names where possible: `size`, `align`, `data`, `scope`, `hidden`; Rust keyword conflict is handled as `r#type`."
+  ],
+  "assembly_or_matching_tactics": [
+    "No direct assembly matching or C decompilation changes were present in this PR.",
+    "The tooling change supports future matching/decomp work by parsing `symbols.txt` into structured symbol records, which can help compare generated map symbols against DTK config symbol metadata.",
+    "The existing generated-symbol size backfill remains: when a table symbol has size zero, the tool derives size from the previous address during reverse address traversal."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The PR body only states: `Progresses #1082.`"
+  ],
+  "searchable_terms": [
+    "PR1087",
+    "config-dtk",
+    "symbols.txt",
+    "DTK config",
+    "dtk_config.rs",
+    "cw_map.rs",
+    "Parser",
+    "parse_symbols",
+    "SymbolAttribute",
+    "nom",
+    "nom-supreme",
+    "ErrorTree",
+    "BTreeMap",
+    "Rayon par_lines",
+    "CodeWarrior map",
+    "GALE01.map",
+    "config/GALE01/symbols.txt",
+    "build/GALE01/symbols.txt",
+    "type size scope align",
+    "hidden symbol",
+    "cwparse"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that consume `dtk_config::Parser::parse_symbols` beyond printing parsed symbols to stdout.",
+    "Check issue #1082 for the intended end state of `config-dtk` and whether this parser was part of a larger config migration.",
+    "Search for later changes to `tools/config-dtk/src/dtk_config.rs` that add tests, duplicate-address handling, or more symbol attributes.",
+    "Look for later PRs replacing the temporary stdout dump of parsed config symbols with actual comparison or generation logic.",
+    "Audit whether `symbols.txt` lines with missing comments, reordered attributes, dotted sections, or C++ names outside `cpp_name` syntax are accepted or intentionally rejected."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

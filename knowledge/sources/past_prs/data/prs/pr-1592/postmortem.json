@@ -1,0 +1,170 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1592",
+  "pr": {
+    "number": 1592,
+    "title": "Split, match, rename, and link db (debug)",
+    "url": "https://github.com/doldecomp/melee/pull/1592",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-13T02:53:43Z",
+    "merged_at": "2025-06-13T02:58:36Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Split the former monolithic debug unit src/melee/db/db_2253.c into thematic db modules, wired them into the build as Matching objects, replaced db_2253.h with db.h, and updated split/symbol metadata so the debug library links and contributes matched code. The decomp.dev report shows GALE01 matched code increased by 12,816 bytes and linked code by 16,952 bytes, with 80 new matches attributed to the new db units; the listed broken matches are primarily the old db_2253 unit disappearing after the split.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "split",
+      "matching",
+      "linking",
+      "headers",
+      "naming",
+      "symbol-scope-cleanup"
+    ],
+    "systems": [
+      "debug",
+      "config",
+      "melee-db",
+      "game-mode",
+      "item",
+      "fighter",
+      "camera",
+      "library"
+    ]
+  },
+  "key_files": [
+    "src/melee/db/db_2253.c",
+    "src/melee/db/db.h",
+    "src/melee/db/dbinit.c",
+    "src/melee/db/dbitem.c",
+    "src/melee/db/dbcpu.c",
+    "src/melee/db/dbanim.c",
+    "src/melee/db/dbcamera.c",
+    "src/melee/db/dbsound.c",
+    "src/melee/db/dbeffect.c",
+    "src/melee/db/dbscreenshot.c",
+    "src/melee/db/dberror.c",
+    "src/melee/db/dbbonus.c",
+    "src/melee/db/dballoc.c",
+    "src/melee/db/dbitem.static.h",
+    "configure.py",
+    "config/GALE01/splits.txt",
+    "config/GALE01/symbols.txt"
+  ],
+  "what_changed": [
+    "Deleted the 1,860-line src/melee/db/db_2253.c monolith and replaced it with separate debug modules: dbinit, dbitem, dbcpu, dbanim, dbcamera, dbsound, dbeffect, dbscreenshot, dberror, dbbonus, and dballoc.",
+    "Replaced src/melee/db/db_2253.h with a new shared src/melee/db/db.h containing debug globals and function prototypes such as db_GetGameLaunchButtonState, db_RunEveryFrame, db_CheckAndSpawnItem, db_CheckScreenshot, db_SetupCrashHandler, and fn_UpdateObjAllocLimiter.",
+    "Updated configure.py so the 'db (Debug)' MeleeLib no longer builds Object(NonMatching, 'melee/db/db_2253.c') and instead builds each new db source file as Object(Matching, ...).",
+    "Expanded config/GALE01/splits.txt from one melee/db/db_2253.c range into contiguous section ranges for each new db source file, preserving the original address span from 0x80225374 to 0x802295AC while assigning text/data/bss/sdata/sbss/sdata2 ranges per module.",
+    "Updated config/GALE01/symbols.txt heavily for debug data and local symbols, including renaming db_803EA6C8 to db_build_timestamp and changing many former lbl_* entries to local @NNN compiler-style labels.",
+    "Changed several symbol scopes from global to local where the diff shows internal functions, including fn_HSDPanicHandler, fn_OSErrorHandler, Read, SeekTwiceBeforeRead, __DVDLowSetWAType, CategorizeError, ClearArena, OSExceptionInit, __OSDBIntegrator, __OSDBJump, OSExceptionVector, and OSDefaultExceptionHandler.",
+    "Updated include users across game, item, fighter, camera, and other subsystems from <melee/db/db_2253.h> or \"db/db_2253.h\" to <melee/db/db.h> or \"db/db.h\".",
+    "Improved at least one cross-module prototype: Camera_8003019C changed from UNK_RET Camera_8003019C(UNK_PARAMS) to Vec3* Camera_8003019C(void).",
+    "Removed old src/melee/db/db_2253.static.h and introduced dbitem.static.h for item/debug-local declarations."
+  ],
+  "smart_moves": [
+    "The split followed the existing binary order exactly: dbinit starts at 0x80225374 and the final dballoc unit ends at the old 0x802295AC boundary, making the refactor linkable without moving code.",
+    "The build change converted all new db units to Matching in one step, avoiding a half-split state where source files exist but the debug library still points at the old nonmatching object.",
+    "The new module names are functional rather than address-based, making future debug work searchable by feature: init, item, cpu, anim, camera, sound, effect, screenshot, error, bonus, and alloc.",
+    "The symbols update did more than rename files; it also corrected local/global scope metadata, which is important for matching static functions and avoiding accidental public symbol pressure.",
+    "Using a common db.h let many external users stop depending on an address-derived header name, while still keeping debug globals and cross-module APIs centralized.",
+    "The decomp.dev report validates that the apparent broken matches in db_2253 are balanced by new matches in the split units, a useful pattern when interpreting large split PRs."
+  ],
+  "decomp_lessons": [
+    "When splitting a matched or near-matched monolithic C file, update splits.txt at the same time with exact contiguous section boundaries for every new translation unit; otherwise progress may appear as broken old-unit matches.",
+    "A file split can show many 'broken matches' for the deleted unit while still being a net matching win. Check the new unit list and linked-code delta before treating the bot report as a regression.",
+    "Address-derived names like db_2253 are good scaffolding but should be replaced once the unit boundaries are understood; thematic file names make future symbol and function searches much easier.",
+    "Correct symbol scope matters for matching: internal panic/error handlers and library helper routines should be marked local when evidence shows they are static/internal.",
+    "Shared headers should expose only the cross-translation-unit debug API and known globals; file-local helpers can remain static in implementation or static headers where required for matching.",
+    "Small prototype improvements in dependent systems, such as replacing UNK_RET/UNK_PARAMS with Vec3* Camera_8003019C(void), can be necessary enablers for matching newly split debug code."
+  ],
+  "naming_conventions": [
+    "New debug module files use the db prefix followed by feature area: dbinit.c, dbitem.c, dbcpu.c, dbanim.c, dbcamera.c, dbsound.c, dbeffect.c, dbscreenshot.c, dberror.c, dbbonus.c, dballoc.c.",
+    "The public debug header was renamed from address-based db_2253.h to feature-based db.h.",
+    "The build timestamp global was given the descriptive name db_build_timestamp instead of db_803EA6C8.",
+    "Many anonymous local constants and data entries were represented as compiler-style @NNN local labels rather than lbl_ or subsystem-prefixed global names.",
+    "Existing debug function names mix known db_* names for public/debug API functions with fn_* placeholders for partially understood internal helpers, e.g. db_RunEveryFrame versus fn_UpdateObjAllocLimiter."
+  ],
+  "assembly_or_matching_tactics": [
+    "Split a single nonmatching object into multiple Object(Matching, ...) entries in configure.py after matching each contiguous debug subsection.",
+    "Preserved original link order by listing new objects in address order: dbinit, dbitem, dbcpu, dbanim, dbcamera, dbsound, dbeffect, dbscreenshot, dberror, dbbonus, dballoc.",
+    "Assigned per-file section ranges in splits.txt for .text plus associated .data, .bss, .sdata, .sbss, .sdata2, and .rodata where present.",
+    "Adjusted symbols.txt sizes and scopes for rodata/data entries near the debug split, including local @ labels and corrected object sizes such as @430 at 0x803B84D8.",
+    "Marked former global helper symbols as local when they corresponded to static/internal functions, helping the linker/symbol model match source reality.",
+    "Used typed forward declarations and cross-system headers to satisfy dependencies from debug code into camera, item, fighter, and game-mode systems."
+  ],
+  "review_feedback": [
+    {
+      "source": "decomp-dev[bot]",
+      "url": "https://github.com/doldecomp/melee/pull/1592#issuecomment-2968833328",
+      "feedback": "GALE01 matched code increased to 30.72% (+0.33%, +12,816 bytes) and linked code increased to 22.73% (+0.44%, +16,952 bytes)."
+    },
+    {
+      "source": "decomp-dev[bot]",
+      "url": "https://github.com/doldecomp/melee/pull/1592#issuecomment-2968833328",
+      "feedback": "Reported 80 new matches across the new db units, with large matches including fn_UpdateObjAllocLimiter, fn_CheckCameraInfo, fn_80227188, fn_CheckMiscStageEffects, db_RunEveryFrame, fn_UpdateSoundInfo, fn_CheckAnimationInfo, fn_UpdateAnimationInfo, and db_CheckAndSpawnItem."
+    },
+    {
+      "source": "decomp-dev[bot]",
+      "url": "https://github.com/doldecomp/melee/pull/1592#issuecomment-2968833328",
+      "feedback": "Reported 42 broken matches and 38 unmatched-function regressions under the old main/melee/db/db_2253 unit; evidence indicates these correspond to the deleted/split unit rather than independent behavioral regressions."
+    },
+    {
+      "source": "human review",
+      "url": "",
+      "feedback": "No human review comments were present in the provided PR slice."
+    }
+  ],
+  "searchable_terms": [
+    "pr-1592",
+    "db debug split",
+    "db_2253",
+    "db.h",
+    "dbinit",
+    "dbitem",
+    "dbcpu",
+    "dbanim",
+    "dbcamera",
+    "dbsound",
+    "dbeffect",
+    "dbscreenshot",
+    "dberror",
+    "dbbonus",
+    "dballoc",
+    "db_build_timestamp",
+    "db_RunEveryFrame",
+    "db_GetGameLaunchButtonState",
+    "db_CheckAndSpawnItem",
+    "db_HandleItemPokemonMenuInput",
+    "fn_UpdateObjAllocLimiter",
+    "fn_CheckCameraInfo",
+    "fn_CheckMiscStageEffects",
+    "fn_UpdateSoundInfo",
+    "fn_CheckAnimationInfo",
+    "db_SetupCrashHandler",
+    "fn_HSDPanicHandler",
+    "fn_OSErrorHandler",
+    "Camera_8003019C",
+    "Object(Matching)",
+    "GALE01 splits",
+    "GALE01 symbols",
+    "local scope symbols"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename remaining fn_* functions in src/melee/db/dbcamera.c, dbitem.c, dbbonus.c, or dballoc.c.",
+    "Search for follow-up cleanup of static prototypes in src/melee/db/db.h versus file-local static headers.",
+    "Look for PRs that further type debug globals such as db_804D6B20 or db_MiscVisualEffectsStatus.",
+    "Check whether later symbol updates keep fn_HSDPanicHandler and fn_OSErrorHandler local after this split.",
+    "Search for additional debug menu decomp work around db_HandleItemPokemonMenuInput and db_CheckAndSpawnItem."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

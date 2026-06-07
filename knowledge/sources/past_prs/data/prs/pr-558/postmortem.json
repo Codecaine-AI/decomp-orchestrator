@@ -1,0 +1,141 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-558",
+  "pr": {
+    "number": 558,
+    "title": "Match HSD objalloc",
+    "url": "https://github.com/doldecomp/melee/pull/558",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-09-09T21:16:05Z",
+    "merged_at": "2022-09-09T22:10:39Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the SysDolphin baselib object allocator by replacing asm/sysdolphin/baselib/objalloc.s with C implementations in src/sysdolphin/baselib/objalloc.c and removing the asm object from obj_files.mk. The PR reconstructs the object heap globals, allocation/free-list behavior, heap/limit checks, initialization/list unlinking, and forget-memory path for HSD_ObjAllocAddFree, HSD_ObjAlloc, HSD_ObjFree, HSD_ObjAllocInit, HSD_ObjSetHeap, and _HSD_ObjAllocForgetMemory.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "asm-to-c",
+      "decomp-matching",
+      "baselib-runtime",
+      "memory-allocation"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "objalloc",
+      "memory",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/objalloc.c",
+    "asm/sysdolphin/baselib/objalloc.s",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted the 383-line assembly implementation at asm/sysdolphin/baselib/objalloc.s.",
+    "Removed $(BUILD_DIR)/asm/sysdolphin/baselib/objalloc.s.o from TEXT_O_FILES in obj_files.mk so the C object is used instead of the asm object.",
+    "Expanded src/sysdolphin/baselib/objalloc.c from only HSD_ObjSetHeap into a full matched implementation of the object allocator.",
+    "Replaced the extern assembly-backed objheap label with a named static objheap obj_heap initialized as { 0, 0, -1, -1 }.",
+    "Added static HSD_ObjAllocData* alloc_datas to represent the allocator-data linked list formerly stored at lbl_804D76E0.",
+    "Implemented HSD_ObjAllocAddFree to assert non-null data, choose between obj_heap-backed allocation and HSD_MemAlloc, align pool starts with (curr + align) & ~align, trim pool_size to available heap space, populate the free-list links, and update free counts.",
+    "Implemented HSD_ObjAlloc with num_limit_flag and heap_limit_flag checks, OSCheckHeap/HSD_GetHeap fallback when no custom object heap is set, lazy refill through HSD_ObjAllocAddFree(data, 1), free-list pop, used/free accounting, and peak tracking.",
+    "Implemented HSD_ObjFree as a free-list push with used/free count updates.",
+    "Added inline removeAll to unlink an HSD_ObjAllocData from alloc_datas before reinitialization.",
+    "Implemented HSD_ObjAllocInit with assert_line(0x185, data), memset over sizeof(HSD_ObjAllocData), default limit fields set to -1 where appropriate, align stored as align - 1, size rounded up by alignment mask, and insertion into alloc_datas.",
+    "Implemented _HSD_ObjAllocForgetMemory by clearing alloc_datas."
+  ],
+  "smart_moves": [
+    "Mapped anonymous labels to meaningful static globals: lbl_80406E48 became obj_heap and lbl_804D76E0 became alloc_datas, making allocator state easier to reason about while preserving the underlying behavior.",
+    "Kept the custom heap path and normal heap path separate in HSD_ObjAllocAddFree, matching the original distinction between obj_heap.top != 0 and HSD_MemAlloc fallback.",
+    "Preserved the allocator’s alignment idiom by storing align - 1 and using bitmask rounding, which matches the assembly pattern using andc.",
+    "Recreated the free-list pool setup with a simple for loop writing next pointers at data->size offsets; this corresponds to the assembly’s repeated/stwx loop behavior without keeping the assembly structure verbatim.",
+    "Used assert_line with the original line constants 0xEE and 0x185, preserving source-line-sensitive assert behavior required for matching.",
+    "Introduced removeAll as an inline helper for the linked-list unlink logic in HSD_ObjAllocInit, keeping the C readable while still representing the original traversal/update behavior."
+  ],
+  "decomp_lessons": [
+    "When replacing baselib assembly, update obj_files.mk at the same time; leaving the asm object in TEXT_O_FILES would continue linking the old implementation or cause duplicate symbols.",
+    "For allocator code, identify whether an apparent global is a custom heap descriptor or a linked-list head before naming it; the PR distinguishes obj_heap from alloc_datas.",
+    "Heap-limit behavior may depend on both a custom allocator heap and the OS heap. This implementation checks obj_heap.remain when obj_heap.top is set, otherwise calls HSD_GetHeap followed by OSCheckHeap.",
+    "Alignment fields in HSD object allocators are mask values, not raw alignment values: HSD_ObjAllocInit stores align - 1 and size is rounded with (size + align_mask) & ~align_mask.",
+    "Free-list allocators often store the next pointer inside the freed object memory itself; matching C should use casts such as HSD_ObjAllocLink* or void** carefully rather than introducing separate node allocations.",
+    "A tiny unused local can be a matching artifact. HSD_ObjAllocAddFree includes u32 unused; with no functional role visible in the diff, likely retained for codegen/stack matching rather than semantics.",
+    "If initialization can be called repeatedly on an existing allocator record, unlink it from the global list before memset; otherwise stale list links can survive or duplicate entries can be created."
+  ],
+  "naming_conventions": [
+    "Anonymous static data labels were converted to descriptive lower_snake_case globals: obj_heap and alloc_datas.",
+    "The allocator struct type name HSD_ObjAllocData and link type HSD_ObjAllocLink follow the project’s HSD_* type convention.",
+    "Public functions preserve the original HSD_Obj* names: HSD_ObjSetHeap, HSD_ObjAllocAddFree, HSD_ObjAlloc, HSD_ObjFree, HSD_ObjAllocInit.",
+    "The internal forget-memory function keeps its leading underscore name: _HSD_ObjAllocForgetMemory.",
+    "Local names describe allocator arithmetic rather than registers: computed_start, pool_end, pool_size, pool_start."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted matched assembly only after adding the C implementation and removing the asm object from obj_files.mk.",
+    "Used static initialized data to replace .data contents: obj_heap = { 0, 0, -1, -1 } matches the former four-word heap label initialization.",
+    "Used static BSS-like pointer alloc_datas to replace the former small-BSS allocator list head.",
+    "Retained assert_line numeric constants matching the original assembly’s __assert line numbers.",
+    "Matched address alignment with bitwise mask expressions equivalent to the assembly andc operations.",
+    "Represented the assembly free-list construction loop as a C for loop over num - 1, writing next pointers into each pool element.",
+    "Preserved control-flow-sensitive early returns for out-of-heap, zero-sized adjusted pools, allocation failure, num limits, and heap limits.",
+    "Called HSD_GetHeap before OSCheckHeap even though only OSCheckHeap’s result is assigned in C, matching the observed call sequence from assembly."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "PsiLupan",
+      "state": "APPROVED",
+      "submitted_at": "2022-09-09T22:07:12Z",
+      "body": ""
+    },
+    {
+      "note": "No issue comments or review comments were present in the provided PR slice, so there is no detailed human rationale or requested change to extract."
+    }
+  ],
+  "searchable_terms": [
+    "PR558",
+    "Match HSD objalloc",
+    "r-burns",
+    "HSD_ObjAllocAddFree",
+    "HSD_ObjAlloc",
+    "HSD_ObjFree",
+    "HSD_ObjAllocInit",
+    "HSD_ObjSetHeap",
+    "_HSD_ObjAllocForgetMemory",
+    "objalloc.c",
+    "objalloc.s",
+    "obj_files.mk",
+    "obj_heap",
+    "alloc_datas",
+    "HSD_ObjAllocData",
+    "HSD_ObjAllocLink",
+    "objheap",
+    "freehead",
+    "heap_limit_flag",
+    "num_limit_flag",
+    "heap_limit_num",
+    "heap_limit_size",
+    "HSD_MemAlloc",
+    "HSD_GetHeap",
+    "OSCheckHeap",
+    "assert_line",
+    "alignment mask",
+    "free list",
+    "asm-to-c",
+    "sysdolphin baselib"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify HSD_ObjAllocData fields or objalloc.h to confirm struct layout and field naming.",
+    "Search for other baselib allocator matches that use align - 1 and bitmask rounding tactics.",
+    "Search for PRs touching HSD_MemAlloc, HSD_GetHeap, or OSCheckHeap interactions with object allocator heap limits.",
+    "Look for later cleanups around the unused local in HSD_ObjAllocAddFree or the inline removeAll helper."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

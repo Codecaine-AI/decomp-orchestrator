@@ -1,0 +1,170 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-950",
+  "pr": {
+    "number": 950,
+    "title": "Match ityoshistar",
+    "url": "https://github.com/doldecomp/melee/pull/950",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-07-01T07:25:37Z",
+    "merged_at": "2023-07-01T07:36:56Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Yoshi Star item by replacing asm/melee/it/items/ityoshistar.s with src/melee/it/items/ityoshistar.c and adding a public ityoshistar.h. The C translation reconstructs the item spawn path, state table, animation/collision callbacks, owner and velocity initialization, gravity/fall-speed update, and rotation update. Build wiring was switched from the asm object to the C object, and related item prototypes/includes were cleaned up so the new item header owns the Yoshi Star declarations.",
+  "change_classification": {
+    "primary_type": "asm-to-c item decompilation",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "build-system-cleanup",
+      "item-state-table"
+    ],
+    "systems": [
+      "item",
+      "asm",
+      "headers",
+      "obj_files.mk"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "asm/melee/it/items/ityoshistar.s",
+      "role": "Deleted 314-line assembly source after matching it in C."
+    },
+    {
+      "path": "src/melee/it/items/ityoshistar.c",
+      "role": "New matched C implementation for Yoshi Star item functions and state table it_803F7158."
+    },
+    {
+      "path": "src/melee/it/items/ityoshistar.h",
+      "role": "New item-specific header exporting it_803F7158 and Yoshi Star function prototypes."
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "Changed TEXT_O_FILES from ityoshistar.s.o to ityoshistar.c.o."
+    },
+    {
+      "path": "src/melee/it/it_803F3100.c",
+      "role": "Included ityoshistar.h and removed local extern/prototype declarations for Yoshi Star symbols."
+    },
+    {
+      "path": "src/melee/it/it_266F.h",
+      "role": "Added shared item-system prototypes used by the new C file."
+    },
+    {
+      "path": "src/melee/it/items/itcapsule.c",
+      "role": "Removed now-redundant local item function prototypes, including itColl_BounceOffShield."
+    }
+  ],
+  "what_changed": [
+    "Replaced the Yoshi Star assembly object with a C object in obj_files.mk.",
+    "Added ityoshistar.c implementing it_802B2FC8, it_802B309C, it_802B30C0, it_802B30E4, it_802B3108, it_802B312C, it_802B314C, it_802B322C, it_802B3294, it_802B32C8, it_802B3324, and it_802B3348.",
+    "Defined ItemStateTable it_803F7158[] in C with callbacks it_802B3294, it_802B32C8, and it_802B3324.",
+    "Introduced a local StarAttrs struct with speed and accel fields, read from item->xC4_article_data->x4_specialAttributes.",
+    "Reconstructed the spawn function using SpawnItem, It_Kind_Yoshi_Star, it_8026BB68, Item_80268B18, it_802B322C, and db_80225DD8.",
+    "Mapped four simple callbacks to it_80272BA4 followed by return true.",
+    "Mapped shield collision callback it_802B312C to return itColl_BounceOffShield(item_gobj).",
+    "Converted the rotation callback to call it_80273030 and HSD_JObjSetRotationY(jobj, M_PI / 2 * item->facing_dir), returning false.",
+    "Moved Yoshi Star declarations into a dedicated header and included it from it_803F3100.c.",
+    "Promoted shared helper declarations into it_266F.h and removed duplicate local declarations from itcapsule.c."
+  ],
+  "smart_moves": [
+    "Kept the item-specific API in src/melee/it/items/ityoshistar.h instead of leaving anonymous externs in it_803F3100.c, which makes future item table work easier to include and audit.",
+    "Used a compact StarAttrs struct to document the two special-attribute fields proven by the assembly accesses: speed at offset 0 and accel at offset 4.",
+    "Used item macros and typed fields such as GET_ITEM, GET_JOBJ, item->owner, item->x40_vel, item->xCC_item_attr, and item->facing_dir to express the assembly behavior at the item-system level.",
+    "Recognized repeated callback bodies and represented them directly as small wrappers over it_80272BA4 returning true, reducing noise while preserving ABI-visible functions.",
+    "Used HSD_JObjSetRotationY rather than manually reproducing JObj flag checks, dirty-matrix updates, and assertions seen in the assembly, relying on the baselib helper to match the intended operation.",
+    "Changed the build object at the same time as deleting the assembly, avoiding a stale asm/C duplicate symbol situation."
+  ],
+  "decomp_lessons": [
+    "When an item file is matched, add a dedicated item header and include it from item state-table aggregation files instead of accumulating local prototypes.",
+    "Small item-specific attribute blobs can often be named locally with only the fields used by the matched item; here speed and accel are enough evidence from x4_specialAttributes.",
+    "State table migration should move the table definition with the item source and remove the old extern from central files once the item header exports it.",
+    "Assembly patterns that write JObj rotation and dirty flags may correspond to HSD_JObjSetRotationY or related HSD_JObj setters; using the helper can avoid hand-coding internal JObj assertions and flag tests.",
+    "SpawnItem initialization order matters for matching: kind, previous position, computed position, facing direction, damage, zero velocity, parent pointers, spawn flag bit, and x40 are all explicitly reconstructed before Item_80268B18.",
+    "Repeated one-line item callbacks should still be kept as ABI-visible functions if the state table or external callers reference the original symbol addresses."
+  ],
+  "naming_conventions": [
+    "New item files follow the existing lowercase item filename convention: ityoshistar.c and ityoshistar.h.",
+    "Header guard uses MELEE_IT_ITYOSHISTAR_H.",
+    "Unrenamed function symbols keep address-based names such as it_802B2FC8 and it_802B32C8.",
+    "The item state table remains address-named as it_803F7158.",
+    "The local special-attributes struct is named descriptively as StarAttrs with fields speed and accel.",
+    "Parameters use conventional item-system names such as item_gobj, parent, pos, dir, owner, and arg1."
+  ],
+  "assembly_or_matching_tactics": [
+    "The deleted assembly's sdata2 constants 0.0f and 0x3FC90FDB were represented as explicit 0.0F velocity initialization and M_PI / 2.",
+    "The assembly's stores to item velocity offsets were mapped to item->x40_vel.x and item->x40_vel.y.",
+    "The assembly's owner store at item offset 0x518 was represented as item->owner = owner.",
+    "The assembly's special-attribute reads through item->xC4_article_data->x4_specialAttributes were expressed as a typed StarAttrs pointer.",
+    "The assembly callback sequence it_80272860 followed by an x-velocity fused multiply-add became it_80272860(item_gobj, attr->x10_fall_speed, attr->x14_fall_speed_max) plus item->x40_vel.x += star->accel * item->facing_dir.",
+    "The assembly's null-check return pattern after Item_80268B18 was translated into an idiomatic if (item_gobj != NULL) return item_gobj; return NULL.",
+    "The JObj rotation path was matched through HSD_JObjSetRotationY, abstracting over the lower-level assembly writes, assertion strings, and HSD_JObjSetMtxDirtySub call."
+  ],
+  "review_feedback": [
+    {
+      "type": "none_present",
+      "note": "The PR context contains no issue comments, review comments, or review bodies, so there is no direct reviewer feedback to extract."
+    }
+  ],
+  "searchable_terms": [
+    "PR 950",
+    "Match ityoshistar",
+    "r-burns",
+    "ityoshistar",
+    "Yoshi Star",
+    "It_Kind_Yoshi_Star",
+    "it_802B2FC8",
+    "it_802B309C",
+    "it_802B30C0",
+    "it_802B30E4",
+    "it_802B3108",
+    "it_802B312C",
+    "it_802B314C",
+    "it_802B322C",
+    "it_802B3294",
+    "it_802B32C8",
+    "it_802B3324",
+    "it_802B3348",
+    "it_803F7158",
+    "StarAttrs",
+    "SpawnItem",
+    "Item_80268B18",
+    "Item_80268E5C",
+    "ITEM_ANIM_UPDATE",
+    "it_8026BB68",
+    "it_8026B3A8",
+    "it_8026B894",
+    "it_8026E0F4",
+    "it_80272BA4",
+    "it_80272C6C",
+    "it_80272860",
+    "it_80273030",
+    "itColl_BounceOffShield",
+    "db_80225DD8",
+    "HSD_JObjSetRotationY",
+    "M_PI",
+    "obj_files.mk",
+    "it_266F.h",
+    "it_803F3100.c",
+    "itcapsule.c",
+    "asm-to-c"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename it_802B2FC8 or other Yoshi Star functions from address-based names.",
+    "Search for other item PRs using HSD_JObjSetRotationY to replace manual JObj rotation/dirty-flag assembly.",
+    "Find PRs that further type item->xC4_article_data->x4_specialAttributes for Yoshi special items.",
+    "Check whether it_266F.h later receives stronger declarations for it_80272860, it_8026B894, or related helpers still locally declared elsewhere.",
+    "Compare ityoshistar.c with neighboring matched item files such as ityoshieggthrow, itpikachutjoltground, and itsamusbomb for reusable spawn and state-table patterns."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,114 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-129",
+  "pr": {
+    "number": 129,
+    "title": "Patch postprocess.py to make lbcommand match",
+    "url": "https://github.com/doldecomp/melee/pull/129",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-11-29T04:29:34Z",
+    "merged_at": "2021-11-29T04:29:39Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Adjusted the ELF postprocess epilogue-detection logic so the C implementations of lbcommand timer commands could match, allowing inline assembly fallbacks for Command_04 and Command_08 to be removed. The PR also moved lbl_804D79E8 from the global asm/sdata2.s block into asm/melee/lb/lbcommand.s while removing lbl_804D79E0 from asm/sdata2.s, reflecting the new matching output's data needs.",
+  "change_classification": {
+    "primary_type": "decomp-matching-tooling",
+    "categories": [
+      "decomp-matching",
+      "tooling",
+      "asm-cleanup",
+      "inline-asm-removal"
+    ],
+    "systems": [
+      "tools/postprocess.py",
+      "melee/lb",
+      "asm",
+      "sdata2"
+    ]
+  },
+  "key_files": [
+    "tools/postprocess.py",
+    "src/melee/lb/lbcommand.c",
+    "asm/melee/lb/lbcommand.s",
+    "asm/sdata2.s"
+  ],
+  "what_changed": [
+    "Removed NON_MATCHING guards and inline assembly implementations for Command_04 and Command_08 in src/melee/lb/lbcommand.c, leaving the plain C versions active.",
+    "Command_04 now relies on the C expression that adds the masked command data value, `*info->data_position & 0x3ffffff`, to `info->timer` and advances `data_position` by one word.",
+    "Command_08 now relies on the C expression that sets `info->timer` to the masked command data value minus `info->frame_count` and advances `data_position` by one word.",
+    "Updated tools/postprocess.py epilogue handling to treat `addi r1, r1, 0x18` (`0x38210018`) as a possible old-stack epilogue marker when no `mtlr_pos` has been found.",
+    "Relaxed the old epilogue distance assertion in postprocess.py from `<= 6 * 4` to `<= 7 * 4`, allowing one additional instruction word in the recognized epilogue window.",
+    "Moved the `lbl_804D79E8` sdata2 constant containing `0x7F7FFFFF, 0x00000000` from asm/sdata2.s into the lbcommand-specific assembly file asm/melee/lb/lbcommand.s.",
+    "Removed `lbl_804D79E0`, containing `0x43300000, 0x00000000`, from asm/sdata2.s in this diff."
+  ],
+  "smart_moves": [
+    "Fixed the matching blocker in the project tooling instead of preserving local inline assembly in lbcommand.c, improving future decompilation leverage beyond a single function.",
+    "Kept the C implementations of Command_04 and Command_08 simple and readable once the postprocessing issue was addressed.",
+    "The postprocess.py change targets a specific observed epilogue shape, `addi r1, r1, 0x18` followed by `blr`, rather than broadly disabling or removing old-epilogue checks.",
+    "Relaxing the assertion by exactly one instruction word preserved a bounded safety check while accommodating the lbcommand output."
+  ],
+  "decomp_lessons": [
+    "When a C function only fails to match because postprocessing does not recognize a compiler-emitted epilogue shape, consider extending postprocess.py before falling back to inline assembly.",
+    "Old-stack or epilogue patching logic may need to recognize stack-restoration instructions such as `addi r1, r1, 0x18` even when an explicit `mtlr` marker is absent.",
+    "A matching fix can require synchronized changes across C source, assembly data placement, and build/postprocess tooling.",
+    "Removing inline assembly after a tooling fix is valuable because it exposes the real C logic and reduces future maintenance burden.",
+    "Small changes to sdata2 labels can be a symptom of compiler/codegen differences caused by replacing inline assembly with matching C."
+  ],
+  "naming_conventions": [
+    "Command handlers in lbcommand use `Command_XX` names, such as `Command_00`, `Command_04`, and `Command_08`, corresponding to command IDs.",
+    "The command context type is named `CommandInfo` and includes fields evidenced by this PR: `timer`, `frame_count`, and `data_position`.",
+    "Unidentified sdata2 labels retain generated names such as `lbl_804D79E8` and `lbl_804D79F0` when no semantic name is established.",
+    "postprocess.py helper variables use descriptive epilogue-scanning names such as `mtlr_pos`, `blr_pos`, and `epilogues`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Recognize PowerPC instruction word `0x38210018` as `addi r1, r1, 0x18` in postprocess.py when scanning for old epilogues.",
+    "Allow old epilogue patching to span up to seven instructions between the detected marker and `blr` instead of six.",
+    "For timer command matching, the C masked integer-to-float-style behavior from the removed assembly corresponds to masking the command word with `0x3ffffff` before updating `timer`.",
+    "The removed inline assembly used the standard `0x4330` double-conversion constant label `lbl_804D79E0`; after the tooling fix, that explicit assembly path was no longer needed in lbcommand.c.",
+    "Relocating sdata2 constants into the per-module assembly file can align the assembly data layout with the newly matching C object."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-129",
+    "PsiLupan",
+    "Patch postprocess.py to make lbcommand match",
+    "lbcommand",
+    "Command_04",
+    "Command_08",
+    "CommandInfo",
+    "timer",
+    "frame_count",
+    "data_position",
+    "NON_MATCHING",
+    "inline asm removal",
+    "tools/postprocess.py",
+    "impl_postprocess_elf",
+    "old epilogue",
+    "old stack",
+    "mtlr_pos",
+    "blr_pos",
+    "addi r1 r1 0x18",
+    "0x38210018",
+    "sdata2",
+    "lbl_804D79E0",
+    "lbl_804D79E8",
+    "0x7F7FFFFF",
+    "0x43300000"
+  ],
+  "follow_up_queries": [
+    "Find other postprocess.py PRs that changed old epilogue or old stack patching logic.",
+    "Find other PRs that removed NON_MATCHING inline assembly after a tooling adjustment.",
+    "Search for remaining lbcommand Command_XX handlers that still rely on inline assembly or NON_MATCHING guards.",
+    "Search for sdata2 label relocations tied to matching C conversions or float/double constants."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

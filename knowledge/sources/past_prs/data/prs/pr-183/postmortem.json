@@ -1,0 +1,104 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-183",
+  "pr": {
+    "number": 183,
+    "title": "Finish matching HSD Archive",
+    "url": "https://github.com/doldecomp/melee/pull/183",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-13T20:44:26Z",
+    "merged_at": "2021-12-13T20:44:33Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Finished matching the HSD archive external relocation helper by replacing the inline assembly version of HSD_ArchiveLocateExtern with matching C in src/sysdolphin/baselib/archive.c. The key fix was treating archive->data relocation offsets as byte offsets, reading and writing through `(u32)archive->data + offset`, and writing the resolved address at each chained relocation site instead of accidentally writing to the start of archive->data.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "inline-asm-removal",
+      "pointer-arithmetic-fix",
+      "baselib"
+    ],
+    "systems": [
+      "src",
+      "sysdolphin",
+      "baselib",
+      "HSD Archive"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/archive.c"
+  ],
+  "what_changed": [
+    "Removed the NON_MATCHING/asm split around HSD_ArchiveLocateExtern and kept the C implementation.",
+    "Moved `#pragma pop` from before HSD_ArchiveLocateExtern to after it, making the function part of the matching pragma scope.",
+    "Declared `u32 next;` before the relocation loop rather than inside the loop.",
+    "Changed relocation chain traversal from `*(u32*)((u32*)archive->data)[offset]` to `*(u32*)((u32)archive->data + offset)`, using byte-offset addressing.",
+    "Changed the relocation write from `*(u32*)archive->data = (u32)addr` to `*(u32*)((u32)archive->data + offset) = (u32)addr`, updating the current relocation slot.",
+    "Deleted the hand-written PowerPC assembly implementation for HSD_ArchiveLocateExtern."
+  ],
+  "smart_moves": [
+    "Recognized that the archive relocation `offset` is compared against `archive->header.data_size`, so it should be applied as a byte offset into `archive->data`, not as an index into a `u32*` array.",
+    "Preserved the linked-list relocation pattern: read the next offset from the current relocation slot, write the resolved external address into that same slot, then advance to the saved next offset.",
+    "Kept the sentinel logic using `offset != -1` while also bounding traversal by `archive->header.data_size`, mirroring the assembly's termination behavior.",
+    "Removed a large inline asm block after achieving a matching C expression, improving maintainability without broad file churn."
+  ],
+  "decomp_lessons": [
+    "When reconstructing archive relocation code, check whether stored offsets are byte offsets or typed-array indices; casting to `u32*` too early can introduce unwanted scaling.",
+    "For relocation chains, save the next pointer before overwriting the current slot with the resolved address.",
+    "If assembly shows `add base, offset` followed by `lwz/stw 0(base+offset)`, the C should generally use byte-wise address arithmetic such as `(u32)base + offset` before casting to the access type.",
+    "A small expression-level pointer arithmetic change can be enough to eliminate an entire NON_MATCHING inline assembly fallback."
+  ],
+  "naming_conventions": [
+    "Retained existing HSD baselib naming: `HSD_ArchiveLocateExtern`, `HSD_ArchiveGetExtern`, `HSD_Archive`.",
+    "Used simple local names matching the relocation-chain role: `offset`, `next`, `symbols`, and `addr`.",
+    "No new project-wide naming convention was introduced by this PR."
+  ],
+  "assembly_or_matching_tactics": [
+    "Matched PowerPC byte-offset address calculation by casting `archive->data` to an integer address before adding `offset`.",
+    "Hoisted `next` out of the while loop, likely to better match compiler register allocation or declaration ordering.",
+    "Replaced an inline asm block labeled around addresses 80380434-803804F4 with C that preserves the same control flow: symbol lookup loop, sentinel check, relocation chain traversal, bounds check.",
+    "The fix specifically avoided `((u32*)archive->data)[offset]`, which would multiply the offset by four and fail to correspond to assembly using raw byte addition."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice."
+  ],
+  "searchable_terms": [
+    "PR183",
+    "Finish matching HSD Archive",
+    "PsiLupan",
+    "HSD_ArchiveLocateExtern",
+    "HSD_ArchiveGetExtern",
+    "HSD_Archive",
+    "src/sysdolphin/baselib/archive.c",
+    "archive.c",
+    "extern_info",
+    "archive->data",
+    "archive->header.data_size",
+    "byte offset",
+    "pointer arithmetic",
+    "relocation chain",
+    "NON_MATCHING",
+    "inline asm removal",
+    "strcmp",
+    "pragma pop",
+    "80380434",
+    "803804F4"
+  ],
+  "follow_up_queries": [
+    "Find other archive relocation functions that cast data buffers to typed pointers before applying file offsets.",
+    "Search for remaining NON_MATCHING blocks in src/sysdolphin/baselib related to HSD archive loading or relocation.",
+    "Compare other uses of `archive->header.data_size` to confirm offsets are consistently treated as byte offsets.",
+    "Look for relocation loops that overwrite a slot before saving the next chained offset."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

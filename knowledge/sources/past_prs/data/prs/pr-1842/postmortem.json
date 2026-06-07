@@ -1,0 +1,151 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1842",
+  "pr": {
+    "number": 1842,
+    "title": "Partially match `lb_00F9`",
+    "url": "https://github.com/doldecomp/melee/pull/1842",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2025-08-15T19:30:25Z",
+    "merged_at": "2025-08-15T19:46:18Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Partially decompiled and typed several functions in `src/melee/lb/lb_00F9.c`, with one full new match reported by decomp.dev: `lb_8001285C` at 100% (+312 bytes). The PR also improved `lb_80013E3C`, `lb_80014638`, and `lb_800115F4`, and reshaped related fighter/item fields into shared argument structs so callers match the newly understood `lb_80014638` interface.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "partial-decompilation",
+      "headers",
+      "struct-typing",
+      "sdk-header-cleanup"
+    ],
+    "systems": [
+      "lb",
+      "fighter",
+      "item",
+      "sysdolphin",
+      "external-sdk",
+      "GX"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/lb_00F9.c",
+    "src/melee/lb/lb_00F9.h",
+    "src/melee/lb/lb_00F9.static.h",
+    "src/melee/lb/types.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/ft_0819.c",
+    "src/melee/ft/ftdrawcommon.c",
+    "src/melee/it/types.h",
+    "src/melee/it/it_2725.c",
+    "src/melee/it/it_2725.h",
+    "src/sysdolphin/baselib/tobj.c",
+    "src/sysdolphin/baselib/tobj.h",
+    "extern/dolphin/include/dolphin/gx.h"
+  ],
+  "what_changed": [
+    "Implemented `lb_8001285C(HSD_ImageDesc*, GXTexObj*)`, setting up a texture object and GX state with calls such as `GXInitTexObj`, `GXClearVtxDesc`, `GXSetCullMode`, `GXSetNumTexGens`, `GXSetNumTevStages`, `GXLoadTexObj`, `GXSetVtxAttrFmt`, `GXSetTevOrder`, `GXSetTevColorIn`, `GXSetTevColorOp`, and `GXSetBlendMode`.",
+    "Added partial C implementations for `lb_800115F4`, `lb_80013E3C`, and `lb_80014638`, replacing previous unmatched stubs.",
+    "Added inline helpers in `lb_00F9.c`: `inlineB0` for linked-list/count update behavior in `lb_800115F4`, `inlineD0` for `ColorOverlay` light blend setup, and `inlineC0` for interpolation logic used by `lb_80014638`.",
+    "Changed `lb_800122C8` from unnamed/int parameters to `lb_800122C8(HSD_ImageDesc* image_desc, u16 origx, u16 origy, bool clear)` and forwarded to `HSD_ImageDescCopyFromEFB(..., clear, true)`.",
+    "Introduced `struct lb_80014638_arg0_t` containing two `Vec3` fields and `struct lb_80014638_arg1_t` containing two floats plus a `Vec3`, with static size assertions.",
+    "Replaced fighter damage fields `Vec3 x1930` and `Vec3 x193c` with `struct lb_80014638_arg0_t x1930`, updating users to access `.x0` and `.xC` subfields.",
+    "Replaced item fields `Vec2 xB54`, `xB5C`, `xB60`, and `xB64` with `struct lb_80014638_arg1_t xB54`, updating item collision/position code to use `unk_x`, `unk_y`, and `x8` subfields.",
+    "Changed `it_80274D04` to take `struct lb_80014638_arg1_t*` instead of `Vec2*`, matching the new shared argument struct.",
+    "Moved several lb-related structs from `lb_00F9.static.h` into `src/melee/lb/types.h`, leaving a newly inferred stack struct for `lb_80014638` in the static header.",
+    "Extended `ColorOverlay`'s `x8_ptr1` union by naming it `union ColorOverlay_x8_t` and adding a raw `u32 val` view used by `lb_80013E3C`.",
+    "Renamed `lb_80011A50_t` fields from raw `x28`/`x30` to `unk_count0`/`unk_count1`, and changed `x0` from `s8` to `u8`.",
+    "Adjusted `HSD_ImageDescCopyFromEFB`'s `sync` parameter type from `int` to `bool` in `tobj.c` and `tobj.h`.",
+    "Cleaned `extern/dolphin/include/dolphin/gx.h` includes by adding `// IWYU pragma: export`, sorting the GX exports, removing a duplicate `GXTev` include, and normalizing the `GXSetDrawSyncCallback` prototype formatting."
+  ],
+  "smart_moves": [
+    "Modeled the data passed into `lb_80014638` as reusable structs instead of forcing it to look like unrelated `Vec3` or `Vec2` data. This made the fighter and item layouts line up with the function's actual memory access pattern.",
+    "Updated all known producers and consumers of the new `lb_80014638_arg0_t` and `lb_80014638_arg1_t` shapes in the same PR, preventing header/API drift between lb, fighter, and item code.",
+    "Used `STATIC_ASSERT` on newly introduced struct sizes, which is especially important because these structs replace adjacent raw fields in `Fighter` and `Item` layouts.",
+    "Kept partially understood names honest with `unk_x`, `unk_y`, `unk_count0`, and `unk_count1` rather than overclaiming semantics.",
+    "Added `PAD_STACK(4)` where needed in matched/near-matched functions, indicating stack-layout sensitivity was handled explicitly.",
+    "Preserved evidence of recurring inline/list behavior with `@todo inline appears in #lb_800115F4`, making future deduplication easier.",
+    "Changed wrapper and SDK-like prototypes to stronger `bool` types where the call sites use boolean constants, improving type clarity without changing behavior.",
+    "Marked umbrella GX includes with IWYU export pragmas so include-cleanup tooling does not incorrectly remove transitive SDK exports."
+  ],
+  "decomp_lessons": [
+    "When a function appears to take a `Vec3*` or `Vec2*` but accesses a larger compound region, create a dedicated argument struct and then propagate that type back into owning game structs.",
+    "Replacing adjacent scalar fields with a single struct can unlock function signatures and matching in unrelated modules; here, item fields at `xB54` and fighter damage fields at `x1930` became the argument layouts for `lb_80014638`.",
+    "Partial matches can still justify broad type cleanup when the new types are backed by offsets, field usage, and static size checks.",
+    "For linked-list update/deallocation loops, modeling the free-list reinsertion inline can improve match quality while preserving the original control flow.",
+    "For color/packed command streams, a named union with both structured and raw integer views can match bitmask operations without losing typed access to color fields.",
+    "GX setup functions often require exact enum choices and call ordering; matching `lb_8001285C` depended on reconstructing the full render-state sequence, not just the texture-object initialization.",
+    "Header-only cleanup such as IWYU pragmas can be part of matching work when new implementations require broader SDK symbols through umbrella headers."
+  ],
+  "naming_conventions": [
+    "`lb_80014638_arg0_t` and `lb_80014638_arg1_t` follow the project pattern of naming unknown argument structs after the consuming function address.",
+    "Uncertain fields remained explicitly unknown, e.g. `unk_x`, `unk_y`, `unk_count0`, and `unk_count1`, instead of being given speculative gameplay names.",
+    "Subfields preserving offsets use offset-style names such as `x0`, `x8`, and `xC` inside newly discovered structs.",
+    "Function prototypes in headers retained address comments such as `/* 014638 */` and refined parameter names only when the usage was clear, e.g. `image_desc`, `origx`, `origy`, and `clear`.",
+    "The named union `ColorOverlay_x8_t` matches the owning field `ColorOverlay::x8_ptr1` and supports both `light_color`, `light_rot`, and raw `val` access."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `PAD_STACK(4)` in `lb_8001285C` and `lb_80014638` to satisfy stack layout/codegen requirements.",
+    "Factored repeated or compiler-sensitive code into static inline helpers (`inlineB0`, `inlineC0`, `inlineD0`) rather than flattening everything into the parent functions.",
+    "Matched `lb_80014638` with local `Vec3` temporaries copied from argument structs, then applied small-threshold Z interpolation using `ABS(b->z - a->z) < 0.01f`.",
+    "Represented a raw packed color/count value as `arg0->x8_ptr1->val & 0x03FFFFFF` to support the arithmetic in `lb_80013E3C`.",
+    "Updated call signatures and owning structs together so pointer arithmetic/field offsets generated by callers agree with the callee's expected layout.",
+    "For `lb_800115F4`, reproduced the active-list traversal, decrementing `unk_count0`, incrementing `unk_count1`, removing expired nodes, and pushing them onto a free list before updating `lb_804D63B4` state."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided PR slice.",
+    "The decomp.dev bot reported matched code increased to 38.60% (+0.01%, +312 bytes).",
+    "The bot reported one new full match: `main/melee/lb/lb_00F9::lb_8001285C`, +312 bytes, 0.00% to 100.00%.",
+    "The bot reported three improved unmatched functions: `lb_80013E3C` to 94.94% (+300 bytes), `lb_80014638` to 89.74% (+280 bytes), and `lb_800115F4` to 85.92% (+244 bytes)."
+  ],
+  "searchable_terms": [
+    "pr-1842",
+    "Partially match lb_00F9",
+    "ribbanya",
+    "lb_00F9",
+    "lb_8001285C",
+    "lb_80013E3C",
+    "lb_80014638",
+    "lb_800115F4",
+    "lb_800122C8",
+    "lb_80014770",
+    "lb_80014638_arg0_t",
+    "lb_80014638_arg1_t",
+    "ColorOverlay_x8_t",
+    "lb_80011A50_t",
+    "unk_count0",
+    "unk_count1",
+    "HSD_ImageDescCopyFromEFB",
+    "HSD_ImageDesc",
+    "GXTexObj",
+    "GXInitTexObj",
+    "GXSetTevColorIn",
+    "GXSetBlendMode",
+    "IWYU pragma export",
+    "Fighter dmg x1930",
+    "Item xB54",
+    "it_80274D04",
+    "ft_80081938",
+    "ft_800819A8",
+    "ft_80081A00",
+    "ftDrawCommon_800805C8"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match `lb_80013E3C`, `lb_80014638`, or `lb_800115F4`.",
+    "Search for future renames of `lb_80014638_arg0_t` and `lb_80014638_arg1_t` once their gameplay meaning is known.",
+    "Check whether `unk_count0` and `unk_count1` in `lb_80011A50_t` receive semantic names in later lb/rumble/color-overlay work.",
+    "Look for later cleanup of the `@todo inline appears in #lb_800115F4` duplication.",
+    "Search for additional callers of `HSD_ImageDescCopyFromEFB` affected by the `sync` parameter becoming `bool`."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

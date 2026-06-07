@@ -1,0 +1,148 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1995",
+  "pr": {
+    "number": 1995,
+    "title": "Several easy_funcs",
+    "url": "https://github.com/doldecomp/melee/pull/1995",
+    "state": "MERGED",
+    "author": "Gelatart",
+    "created_at": "2025-12-12T20:49:42Z",
+    "merged_at": "2025-12-18T23:37:02Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched several small previously-undecompiled functions across stage and item code: Big Blue Route setup forwarding, two Corneria animation helpers, a Kirby item distance-squared helper, Samus grapple pickup logic, and Whispy Apple velocity reset/state transition logic. The PR also tightened prototypes in headers for grBigBlueRoute_8020CD20 and it_802F23AC. Reviewer feedback mainly pushed removal of unnecessary HSD_GObj casts when the typed gobj parameter was already acceptable.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "small-function-matching",
+      "prototype-cleanup"
+    ],
+    "systems": [
+      "stage",
+      "item",
+      "ground",
+      "kirby-item",
+      "samus-grapple",
+      "whispy-apple"
+    ]
+  },
+  "key_files": [
+    "src/melee/gr/grbigblueroute.c",
+    "src/melee/gr/grbigblueroute.h",
+    "src/melee/gr/grcorneria.c",
+    "src/melee/it/items/itkirby_2F23.c",
+    "src/melee/it/items/itkirby_2F23.h",
+    "src/melee/it/items/itsamusgrapple.c",
+    "src/melee/it/items/itwhispyapple.c"
+  ],
+  "what_changed": [
+    "Implemented grBigBlueRoute_8020C1DC as a short wrapper that calls grBigBlueRoute_8020C85C() and then grBigBlueRoute_8020CD20(gobj).",
+    "Updated grBigBlueRoute_8020CD20 prototype from UNK_PARAMS to Ground_GObj* in grbigblueroute.h.",
+    "Implemented grCorneria_801DD620 to call grAnime_801C8138 with the ground object's map_id.",
+    "Implemented grCorneria_801DFBF0 similarly, storing GET_GROUND(gobj) in a local Ground* before calling grAnime_801C8138.",
+    "Implemented it_802F23AC in itkirby_2F23.c as a distance-squared calculation between position data reached via obj + 0x2C and a float position array.",
+    "Updated it_802F23AC declaration in itkirby_2F23.h from UNK_RET/UNK_PARAMS to double it_802F23AC(int* obj, float* pos).",
+    "Implemented it_2725_Logic53_PickedUp for Samus grapple to pad the stack, call Item_80268E5C with animation update mode 0, then call it_802A2428(gobj).",
+    "Implemented it_802EE6A0 for Whispy Apple to zero x/y/z velocity via GET_ITEM(gobj)->x40_vel and call Item_80268E5C with animation update mode 1.",
+    "Reordered includes in itwhispyapple.c so it/inlines.h appears before item subsystem headers."
+  ],
+  "smart_moves": [
+    "Used narrow header prototype updates where function signatures became known, improving type information without broad unrelated churn.",
+    "For tiny stage helper matches, reused existing stage animation helper grAnime_801C8138 and GET_GROUND(gobj)->map_id instead of inventing new behavior.",
+    "For item logic functions, reused existing item helpers Item_80268E5C, ITEM_ANIM_UPDATE, GET_ITEM, and it_802A2428, matching project idioms for item state and animation transitions.",
+    "Kept the Kirby helper as a direct offset-based implementation because the surrounding type information was apparently still incomplete; comments documented the load/floating-point operation mapping from assembly.",
+    "Used PAD_STACK(16) in it_2725_Logic53_PickedUp, indicating attention to stack shape for matching a small function."
+  ],
+  "decomp_lessons": [
+    "Small wrapper functions are often matchable by identifying the exact callee sequence and then updating only the directly affected prototype.",
+    "When a typed alias like Ground_GObj* or Item_GObj* is accepted by a helper, prefer passing the typed gobj directly rather than adding explicit HSD_GObj* casts unless needed for matching or compiler typing.",
+    "For item velocity reset functions, assigning a single local zero value to x40_vel.x/y/z can express the intended all-axis zeroing while preserving potential matching behavior.",
+    "Distance-squared helpers may return double even when all intermediate values are float; preserve the observed return type rather than simplifying to float without evidence.",
+    "If struct recovery is incomplete, temporary raw pointer arithmetic can be acceptable for matching, but the raw offsets should be isolated and documented for future cleanup."
+  ],
+  "naming_conventions": [
+    "Stage functions retain address-style names such as grBigBlueRoute_8020C1DC and grCorneria_801DFBF0 until semantic names are known.",
+    "Item logic names combine item id or module address with behavior suffixes, e.g. it_2725_Logic53_PickedUp and itWhispyapple_UnkMotion1_Anim.",
+    "Project macros and type aliases use established uppercase helper forms such as GET_GROUND, GET_ITEM, PAD_STACK, and ITEM_ANIM_UPDATE.",
+    "Header declarations keep address comments such as /* 20CD20 */ and /* 2F23AC */ alongside prototypes."
+  ],
+  "assembly_or_matching_tactics": [
+    "Matched grBigBlueRoute_8020C1DC as a two-call wrapper with no additional control flow.",
+    "Matched Corneria animation helpers by passing map_id from the Ground object into grAnime_801C8138 with third argument 0.",
+    "Matched it_802F23AC by preserving float temporaries dx/dy/dz, squaring each, summing, and returning as double; inline comments map source expressions to floating-point instructions.",
+    "Used PAD_STACK(16) in the Samus grapple pickup function to preserve stack layout.",
+    "Used a local f32 zero value in it_802EE6A0 before assigning all three velocity components, likely to influence generated code shape.",
+    "Reviewer suggestions imply that avoiding unnecessary explicit casts can still match and produce cleaner C in these cases."
+  ],
+  "review_feedback": [
+    {
+      "author": "r-burns",
+      "file": "src/melee/gr/grcorneria.c",
+      "feedback": "Suggested calling grAnime_801C8138(gobj, gp->map_id, 0) instead of casting gobj to HSD_GObj* in grCorneria_801DFBF0."
+    },
+    {
+      "author": "r-burns",
+      "file": "src/melee/it/items/itwhispyapple.c",
+      "feedback": "Suggested Item_80268E5C(gobj, 1, ITEM_ANIM_UPDATE) instead of casting gobj to HSD_GObj*."
+    },
+    {
+      "author": "r-burns",
+      "file": "src/melee/it/items/itsamusgrapple.c",
+      "feedback": "Suggested Item_80268E5C(gobj, 0, ITEM_ANIM_UPDATE) instead of casting gobj to HSD_GObj*."
+    },
+    {
+      "author": "r-burns",
+      "file": "src/melee/gr/grcorneria.c",
+      "feedback": "Suggested grAnime_801C8138(gobj, GET_GROUND(gobj)->map_id, 0) for grCorneria_801DD620, again avoiding the explicit HSD_GObj* cast."
+    }
+  ],
+  "searchable_terms": [
+    "PR1995",
+    "Several easy_funcs",
+    "Gelatart",
+    "grBigBlueRoute_8020C1DC",
+    "grBigBlueRoute_8020CD20",
+    "grBigBlueRoute_8020C85C",
+    "grbigblueroute.h",
+    "grCorneria_801DD620",
+    "grCorneria_801DFBF0",
+    "grAnime_801C8138",
+    "GET_GROUND",
+    "map_id",
+    "it_802F23AC",
+    "itkirby_2F23",
+    "distance squared",
+    "it_2725_Logic53_PickedUp",
+    "itsamusgrapple",
+    "PAD_STACK",
+    "Item_80268E5C",
+    "ITEM_ANIM_UPDATE",
+    "it_802A2428",
+    "it_802EE6A0",
+    "itwhispyapple",
+    "GET_ITEM",
+    "x40_vel",
+    "HSD_GObj cast",
+    "Ground_GObj",
+    "Item_GObj"
+  ],
+  "follow_up_queries": [
+    "Search for other small grAnime_801C8138 wrappers that can be matched using GET_GROUND(gobj)->map_id.",
+    "Audit remaining Item_80268E5C call sites for unnecessary HSD_GObj* casts after typedef compatibility is known.",
+    "Investigate the real struct type behind it_802F23AC's int* obj and offset 0x2C to replace raw pointer arithmetic when safe.",
+    "Look for similar item velocity reset functions that zero x40_vel before calling Item_80268E5C.",
+    "Check whether grBigBlueRoute_8020CD20 can now be further typed or decompiled given its Ground_GObj* prototype."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

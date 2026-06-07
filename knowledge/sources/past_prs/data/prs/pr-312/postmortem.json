@@ -1,0 +1,130 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-312",
+  "pr": {
+    "number": 312,
+    "title": "gobjgxlink matches",
+    "url": "https://github.com/doldecomp/melee/pull/312",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2022-02-25T16:09:42Z",
+    "merged_at": "2022-02-25T16:09:49Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched two more functions in sysdolphin/baselib gobjgxlink by replacing asm for func_8039075C and func_803907C8 with C implementations named GObj_SetupGXLinkMax and GObj_SetupGXLinkMaxSorted. The PR also propagated those names through many remaining asm callsites and added prototypes to gobjgxlink.h, making GX render-link setup behavior more searchable and reusable.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "naming",
+      "asm-symbol-renaming"
+    ],
+    "systems": [
+      "sysdolphin/baselib",
+      "gobjgxlink",
+      "gobj",
+      "gx-link",
+      "rendering",
+      "asm",
+      "include",
+      "src"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/gobjgxlink.c",
+    "src/sysdolphin/baselib/gobjgxlink.h",
+    "asm/sysdolphin/baselib/gobjgxlink.s",
+    "include/functions.h",
+    "asm/melee/cm/camera.s",
+    "asm/melee/cm/cmsnap.s",
+    "asm/melee/gm/code_801601C4.s",
+    "asm/melee/gm/gmtitle.s",
+    "asm/melee/gr/grizumi.s",
+    "asm/melee/gr/grstadium.s",
+    "asm/melee/text_2.s",
+    "asm/melee/text_3.s",
+    "asm/melee/text_4.s",
+    "asm/sysdolphin/baselib/sislib.s",
+    "asm/sysdolphin/baselib/sobjlib.s"
+  ],
+  "what_changed": [
+    "Deleted the asm bodies for func_8039075C and func_803907C8 from asm/sysdolphin/baselib/gobjgxlink.s, indicating those functions were matched in C.",
+    "Added GObj_SetupGXLinkMax in src/sysdolphin/baselib/gobjgxlink.c. It sets render_cb, assigns gx_link to lbl_804CE380.gx_link_max + 1, stores render_priority, walks lbl_804D7820[gobj->gx_link] using prev_gx while existing priority is greater, then calls GObj_GXReorder.",
+    "Added an inline helper GObj_GXFindPrioPosition that starts from lbl_804D7824[gobj->gx_link] and walks next_gx while existing render_priority is less than the new object's priority.",
+    "Added GObj_SetupGXLinkMaxSorted in C. It shares the max-link setup logic, uses GObj_GXFindPrioPosition, adjusts to prev_gx when a position is found or falls back to lbl_804D7820[gobj->gx_link], then reorders the object.",
+    "Added public prototypes for GObj_SetupGXLinkMax and GObj_SetupGXLinkMaxSorted to src/sysdolphin/baselib/gobjgxlink.h.",
+    "Updated include/functions.h comments from unknown func_8039075C and func_803907C8 entries to GObj_SetupGXLinkMax and GObj_SetupGXLinkMaxSorted.",
+    "Renamed many remaining assembly callsites from func_8039075C to GObj_SetupGXLinkMax across camera, game-mode, ground, interface, menu, text, sislib, and sobjlib asm files.",
+    "Renamed at least one callsite from func_803907C8 to GObj_SetupGXLinkMaxSorted, shown in asm/melee/gr/grizumi.s."
+  ],
+  "smart_moves": [
+    "The names were based on observed behavior rather than only addresses: both functions force the GObj onto gx_link_max + 1, so the \"Max\" suffix captures the distinctive setup semantics.",
+    "The PR separated the sorted variant from the non-sorted/max variant. GObj_SetupGXLinkMax walks from lbl_804D7820 with a greater-than priority test, while GObj_SetupGXLinkMaxSorted uses a helper that walks from lbl_804D7824 with a less-than priority test before converting the found node to a reorder anchor.",
+    "Adding gobjgxlink.h prototypes immediately made the matched functions available to future C decomp work instead of leaving them as local-only knowledge.",
+    "Renaming all known asm callsites in the same PR greatly improved cross-module grepability and helped document function arity and argument roles through repeated usage patterns: gobj, render callback, priority.",
+    "Using a small inline helper for the sorted search likely helped reproduce the compiler output for func_803907C8 while keeping the source readable."
+  ],
+  "decomp_lessons": [
+    "When a function is matched, propagate the new symbol name through still-asm callsites; this preserves project-wide context and makes future decompilation easier.",
+    "For baselib GObj functions, repeated callsite signatures are strong evidence for parameter naming: r3 is the HSD_GObj pointer, r4 is the render callback, and r5 is the render priority in these setup routines.",
+    "GX-link list manipulation can require reasoning from both list heads/tails: lbl_804D7820 and lbl_804D7824 are used differently by the two matched functions.",
+    "Address-based unknowns like func_8039075C and func_803907C8 can often be named by comparing nearly identical code paths and identifying the semantic difference, here max-link setup versus max-link sorted setup.",
+    "Inline helper extraction can be a valid matching tactic when it mirrors a reusable search subexpression and does not introduce a separate exported symbol."
+  ],
+  "naming_conventions": [
+    "Use the existing baselib GObj prefix style for matched functions: GObj_SetupGXLink, GObj_SetupGXLinkMax, GObj_SetupGXLinkMaxSorted, GObj_GXReorder.",
+    "Use descriptive suffixes to distinguish close variants: \"Max\" indicates assignment to gx_link_max + 1, while \"Sorted\" indicates the alternate priority-position search path.",
+    "Use HSD_GObj* and render_cb parameter naming consistently for GObj render-link setup routines.",
+    "The internal helper was named GObj_GXFindPrioPosition, using the GObj_GX prefix and a short \"Prio\" abbreviation consistent with render-priority semantics."
+  ],
+  "assembly_or_matching_tactics": [
+    "Matched func_8039075C by expressing stores to gobj fields as gobj->render_cb, gobj->gx_link, and gobj->render_priority, then reproducing the loop over prev_gx until i is NULL or i->render_priority is not greater than the new priority.",
+    "Matched func_803907C8 by expressing the tail-list search over next_gx, then converting the found node into the correct high-priority reorder anchor using prev_gx or lbl_804D7820[gobj->gx_link].",
+    "Preserved the max-link byte behavior by using u8 max_link = lbl_804CE380.gx_link_max followed by gobj->gx_link = max_link + 1.",
+    "The deleted asm confirms the C matched the original machine code for both 8039075C and 803907C8; all callsite instruction addresses and branch targets remained unchanged except symbol labels.",
+    "The broad asm rename pass turned raw branches to func_8039075C/func_803907C8 into semantic calls without changing instruction bytes."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-312",
+    "gobjgxlink matches",
+    "PsiLupan",
+    "GObj_SetupGXLinkMax",
+    "GObj_SetupGXLinkMaxSorted",
+    "GObj_GXFindPrioPosition",
+    "GObj_GXReorder",
+    "func_8039075C",
+    "func_803907C8",
+    "src/sysdolphin/baselib/gobjgxlink.c",
+    "src/sysdolphin/baselib/gobjgxlink.h",
+    "asm/sysdolphin/baselib/gobjgxlink.s",
+    "lbl_804CE380",
+    "gx_link_max",
+    "lbl_804D7820",
+    "lbl_804D7824",
+    "render_cb",
+    "render_priority",
+    "prev_gx",
+    "next_gx",
+    "HSD_GObj",
+    "gx link",
+    "GX link max",
+    "sorted priority position"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that convert remaining GObj_SetupGXLinkMax callsites from asm to C.",
+    "Search for subsequent naming or struct changes around lbl_804CE380, lbl_804D7820, and lbl_804D7824.",
+    "Check whether GObj_GXFindPrioPosition remained inline/internal or was renamed in later gobjgxlink decomp work.",
+    "Compare later baselib gobjgxlink matches for consistent priority ordering semantics between GObj_SetupGXLink, GObj_SetupGXLinkMax, and GObj_SetupGXLinkMaxSorted."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

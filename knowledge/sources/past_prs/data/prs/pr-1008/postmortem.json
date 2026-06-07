@@ -1,0 +1,155 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1008",
+  "pr": {
+    "number": 1008,
+    "title": "Partially match `ftCo_FlyReflect`",
+    "url": "https://github.com/doldecomp/melee/pull/1008",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-11-17T17:57:07Z",
+    "merged_at": "2023-11-17T18:14:44Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Partially decompiled the common fighter FlyReflect code by adding src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c and a dedicated header, removing most of the corresponding assembly from asm/melee/ft/ft_0C08.s, and wiring the new object files into obj_files.mk. The PR report shows the new C file at 98.45% overall, with ftCo_800C15F4, ftCo_800C1718, ftCo_FlyReflect_Anim, ftCo_FlyReflect_IASA, and ftCo_FlyReflect_Phys at 100%, while ftCo_800C17CC, ftCo_FlyReflect_Coll, and ftCo_800C18A8 remained partial. It also added typed surface/motion-var/common-data fields needed to express collision reflection behavior.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "partial-match",
+      "headers",
+      "struct-typing",
+      "asm-data-split"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "damage",
+      "collision",
+      "asm",
+      "build"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c",
+    "src/melee/ft/chara/ftCommon/ftCo_FlyReflect.h",
+    "asm/melee/ft/ft_0C08.s",
+    "asm/melee/ft/chara/ftCommon/ftCo_FlyReflect.s",
+    "asm/melee/ft/chara/ftCommon/ftCo_Bury.s",
+    "src/melee/ft/chara/ftCommon/forward.h",
+    "src/melee/ft/chara/ftCommon/types.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/ft_081B.c",
+    "src/melee/ft/ft_081B.h",
+    "src/melee/ft/chara/ftKirby/ftKb_Init.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Added a new ftCo_FlyReflect.c implementation containing C versions or guarded partial C versions for ftCo_800C15F4, ftCo_800C1718, ftCo_800C17CC, ftCo_800C18A8, ftCo_FlyReflect_Anim, ftCo_FlyReflect_IASA, ftCo_FlyReflect_Phys, and ftCo_FlyReflect_Coll.",
+    "Removed the FlyReflect function bodies from asm/melee/ft/ft_0C08.s and left ft_0C08.s to continue carrying later unmatched code.",
+    "Added asm/melee/ft/chara/ftCommon/ftCo_FlyReflect.s for FlyReflect literals in .sdata2: 0.0, -1.0, 1.0, 0.5, and 3.0.",
+    "Added asm/melee/ft/chara/ftCommon/ftCo_Bury.s for related static data/literals that were apparently needed after object splitting, including jobj assert strings and float/double constants.",
+    "Added ftCo_FlyReflect.h and moved FlyReflect prototypes out of src/melee/ft/ft_0C08.h into the dedicated header.",
+    "Included ftCo_FlyReflect.h from ftCo_Damage.c, ftCo_DownDamage.c, and ftCo_Init.c so existing users resolve against the new header.",
+    "Added ftCo_Surface enum values in ftCommon/forward.h: FTCO_Surface_None, ftCo_Surface_LeftWall, ftCo_Surface_RightWall, and ftCo_Surface_Ceiling.",
+    "Refined ftCommon_MotionVars.damage by splitting the previous x18 byte array into explicit u8 x18 and u8 x19 fields at fp+2358 and fp+2359.",
+    "Refined ftCommonData field types at offsets x1B0, x1B8, x1BC, and x1C0 to float/int/float/float, matching their use as reflect thresholds, collision parameter, velocity scaling, and timer data.",
+    "Changed ft_80081F2C and ft_80082084 declarations/definitions from unknown or void signatures to bool-returning functions taking Fighter_GObj*, enabling their use in FlyReflect collision checks.",
+    "Changed ftKb_SpecialN_800F1F1C's gobj parameter type from ftKb_GObj* to ftCo_GObj*, matching its use from common FlyReflect code.",
+    "Added the new C and asm object files to obj_files.mk so the split source/literal files participate in the build."
+  ],
+  "smart_moves": [
+    "Separated fully matched helper functions from still-problematic functions: the report shows several 100% functions while keeping ftCo_800C17CC, ftCo_FlyReflect_Coll, and ftCo_800C18A8 under ASM/MUST_MATCH fallback blocks.",
+    "Used dedicated literal externs and companion .sdata2 assembly files to preserve exact constant placement while moving logic into C.",
+    "Introduced ftCo_Surface as a named enum instead of leaving magic byte values for the last reflected surface, making repeated-wall/ceiling suppression understandable.",
+    "Split damage motion variable bytes x18 and x19 so the reflect cooldown/timer and last-surface state can be expressed directly in C.",
+    "Typed ftCommonData fields only where this PR had concrete usage evidence, avoiding a broad speculative struct cleanup.",
+    "Reused existing vector/collision helpers directly in the C reconstruction: lbVector_Add_xy, lbVector_Mirror, ft_80081F2C, ft_80082084, ftColl_8007B760, Camera_80030E44, and efAsync_Spawn.",
+    "Kept decomp progress buildable by adding both the new C object and the asm literal/data objects while leaving remaining unmatched assembly guarded in source."
+  ],
+  "decomp_lessons": [
+    "When extracting functions from a monolithic asm file, check whether local literals or neighboring data must move into a new per-feature asm file to preserve section order and addresses.",
+    "Partial matches can still be valuable if exact C is used for easy leaf/state functions and ASM fallbacks remain for hard control-flow or codegen-sensitive functions.",
+    "Collision-state functions often require struct typing across several layers: fighter motion vars, common data, collision flags, and helper function signatures all had to be improved before the C became readable.",
+    "Named enum values for byte-sized state fields are useful even before all surrounding symbols are known; here they document left wall, right wall, and ceiling reflect suppression.",
+    "Guarding unused-stack padding under MUST_MATCH documents the codegen issue without polluting non-matching/readable builds.",
+    "Helper signatures should be updated from UNK_RET/UNK_PARAMS only when call-site evidence is strong; this PR used FlyReflect call sites to type ft_80081F2C, ft_80082084, and ftKb_SpecialN_800F1F1C.",
+    "A decomp PR may need header include cleanup in consumers when moving prototypes out of an aggregate header such as ft_0C08.h into a feature-specific header."
+  ],
+  "naming_conventions": [
+    "Feature source/header names follow the common fighter motion style: ftCo_FlyReflect.c and ftCo_FlyReflect.h.",
+    "Action callbacks use the motion suffix convention: ftCo_FlyReflect_Anim, ftCo_FlyReflect_IASA, ftCo_FlyReflect_Phys, and ftCo_FlyReflect_Coll.",
+    "Unknown address-based helpers remain named by address, such as ftCo_800C15F4, ftCo_800C1718, ftCo_800C17CC, and ftCo_800C18A8.",
+    "The new enum type is ftCo_Surface, with values for ftCo_Surface_LeftWall, ftCo_Surface_RightWall, and ftCo_Surface_Ceiling; the zero value is spelled FTCO_Surface_None in the diff.",
+    "Common-data fields remained offset-derived names, e.g. x1B0, x1B8, x1BC, and x1C0, but gained concrete C types.",
+    "Motion variable fields retained offset-derived names x18 and x19 once their byte layout was identified."
+  ],
+  "assembly_or_matching_tactics": [
+    "Left difficult functions wrapped as ASM functions with C bodies enabled when !MUST_MATCH or WIP, and inline assembly fallback under MUST_MATCH.",
+    "Used #pragma force_active on under WIP around literal externs to help preserve constant/data emission during matching experiments.",
+    "Declared file-local literal symbols as extern constants and supplied their exact values in asm/melee/ft/chara/ftCommon/ftCo_FlyReflect.s.",
+    "Kept explicit unused stack padding under MUST_MATCH, e.g. u8 _[8] and u8 _[4], to account for stack layout differences in matched builds.",
+    "Used the project RETURN_IF macro in the readable ftCo_FlyReflect_Coll C path to mirror early-return collision sequencing compactly.",
+    "Replaced an assembly sqrt/frsqrte sequence in the readable C path with sqrtf(SQ(vel_x) + SQ(vel_y)) while preserving the inline asm fallback for exact matching.",
+    "Object-file ordering was updated to place ftCo_Bury.c, ftCo_Bury.s, ftCo_FlyReflect.c, ftCo_FlyReflect.s, then the remaining ft_0C08.s, indicating careful section/order management."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The only human text excerpt is the automated/report-style match table for src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c."
+  ],
+  "searchable_terms": [
+    "pr-1008",
+    "ftCo_FlyReflect",
+    "FlyReflect",
+    "ftCo_800C15F4",
+    "ftCo_800C1718",
+    "ftCo_800C17CC",
+    "ftCo_800C18A8",
+    "ftCo_FlyReflect_Anim",
+    "ftCo_FlyReflect_IASA",
+    "ftCo_FlyReflect_Phys",
+    "ftCo_FlyReflect_Coll",
+    "ftCo_Surface",
+    "ftCo_Surface_LeftWall",
+    "ftCo_Surface_RightWall",
+    "ftCo_Surface_Ceiling",
+    "ftCo_MS_FlyReflectWall",
+    "ftCo_MS_FlyReflectCeil",
+    "p_ftCommonData",
+    "x1B0",
+    "x1B8",
+    "x1BC",
+    "x1C0",
+    "mv.co.damage.x18",
+    "mv.co.damage.x19",
+    "lbVector_Mirror",
+    "lbVector_Add_xy",
+    "efAsync_Spawn",
+    "Camera_80030E44",
+    "Fighter_ChangeMotionState",
+    "ft_80081F2C",
+    "ft_80082084",
+    "ftKb_SpecialN_800F1F1C",
+    "ftCo_DownBound_SfxIds",
+    "MUST_MATCH",
+    "WIP",
+    "asm literals",
+    "sdata2"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully matched ftCo_800C17CC, ftCo_FlyReflect_Coll, or ftCo_800C18A8.",
+    "Search for later renames or cleanups of ftCo_Surface and FTCO_Surface_None casing.",
+    "Check whether ftCommonData x1B0, x1B8, x1BC, and x1C0 received semantic names after this PR.",
+    "Look for subsequent PRs that remove ASM fallbacks from ftCo_FlyReflect.c.",
+    "Search for other PRs that split monolithic ft_0C08.s into feature-specific ftCommon source files and asm literal files."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

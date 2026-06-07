@@ -1,0 +1,129 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-849",
+  "pr": {
+    "number": 849,
+    "title": "Match `ftCo_AttackHi3`",
+    "url": "https://github.com/doldecomp/melee/pull/849",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-13T19:19:36Z",
+    "merged_at": "2023-05-13T19:26:43Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common up-tilt action `ftCo_AttackHi3` by moving the 0x8008B980-0x8008BB24 routines out of `asm/melee/ft/ft_08A4.s` into a new C module and header. The PR also performed supporting semantic renames around attack input checks and the fighter interrupt bit, added the new object file to the build, exposed helper assembly labels needed by remaining asm, and named the `ftCommonData` +0xAC up-tilt stick threshold as `attackhi3_stick_threshold_y`.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "symbol-renaming",
+      "struct-field-naming",
+      "build-system"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "common-attacks",
+      "asm",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_AttackHi3.c",
+    "src/melee/ft/chara/ftCommon/ftCo_AttackHi3.h",
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/chara/ftCommon/ftCo_Attack1.c",
+    "src/melee/ft/chara/ftCommon/ftCo_AttackS3.c",
+    "src/melee/ft/types.h",
+    "src/melee/ft/ft_08A4.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Added `ftCo_AttackHi3.c` with matched implementations for `ftCo_AttackHi3_CheckInput`, `doEnter`, `ftCo_AttackHi3_Anim`, `ftCo_AttackHi3_IASA`, `ftCo_AttackHi3_Phys`, and `ftCo_AttackHi3_Coll`.",
+    "Removed the corresponding assembly block from `asm/melee/ft/ft_08A4.s`, including the old `ft_8008B980` input-check function and the `ftCo_AttackHi3_*` callbacks.",
+    "Added `src/melee/ft/chara/ftCommon/ftCo_AttackHi3.h` and inserted `ftCo_AttackHi3.c.o` into `obj_files.mk` so the new C translation unit participates in the text object build.",
+    "Renamed the old `ft_8008B980` call sites to the semantic name `ftCo_AttackHi3_CheckInput` in common IASA paths such as attack low tilt, attack smash, guard-off, ottotto, walk, and turn paths shown in the diff excerpt.",
+    "Renamed related input-decision helpers from `DecideMotion` or address-like names to `CheckInput`, including `ftCo_Attack1_CheckInput`, `ftCo_AttackDash_CheckInput`, and `ftCo_AttackS3_CheckInput`.",
+    "Renamed fighter bitfield `x2218_b0` to `allow_interrupt` and updated many attack-state users to read or clear that field by meaning rather than offset.",
+    "Named `ftCommonData` offset +0xAC as `attackhi3_stick_threshold_y`, used by `ftCo_AttackHi3_CheckInput` when comparing the Y stick input.",
+    "Exposed remaining assembly-local helper labels as globals where needed, including `ft_80094E54`, `lbl_80094B6C`, `lbl_800951D0`, `lbl_80095254`, `lbl_800952DC`, and `lbl_8009563C`, so C/asm cross-references could use stable symbols.",
+    "Removed the obsolete `ft_8008B980` prototype from `src/melee/ft/ft_0877.h` and added `ft_80094E54(ftCo_Fighter* fp)` to `src/melee/ft/ft_08A4.h`."
+  ],
+  "smart_moves": [
+    "The new C function preserves the original control flow: require `HSD_Pad_A`, require Y stick above `p_ftCommonData->attackhi3_stick_threshold_y`, require `ftCommon_8007D964(fp) > p_ftCommonData->x20`, then branch either to light high throw when holding an item and `ft_80094E54(fp)` passes, or enter `ftCo_MS_AttackHi3`.",
+    "Matching was helped by giving the interrupt bit a semantic name, `allow_interrupt`, because the same bit gates IASA-to-wait behavior across many attack states.",
+    "The PR did not only match the isolated function; it cleaned up caller names so repeated IASA check chains read as a sequence of `CheckInput` calls rather than mixed address-based names.",
+    "For the remaining unmigrated assembly in `ft_08A4.s`, the PR promoted local labels to global labels rather than pretending those functions were decompiled; this kept cross-module references linkable while keeping the evidence boundary clear.",
+    "The extracted callbacks use existing shared helpers (`Fighter_ChangeMotionState`, `ftAnim_8006EBA4`, `ftAnim_IsFramesRemaining`, `ft_8008A2BC`, `ft_80084F3C`, `ft_80084104`) instead of duplicating behavior."
+  ],
+  "decomp_lessons": [
+    "When matching a small fighter action module, also chase caller-side names; input-check functions are often invoked from many IASA chains, so semantic naming improves future matching across the whole common action state machine.",
+    "A single bitfield rename can unlock readability across numerous action files. Here, `x2218_b0` became `allow_interrupt`, matching its observed use as the gate for returning to wait during IASA.",
+    "Constants loaded from `p_ftCommonData` should be named when their use is clear. The +0xAC float is identified by direct comparison with up-stick input in AttackHi3 and was named `attackhi3_stick_threshold_y`.",
+    "It is acceptable in incremental decomp to expose still-asm helper labels as globals (`lbl_*` or `ft_*`) when newly decompiled C or relabeled asm needs stable call targets.",
+    "Attack enter functions commonly clear `allow_interrupt`, call `Fighter_ChangeMotionState` with `Ft_MF_None`, and then call `ftAnim_8006EBA4`; this pattern was reused for `ftCo_MS_AttackHi3`."
+  ],
+  "naming_conventions": [
+    "`ftCo_AttackHi3_CheckInput` is the semantic replacement for the address-like `ft_8008B980`.",
+    "Input probe helpers for common attack states use the suffix `CheckInput`, as shown by renames to `ftCo_Attack1_CheckInput`, `ftCo_AttackDash_CheckInput`, and `ftCo_AttackS3_CheckInput`.",
+    "The fighter bitfield at `fp+2218:0` is named `allow_interrupt` rather than `x2218_b0`.",
+    "The common-data float at offset `+AC` is named `attackhi3_stick_threshold_y`.",
+    "Still-unknown or not-yet-decompiled assembly helpers may remain as `lbl_80094B6C`-style global labels when no better semantic name is established.",
+    "Action callback names follow the existing common fighter pattern: `ftCo_AttackHi3_Anim`, `ftCo_AttackHi3_IASA`, `ftCo_AttackHi3_Phys`, and `ftCo_AttackHi3_Coll`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Extracted only the matched AttackHi3 range from `ft_08A4.s`, leaving the rest of the large assembly file intact.",
+    "Preserved call targets and branch behavior by relabeling calls in remaining asm from `.L_80094E54` to `ft_80094E54` and from `.L_80094B6C` to `lbl_80094B6C` where the labels needed global visibility.",
+    "The C match encodes the original floating-point comparisons as normal C threshold checks against `fp->input.lstick.y` and `ftCommon_8007D964(fp)`.",
+    "Motion-state entry is expressed with `Fighter_ChangeMotionState(gobj, ftCo_MS_AttackHi3, Ft_MF_None, NULL, 0, 1, 0)` followed by `ftAnim_8006EBA4(gobj)`, matching the removed assembly sequence.",
+    "Simple callback wrappers were matched directly: animation exits to `ft_8008A2BC` when no frames remain, physics delegates to `ft_80084F3C`, and collision delegates to `ft_80084104`."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-849",
+    "ftCo_AttackHi3",
+    "ftCo_AttackHi3_CheckInput",
+    "ft_8008B980",
+    "ftCo_MS_AttackHi3",
+    "ftCo_MS_LightThrowHi",
+    "attackhi3_stick_threshold_y",
+    "allow_interrupt",
+    "x2218_b0",
+    "ftCo_Attack1_CheckInput",
+    "ftCo_AttackDash_CheckInput",
+    "ftCo_AttackS3_CheckInput",
+    "ft_80094E54",
+    "lbl_80094B6C",
+    "lbl_800951D0",
+    "lbl_80095254",
+    "lbl_800952DC",
+    "lbl_8009563C",
+    "Fighter_ChangeMotionState",
+    "ftAnim_8006EBA4",
+    "ftAnim_IsFramesRemaining",
+    "ft_8008A2BC",
+    "ft_80084F3C",
+    "ft_80084104",
+    "p_ftCommonData",
+    "HSD_Pad_A",
+    "common attack IASA",
+    "ft_08A4.s"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that further decompile or rename helpers around `ft_80094E54` and `lbl_80094B6C`.",
+    "Search for remaining uses of `x2218_b1` near attack state transitions to determine whether it can receive a semantic name like `allow_interrupt` did.",
+    "Audit other common attack input helpers for the `CheckInput` suffix to keep naming consistent across AttackHi3, AttackS3, AttackDash, Attack1, and smash inputs.",
+    "Investigate remaining `p_ftCommonData` unnamed fields near offsets `x20` and `+AC` used in attack input thresholds."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

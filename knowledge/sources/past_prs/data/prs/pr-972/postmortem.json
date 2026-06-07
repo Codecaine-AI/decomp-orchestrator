@@ -1,0 +1,150 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-972",
+  "pr": {
+    "number": 972,
+    "title": "Finish HSD_FObj",
+    "url": "https://github.com/doldecomp/melee/pull/972",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2023-09-23T02:50:37Z",
+    "merged_at": "2023-09-23T03:00:02Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Finished the sysdolphin baselib HSD_FObj decompilation by replacing the inline PowerPC assembly implementation of HSD_FObjInterpretAnim with C, adding extracted static helpers for packed animation data parsing and opcode handling, moving FObj load-state constants into fobj.h, and deleting the remaining fobj.s assembly object from the build.",
+  "change_classification": {
+    "primary_type": "decompilation_completion",
+    "categories": [
+      "decompiled_asm_removal",
+      "matching_c_rewrite",
+      "headers",
+      "animation_state_machine",
+      "cleanup"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "HSD_FObj",
+      "asm",
+      "build"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/sysdolphin/baselib/fobj.c",
+      "role": "Main implementation rewrite; added C helpers and replaced the inline asm HSD_FObjInterpretAnim."
+    },
+    {
+      "path": "src/sysdolphin/baselib/fobj.h",
+      "role": "Header cleanup; added FOBJ_LOAD_DATA0, FOBJ_LOAD_DATA, and FOBJ_LOAD_WAIT constants; corrected HSD_FObjSetState signature; removed exposed static helper prototypes."
+    },
+    {
+      "path": "asm/sysdolphin/baselib/fobj.s",
+      "role": "Deleted leftover assembly data containing assertion strings for FObj load states."
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "Removed asm/sysdolphin/baselib/fobj.s.o from TEXT_O_FILES now that fobj.c supplies the needed contents."
+    }
+  ],
+  "what_changed": [
+    "Deleted asm/sysdolphin/baselib/fobj.s, which only contained HSD_FObj_80406350 assertion strings for \"st == FOBJ_LOAD_WAIT\" and \"st == FOBJ_LOAD_DATA0 || st == FOBJ_LOAD_DATA\".",
+    "Removed $(BUILD_DIR)/asm/sysdolphin/baselib/fobj.s.o from obj_files.mk.",
+    "Changed HSD_FObjSetState from u8 HSD_FObjSetState(HSD_FObj* fobj, u8 state) to u32 HSD_FObjSetState(HSD_FObj* fobj, u32 state) in both source and header.",
+    "Made parseFloat, parsePackInfo, and FObjLaunchKeyData truly file-local static helpers instead of carrying commented-out static markers and public header prototypes.",
+    "Added parseOpCode, parseWait, FObjLoadWait, FObjAnimCON, FObjAnimLinear, FObjAnimSPL0, FObjAnimSPL, FObjAnimSLP, FObjAnimKey, and inline FObjLoadData to break the former monolithic asm routine into named C pieces.",
+    "Replaced the inline asm HSD_FObjInterpretAnim body with structured C using a state switch over states 0 through 6, handling data load, wait load, update, transition, and terminal cases.",
+    "Added FOBJ_LOAD_DATA0, FOBJ_LOAD_DATA, and FOBJ_LOAD_WAIT macros to fobj.h for documented state assertions.",
+    "Replaced a manual __assert in HSD_FObjAlloc with HSD_ASSERT(0x2F3, new)."
+  ],
+  "smart_moves": [
+    "Factored the large HSD_FObjInterpretAnim state machine into small static helpers that each correspond to a recognizable animation opcode or parser action, making the C source much easier to reason about than the previous 500-line inline asm block.",
+    "Preserved assertion line numbers and conditions in the new helper functions, such as HSD_ASSERT(0x16C, st == FOBJ_LOAD_WAIT) and HSD_ASSERT checks for FOBJ_LOAD_DATA0 or FOBJ_LOAD_DATA in the opcode handlers.",
+    "Removed helper declarations from the public header once the helpers were made static, reducing accidental external API surface.",
+    "Kept the build graph clean by deleting the now-unneeded fobj.s object from obj_files.mk rather than leaving dead assembly linked beside the C implementation.",
+    "Introduced named FOBJ_LOAD_* constants so load-state assertions no longer depended only on raw magic values in the source."
+  ],
+  "decomp_lessons": [
+    "For large animation interpreters, matchability can improve by decomposing the original control flow into small static helpers that mirror semantic units: opcode parsing, wait parsing, individual interpolation modes, and the outer state loop.",
+    "When replacing inline asm that used string/data symbols only for assertions, convert the assertions to HSD_ASSERT and remove the standalone asm data file if no other symbols remain.",
+    "Keep local parser helpers static and out of headers; only expose functions actually used across translation units.",
+    "Header signatures should reflect the matched return/register behavior. Here HSD_FObjSetState was widened from u8 to u32, matching its use as a state-returning helper.",
+    "Do not leave commented-out storage-class markers such as /*static*/ after a function has been matched; make the function genuinely static and clean the header at the same time.",
+    "State-machine names such as FOBJ_LOAD_DATA0, FOBJ_LOAD_DATA, and FOBJ_LOAD_WAIT make future matching safer than scattering raw state values through assertions and switches."
+  ],
+  "naming_conventions": [
+    "Static helper names use FObj-prefixed PascalCase for functional animation operations: FObjLoadWait, FObjAnimCON, FObjAnimLinear, FObjAnimSPL0, FObjAnimSPL, FObjAnimSLP, FObjAnimKey, FObjLoadData.",
+    "Parser helpers use lower camel case: parseFloat, parseOpCode, parsePackInfo, parseWait.",
+    "Header load-state macros use all-caps FOBJ_LOAD_* names.",
+    "Existing HSD animation opcode macros are all-caps HSD_A_OP_* names such as HSD_A_OP_CON, HSD_A_OP_LIN, HSD_A_OP_SPL0, HSD_A_OP_SPL, HSD_A_OP_SLP, and HSD_A_OP_KEY."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted a nofralloc inline asm HSD_FObjInterpretAnim into C while preserving the same state-machine structure: initial null/state check, time accumulation with negative-time early exit, infinite loop, and switch cases for states 0 through 6.",
+    "Used small helper functions to recreate repeated asm blocks for CON/LIN/SPL0/SPL/SLP/KEY handling, reducing duplicated state assertions, p0/p1 and d0/d1 updates, and state transitions.",
+    "Used varint-style parsing loops for packed data: parsePackInfo accumulates 7-bit continuation bytes after an initial nibble-derived count, and parseWait accumulates wait values with 7-bit shifts until the high bit clears.",
+    "Maintained unusual-looking source constructs needed for matching in HSD_FObjInterpretAnim, including repeated assignments like state = state = 3 and state = state = 5, and a dummy stack array u8 _[8] in case 4.",
+    "Replaced direct __assert calls and external assertion string references with HSD_ASSERT macros, allowing the deletion of HSD_FObj_80406350 data in fobj.s."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "path": "src/sysdolphin/baselib/fobj.c",
+      "comment": "Wow.",
+      "interpretation": "Only review comment captured; it reads as positive surprise/approval, but contains no specific technical change request."
+    }
+  ],
+  "searchable_terms": [
+    "Finish HSD_FObj",
+    "HSD_FObj",
+    "HSD_FObjInterpretAnim",
+    "HSD_FObjInterpretAnimAll",
+    "HSD_FObjSetState",
+    "HSD_FObjGetState",
+    "HSD_FObjAlloc",
+    "FObjUpdateAnim",
+    "FObjLoadData",
+    "FObjLoadWait",
+    "FObjLaunchKeyData",
+    "FObjAnimCON",
+    "FObjAnimLinear",
+    "FObjAnimSPL0",
+    "FObjAnimSPL",
+    "FObjAnimSLP",
+    "FObjAnimKey",
+    "parseFloat",
+    "parseOpCode",
+    "parsePackInfo",
+    "parseWait",
+    "FOBJ_LOAD_DATA0",
+    "FOBJ_LOAD_DATA",
+    "FOBJ_LOAD_WAIT",
+    "HSD_A_OP_CON",
+    "HSD_A_OP_LIN",
+    "HSD_A_OP_SPL0",
+    "HSD_A_OP_SPL",
+    "HSD_A_OP_SLP",
+    "HSD_A_OP_KEY",
+    "HSD_ASSERT",
+    "sysdolphin baselib fobj.c",
+    "asm/sysdolphin/baselib/fobj.s",
+    "obj_files.mk",
+    "inline asm removal",
+    "packed animation data",
+    "animation interpreter"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify HSD_FObjInterpretAnim or remove the matching artifacts such as state = state = 3 or u8 _[8].",
+    "Search for other baselib animation interpreters that can reuse the parsePackInfo and parseWait decompilation pattern.",
+    "Check whether FOBJ_LOAD_* constants were later expanded or replaced with an enum.",
+    "Look for follow-up changes to HSD_FObjSetState callers after the return and state parameter types changed to u32."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

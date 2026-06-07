@@ -1,0 +1,150 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1577",
+  "pr": {
+    "number": 1577,
+    "title": "Match it_2E6A (ityaku)",
+    "url": "https://github.com/doldecomp/melee/pull/1577",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-07T02:32:22Z",
+    "merged_at": "2025-06-07T02:37:37Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the stage-related item source src/melee/it/items/it_2E6A.c, identified in comments as ityaku.c, and flipped it from NonMatching to Matching in configure.py. The fix centered on replacing placeholder integer/void callback plumbing with typed Item_GObj/Ground callback signatures, unifying the it_2E6A item variable layout with a union for JObj-vs-Vec3 storage, correcting ItemAttr size/initializer assumptions, and propagating the refined types into grmaterial, grcorneria, grticeclimber, and ground vars.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "type-correction",
+      "callback-signatures",
+      "struct-layout"
+    ],
+    "systems": [
+      "item",
+      "stage",
+      "ground",
+      "grmaterial",
+      "Corneria",
+      "Icicle Mountain"
+    ]
+  },
+  "key_files": [
+    "configure.py",
+    "src/melee/it/items/it_2E6A.c",
+    "src/melee/it/items/it_2E6A.h",
+    "src/melee/it/itCommonItems.h",
+    "src/melee/it/types.h",
+    "src/melee/gr/grmaterial.c",
+    "src/melee/gr/grmaterial.h",
+    "src/melee/gr/grcorneria.c",
+    "src/melee/gr/grcorneria.h",
+    "src/melee/gr/grticeclimber.c",
+    "src/melee/gr/grticeclimber.h",
+    "src/melee/gr/types.h"
+  ],
+  "what_changed": [
+    "Changed configure.py so melee/it/items/it_2E6A.c is built as Matching instead of NonMatching.",
+    "Cleaned up it_2E6A.c by removing commented-out nonmatching scaffolding and using direct typed calls, local declarations, NULL checks, GET_ITEM/GET_JOBJ usage, and a normal while(true) trap after the ityaku.c OSReport path.",
+    "Changed it_802E6AEC to take typed callback function pointers: init-style callback Item_GObj*/Ground*, pickup/touch-position callback Item_GObj*/Ground*/Vec3*/HSD_GObj*/f32, and toucher callback Item_GObj*/Ground*/HSD_GObj*.",
+    "Updated it_802E6F7C, it_802E6FC0, and it_802E7054 to call the typed callback fields directly with the stored Ground pointer rather than casting void pointers or HSD_GObj-only callbacks.",
+    "Merged the previous two it_2E6A item-var structs into one it_2E6A_ItemVars_1 using a union at offset +4 for either HSD_JObj* x4 or Vec3 x4_vec, with x2 documenting the union tag: 1=jobj, 2=vec.",
+    "Typed it_2E6A item variables x10/x14/x18/x1C as Ground* and exact callback pointer types instead of void* fields.",
+    "Removed it_2E6A_ItemVars_2 from Item's xDD4_itemVar union and deleted extra ItemAttr fields x84 through x9C from src/melee/it/types.h.",
+    "Corrected the it_803F8C08 ItemAttr initializer in it_2E6A.c so destroy_gfx and the following x68-style field are -1 instead of 0, matching the 0xFFFFFFFF comments.",
+    "Made static Vec3 it_803B8730 const.",
+    "Changed grMaterial_801C8CFC and grMaterial_801C8D44 to return Item_GObj* from it_802E6AEC and to accept the same typed callback pointers.",
+    "Changed grMaterial_801C8DE0 and grMaterial_801C8E08 to accept Item_GObj* instead of generic HSD_GObj*/int-like placeholders.",
+    "Updated Corneria and Icicle Mountain callback prototypes to the new item/ground callback shapes, including fn_801E12D0(Item_GObj*, Ground*) and grTIceClimber_80221208(Item_GObj*, Ground*, Vec3*, HSD_GObj*, f32).",
+    "Changed grCorneria_GroundVars fields x120 and x124 from u32 to Item_GObj*, indicating the stage ground vars hold spawned item object references.",
+    "Added forward includes for item and ground types where needed instead of relying on ad hoc extern declarations."
+  ],
+  "smart_moves": [
+    "The match was achieved by improving type information across call boundaries instead of preserving casts and placeholder signatures; this made the generated code closer to the original calling convention.",
+    "Using a union for it_2E6A_ItemVars_1 captured the actual overlapping storage at item var offset +4, avoiding duplicated structs that represented alternate interpretations of the same memory.",
+    "Returning Item_GObj* from grMaterial_801C8CFC/grMaterial_801C8D44 matched their callers, especially grTIceClimber_80221288, where the return is immediately checked and then passed to item helpers.",
+    "Replacing '&pos != 0' with 'pos != 0' fixed a clear pointer-test artifact in it_802E6AEC and made the Vec3-spawn path meaningful.",
+    "Propagating Item_GObj* through grmaterial and stage callback prototypes reduced generic HSD_GObj and integer casts while keeping the evidence tied to actual users of it_802E6AEC.",
+    "Correcting ItemAttr structure size and the -1 initializer values removed misleading padding/field assumptions that affected the item attribute literal."
+  ],
+  "decomp_lessons": [
+    "When an item file only matches with ugly casts, inspect its stage wrapper functions; typed callback signatures in the ground/stage layer can be the missing constraint.",
+    "Item xDD4 unions often represent overlapping runtime modes, not distinct structs that both need to live in the main Item union. A tagged union can be more accurate and more match-friendly.",
+    "If a helper function wraps a spawn routine and callers test the result, prefer the concrete object pointer return type over bool/int placeholders.",
+    "Do not add speculative trailing struct fields just because an initializer comment says fields might be missing; verify structure size against real initializers and users.",
+    "Small initializer constants matter for matching: 0 versus -1 is also 0x00000000 versus 0xFFFFFFFF and can affect data matching.",
+    "Forward headers should be updated when replacing placeholder types with real cross-system types; this keeps prototypes accurate without creating broad includes.",
+    "A callback stored in item vars may need contextual data from the item var block itself, such as Ground*, not just the triggering gobj."
+  ],
+  "naming_conventions": [
+    "The PR title identifies it_2E6A as ityaku; the file still uses address-based symbol names such as it_802E6AEC and it_802E6D60.",
+    "Callback arguments in updated headers are named by position in grMaterial prototypes, e.g. arg4, arg5, arg6, but their function pointer types are explicit.",
+    "The it_2E6A item-var union names preserve offset-based names, with x4 for HSD_JObj* and x4_vec for the Vec3 overlay.",
+    "Stage functions retain existing generated names such as fn_801E12D0 and grTIceClimber_80221208 while gaining concrete Item_GObj/Ground parameter types.",
+    "The grTIceClimber capitalization pattern remains as existing project style, including grTIceClimber_80221208."
+  ],
+  "assembly_or_matching_tactics": [
+    "Changed object status from NonMatching to Matching only after reducing casts and placeholder parameters in the source and dependent headers.",
+    "Used exact callback pointer signatures to let indirect calls compile into the expected argument setup rather than casting at each callsite.",
+    "Used a const Vec3 scale literal and local assignment for HSD_JObjSetScale, likely matching the original rodata/data placement better than a mutable static.",
+    "Replaced a manual goto self-loop with while(true), preserving the infinite trap behavior after OSReport while presenting cleaner C.",
+    "Removed PAD_STACK(16) from grTIceClimber_80221208 after the corrected five-argument callback signature made the stack layout match without padding.",
+    "Changed bool-style result handling to Item_GObj* result_1 != NULL in grTIceClimber_80221288, aligning the wrapper return type with object-pointer use.",
+    "Removed casts such as (HSD_GObj*) item_gobj in several places where Item_GObj* is already compatible with the expected typed helper."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "The only recorded discussion count is one issue comment, but no human text excerpt was provided, so reviewer intent cannot be inferred."
+  ],
+  "searchable_terms": [
+    "pr-1577",
+    "Match it_2E6A",
+    "ityaku",
+    "it_2E6A.c",
+    "it_802E6AEC",
+    "it_802E6D60",
+    "it_802E6F7C",
+    "it_802E6FC0",
+    "it_802E7054",
+    "it_803F8C08",
+    "it_803B8730",
+    "it_2E6A_ItemVars_1",
+    "x4_vec",
+    "Pokemon_Random",
+    "Item_GObj",
+    "Ground",
+    "grMaterial_801C8CFC",
+    "grMaterial_801C8D44",
+    "grMaterial_801C8DE0",
+    "grMaterial_801C8E08",
+    "grCorneria_801E12D0",
+    "fn_801E12D0",
+    "fn_801E12D4",
+    "grTIceClimber_80221208",
+    "grTIceClimber_80221288",
+    "grCorneria_GroundVars",
+    "ItemAttr",
+    "xDD4_itemVar",
+    "callback signatures",
+    "struct union",
+    "NonMatching to Matching",
+    "stage-related items"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename it_2E6A or ityaku symbols to semantic names.",
+    "Search for other item var structs with duplicated JObj-versus-Vec3 layouts that could be converted to tagged unions.",
+    "Audit grMaterial_801C8CFC and grMaterial_801C8D44 callers for remaining placeholder callback types.",
+    "Check whether ItemAttr field removal affected other common item attribute initializers or required follow-up struct documentation.",
+    "Look for additional stage-related item files still marked NonMatching near itoctarock, it_2E5A, itarwinglaser, itoctarockstone, and itleadead."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

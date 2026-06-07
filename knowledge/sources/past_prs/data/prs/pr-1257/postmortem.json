@@ -1,0 +1,122 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1257",
+  "pr": {
+    "number": 1257,
+    "title": "Move `ItemStateTable` to `it/items/types.h`",
+    "url": "https://github.com/doldecomp/melee/pull/1257",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-02-19T19:53:40Z",
+    "merged_at": "2024-02-19T19:55:25Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Header/type hygiene PR that moved item state/logic table definitions out of the broad `src/melee/it/types.h` header and into the item-specific `src/melee/it/items/types.h`. The diff updated many item headers to include `it/items/types.h` for `ItemStateTable`/`ItemLogicTable` while adding `it/forward.h` where only `Item_GObj`-style forward declarations were needed. It also moved several `ItemLogicTable` extern declarations from `item.c` into `it_2725.h`. There were no PR body notes or review comments in the provided context, so intent beyond dependency cleanup is inferred from the title and mechanical include changes.",
+  "change_classification": {
+    "primary_type": "header/type relocation",
+    "categories": [
+      "headers",
+      "types-structs",
+      "include hygiene",
+      "mechanical refactor"
+    ],
+    "systems": [
+      "item",
+      "fighter"
+    ]
+  },
+  "key_files": [
+    "src/melee/it/items/types.h",
+    "src/melee/it/types.h",
+    "src/melee/it/items/forward.h",
+    "src/melee/it/forward.h",
+    "src/melee/it/it_2725.h",
+    "src/melee/it/item.c",
+    "src/melee/ft/chara/ftNess/ftNs_AttackHi4.c",
+    "src/melee/ft/chara/ftSeak/ftSk_SpecialS.c",
+    "src/melee/it/items/it_27CF.h",
+    "src/melee/it/items/it_2F28.h"
+  ],
+  "what_changed": [
+    "Added `struct ItemStateTable` to `src/melee/it/items/types.h`, preserving its fields: `anim_id`, `animated`, `physics_updated`, and `collided`.",
+    "Added `struct ItemLogicTable` to `src/melee/it/items/types.h`, preserving its item callback table fields such as `states`, `spawned`, `destroyed`, `picked_up`, `dropped`, `thrown`, `dmg_dealt`, `dmg_received`, `entered_air`, `reflected`, `clanked`, `absorbed`, `shield_bounced`, `hit_shield`, and `evt_unk`.",
+    "Removed the same `ItemStateTable` and `ItemLogicTable` struct definitions from `src/melee/it/types.h`.",
+    "Added `ItemLogicTable` and `ItemStateTable` forward typedefs to `src/melee/it/items/forward.h` and removed them from the broader `src/melee/it/forward.h`.",
+    "Updated many `src/melee/it/items/*.h` headers to replace `#include \"it/types.h\"` with `#include \"it/items/types.h\"`, usually adding `#include \"it/forward.h\"` to keep `Item_GObj` and related item forward declarations available.",
+    "Changed `src/melee/it/items/types.h` to export `it/items/forward.h` with an IWYU pragma and to include `<baselib/forward.h>` for HSD callback typedefs used by the moved structs.",
+    "Added `#include \"it/items/forward.h\"` to `src/melee/it/types.h`, keeping broad item type consumers able to see item-table forward declarations without keeping the full table definitions there.",
+    "Moved extern declarations for `it_803F14C4`, `it_803F23CC`, `it_803F3100`, and `it_803F4D20` from local declarations in `src/melee/it/item.c` into `src/melee/it/it_2725.h`, and included that header from `item.c`.",
+    "Adjusted fighter source includes in `ftNs_AttackHi4.c` and `ftSk_SpecialS.c`, removing `it/forward.h` from the top include block and adding `it/types.h` near the item headers where full item types were needed."
+  ],
+  "smart_moves": [
+    "Kept the move mechanical: the structs were relocated with their documented offsets and field names intact rather than renamed or reshaped, lowering matching/regression risk.",
+    "Separated ownership of forward declarations from full type definitions: `it/items/forward.h` now owns `ItemStateTable` and `ItemLogicTable` forward typedefs, while `it/items/types.h` owns their layouts.",
+    "Used `it/forward.h` plus `it/items/types.h` in item headers instead of relying on the heavy umbrella `it/types.h`, reducing accidental transitive dependencies.",
+    "Added the needed `<baselib/forward.h>` include at the destination because the moved structs reference HSD callback types such as `HSD_GObjPredicate`, `HSD_GObjEvent`, and `HSD_GObjInteraction`.",
+    "Centralized `ItemLogicTable` extern declarations in a header (`it_2725.h`) instead of leaving them as ad hoc externs inside `item.c`, making table symbols reusable and easier to audit."
+  ],
+  "decomp_lessons": [
+    "When a type is primarily consumed by per-item headers, put the full struct layout in the item subdirectory header rather than the broad subsystem `types.h`.",
+    "After moving a struct, audit every consumer for whether it needs the full definition or only a forward declaration; this PR repeatedly pairs `it/forward.h` with `it/items/types.h` to make that dependency explicit.",
+    "Do not leave relocated table symbols as local `extern` declarations in a C file if they are part of a shared item interface; declare them in the relevant header with their known array sizes when available.",
+    "Preserve offset comments and `@todo Size unknown` notes during header moves so future struct-size and field-layout work does not lose existing decomp evidence.",
+    "Include-order cleanup can affect non-item systems too: fighter files that instantiate or inspect item data may need `it/types.h` even if they no longer directly include `it/forward.h`.",
+    "A broad type header can still re-export forwards from a narrower header to maintain compatibility while moving heavy definitions out of the umbrella include."
+  ],
+  "naming_conventions": [
+    "Item table types use PascalCase names: `ItemStateTable` and `ItemLogicTable`.",
+    "Per-item headers live under `src/melee/it/items/` and commonly use lower-case item names such as `itbombhei.h`, `itbox.h`, `itfoods.h`, plus address-style unknown headers such as `it_27CF.h` and `it_2F28.h`.",
+    "Item data table externs retain linker/address-style names such as `it_803F14C4`, `it_803F23CC`, `it_803F3100`, and `it_803F4D20`, with address comments like `/* 3F14C4 */`.",
+    "Struct fields in `ItemLogicTable` are named after lifecycle/callback roles: `spawned`, `destroyed`, `picked_up`, `dropped`, `thrown`, `dmg_dealt`, `dmg_received`, `entered_air`, `reflected`, `clanked`, `absorbed`, `shield_bounced`, `hit_shield`, and `evt_unk`.",
+    "The moved structs keep decomp annotation style with `/// @at{...} @sz{4}` field comments."
+  ],
+  "assembly_or_matching_tactics": [
+    "No assembly-specific matching tactic is described in PR text or review comments.",
+    "The main matching-safety tactic evident from the diff is preserving struct layouts and field ordering exactly while moving headers, avoiding changes to generated code semantics.",
+    "Replacing umbrella includes with precise forward/type includes can reduce compile-order and dependency noise without touching function bodies."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review body text were present in the provided PR context."
+  ],
+  "searchable_terms": [
+    "pr-1257",
+    "ItemStateTable",
+    "ItemLogicTable",
+    "it/items/types.h",
+    "it/items/forward.h",
+    "it/types.h",
+    "it/forward.h",
+    "it_2725.h",
+    "item.c",
+    "it_803F14C4",
+    "it_803F23CC",
+    "it_803F3100",
+    "it_803F4D20",
+    "HSD_GObjPredicate",
+    "HSD_GObjEvent",
+    "HSD_GObjInteraction",
+    "IWYU pragma: export",
+    "include hygiene",
+    "header move",
+    "item headers",
+    "ftNs_AttackHi4.c",
+    "ftSk_SpecialS.c",
+    "ribbanya"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that continue moving item-specific structs from `it/types.h` into `it/items/types.h` or per-item headers.",
+    "Search for remaining item headers that include `it/types.h` only to get `ItemStateTable` or `ItemLogicTable`.",
+    "Audit whether `ItemLogicTable` size is now known and whether the `@todo Size unknown` on `ItemStateTable` was later resolved.",
+    "Search for later changes to `it_803F14C4`, `it_803F23CC`, `it_803F3100`, or `it_803F4D20` declarations and array sizes.",
+    "Check whether similar forward/type split conventions were applied to fighter, stage, or effect subsystem headers."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

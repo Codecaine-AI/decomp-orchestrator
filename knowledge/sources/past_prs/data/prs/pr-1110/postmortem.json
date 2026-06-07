@@ -1,0 +1,129 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1110",
+  "pr": {
+    "number": 1110,
+    "title": "Re-link `dolphin/card`",
+    "url": "https://github.com/doldecomp/melee/pull/1110",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-01-25T12:52:54Z",
+    "merged_at": "2024-01-25T12:54:04Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Re-linked the Dolphin memory card runtime library objects by changing six `dolphin/card` source files from `NonMatching` to `Matching` in `configure.py`. The source edits are small matching/linkage fixes: always emitting previously `MUST_MATCH`-guarded dummy stack arrays, adding `#pragma force_active` around externally-needed or otherwise retained functions, exporting `CreateCallbackFat`, and changing one conditional from `MUST_MATCH` to `!BUGFIX` for a suspected missing-inline/bugfix-sensitive assignment.",
+  "change_classification": {
+    "primary_type": "matching_status_relink",
+    "categories": [
+      "configure",
+      "matching",
+      "headers",
+      "linkage",
+      "pragmas",
+      "dolphin_runtime"
+    ],
+    "systems": [
+      "dolphin/card",
+      "configure.py",
+      "runtime_lib"
+    ]
+  },
+  "key_files": [
+    "configure.py",
+    "src/dolphin/card/CARDBlock.c",
+    "src/dolphin/card/CARDCreate.c",
+    "src/dolphin/card/CARDCreate.h",
+    "src/dolphin/card/CARDDir.c",
+    "src/dolphin/card/CARDRdwr.c",
+    "src/dolphin/card/CARDStat.c",
+    "src/dolphin/card/CARDUnlock.c"
+  ],
+  "what_changed": [
+    "`configure.py` now marks `dolphin/card/CARDUnlock.c`, `CARDRdwr.c`, `CARDBlock.c`, `CARDDir.c`, `CARDCreate.c`, and `CARDStat.c` as `Object(Matching, ...)` instead of `Object(NonMatching, ...)` in the `RuntimeLib` card object list.",
+    "Previously `#ifdef MUST_MATCH`-guarded unused stack buffers `u8 _[8];` were made unconditional in `CARDBlock.c`, `CARDDir.c`, and `CARDUnlock.c`, preserving the stack-layout effect without relying on `MUST_MATCH`.",
+    "`__CARDAllocBlock` in `CARDBlock.c` was wrapped in `#pragma push`, `#pragma force_active on`, and `#pragma pop` so the symbol remains emitted/active.",
+    "A duplicated-looking `card = &__CARDBlock[chan];` pattern in `__CARDFreeBlock` changed its guard from `#ifdef MUST_MATCH` to `#ifndef BUGFIX`, documenting that the odd code is tied to non-bugfixed matching behavior rather than only a match-only build mode.",
+    "`CreateCallbackFat` in `CARDCreate.c` was changed from `static void` to external `void`, guarded with `#pragma force_active` when `BUGFIX` is not defined, and declared in `CARDCreate.h`.",
+    "`CARDCreateAsync`, `CARDGetXferredBytes`, and `CARDSetStatusAsync` were wrapped with `#pragma force_active on`, with comments noting they are used only by `#hsd_803AAA48`.",
+    "No PR body, issue comments, review comments, or reviews were present in the supplied context; evidence is from the title, changed-file list, and diff excerpt."
+  ],
+  "smart_moves": [
+    "The PR separated true matching/linkage mechanics from old `MUST_MATCH` scaffolding by making necessary dummy stack reservations unconditional, which lets the files be promoted to `Matching` cleanly.",
+    "Using localized `#pragma push`/`#pragma force_active on`/`#pragma pop` blocks retained required symbols without globally affecting compiler behavior.",
+    "The `#ifndef BUGFIX` guard communicates that a suspicious assignment pattern is intentional for original-code matching and should be omitted only in bugfixed builds.",
+    "Adding `CreateCallbackFat` to `CARDCreate.h` matches its new non-static linkage and avoids relying on an internal-only declaration after the symbol is force-retained/exported.",
+    "The comments `Used only by #hsd_803AAA48` preserve why otherwise-unused public CARD functions need force-active treatment, which is useful for future dead-code/link-order investigations."
+  ],
+  "decomp_lessons": [
+    "When moving runtime-library objects from `NonMatching` to `Matching`, check for local `MUST_MATCH` hacks that can be converted into normal source constructs once they are known to be required for the retail binary.",
+    "Unused local arrays can be legitimate stack-shape matching tools; if they are required for the target binary, keep them in source rather than hiding them behind `MUST_MATCH`.",
+    "If a function is only referenced through obscure external code or linker behavior, `#pragma force_active` can be a targeted way to preserve it while keeping the rest of the file normal.",
+    "Functions made non-static for linkage or force-active reasons should have header declarations updated at the same time.",
+    "Use semantic build guards like `BUGFIX` when a strange construct represents an original-code bug or artifact, rather than treating it as merely a decompilation matching hack.",
+    "A relink PR can consist largely of configuration flips plus tiny source-layout/linkage corrections; those small edits are often what make a whole library eligible for `Matching`."
+  ],
+  "naming_conventions": [
+    "Dolphin CARD source files retain SDK-style names such as `CARDBlock.c`, `CARDCreate.c`, `CARDDir.c`, `CARDRdwr.c`, `CARDStat.c`, and `CARDUnlock.c`.",
+    "Internal CARD helpers use double-underscore names such as `__CARDAllocBlock`, `__CARDFreeBlock`, `__CARDUpdateFatBlock`, `__CARDUpdateDir`, `__CARDWrite`, `__CARDWritePage`, `__CARDPutControlBlock`, and `__CARDUnlock`.",
+    "Public CARD APIs use SDK-style names such as `CARDCreateAsync`, `CARDGetXferredBytes`, `CARDGetStatus`, and `CARDSetStatusAsync`.",
+    "Callback symbols use descriptive CamelCase names including `EraseCallback`, `WriteCallback`, `BlockWriteCallback`, and `CreateCallbackFat`.",
+    "The dummy unused stack buffer is named `_`, as in `u8 _[8];`, indicating intentional unused storage for layout matching."
+  ],
+  "assembly_or_matching_tactics": [
+    "Promoted six CARD objects to `Matching` in the runtime library object list.",
+    "Kept unused `u8 _[8];` stack allocations unconditionally to preserve stack frame shape.",
+    "Applied `#pragma force_active on` only around specific symbols that must be retained: `__CARDAllocBlock`, `CreateCallbackFat`, `CARDCreateAsync`, `CARDGetXferredBytes`, and `CARDSetStatusAsync`.",
+    "Used `#pragma push` and `#pragma pop` to scope force-active pragmas tightly.",
+    "Changed a match-only conditional from `#ifdef MUST_MATCH` to `#ifndef BUGFIX` around an odd assignment in `__CARDFreeBlock`, implying the retail behavior is intentionally preserved except in bugfix builds.",
+    "Converted `CreateCallbackFat` from `static` to external linkage and added a header prototype, likely to satisfy symbol/link expectations during relink."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1110",
+    "Re-link dolphin/card",
+    "RuntimeLib card",
+    "Object Matching",
+    "Object NonMatching",
+    "configure.py",
+    "CARDUnlock.c",
+    "CARDRdwr.c",
+    "CARDBlock.c",
+    "CARDDir.c",
+    "CARDCreate.c",
+    "CARDStat.c",
+    "CARDCreate.h",
+    "MUST_MATCH",
+    "BUGFIX",
+    "force_active",
+    "#pragma push",
+    "#pragma pop",
+    "unused stack",
+    "u8 _[8]",
+    "__CARDAllocBlock",
+    "__CARDFreeBlock",
+    "__CARDUpdateFatBlock",
+    "CreateCallbackFat",
+    "CARDCreateAsync",
+    "CARDGetXferredBytes",
+    "CARDSetStatusAsync",
+    "hsd_803AAA48",
+    "fix_epilogue",
+    "memory card",
+    "dolphin CARD"
+  ],
+  "follow_up_queries": [
+    "Find other PRs that converted `MUST_MATCH` unused stack arrays into unconditional dummy buffers.",
+    "Search for other `#pragma force_active` uses around functions referenced only by `hsd_803AAA48`.",
+    "Compare later CARD PRs to see whether the `#ifndef BUGFIX` assignment in `__CARDFreeBlock` was refined or documented further.",
+    "Look for relink PRs that promote several `Object(NonMatching, ...)` entries to `Object(Matching, ...)` after small linkage fixes."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

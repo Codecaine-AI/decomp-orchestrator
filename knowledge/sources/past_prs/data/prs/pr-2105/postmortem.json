@@ -1,0 +1,136 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2105",
+  "pr": {
+    "number": 2105,
+    "title": "grCorneria matches",
+    "url": "https://github.com/doldecomp/melee/pull/2105",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2026-01-18T23:19:42Z",
+    "merged_at": "2026-01-18T23:23:53Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched several previously stubbed grCorneria stage functions and tightened Corneria ground variable layout/prototypes. The PR renamed two anonymous generator callbacks in symbols/header from fn_801E2454/fn_801E2480 to grCorneria_801E2454/grCorneria_801E2480, implemented position helper functions, state-reset functions, a stage-ID check for Corneria/Venom, and an accessor for Corneria xD0. The key structural fix was changing grCorneria_GroundVars bitfield groups xC4 and xC6 into unions with both named bit access and whole-byte value access, enabling matching code that zeroes or assigns the entire flag byte.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-layout",
+      "symbol-renaming",
+      "stage-logic"
+    ],
+    "systems": [
+      "stage",
+      "ground",
+      "config"
+    ]
+  },
+  "key_files": [
+    "src/melee/gr/grcorneria.c",
+    "src/melee/gr/types.h",
+    "src/melee/gr/grcorneria.h",
+    "config/GALE01/symbols.txt"
+  ],
+  "what_changed": [
+    "Implemented grCorneria_801DDCF0(Vec3*) to fetch ground object 3 via Ground_801C2BA4(3), compute offset-relative x/y using gv.corneria.offset_x, offset_y.val, xE4, and xE8, and set z to 0.0f.",
+    "Implemented grCorneria_801DDD4C(Vec3*) to fetch ground object 3 and compute base-plus-offset x/y from gv.corneria.base_x, base_y, offset_x, and offset_y.val.",
+    "Reworked Corneria flag accesses from xC4_flags/xC6_flags to union fields xC4.flags, xC4.value, xC6.flags, and xC6.value.",
+    "Simplified grCorneria_801DFC2C reset logic by using GET_GROUND(gobj), clearing xC6.value, clearing offset_y.flags.b0, memzeroing 0x18 bytes starting at xC8, clearing xC4.value, and setting gp->x11_flags.b012.",
+    "Implemented grCorneria_801E0140 with the same animation/reset pattern seen in grCorneria_801DFEB8: clear xC6.flags.b0, call grAnime_801C8138, clear xC4.value, and set x11_flags.b012.",
+    "Implemented grCorneria_801E0F34(Ground_GObj*, int) to clear xCC/xC8, clamp the integer argument to the range 0..0x13, and store it into the xC4 byte.",
+    "Implemented grCorneria_801E2454(Vec3*) and grCorneria_801E2480(Vec3*) as grLib_801C96F8 generator wrappers using IDs 0x7534 and 0x7530 with count/parameter 0x1E.",
+    "Implemented grCorneria_801E2CE8(void) to return true when stage_info.internal_stage_id is CORNERIA or VENOM.",
+    "Implemented grCorneria_801E2EA0(void) to return gv.corneria.xD0 from ground object 3 when available, otherwise 0.0f.",
+    "Updated grcorneria.h prototypes for newly typed functions, including Vec3*, Ground_GObj*, int, HSD_Generator*, and f32 return types.",
+    "Renamed config symbols fn_801E2454 and fn_801E2480 to grCorneria_801E2454 and grCorneria_801E2480.",
+    "Updated includes in grcorneria.c to use forward headers and explicit gr/ include paths, adding gr/grlib.h for grLib_801C96F8."
+  ],
+  "smart_moves": [
+    "Used unions for xC4 and xC6 so the code can match both individual bitfield operations and whole-byte stores/clears without losing readable flag names.",
+    "Replaced a sequence of individual field clears in grCorneria_801DFC2C with memzero(&gp->gv.corneria.xC8, 0x18), matching the observed contiguous reset pattern and reducing manual field-by-field noise.",
+    "Promoted anonymous local function names to stage-scoped grCorneria_* names once their role as Corneria generator callbacks was understood, keeping symbols aligned with neighboring stage functions.",
+    "Typed small helper functions in the public header as soon as their signatures were known, replacing UNK_RET/UNK_PARAMS with Vec3*, Ground_GObj*, int, HSD_Generator*, and f32.",
+    "Reused existing ground access and stage globals rather than inventing abstractions: Ground_801C2BA4(3), GET_GROUND, stage_info.internal_stage_id, CORNERIA, and VENOM."
+  ],
+  "decomp_lessons": [
+    "When a ground variable byte is sometimes addressed as named bits and sometimes as an integer byte, represent it as a union of a bitfield struct and a value member; this can unlock matches while preserving semantic access.",
+    "Contiguous struct clears in assembly may be better represented as memzero over a known field range than as many scalar assignments, especially inside ground variable reset functions.",
+    "Stage helper functions that only read/write a Vec3 often fetch a canonical ground object by map/index and compute positions directly from stage-specific gv fields.",
+    "If a previously anonymous fn_* callback is passed to a stage-specific generator setup, it may deserve a grStage_address name and a typed prototype.",
+    "Header cleanup is part of matching work: replacing UNK_RET/UNK_PARAMS with exact types improves callsite readability and helps future matching.",
+    "Stage checks can include sibling or reused stages; in this slice Corneria logic explicitly treats both CORNERIA and VENOM as true."
+  ],
+  "naming_conventions": [
+    "Stage-local matched functions use the grCorneria_80xxxxxx naming pattern rather than generic fn_80xxxxxx once associated with Corneria.",
+    "Bitfield unions were named by offset-like field names xC4 and xC6, with nested .flags for bit access and .value for whole-byte access.",
+    "Vector output parameters in prototypes were named pos or Vec3* where the function writes a position.",
+    "The project prefers f32 in headers for float-returning decomp prototypes when matching surrounding typedef conventions."
+  ],
+  "assembly_or_matching_tactics": [
+    "Added PAD_STACK(4) in the Vec3 helper functions, indicating stack-padding was needed for matching those small functions.",
+    "Used memzero(&gp->gv.corneria.xC8, 0x18) to match a block clear spanning xC8 and following Corneria ground variable fields.",
+    "Stored a clamped integer into xC4 via *(int*)(&gp->gv.corneria.xC4) in grCorneria_801E0F34, suggesting a matching-motivated cast/store pattern rather than a purely type-safe byte assignment.",
+    "Changed flag writes from xC4_flags.b0/xC4_flags.b1 to xC4.flags.b0/xC4.flags.b1 and whole-byte clears to xC4.value = 0 to match different access widths.",
+    "Used GET_GROUND(gobj) in places where the diff indicates it produced the desired code shape compared with direct gobj->user_data access."
+  ],
+  "review_feedback": [
+    {
+      "source": "issue_comment",
+      "author": "YunataSavior",
+      "text": "Congrats on 50%!",
+      "interpretation": "No technical review feedback was present in the provided slice; this appears to be a progress/milestone comment."
+    }
+  ],
+  "searchable_terms": [
+    "pr-2105",
+    "grCorneria matches",
+    "PsiLupan",
+    "grcorneria.c",
+    "grcorneria.h",
+    "gr/types.h",
+    "config/GALE01/symbols.txt",
+    "grCorneria_801DDCF0",
+    "grCorneria_801DDD4C",
+    "grCorneria_801DFC2C",
+    "grCorneria_801E0140",
+    "grCorneria_801E0F34",
+    "grCorneria_801E2454",
+    "grCorneria_801E2480",
+    "grCorneria_801E2CE8",
+    "grCorneria_801E2EA0",
+    "fn_801E2454",
+    "fn_801E2480",
+    "grCorneria_GroundVars",
+    "xC4",
+    "xC4_flags",
+    "xC6",
+    "xC6_flags",
+    "offset_y.flags",
+    "memzero",
+    "PAD_STACK",
+    "Ground_801C2BA4",
+    "GET_GROUND",
+    "grLib_801C96F8",
+    "grZakoGenerator_801CA394",
+    "stage_info.internal_stage_id",
+    "CORNERIA",
+    "VENOM"
+  ],
+  "follow_up_queries": [
+    "Look for other grCorneria functions still using UNK_RET or fn_* names around 801E24AC, 801E2D14, 801E2D90, and 801E2E50.",
+    "Search other stage GroundVars structs for bitfield-only bytes that may need union { flags; value; } treatment to match whole-byte stores.",
+    "Compare grCorneria_801E2454 and grCorneria_801E2480 callsites and generated code, especially because the diff excerpt shows grCorneria_801E2480 calling grLib_801C96F8 without an explicit return despite an HSD_Generator* prototype.",
+    "Review remaining Corneria reset/init functions for opportunities to replace scalar clears with memzero when contiguous struct ranges are cleared in assembly."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

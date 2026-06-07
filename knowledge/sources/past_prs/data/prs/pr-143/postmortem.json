@@ -1,0 +1,106 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-143",
+  "pr": {
+    "number": 143,
+    "title": "Fix write error and handle other mr cases",
+    "url": "https://github.com/doldecomp/melee/pull/143",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-03T19:45:14Z",
+    "merged_at": "2021-12-03T19:45:22Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Fixed a small but important bug in tools/postprocess.py: after reading the instruction at mr_pos, the script now seeks back to mr_pos before writing, preventing the write from landing at the post-read file offset. The postprocess pattern matcher was also broadened to recognize several valid `mr r3, r28/r29/r30/r31` encodings after an `lwz r0, N(r1)` instruction, instead of only one hard-coded `mr` case.",
+  "change_classification": {
+    "primary_type": "tooling_fix",
+    "categories": [
+      "fix",
+      "tooling",
+      "postprocess",
+      "binary_patch"
+    ],
+    "systems": [
+      "tools/postprocess.py",
+      "ELF postprocessing",
+      "old stack handling"
+    ]
+  },
+  "key_files": [
+    "tools/postprocess.py"
+  ],
+  "what_changed": [
+    "In impl_postprocess_elf, expanded the `mr` instruction match immediately following a detected `lwz r0, N(r1)` from a single encoding to four encodings: `0x7F83E378`, `0x7FE3FB78`, `0x7FC3F378`, and `0x7FA3EB78`.",
+    "The comment documents the intended accepted forms as `mr r3, r28`, `mr r3, r29`, `mr r3, r30`, and `mr r3, r31`.",
+    "Added `f.seek(mr_pos)` after reading the instruction at `mr_pos` and before `write_u32(f, lwz)`, fixing a file-position/write-offset error during the instruction swap.",
+    "Changed only one file, with 2 added lines and 1 deleted line."
+  ],
+  "smart_moves": [
+    "The fix preserves the existing narrow pattern structure around `lwz_pos + 4`, reducing risk while allowing additional observed `mr` register variants.",
+    "The write bug fix is minimal and targeted: because `read_u32(f)` advances the file cursor, seeking back to `mr_pos` before `write_u32` ensures the swap writes to the intended instruction location.",
+    "The PR addresses both correctness of detection and correctness of mutation in the same postprocess path, which is important for binary patching tools where a wrong offset can silently corrupt nearby instructions."
+  ],
+  "decomp_lessons": [
+    "When postprocessing binaries by seeking and reading, remember that reads advance the file cursor; always re-seek before writing to a previously read location.",
+    "Instruction-pattern tooling should account for equivalent compiler output variants when evidence shows multiple valid register choices, but should keep enough contextual checks, such as `it == lwz_pos + 4`, to avoid overmatching.",
+    "For decompilation support scripts, very small offset bugs can have outsized impact because they modify generated objects or ELFs after compilation.",
+    "When matching PowerPC `mr` aliases, record and reuse the exact 32-bit encodings that have been observed in matching work rather than assuming only one register allocation."
+  ],
+  "naming_conventions": [
+    "Existing helper/position names use concise snake_case such as `lwz_pos`, `mr_pos`, `read_u32`, and `write_u32`.",
+    "The postprocess entry point is named `impl_postprocess_elf`, indicating an implementation helper for ELF postprocessing.",
+    "Boolean feature flags in this function use `do_` prefixes, including `do_ctor_realign`, `do_old_stack`, and `do_symbol_fixup`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Recognize stack-related `lwz` with a masked comparison: `instr & 0xFFFFFF00 == 0x80010000` plus `instr & 0xFF > 0`, described as `lwz r0, N(r1)`.",
+    "Only accept the `mr` candidate when it appears exactly four bytes after the detected `lwz`, using `it == lwz_pos + 4`.",
+    "Accepted `mr` encodings in this slice are `0x7F83E378`, `0x7FA3EB78`, `0x7FC3F378`, and `0x7FE3FB78`.",
+    "The patch swaps the instructions at `lwz_pos` and `mr_pos` by reading both 32-bit words, seeking to `mr_pos` to write the `lwz`, then seeking to `lwz_pos` to write the `mr`."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-143",
+    "PsiLupan",
+    "Fix write error and handle other mr cases",
+    "tools/postprocess.py",
+    "impl_postprocess_elf",
+    "postprocess.py",
+    "postprocess-fix",
+    "do_old_stack",
+    "do_ctor_realign",
+    "do_symbol_fixup",
+    "lwz_pos",
+    "mr_pos",
+    "read_u32",
+    "write_u32",
+    "f.seek(mr_pos)",
+    "lwz r0, N(r1)",
+    "mr r3 r28",
+    "mr r3 r29",
+    "mr r3 r30",
+    "mr r3 r31",
+    "0x7F83E378",
+    "0x7FA3EB78",
+    "0x7FC3F378",
+    "0x7FE3FB78",
+    "0x4E800020",
+    "PowerPC",
+    "ELF postprocess",
+    "binary patching",
+    "write offset"
+  ],
+  "follow_up_queries": [
+    "Find later changes to tools/postprocess.py that further adjust old stack handling or mr/lwz instruction swapping.",
+    "Search for other postprocess.py patches involving read_u32/write_u32 cursor positioning bugs.",
+    "Look for PRs documenting why `mr r3, r28/r29/r30/r31` variants appear in old stack or constructor realignment cases."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

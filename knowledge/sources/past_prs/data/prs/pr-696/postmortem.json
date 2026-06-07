@@ -1,0 +1,158 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-696",
+  "pr": {
+    "number": 696,
+    "title": "Match OSInit",
+    "url": "https://github.com/doldecomp/melee/pull/696",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-01-17T00:53:51Z",
+    "merged_at": "2023-01-17T08:16:04Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched Dolphin OS initialization code by replacing a large inline-assembly/NOT_IMPLEMENTED OSInit implementation with C, moving OS_data.s data and sbss into OSInit.c, and cleaning related declarations in OSInit.h and db.{c,h}. The PR body says it was based on Prime decomp and still needed cleanup, and review feedback confirms some stylistic and type choices remained under discussion.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "cleanup",
+      "data-migration"
+    ],
+    "systems": [
+      "dolphin",
+      "dolphin/os",
+      "dolphin/db",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "src/dolphin/os/OSInit.c",
+    "src/dolphin/os/OSInit.h",
+    "asm/dolphin/os/OS_data.s",
+    "src/dolphin/db/db.c",
+    "src/dolphin/db/db.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Reworked src/dolphin/os/OSInit.c heavily, replacing the previous inline asm OSInit path and NOT_IMPLEMENTED fallback with a C implementation for OSInit.",
+    "Deleted asm/dolphin/os/OS_data.s and removed its object from obj_files.mk, folding its data/sbss responsibilities into C-side definitions in OSInit.c.",
+    "Introduced more meaningful OSInit-side types and constants, including OSBootInfo fields for DVDDiskID, magic, version, memorySize, consoleType, arenaLo, arenaHi, FSTLocation, and FSTMaxLength; an OSConsoleType enum; BI2Debug; OS_BI2_DEBUG_ADDRESS; OS_DEBUG_ADDRESS_2; OS_EXCEPTIONTABLE_ADDR; and OS_DBJUMPPOINT_ADDR.",
+    "Changed formerly broad extern unk_t declarations around OS init state into more specific types where evidenced, such as static OSBootInfo* BootInfo, static u32* BI2DebugFlag, static bool AreWeInitialized, OSTime __OSStartTime, extern bool __DVDLongFileNameFlag, extern u32 __PADSpec, and extern void _db_stack_end(void).",
+    "Updated OSGetConsoleType to return the named OS_CONSOLE_ARTHUR enum value instead of the literal 0x10000002 when BootInfo is absent or has consoleType 0.",
+    "Added db.h include usage and declared bool __DBIsExceptionMarked(u8 exception) in src/dolphin/db/db.h.",
+    "Renamed __DBIsExceptionMarked's parameter from a to exception and changed its return type from int to bool while preserving the u8 exception index type.",
+    "Converted at least part of exception setup from inline asm/placeholder into C: diff evidence shows static void OSExceptionInit(void), use of OSExceptionTable, exception vector copy/flush/invalidate behavior, __OSGetExceptionHandler/__OSSetExceptionHandler declarations in OSInit.h, and remaining MWERKS_GEKKO asm for low-level vector snippets."
+  ],
+  "smart_moves": [
+    "Used a known external decompilation reference: the PR body explicitly says the work was based on Prime decomp, which likely accelerated matching for complex Dolphin OS startup code.",
+    "Kept truly low-level exception vector routines in MWERKS_GEKKO asm while converting higher-level OSInit and OSExceptionInit control flow to C, reducing asm without overreaching on code that is naturally vector/SPR-sensitive.",
+    "Replaced magic console-type literals with an enum, improving readability while retaining exact numeric values used by Dolphin OS console detection.",
+    "Modeled fixed hardware and boot memory addresses with named macros and AT_ADDRESS declarations, making hardware register and boot-info accesses searchable and less error-prone.",
+    "Preserved the compiler workaround around the unused inline asm __OSFPRInit by documenting the peephole issue and leaving #pragma peephole off under MUST_MATCH.",
+    "Made data ownership cleaner by eliminating a standalone OS_data.s object once the strings/state could be represented from C, simplifying obj_files.mk and future symbol tracking."
+  ],
+  "decomp_lessons": [
+    "For Dolphin OS code, moving from assembly to C may require reconstructing not only functions but also adjacent .data and .sbss symbols; deleting the asm data file must be paired with correct C definitions and build list updates.",
+    "Boot ROM and BI2 structures should be modeled with real fields once offsets are understood; this lets code express BootInfo->arenaLo, BootInfo->arenaHi, BootInfo->consoleType, and DebugInfo->debugFlag instead of raw offsets.",
+    "Use named constants for fixed GameCube addresses such as 0x800000F4, 0x800030E9, 0x80003000/exception table areas, and PI register regions to make decompiled code auditable.",
+    "Small type choices can matter for matching and ABI: reviewer discussion around __DBIsExceptionMarked notes that the exception parameter really needed to stay u8 rather than a wider OSException type.",
+    "C decompilation can still leave embedded asm islands for exception vectors and branch-to-absolute-address stubs; partial conversion is acceptable when those routines are hard to express safely in C.",
+    "When a match requires compiler pragmas, document the exact reason, e.g. a peephole optimizer bug triggered by an inline asm function, instead of leaving a vague TODO."
+  ],
+  "naming_conventions": [
+    "Use OS-prefixed enums for Dolphin OS constants, as shown by OSConsoleType and values OS_CONSOLE_RETAIL, OS_CONSOLE_EMULATOR, OS_CONSOLE_PC_EMULATOR, OS_CONSOLE_ARTHUR, and OS_CONSOLE_MINNOW.",
+    "Use descriptive parameter names for narrow integral indices, e.g. __DBIsExceptionMarked(u8 exception) instead of u8 a.",
+    "Internal Dolphin OS symbols retained double-underscore prefixes where matching existing SDK-style names: __OSStartTime, __OSDeviceCode, __OSDBINTSTART, __OSDBINTEND, __OSDBJUMPSTART, __OSDBJUMPEND, __OSEVStart, __OSEVEnd, __OSGetExceptionHandler, and __OSSetExceptionHandler.",
+    "Hardware-address and boot-address macros used uppercase names with OS_ prefixes, including OS_BI2_DEBUG_ADDRESS, OS_DEBUG_ADDRESS_2, OS_DBJUMPPOINT_ADDR, and OS_EXCEPTIONTABLE_ADDR.",
+    "Structure names reflected SDK concepts rather than anonymous placeholders: OSBootInfo and BI2Debug replaced opaque char padding/unk_t-heavy declarations where offsets were known."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed asm/dolphin/os/OS_data.s and its obj_files.mk entry after migrating the OSInit strings, BootInfo, BI2DebugFlag, BI2DebugFlagHolder, AreWeInitialized, OSExceptionTable, and __OSStartTime data responsibilities into C.",
+    "Converted OSInit from a large inline asm block to C while preserving behavior such as one-time initialization, __OSGetSystemTime, OSDisableInterrupts, BootInfo setup, BI2 debug loading, arena bounds setup, subsystem initialization, console reporting, ClearArena, and OSEnableInterrupts.",
+    "Used exact-address declarations and volatile structs for memory-mapped state, including __OSDeviceCode at OS_BASE_CACHED | 0x30E6 and OS_PI at 0xCC003000.",
+    "Kept #pragma peephole off under MUST_MATCH with an explicit note that the workaround is tied to inline asm function __OSFPRInit.",
+    "Preserved low-level asm for vector-related routines where diff evidence shows asm void __OSDBIntegrator, __OSDBJump, OSExceptionVector, and OSDefaultExceptionHandler remained or were reshaped.",
+    "OSExceptionInit C reconstruction used memcpy plus cache maintenance calls in the diff excerpt, including DCFlushRangeNoSync, sync, and ICInvalidateRange after copying exception/debug-vector code."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "file": "src/dolphin/db/db.c",
+      "comment": "Asked whether OSException would match for the __DBIsExceptionMarked parameter instead of u8."
+    },
+    {
+      "author": "r-burns",
+      "file": "src/dolphin/db/db.c",
+      "comment": "Replied that the parameters really do need to be u8."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/dolphin/os/OSInit.c",
+      "comment": "Requested that in the future comments be placed above the line they describe, not beside; explicitly said no immediate change was required."
+    }
+  ],
+  "searchable_terms": [
+    "Match OSInit",
+    "OSInit",
+    "OSInit.c",
+    "OSInit.h",
+    "OS_data.s",
+    "obj_files.mk",
+    "Prime decomp",
+    "Dolphin OS",
+    "OSBootInfo",
+    "BI2Debug",
+    "BootInfo",
+    "BI2DebugFlag",
+    "BI2DebugFlagHolder",
+    "AreWeInitialized",
+    "OSExceptionTable",
+    "__OSStartTime",
+    "OSConsoleType",
+    "OS_CONSOLE_ARTHUR",
+    "OS_CONSOLE_RETAIL",
+    "OS_BI2_DEBUG_ADDRESS",
+    "OS_DEBUG_ADDRESS_2",
+    "OS_DBJUMPPOINT_ADDR",
+    "OS_EXCEPTIONTABLE_ADDR",
+    "__DBIsExceptionMarked",
+    "u8 exception",
+    "OSExceptionInit",
+    "OSExceptionVector",
+    "__OSDBIntegrator",
+    "__OSDBJump",
+    "__OSEVStart",
+    "__OSEVEnd",
+    "__OSFPRInit",
+    "peephole off",
+    "MUST_MATCH",
+    "MWERKS_GEKKO",
+    "AT_ADDRESS",
+    "OS_PI",
+    "__OSDeviceCode",
+    "ClearArena",
+    "OSGetConsoleType",
+    "EnableMetroTRKInterrupts",
+    "DCFlushRangeNoSync",
+    "ICInvalidateRange"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that clean up comments or style in src/dolphin/os/OSInit.c after PR 696.",
+    "Find later changes to __DBIsExceptionMarked or OSException typedef usage to see whether u8 remained required.",
+    "Find PRs that further decompile Dolphin OS exception/vector code left in MWERKS_GEKKO asm.",
+    "Search for additional migrations of asm/dolphin/os/*.s data into C and their obj_files.mk removal pattern.",
+    "Search for uses of OSBootInfo, BI2Debug, and OSConsoleType introduced or moved to shared headers after this PR."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

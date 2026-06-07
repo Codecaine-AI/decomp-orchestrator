@@ -1,0 +1,114 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-930",
+  "pr": {
+    "number": 930,
+    "title": "Partially match HSD fobj",
+    "url": "https://github.com/doldecomp/melee/pull/930",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-06-16T02:13:31Z",
+    "merged_at": "2023-06-16T02:22:41Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Partially moved sysdolphin baselib fobj work out of standalone assembly and into src/sysdolphin/baselib/fobj.c. The large HSD_FObjInterpretAnim body was preserved as inline asm inside C, while nearby functions such as HSD_FObjInterpretAnimAll, HSD_FObjLoadDesc, HSD_FObjAlloc, and HSD_FObjFree were implemented in C. The PR also moved fobj.c-local strings/constants into C and adjusted fobj.h plus a few asm labels in pobj.s/tobj.s so function-pointer references use named symbols instead of anonymous local labels. There were no PR body comments or review comments in the provided slice, so intent beyond the title/diff is inferred from the code movement.",
+  "change_classification": {
+    "primary_type": "partial-decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "source-migration",
+      "headers",
+      "asm-label-cleanup"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "fobj",
+      "pobj",
+      "tobj"
+    ]
+  },
+  "key_files": [
+    "asm/sysdolphin/baselib/fobj.s",
+    "src/sysdolphin/baselib/fobj.c",
+    "src/sysdolphin/baselib/fobj.h",
+    "asm/sysdolphin/baselib/pobj.s",
+    "asm/sysdolphin/baselib/tobj.s"
+  ],
+  "what_changed": [
+    "Removed most of asm/sysdolphin/baselib/fobj.s text/sdata/sdata2 content, leaving the fobj data string table HSD_FObj_80406350 in assembly.",
+    "Added roughly 550 lines to src/sysdolphin/baselib/fobj.c, including an inline-asm version of HSD_FObjInterpretAnim and C implementations of HSD_FObjInterpretAnimAll, HSD_FObjLoadDesc, HSD_FObjAlloc, and HSD_FObjFree.",
+    "Added <string.h> to fobj.c so HSD_FObjAlloc can memset the newly allocated HSD_FObj.",
+    "Moved fobj.c local data into C: HSD_FObj_804D5D58 = \"fobj.c\", HSD_FObj_804D5D60 = \"new\", and static const f64 HSD_FObj_804DE4F0 = 0.0.",
+    "Changed HSD_FObjInterpretAnimAll's header declaration from HSD_FObj* fobj to void* fobj, matching the new implementation that casts internally to HSD_FObj* before walking next pointers.",
+    "Renamed local assembly labels used as callable/function-pointer targets: .L_8036BAF4 became PObjUpdateFunc in pobj.s, and .L_803600A0 became TObjMakeTExp in tobj.s.",
+    "Added explicit tobj.s labels for HSD_TGTex2Index, HSD_TexCoord2Index, and HSD_TexMap2Index, and removed an unused .L_804DE3F8 sdata2 set."
+  ],
+  "smart_moves": [
+    "Preserved HSD_FObjInterpretAnim as inline asm inside fobj.c rather than forcing a full C match, allowing the rest of fobj.c to advance while keeping the difficult interpreter exactly matched.",
+    "Converted simple allocation/loading/freeing wrappers to C around the still-asm-heavy interpreter, reducing standalone assembly without overreaching.",
+    "Kept fobj assertion strings and floating-point constants colocated with the C translation unit, which helps reproduce small-data references used by __assert and floating comparisons.",
+    "Used named assembly labels for function-pointer targets in pobj/tobj, making cross-file references more stable and searchable than anonymous .L labels."
+  ],
+  "decomp_lessons": [
+    "For large interpreter/state-machine functions, it is acceptable to migrate the function into the C file as inline asm first, then progressively replace pieces with C later.",
+    "When moving code out of .s files, also account for the companion .sdata/.sdata2 symbols; C static strings and const floating data may be needed to preserve small-data layout and references.",
+    "Allocator functions should preserve original assert behavior and initialization order: HSD_FObjAlloc asserts on NULL with the original file/name strings, then memset(new, 0, sizeof(HSD_FObj)).",
+    "Header prototypes may need to match the ABI or existing call sites rather than the most specific internal type; here HSD_FObjInterpretAnimAll exposes void* and casts internally.",
+    "Anonymous local labels that are really function entry points should be promoted to named labels before or during decomp so function-pointer initializers/readability do not depend on .L names."
+  ],
+  "naming_conventions": [
+    "HSD_FObj* public baselib functions keep the HSD_FObj prefix: HSD_FObjInterpretAnim, HSD_FObjInterpretAnimAll, HSD_FObjLoadDesc, HSD_FObjAlloc, HSD_FObjFree.",
+    "Internal fobj helpers use FObj* or lower camel/camel-like names already present in the file, such as FObjUpdateAnim, parsePackInfo, parseFloat, and FObjLaunchKeyData.",
+    "Auto-generated/local data names retained the project symbol style HSD_FObj_804D5D58, HSD_FObj_804D5D60, HSD_FObj_804DE4F0, and HSD_FObj_80406350.",
+    "Former local asm labels that denote callable routines were renamed to descriptive symbol names such as PObjUpdateFunc and TObjMakeTExp."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `#pragma push` / `#pragma pop` and `asm void HSD_FObjInterpretAnim(...) { nofralloc ... }` to keep the existing PowerPC body in C while removing it from fobj.s.",
+    "Replaced assembly references like `.L_804DE4D0` for zero with C-side `0.0f` where possible inside the inline asm text, while retaining named f64 data for `HSD_FObj_804DE4F0` and `lbl_804DE4E0` references.",
+    "Preserved branch labels in the inline asm as `lbl_8036B...` rather than `.L_8036B...`, avoiding local-label syntax issues and keeping address-derived searchability.",
+    "Defined `#define fobj_c_sdata2_start (HSD_FObj_804DE4F0 - 0x20)` and `#define lbl_804DE4E0 (fobj_c_sdata2_start + 0x10)` to reproduce sdata2-addressed double constants used by the interpreter.",
+    "Named asm entry points in pobj.s/tobj.s were used where code takes function addresses, replacing `.L_...@ha/@l` references with symbol names."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "Partially match HSD fobj",
+    "HSD_FObjInterpretAnim",
+    "HSD_FObjInterpretAnimAll",
+    "HSD_FObjLoadDesc",
+    "HSD_FObjAlloc",
+    "HSD_FObjFree",
+    "FObjUpdateAnim",
+    "FObjLaunchKeyData",
+    "parsePackInfo",
+    "parseFloat",
+    "fobj.c",
+    "HSD_FObj_80406350",
+    "HSD_FObj_804D5D58",
+    "HSD_FObj_804D5D60",
+    "HSD_FObj_804DE4F0",
+    "fobj_c_sdata2_start",
+    "lbl_804DE4E0",
+    "PObjUpdateFunc",
+    "TObjMakeTExp",
+    "HSD_TGTex2Index",
+    "HSD_TexCoord2Index",
+    "HSD_TexMap2Index",
+    "sysdolphin baselib fobj"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that replace the inline asm HSD_FObjInterpretAnim with C.",
+    "Search for uses of HSD_FObjInterpretAnimAll with non-HSD_FObj typed pointers to explain the void* prototype.",
+    "Check subsequent cleanup of HSD_FObj_80406350 and fobj assertion string names.",
+    "Look for later decomp of PObjUpdateFunc and TObjMakeTExp after they were promoted from local labels."
+  ],
+  "confidence": 0.84,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

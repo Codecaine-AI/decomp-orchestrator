@@ -1,0 +1,131 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-673",
+  "pr": {
+    "number": 673,
+    "title": "Implement `stdbool.h`",
+    "url": "https://github.com/doldecomp/melee/pull/673",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-13T07:48:45Z",
+    "merged_at": "2023-01-13T08:19:02Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added an MSL `stdbool.h` shim and migrated the codebase from project-local `BOOL`/`TRUE`/`FALSE` in `Runtime/platform.h` to standard-style `bool`/`true`/`false`. The change was broad but mostly mechanical, touching Dolphin libraries, Runtime, fighters, items, ground, player, baselib, and game-mode headers/sources. It centralized boolean definitions behind `<stdbool.h>` and removed the old `BOOL` typedef/macros from `platform.h`. Review discussion focused on whether the new header's documentation should claim it assumes GEKKO and on the fact that this shim uses `typedef int bool`, while the C standard's `_Bool` has unsigned-like behavior/representation concerns.",
+  "change_classification": {
+    "primary_type": "header/API modernization",
+    "categories": [
+      "headers",
+      "naming",
+      "mechanical refactor",
+      "boolean type migration"
+    ],
+    "systems": [
+      "MSL",
+      "Runtime",
+      "Dolphin SDK",
+      "fighter",
+      "item",
+      "stage/ground",
+      "player",
+      "game-mode",
+      "sysdolphin baselib",
+      "melee-core"
+    ]
+  },
+  "key_files": [
+    "src/MSL/stdbool.h",
+    "src/Runtime/platform.h",
+    "src/Runtime/runtime.h",
+    "src/MSL/console_io.c",
+    "src/dolphin/card.h",
+    "src/dolphin/card/CARDBios.c",
+    "src/dolphin/card/CARDBios.h",
+    "src/dolphin/card/CARDOpen.c",
+    "src/dolphin/card/CARDOpen.h",
+    "src/dolphin/dvd/dvd.c",
+    "src/dolphin/os/OSExi.c",
+    "src/melee/ft/ftlib.c",
+    "src/melee/it/item.c",
+    "src/melee/gr/ground.c"
+  ],
+  "what_changed": [
+    "Created `src/MSL/stdbool.h` defining include guard `STDBOOL_H`, `typedef int bool`, and macros `true 1` and `false 0`.",
+    "Added `#include <stdbool.h>` to `src/Runtime/platform.h`.",
+    "Removed the old `typedef int BOOL;` and `TRUE`/`FALSE` macro definitions from `src/Runtime/platform.h`.",
+    "Changed function prototypes, struct fields, locals, statics, and return types from `BOOL` to `bool` across a very large set of source and header files.",
+    "Changed boolean literals from `TRUE`/`FALSE` to `true`/`false` throughout touched code.",
+    "Examples from the diff include `BOOL lbl_804D7080` becoming `bool lbl_804D7080` in `src/MSL/console_io.c`, `u64 __shl2i(unk_t, BOOL, s8)` becoming `u64 __shl2i(unk_t, bool, s8)` in `src/Runtime/runtime.h`, `CARDControl::attached` becoming `bool attached`, and CARD/EXI helper APIs returning or accepting `bool`.",
+    "The PR touched 268 files with nearly balanced line churn, indicating a largely mechanical API/name replacement rather than a behavioral rewrite."
+  ],
+  "smart_moves": [
+    "Implemented the compatibility header in `src/MSL/` instead of keeping ad hoc boolean definitions in `Runtime/platform.h`, making boolean use look like standard C and simplifying future includes.",
+    "Performed the migration consistently in both declarations and definitions, reducing prototype/type mismatches between headers and source files.",
+    "Updated struct fields and callback/reset function signatures where boolean semantics were part of public or cross-file APIs, not just local variables.",
+    "Kept the shim minimal, which limited risk for a sweeping mechanical change: `bool`, `true`, and `false` only.",
+    "Preserved the old ABI-relevant representation by using `typedef int bool`, matching the former `BOOL` definition and avoiding broad codegen/layout disruption in a decompilation project."
+  ],
+  "decomp_lessons": [
+    "For large naming cleanups, keep semantic risk low: replace `BOOL` with `bool` and `TRUE`/`FALSE` with `true`/`false` without changing control flow or integer widths unless there is matching evidence.",
+    "When replacing a project-wide typedef, migrate headers and sources together; stale prototypes can create subtle mismatch or matching problems.",
+    "In decomp projects, a standard-looking type may still need a nonstandard backing typedef to preserve binary layout/codegen. Here `bool` remained `int`, not native C99 `_Bool`.",
+    "Centralizing primitive aliases in a library-style header makes future code look closer to original SDK/MSL conventions and avoids spreading custom typedefs through platform headers.",
+    "Be cautious documenting platform assumptions in shim headers; review questioned the `@todo Assumes @c GEKKO` note, showing that comments about compiler/target assumptions should be precise and justified."
+  ],
+  "naming_conventions": [
+    "Use lowercase `bool` instead of uppercase `BOOL` for boolean-valued variables, struct members, parameters, and return types.",
+    "Use lowercase `true` and `false` instead of uppercase `TRUE` and `FALSE`.",
+    "Prefer including `<stdbool.h>` from the runtime/platform layer rather than defining boolean aliases directly in `platform.h`.",
+    "Keep the MSL compatibility header named `src/MSL/stdbool.h` with guard `STDBOOL_H`.",
+    "Do not infer native C `_Bool` behavior from the spelling `bool` in this codebase after this PR; the shim defines it as `int`."
+  ],
+  "assembly_or_matching_tactics": [
+    "The migration intentionally retained `int` as the underlying type for `bool`, which should preserve former `BOOL` calling convention, struct size/alignment, and codegen more than switching to C99 `_Bool`.",
+    "The diff is largely token-level replacement, a safe tactic for broad decomp cleanup because it avoids altering expressions beyond literal/type spelling.",
+    "Boolean accumulation patterns such as `err = false; err |= !EXIImm(...);` were preserved rather than rewritten to logical operators, helping retain matching behavior.",
+    "Return constants in simple stubs were changed from `TRUE`/`FALSE` to `true`/`false` without changing numeric values."
+  ],
+  "review_feedback": [
+    "Reviewer r-burns left a suggestion on `src/MSL/stdbool.h` against the initial comment block; the excerpt shows an empty suggestion, so the exact intended deletion/change is not fully recoverable from the slice.",
+    "Reviewer r-burns asked: \"wdym assumes gekko?\" about the `/// @todo Assumes @c GEKKO.` comment in the new `stdbool.h`.",
+    "Author ribbanya replied: \"The C standard is an unsigned integer.\" This appears to explain the concern around the shim's `typedef int bool` versus standard `_Bool`, but the excerpt is limited and does not show a final resolution beyond merge."
+  ],
+  "searchable_terms": [
+    "PR 673",
+    "stdbool.h",
+    "src/MSL/stdbool.h",
+    "BOOL to bool",
+    "TRUE to true",
+    "FALSE to false",
+    "typedef int bool",
+    "Runtime/platform.h",
+    "MSL bool shim",
+    "GEKKO stdbool",
+    "_Bool",
+    "boolean migration",
+    "CARDControl attached bool",
+    "OSDisableInterrupts bool",
+    "EXI2_Poll bool",
+    "AMC_IsStub bool",
+    "CARDBios OnReset bool",
+    "__CARDEnableInterrupt bool",
+    "__CARDCompareFileName bool",
+    "ribbanya",
+    "r-burns"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that replace `typedef int bool` with compiler/native `_Bool` or adjust the MSL `stdbool.h` shim.",
+    "Search for remaining `BOOL`, `TRUE`, or `FALSE` after PR 673 to identify incomplete migration or intentional SDK leftovers.",
+    "Search discussion around `Assumes GEKKO` comments in MSL/runtime headers to understand platform-documentation conventions.",
+    "Check whether any struct layout or function signature matching issues were later attributed to `bool` being `int` rather than `_Bool`."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

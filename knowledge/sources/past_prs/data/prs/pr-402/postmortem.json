@@ -1,0 +1,162 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-402",
+  "pr": {
+    "number": 402,
+    "title": "Decompile mtx.s",
+    "url": "https://github.com/doldecomp/melee/pull/402",
+    "state": "MERGED",
+    "author": "CelestialAmber",
+    "created_at": "2022-07-06T01:51:32Z",
+    "merged_at": "2022-07-08T17:09:37Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Decompiled sysdolphin/baselib/mtx.s into C, replacing the 1477-line assembly file with src/sysdolphin/baselib/mtx.c and adding mtx prototypes/header coverage. The work covered matrix inverse, inverse-concat, Euler/scale/translation extraction and construction helpers, vector/matrix alloc init helpers, and related PSMTX/PSVEC prototypes. The PR also adjusted build wiring and attempted Mac-friendly Makefile changes, but review pushed back to keep sha1sum for Windows/Linux and make shasum macOS-specific. Review also emphasized using math.h facilities/static standard-library behavior rather than duplicating macros or writing fake code.",
+  "change_classification": {
+    "primary_type": "decompilation",
+    "categories": [
+      "decomp-matching",
+      "assembly-removal",
+      "headers",
+      "build-system",
+      "matrix-math"
+    ],
+    "systems": [
+      "sysdolphin/baselib",
+      "asm",
+      "src",
+      "include",
+      "fighter",
+      "item",
+      "Makefile"
+    ]
+  },
+  "key_files": [
+    "asm/sysdolphin/baselib/mtx.s",
+    "src/sysdolphin/baselib/mtx.c",
+    "src/sysdolphin/baselib/mtx.h",
+    "include/functions.h",
+    "obj_files.mk",
+    "Makefile",
+    "src/sysdolphin/baselib/jobj.h",
+    "src/melee/it/item.c",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/chara/ftPurin/ftpurin.c"
+  ],
+  "what_changed": [
+    "Deleted asm/sysdolphin/baselib/mtx.s and added src/sysdolphin/baselib/mtx.c with C implementations for the baselib matrix routines.",
+    "Added/updated prototypes for mtx functions such as func_80379310, HSD_MtxInverseConcat, func_80379A20, func_80379C24, func_80379F6C, func_80379F88, func_8037A120, func_8037A230, func_8037A250, func_8037A43C, func_8037A54C, HSD_VecInitAllocData, and HSD_MtxInitAllocData.",
+    "Added PSMTX and PSVEC declarations in include/functions.h for matrix/vector primitives used by the C implementation, including PSMTXIdentity, PSMTXCopy, PSMTXConcat, PSMTXQuat, PSVECMag, PSVECNormalize, PSVECDotProduct, and PSVECCrossProduct.",
+    "Updated obj_files.mk/build wiring so mtx builds from C instead of the old assembly object.",
+    "Touched dependent fighter, item, and jobj files to align with the new mtx declarations and include structure.",
+    "Modified Makefile program selection for CPP and SHA1SUM in an attempt to support macOS; review indicated the SHA1SUM change should be macOS-specific rather than replacing sha1sum for all non-Windows hosts.",
+    "The PR body says it began as draft because the author wanted to remove fakematches, especially in the determinant function; an issue comment notes there was still one nonmatching function at one point."
+  ],
+  "smart_moves": [
+    "Factored the repeated 3x4-matrix determinant calculation into HSD_CalcDeterminantMatrix3x4, making inverse-related routines easier to compare against the assembly.",
+    "Handled source/destination aliasing explicitly in inverse routines by copying to a temporary Mtx before writing when src/inv overlaps dest, mirroring assembly behavior and avoiding clobbering inputs.",
+    "Used existing Dolphin/PS matrix and vector primitives such as PSMTXCopy, PSMTXIdentity, PSMTXConcat, PSMTXQuat, PSVECNormalize, PSVECScale, and PSVECDotProduct where the assembly called out to them.",
+    "Kept the numerical edge cases visible: determinant epsilon checks, FLOAT_MIN checks, identity fallback for singular inverse, and copy-through fallback for failed inverse-concat.",
+    "Used decomp.me scratch links during review for matching discussion, including a reviewer-provided scratch for src/sysdolphin/baselib/mtx.c."
+  ],
+  "decomp_lessons": [
+    "For math-heavy decompilation, preserve operation order aggressively; the diff comment says func_80379A20 needed stores in a different order than func_80379310 for matching.",
+    "When decompiling matrix routines, aliasing paths are often part of the observable assembly shape. Use temporary matrices and conditional PSMTXCopy calls when src/dest can overlap.",
+    "Do not duplicate standard-library math macros/functions in headers to force matches. Review explicitly said to use math.h and not write fake code.",
+    "Static variables used by standard math implementations can still be emitted/initialized for a file, so replacing hand-written fake sqrtf-style header code with math.h can be compatible with matching.",
+    "Cross-platform build changes should be narrowly scoped. Review preferred keeping sha1sum on Windows/Linux and using shasum only in a macOS-specific branch.",
+    "Leaving a NON_MATCHING function or known nonmatch should be clearly isolated and called out; the author explicitly warned about one remaining nonmatching function during the PR."
+  ],
+  "naming_conventions": [
+    "Known baselib functions keep the HSD_ prefix, e.g. HSD_MtxInverseConcat, HSD_VecInitAllocData, and HSD_MtxInitAllocData.",
+    "Dolphin SDK-style matrix/vector primitives keep PSMTX and PSVEC prefixes, e.g. PSMTXCopy, PSMTXQuat, PSVECMag, and PSVECCrossProduct.",
+    "Unidentified functions remained address-based func_8037xxxx names rather than speculative semantic names.",
+    "Helper names in the submitted code used HSD_CalcDeterminantMatrix3x4 and calcVal; evidence does not show a reviewer-approved final semantic naming pass for all helpers."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used inline helpers for determinant and bitwise absolute value to control generated floating-point code shape.",
+    "Matched singular-matrix branches with epsilon comparisons and exact fallback calls such as PSMTXIdentity or PSMTXCopy.",
+    "Preserved temporary variable ordering in HSD_MtxInverseConcat, including many explicit tempN locals, to reproduce floating-point scheduling and register lifetimes.",
+    "Matched in-place matrix operations by branching to a stack temporary Mtx and copying back to dest.",
+    "Used NON_MATCHING around at least one function in the diff excerpt, consistent with the PR discussion that one function remained nonmatching at a point in review."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "RevoSucks",
+      "file": "src/sysdolphin/baselib/mtx.c",
+      "feedback": "Provided a decomp.me scratch link for matching work: https://decomp.me/scratch/h8te3."
+    },
+    {
+      "reviewer": "RevoSucks",
+      "file": "src/sysdolphin/baselib/mtx.h",
+      "feedback": "Asked to use math.h instead of duplicating macros/functions in the header."
+    },
+    {
+      "reviewer": "RevoSucks",
+      "file": "src/sysdolphin/baselib/mtx.h",
+      "feedback": "Clarified that standard-library static variables can still be initialized in the file and said: Do not write fake code."
+    },
+    {
+      "reviewer": "r-burns",
+      "file": "Makefile",
+      "feedback": "Questioned changing sha1sum because it is part of GNU coreutils and should remain the same on Windows/Linux."
+    },
+    {
+      "reviewer": "r-burns",
+      "file": "Makefile",
+      "feedback": "Accepted that macOS uses shasum, but preferred keeping sha1sum on Windows/Linux and making shasum mac-specific."
+    }
+  ],
+  "searchable_terms": [
+    "mtx.s",
+    "mtx.c",
+    "sysdolphin baselib mtx",
+    "HSD_MtxInverseConcat",
+    "HSD_CalcDeterminantMatrix3x4",
+    "func_80379310",
+    "func_80379A20",
+    "func_80379C24",
+    "func_80379F6C",
+    "func_80379F88",
+    "func_8037A120",
+    "func_8037A230",
+    "func_8037A250",
+    "func_8037A43C",
+    "func_8037A54C",
+    "HSD_VecInitAllocData",
+    "HSD_MtxInitAllocData",
+    "PSMTXIdentity",
+    "PSMTXCopy",
+    "PSMTXConcat",
+    "PSMTXQuat",
+    "PSVECMag",
+    "PSVECNormalize",
+    "PSVECDotProduct",
+    "PSVECCrossProduct",
+    "math.h",
+    "sqrtf",
+    "fabsf",
+    "epsilon",
+    "FLOAT_MIN",
+    "NON_MATCHING",
+    "sha1sum",
+    "shasum",
+    "macOS Makefile"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that renamed func_80379310 or other mtx func_8037xxxx symbols to semantic HSD_Mtx names.",
+    "Check whether func_8037A54C or the one nonmatching function from this PR was later matched and removed from NON_MATCHING.",
+    "Search later build-system PRs for the final macOS-specific sha1sum/shasum Makefile handling.",
+    "Search for later cleanup of mtx.h math.h usage and removal of fake sqrtf or duplicated math macros.",
+    "Inspect dependent fighter/item/jobj changes to see which mtx prototypes or include paths were required downstream."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

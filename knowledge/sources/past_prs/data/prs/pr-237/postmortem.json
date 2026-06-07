@@ -1,0 +1,148 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-237",
+  "pr": {
+    "number": 237,
+    "title": "Work on cleaning up DObj",
+    "url": "https://github.com/doldecomp/melee/pull/237",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2022-01-05T17:33:53Z",
+    "merged_at": "2022-01-05T17:34:02Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Cleaned up sysdolphin baselib DObj decompilation by replacing large inline-assembly fallbacks for DObjLoad and HSD_DObjLoadDesc with matching C, while preserving one smaller inline-asm fallback for HSD_DObjAlloc because the compiler, referred to in the PR body as Frank, still broke one function or another. The PR also adjusted string symbol declarations/exports and class-info declarations so C could reference existing assembly/data labels and match string placement.",
+  "change_classification": {
+    "primary_type": "decomp-matching cleanup",
+    "categories": [
+      "decomp-matching",
+      "inline-asm removal",
+      "headers",
+      "data-symbols",
+      "build-configuration"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "DObj",
+      "class system",
+      "Makefile",
+      "asm"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/dobj.c",
+    "asm/sysdolphin/baselib/dobj.s",
+    "src/sysdolphin/baselib/class.h",
+    "Makefile"
+  ],
+  "what_changed": [
+    "Added a Makefile override so $(EPILOGUE_DIR)/src/sysdolphin/baselib/dobj.o uses CC_EPI := $(CC), matching the existing special-case pattern used for lbtime.o.",
+    "Exported asm string labels lbl_80405548 and lbl_80405560 in asm/sysdolphin/baselib/dobj.s so C code could reference the existing string data for \"sysdolphin_base_library\" and \"hsd_dobj\".",
+    "Declared extern HSD_ClassInfo hsdClass in src/sysdolphin/baselib/class.h, replacing the local dobj.c extern that had used HSD_Class.",
+    "Changed dobj.c string externs from char pointers to char arrays for labels such as lbl_80405494, lbl_80405548, and lbl_80405560, making the declarations line up with linker labels/string storage.",
+    "Removed the NON_MATCHING-gated inline assembly implementation of DObjLoad and enabled the C implementation.",
+    "Fixed DObjLoad behavior to match assembly: the 0x40000000 rendermode case now applies flag value 8 with mask 0xE, and the 0x60000000 case applies flag value 4 with mask 0xE.",
+    "Changed the DObjLoad error path to call OSReport(lbl_80405494, dobj->mobj->rendermode) and HSD_Panic(lbl_804D5C78, 312, lbl_804D5C80), avoiding literal strings where the original uses data symbols.",
+    "Removed the NON_MATCHING-gated inline assembly implementation of HSD_DObjLoadDesc and enabled the C implementation.",
+    "Updated HSD_DObjLoadDesc assertion to use lbl_804D5C78 for \"dobj.c\" rather than a string literal, preserving data-section placement.",
+    "Removed local pragma push/peephole/pop around hsdDelete in the shown diff.",
+    "Kept HSD_DObjAlloc behind NON_MATCHING/asm, with a comment that the C version really matches but the compiler setup breaks it; the retained asm was slightly cleaned up by changing the default_class load annotation.",
+    "Updated the NON_MATCHING C version of HSD_DObjAlloc to use __assert(lbl_804D5C78, 525, lbl_804D5C84).",
+    "Updated DObjInfoInit to pass lbl_80405560 for the \"hsd_dobj\" type string instead of a literal."
+  ],
+  "smart_moves": [
+    "Removed the largest inline-asm blocks first and intentionally left the smaller problematic function in asm, minimizing asm surface area while keeping the build/matching state stable.",
+    "Converted string literals to existing data labels where section placement affected matching, which directly addressed the earlier comment that functions were non-matching due to string sections.",
+    "Used exported asm labels for shared string data rather than duplicating strings in C, preserving original data layout and enabling C functions to match.",
+    "Moved hsdClass declaration into class.h as an extern HSD_ClassInfo, making the class-system dependency explicit and reusable instead of keeping an ad hoc local extern in dobj.c.",
+    "Corrected the 0x40000000 and 0x60000000 flag mapping based on the deleted assembly, showing careful validation of decompiled switch logic against the original instructions.",
+    "Special-cased dobj.o's compiler selection in the Makefile, acknowledging that matching sometimes depends on per-object compiler/toolchain behavior."
+  ],
+  "decomp_lessons": [
+    "When a function is non-matching only because of string placement, prefer referencing existing data labels and declaring them accurately as char arrays rather than relying on C string literals.",
+    "For linker/asm string labels, extern char label[] is often a better representation than extern char* label because the symbol names the storage, not a pointer variable.",
+    "Large inline asm can often be retired by comparing C switch cases directly against branch targets and immediate values in the old asm; this PR found and fixed swapped flag values that way.",
+    "If one compiler quirk causes only one remaining function to fail, it can be pragmatic to keep a small asm fallback while converting larger neighboring routines to C.",
+    "Per-object Makefile overrides are a valid matching tactic when the default compiler path causes otherwise correct C to break.",
+    "Shared class metadata such as hsdClass should live in the relevant header with the correct type so other baselib decompilation units can include it without repeating uncertain externs."
+  ],
+  "naming_conventions": [
+    "DObj functions follow the HSD_DObj* public naming style, including HSD_DObjSetCurrent, HSD_DObjLoadDesc, HSD_DObjAlloc, HSD_DObjRemoveAll, and HSD_DObjRemove.",
+    "Internal DObj helpers use DObj* names such as DObjLoad, DObjAmnesia, DObjInfoInit, and DObjRelease.",
+    "Class-system macros and types use HSD_CLASS_INFO, HSD_PARENT_INFO, HSD_ClassInfo, HSD_DObjInfo, and HSD_DOBJ_METHOD.",
+    "Unidentified or data-label symbols retain lbl_-address names such as lbl_80405494, lbl_80405548, lbl_80405560, lbl_804D5C78, lbl_804D5C80, and lbl_804D5C84.",
+    "Small data string labels in dobj.c are represented as static char arrays with explicit sizes, e.g. lbl_804D5C78[7] = \"dobj.c\\0\"."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed inline asm for DObjLoad and HSD_DObjLoadDesc after making their C versions match.",
+    "Kept HSD_DObjAlloc as inline asm under the non-NON_MATCHING path because the PR body says the compiler, Frank, broke either that function or another one; the author chose to leave the smaller function broken/in asm.",
+    "Added global labels for existing assembly strings so C references resolve to the same data addresses.",
+    "Used label-backed strings in OSReport, HSD_Panic, __assert, and hsdInitClassInfo calls to avoid section/order mismatches from C string literals.",
+    "Added a per-object CC_EPI override for dobj.o in the Makefile to influence compiler behavior for matching.",
+    "Validated switch behavior from assembly: rendermode masked with 0x60000000 maps 0 to flag 2, 0x40000000 to flag 8, and 0x60000000 to flag 4."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The PR body explains the main tradeoff: most inline asm was removed, but one function had to keep inline asm because the compiler/tooling broke one function or another, and the author chose the smaller function as the remaining problematic case."
+  ],
+  "searchable_terms": [
+    "PR237",
+    "dobj-cleanup",
+    "PsiLupan",
+    "DObj",
+    "HSD_DObj",
+    "HSD_DObjLoadDesc",
+    "DObjLoad",
+    "HSD_DObjAlloc",
+    "DObjInfoInit",
+    "DObjAmnesia",
+    "DObjRelease",
+    "HSD_DObjModifyFlags_inline",
+    "HSD_MObjLoadDesc",
+    "HSD_PObjLoadDesc",
+    "hsdNew",
+    "hsdSearchClassInfo",
+    "hsdInitClassInfo",
+    "hsdClass",
+    "hsdDObj",
+    "HSD_ClassInfo",
+    "HSD_DObjInfo",
+    "HSD_CLASS_INFO",
+    "HSD_PARENT_INFO",
+    "OSReport",
+    "HSD_Panic",
+    "__assert",
+    "lbl_80405494",
+    "lbl_80405548",
+    "lbl_80405560",
+    "lbl_804D5C78",
+    "lbl_804D5C80",
+    "lbl_804D5C84",
+    "sysdolphin_base_library",
+    "hsd_dobj",
+    "dobj.c",
+    "NON_MATCHING",
+    "inline asm",
+    "string sections",
+    "Frank compiler",
+    "CC_EPI",
+    "Makefile dobj.o"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that remove the remaining HSD_DObjAlloc inline asm.",
+    "Search for other baselib objects using CC_EPI := $(CC) per-object overrides and compare why they need them.",
+    "Search for similar string-section fixes using extern char lbl_[] declarations instead of string literals.",
+    "Review later class.h changes for hsdClass type consistency across HSD_Class and HSD_ClassInfo.",
+    "Find other DObj/MObj/PObj decompilation PRs that depend on rendermode flag mapping."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

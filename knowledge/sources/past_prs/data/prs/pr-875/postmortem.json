@@ -1,0 +1,140 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-875",
+  "pr": {
+    "number": 875,
+    "title": "Match `ftCo_PassiveStand`",
+    "url": "https://github.com/doldecomp/melee/pull/875",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-27T10:23:15Z",
+    "merged_at": "2023-05-27T10:30:12Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the ftCo_PassiveStand code by moving the passive-stand routines out of asm/melee/ft/ft_08A4.s into a new C translation unit, adding the matching header, wiring the object into obj_files.mk, and tightening a common-data field type needed by the match. The PR report shows src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c at 100% for ftCo_80098928, ftCo_800989D4, ftCo_PassiveStand_Anim, ftCo_PassiveStand_IASA, ftCo_PassiveStand_Phys, and ftCo_PassiveStand_Coll.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "asm-to-c",
+      "inline-refactor",
+      "type-correction"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "passive",
+      "build-system",
+      "asm"
+    ]
+  },
+  "key_files": [
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c",
+    "src/melee/ft/chara/ftCommon/ftCo_PassiveStand.h",
+    "src/melee/ft/chara/ftCommon/inlines.h",
+    "src/melee/ft/chara/ftCommon/ftCo_Passive.c",
+    "src/melee/ft/ft_08A4.h",
+    "src/melee/ft/types.h",
+    "obj_files.mk",
+    "src/melee/ft/chara/ftCommon/ftCo_Damage.c",
+    "src/melee/ft/chara/ftCommon/ftCo_DamageIce.c"
+  ],
+  "what_changed": [
+    "Deleted the matched PassiveStand assembly block from asm/melee/ft/ft_08A4.s, including ftCo_80098928, ftCo_800989D4, ftCo_PassiveStand_Anim, ftCo_PassiveStand_IASA, ftCo_PassiveStand_Phys, ftCo_PassiveStand_Coll, and the local sdata2 constants used by that block.",
+    "Added src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c implementing the passive-stand decision path, motion-state transition, animation, IASA, physics, and collision callbacks.",
+    "Added src/melee/ft/chara/ftCommon/ftCo_PassiveStand.h declaring ftCo_80098928 and the PassiveStand callback functions.",
+    "Added ftCo_PassiveStand.c.o to TEXT_O_FILES in obj_files.mk before the remaining ft_08A4 asm object.",
+    "Moved the shared passive effect-spawn inline from a private static inline in ftCo_Passive.c into a new src/melee/ft/chara/ftCommon/inlines.h helper named ftCo_Passive_SpawnEf.",
+    "Updated ftCo_Passive.c to include ftCommon/inlines.h and call ftCo_Passive_SpawnEf instead of its local inlineA0.",
+    "Updated ftCo_Damage.c and ftCo_DamageIce.c to include ftCo_PassiveStand.h where these declarations are now sourced.",
+    "Removed ftCo_80098928 and the previously unknown ftCo_800989D4 prototype from src/melee/ft/ft_08A4.h, reflecting ownership by the new PassiveStand header/C file.",
+    "Changed ftCommonData.x254 in src/melee/ft/types.h from UNK_T to float, matching its use as an analog-stick threshold in ftCo_80098928."
+  ],
+  "smart_moves": [
+    "Extracted a reusable passive effect-spawn inline because both existing passive code and the new PassiveStand transition need the same efAsync_Spawn pattern, including the MUST_MATCH unused-stack workaround.",
+    "Kept ftCo_800989D4 file-local in the C implementation with a static forward declaration, avoiding exporting an internal transition helper after replacing its old UNK prototype.",
+    "Used ABS(fp->input.lstick.x) against p_ftCommonData->x254 and typed x254 as float, aligning the struct field with the floating-point comparisons seen in the deleted assembly.",
+    "Selected ftCo_MS_PassiveStandF versus ftCo_MS_PassiveStandB using the sign of fp->input.lstick.x * fp->facing_dir, matching the forward/backward branch behavior from the assembly.",
+    "Preserved exact side effects in the transition helper: air-to-ground handling via ftCommon_8007D7FC when ground_or_air is GA_Air, Fighter_ChangeMotionState with Ft_MF_None and scalar arguments, collision part setup via ft_800881D8 and ft_80088148, and passive effect spawning on FtPart_TopN.",
+    "Kept the simple callback wrappers minimal: Anim calls ft_8008A2BC when ftAnim_IsFramesRemaining is false, IASA is an empty function, Phys delegates to ft_80084FA8, and Coll delegates to ft_80084104."
+  ],
+  "decomp_lessons": [
+    "When a formerly unknown common-data field participates in lfs/fcmpo threshold logic, update the struct field type to float rather than carrying an UNK_T placeholder.",
+    "Reusable inline helpers can be necessary for matching when multiple C files need the same small call sequence and stack-shaping behavior; centralizing them in an inlines.h file avoids duplicated private inline names.",
+    "For asm-to-C splits, move public declarations out of broad legacy headers like ft_08A4.h into feature-specific headers such as ftCo_PassiveStand.h once ownership is known.",
+    "If the deleted assembly uses a zero float and 1.0 float from sdata2 only for the matched block, matching the block in C can allow those local constants to disappear from the remaining asm file.",
+    "Callback functions that only tail to common fighter helpers may still need explicit wrappers to match the action-state table interface and symbol layout.",
+    "A private transition helper can be implemented as static if only the matched file needs it, even if the old asm symbol had a global label in the monolithic asm file."
+  ],
+  "naming_conventions": [
+    "New source/header files use the action name ftCo_PassiveStand.c and ftCo_PassiveStand.h under src/melee/ft/chara/ftCommon.",
+    "Action callbacks follow the ftCo_PassiveStand_Anim, ftCo_PassiveStand_IASA, ftCo_PassiveStand_Phys, and ftCo_PassiveStand_Coll naming pattern.",
+    "The shared passive effect helper was named ftCo_Passive_SpawnEf, replacing the non-descriptive local inlineA0 name.",
+    "Motion IDs are expressed as ftCo_MS_PassiveStandF and ftCo_MS_PassiveStandB rather than raw numeric constants 0xC8 and 0xC9.",
+    "Struct and enum names in the matched code use project conventions such as ftCo_GObj, ftCo_Fighter, FtMotionId, GA_Air, Ft_MF_None, and FtPart_TopN."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced an ABS-like assembly sequence on fp->input.lstick.x with ABS(fp->input.lstick.x) to match the threshold comparison against p_ftCommonData->x254.",
+    "Used a ternary expression on fp->input.lstick.x * fp->facing_dir >= 0 to reproduce the branch selecting PassiveStandF versus PassiveStandB.",
+    "Used NULL, 0, 1, and 0 arguments in Fighter_ChangeMotionState to match the deleted assembly's zero float, 1.0 float, and integer setup.",
+    "Maintained the MUST_MATCH-only unused 8-byte stack array inside ftCo_Passive_SpawnEf because the original inline carried an explicit unused-stack workaround.",
+    "Cast gobj to HSD_GObj* in the efAsync_Spawn helper, preserving type compatibility while matching the original call pattern.",
+    "Removed the corresponding assembly labels only after adding ftCo_PassiveStand.c.o to TEXT_O_FILES so the linker/build uses the new C object for those symbols."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-875",
+    "ftCo_PassiveStand",
+    "ftCo_80098928",
+    "ftCo_800989D4",
+    "ftCo_PassiveStand_Anim",
+    "ftCo_PassiveStand_IASA",
+    "ftCo_PassiveStand_Phys",
+    "ftCo_PassiveStand_Coll",
+    "ftCo_Passive_SpawnEf",
+    "inlineA0",
+    "ftCo_Passive.c",
+    "ftCo_PassiveStand.c",
+    "ftCo_PassiveStand.h",
+    "ftCommon/inlines.h",
+    "ft_08A4.s",
+    "ft_08A4.h",
+    "p_ftCommonData",
+    "ftCommonData.x254",
+    "UNK_T to float",
+    "ABS",
+    "lstick.x",
+    "facing_dir",
+    "ftCo_MS_PassiveStandF",
+    "ftCo_MS_PassiveStandB",
+    "Fighter_ChangeMotionState",
+    "ftCommon_8007D7FC",
+    "ft_800881D8",
+    "ft_80088148",
+    "efAsync_Spawn",
+    "ftAnim_IsFramesRemaining",
+    "ft_8008A2BC",
+    "ft_80084FA8",
+    "ft_80084104",
+    "FtPart_TopN",
+    "MUST_MATCH unused stack",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Find other ftCommon passive/down action files that still use local inline effect-spawn helpers or duplicated efAsync_Spawn patterns.",
+    "Audit nearby ftCommonData fields around x248-x25C for remaining UNK_T placeholders that are used as floats in decompiled code.",
+    "Search for remaining declarations in ft_08A4.h that should move into action-specific ftCo headers as more of ft_08A4.s is matched.",
+    "Check if ftCo_800989D4 later received a descriptive name after more PassiveStand/passive code was understood."
+  ],
+  "confidence": 0.94,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

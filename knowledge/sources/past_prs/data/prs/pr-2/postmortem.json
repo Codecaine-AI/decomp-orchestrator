@@ -1,0 +1,137 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2",
+  "pr": {
+    "number": 2,
+    "title": "set up disassembly",
+    "url": "https://github.com/doldecomp/melee/pull/2",
+    "state": "MERGED",
+    "author": "camthesaxman",
+    "created_at": "2020-07-01T22:52:32Z",
+    "merged_at": "2020-07-01T22:53:17Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Initial repository setup for building a full-assembly Melee DOL from a generated disassembly. The PR added a very large asm/disasm.s, a root Makefile using devkitPPC assembler and Metrowerks linker/compiler under Wine, an ldscript.lcf fixing section virtual addresses and SDA bases, an elf2dol conversion tool, SHA1 verification for main.dol, and ignore rules for toolchain/build artifacts.",
+  "change_classification": {
+    "primary_type": "tooling/bootstrap",
+    "categories": [
+      "tooling",
+      "build-system",
+      "assembly",
+      "repo-bootstrap",
+      "verification"
+    ],
+    "systems": [
+      "asm",
+      "repo-root",
+      "tooling",
+      "linker-script",
+      "dol-conversion"
+    ]
+  },
+  "key_files": [
+    "asm/disasm.s",
+    "Makefile",
+    "ldscript.lcf",
+    "tools/elf2dol.c",
+    "tools/Makefile",
+    ".gitignore",
+    "tools/.gitignore",
+    "ssbm.sha1"
+  ],
+  "what_changed": [
+    "Added asm/disasm.s containing the initial full-game PowerPC assembly dump, with section metadata, register constants, SDA base constants, global function labels such as func_80003100, and address-style local labels such as lbl_800031D8.",
+    "Added a root Makefile that builds asm/*.s and src/*.c into objects, links with Metrowerks mwldeppc.exe using ldscript.lcf, converts the resulting ELF to main.dol with tools/elf2dol, and checks the output against ssbm.sha1.",
+    "Configured toolchain variables for Wine, devkitPPC powerpc-eabi-as, powerpc-eabi-objcopy, Metrowerks mwcceppc.exe/mwldeppc.exe, and sha1sum.",
+    "Added ldscript.lcf binding .text0, .text1, .data0 through .data7, and .bss to explicit runtime addresses, and defining _SDA_BASE_ = 0x804DB6A0 and _SDA2_BASE_ = 0x804DF9E0.",
+    "Added tools/elf2dol.c, a C utility that validates a 32-bit big-endian PowerPC executable ELF, reads PT_LOAD program headers, maps executable segments to DOL text slots, non-executable file-backed segments to DOL data slots, folds zero-fill into BSS, aligns DOL payloads to 32 bytes, and writes a DOL header plus segment contents.",
+    "Added tools/Makefile to build elf2dol with gcc -O3 -Wall -s.",
+    "Added ssbm.sha1 containing expected hash 08e0bf20134dfcb260699671004527b2d6bb1a45 for main.dol.",
+    "Added ignore rules for mwcc_compiler/, object/ELF/map/DOL outputs, editor swap files, tool executable outputs, and *.exe."
+  ],
+  "smart_moves": [
+    "Made the very first bootstrap build verifiable by running sha1sum -c ssbm.sha1 after producing main.dol, establishing byte-for-byte rebuild checking from the start.",
+    "Used a linker script with explicit BIND addresses for each discovered section, preserving the original memory layout while the project was still all assembly.",
+    "Included _SDA_BASE_ and _SDA2_BASE_ in both the assembly and linker script context, which is essential for matching PowerPC small-data references.",
+    "Ran powerpc-eabi-objcopy on the linked ELF because the Makefile notes that the Metrowerks linker did not generate physical addresses in ELF program headers; this prepared the ELF for elf2dol segment extraction.",
+    "Kept the compiler binaries out of git via mwcc_compiler/ in .gitignore while documenting the expected local toolchain path in Makefile variables.",
+    "Separated host-side helper tool construction into tools/Makefile so the main build can depend on a tools phony target before DOL conversion."
+  ],
+  "decomp_lessons": [
+    "A decomp project can begin with a monolithic generated assembly fallback plus a linker script; C files can then be introduced incrementally while the all-assembly build remains the matching baseline.",
+    "For DOL reconstruction, exact section virtual addresses, physical/program-header addresses, entry point, BSS placement, and segment ordering matter as much as instruction text.",
+    "Hash verification should be part of the primary build recipe, not an optional manual step, so regressions are caught immediately.",
+    "When using Metrowerks tools through Wine with devkitPPC binutils, document every tool variable and flag in the Makefile; future contributors need reproducible assumptions.",
+    "The DOL format has limits on text and data segment counts, reflected in elf2dol by MAX_TEXT_SEGMENTS = 7 and MAX_DATA_SEGMENTS = 11; linker section planning must respect those limits.",
+    "Generated labels using address-based names such as func_80003100 and lbl_800031D8 are acceptable bootstrap placeholders before semantic naming is known."
+  ],
+  "naming_conventions": [
+    "Unknown global functions in the generated assembly use func_XXXXXXXX names based on runtime address, e.g. func_80003100.",
+    "Unknown local/data labels use lbl_XXXXXXXX names based on runtime address, e.g. lbl_800031D8.",
+    "Linker/disassembly section names use numbered buckets such as .text0, .text1, .data0 through .data7, and .bss.",
+    "Small data symbols use standard PowerPC/GameCube names _SDA_BASE_ and _SDA2_BASE_.",
+    "Build variables in the Makefile are uppercase descriptive names such as S_FILES, C_FILES, LDSCRIPT, DOL, ELF, MAP, O_FILES, WINE, AS, CC, LD, ELF2DOL, and SHA1SUM."
+  ],
+  "assembly_or_matching_tactics": [
+    "Preserved original instruction bytes in comments before each assembly instruction, including runtime address and file offset columns, making generated assembly auditable against the source binary.",
+    "Defined PowerPC register aliases with .set r0-r31, f0-f31, and qr0-qr7 at the top of asm/disasm.s for assembler compatibility/readability.",
+    "Bound each section in ldscript.lcf to its original runtime address rather than relying on linker placement.",
+    "Used devkitPPC powerpc-eabi-as with -mgekko and include path support for assembling GameCube PowerPC code.",
+    "Converted ELF to DOL by classifying executable PT_LOAD segments as text and non-executable file-backed PT_LOAD segments as data, while treating zero-size-file or memsz-filesz ranges as BSS.",
+    "Aligned DOL segment file offsets to 32 bytes in elf2dol.",
+    "The Makefile uses Metrowerks flags including -proc gekko, -fp hard, -O2,p, and -Cpp_exceptions off for future C compilation compatibility."
+  ],
+  "review_feedback": [
+    "One collaborator review by RevoSucks approved the PR with an empty body; no line-specific review comments or rationale were present in the provided context."
+  ],
+  "searchable_terms": [
+    "set up disassembly",
+    "bootstrap disassembly",
+    "asm/disasm.s",
+    "ldscript.lcf",
+    "elf2dol",
+    "main.dol",
+    "ssbm.sha1",
+    "08e0bf20134dfcb260699671004527b2d6bb1a45",
+    "mwcc_compiler",
+    "mwcceppc.exe",
+    "mwldeppc.exe",
+    "wine",
+    "devkitPPC",
+    "powerpc-eabi-as",
+    "powerpc-eabi-objcopy",
+    "Metrowerks linker",
+    "physical addresses in ELF program headers",
+    "_SDA_BASE_",
+    "_SDA2_BASE_",
+    "BIND",
+    ".text0",
+    ".text1",
+    ".data0",
+    ".data7",
+    ".bss",
+    "func_80003100",
+    "lbl_800031D8",
+    "DOL header",
+    "PT_LOAD",
+    "PowerPC",
+    "Gekko",
+    "sha1sum"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that split asm/disasm.s into smaller files or replace generated assembly with C.",
+    "Find later changes to ldscript.lcf section bindings or SDA base definitions.",
+    "Find later changes to tools/elf2dol.c or replacement DOL conversion tooling.",
+    "Find PRs that modify the Makefile toolchain flags for mwcceppc.exe, mwldeppc.exe, or powerpc-eabi-as.",
+    "Find PRs that update ssbm.sha1 or alter the hash verification workflow."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

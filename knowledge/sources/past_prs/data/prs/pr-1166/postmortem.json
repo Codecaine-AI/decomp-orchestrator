@@ -1,0 +1,122 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1166",
+  "pr": {
+    "number": 1166,
+    "title": "Partially match `logf`",
+    "url": "https://github.com/doldecomp/melee/pull/1166",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-02-01T00:23:13Z",
+    "merged_at": "2024-02-01T00:24:12Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added a first partial C implementation of MSL `logf` in `src/MSL/math.c`, including IEEE-754 float bit masks, lookup tables for `ln(1+n/128)` and reciprocal values, special-case handling for NaN/Inf/subnormal/zero inputs, and a documented approximation algorithm for normal floats. The PR was merged without recorded review comments, so evidence is limited to the title and diff.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "math-library",
+      "partial-match",
+      "lookup-table-reconstruction",
+      "float-bit-manipulation"
+    ],
+    "systems": [
+      "MSL",
+      "math"
+    ]
+  },
+  "key_files": [
+    "src/MSL/math.c"
+  ],
+  "what_changed": [
+    "Created `src/MSL/math.c` with `#include <platform.h>` and a partial implementation of `float logf(float x)`.",
+    "Introduced float bitfield macros: `EXP_MASK`, `EXP_ZERO`, `MANT_MASK`, `SIGN_BIT`, `F32_BIT_CAST`, `F32_UNBIASED_EXPONENT`, `F32_HIGH_MANTISSA_BITS`, `F32_LOW_MANTISSA_BITS`, and `LN2`.",
+    "Added `float_nan` and `float_inf` globals using arithmetic expressions, with a TODO noting these should eventually use standard-library constants because the definitions may be platform-dependent.",
+    "Added `const float __ln_F[0x81]`, described as `ln(1.0 + n/128)` for `n = 0..128`.",
+    "Added `const float __one_over_F[0x81]`, described as `1.0 / (1.0 + n/128)` for `n = 0..128`.",
+    "Implemented normal-float `logf` behavior by decomposing `x` into exponent `E` and mantissa bits, using the high 7 mantissa bits as a table index, optionally rounding the table index when the next mantissa bit is set, and applying a polynomial/Taylor-style correction using constants `-0.500003` and `0.000005086`.",
+    "Handled exponent-mask cases: NaN returns `x`; positive infinity returns `float_inf`; negative infinity returns `float_nan`; exponent zero returns `-float_inf` for subnormal or zero input.",
+    "Left extensive inline comments mapping C expressions to observed PowerPC code offsets, registers, stack slots, float registers, and table-load instruction sequences."
+  ],
+  "smart_moves": [
+    "Reconstructed the algorithm at a semantic level before forcing matching syntax: the diff documents decomposition into `2^E * 1.M`, table lookup for `ln(1.m)`, reciprocal-table lookup for `1/1.m`, and a correction term for the residual.",
+    "Used explicit bit-mask macros for exponent, mantissa, sign bit, high mantissa bits, and low mantissa bits, making the IEEE-754 manipulation searchable and reusable.",
+    "Preserved table intent with comments defining `__ln_F[n]` and `__one_over_F[n]`, which helps future workers verify table size, indexing, and values.",
+    "Annotated the partial match with assembly evidence such as code offsets, register names, float registers, and observed table-load sequences, making the remaining mismatch easier to investigate.",
+    "Separated special-case exponent handling from normal-float approximation using a `switch (raw_x & EXP_MASK)`, matching the apparent control-flow split in the target."
+  ],
+  "decomp_lessons": [
+    "For libm-style functions, reconstructing lookup tables with mathematical descriptions is valuable even before a full match; table meaning can anchor the rest of the function.",
+    "When matching float algorithms, bit-casting between `float` and `u32` may be necessary to reproduce IEEE-754 exponent and mantissa behavior seen in assembly.",
+    "A partial match can still be useful if it records exact assembly observations near the mismatch, especially base-pointer construction, indexed loads, register allocation, and constant materialization.",
+    "Documenting approximation formulas helps distinguish algorithmic intent from compiler-shaping hacks; this PR explicitly records uncertainty with `I don't understand how this works` instead of overclaiming.",
+    "Platform-dependent NaN/Inf construction should be treated cautiously; this PR itself includes a TODO to replace arithmetic definitions with standard library constants.",
+    "Comments describing hex float constants and bit patterns should be checked carefully in future cleanup; the diff labels `EXP_ZERO` as the hex representation of `(float)0.0f`, while the value `0x3F800000` is the IEEE-754 representation of `1.0f`."
+  ],
+  "naming_conventions": [
+    "`EXP_MASK`, `MANT_MASK`, and `SIGN_BIT` use all-caps mask names for IEEE-754 bit fields.",
+    "`F32_BIT_CAST`, `F32_UNBIASED_EXPONENT`, `F32_HIGH_MANTISSA_BITS`, and `F32_LOW_MANTISSA_BITS` use an `F32_` prefix for float32 bit-manipulation helpers.",
+    "`__ln_F` and `__one_over_F` use double-underscore library-style names for reconstructed lookup tables.",
+    "Local names such as `raw_x`, `raw_fm`, and `raw_fM` distinguish integer bit patterns from their float interpretations.",
+    "The implementation uses short mathematical locals such as `E`, `m`, `H`, and `C` to mirror the described logarithm approximation."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used C comments with offset annotations like `@80`, `@8c`, `@a4`, and register annotations like `@r4`, `@r8`, and `@f6` to connect source statements to target PowerPC instructions.",
+    "Represented `x` bit-cast behavior as `u32 raw_x = *(u32*) &x`, with a comment explaining the observed store/load path from `f1` to stack to `r4`.",
+    "Modeled table indexing through mantissa high bits and noted the target sequence using `rlwinm r4,r8,2,0,0x1d` to multiply the index by `sizeof(float)`.",
+    "Recorded an unresolved table-base mismatch: target code loads table entries through `lbl_803B9154` style base-pointer construction, while the current C emitted `.data.0`-relative loads with different `lfs`/`lfsx` behavior.",
+    "Used explicit `const float` arrays for lookup data so the compiler could potentially emit indexed float loads resembling the target.",
+    "Used a stack-local `float C[2] = { -0.500003, 0.000005086 }` to model observed constant stores and later polynomial use."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR1166",
+    "logf",
+    "Partially match logf",
+    "src/MSL/math.c",
+    "MSL math",
+    "EXP_MASK",
+    "EXP_ZERO",
+    "MANT_MASK",
+    "SIGN_BIT",
+    "F32_BIT_CAST",
+    "F32_UNBIASED_EXPONENT",
+    "F32_HIGH_MANTISSA_BITS",
+    "F32_LOW_MANTISSA_BITS",
+    "LN2",
+    "float_nan",
+    "float_inf",
+    "__ln_F",
+    "__one_over_F",
+    "ln(1.0 + n/128)",
+    "1.0 / (1.0 + n/128)",
+    "raw_x",
+    "raw_fm",
+    "raw_fM",
+    "reciprocal_table_803B9154",
+    "lbl_803B9154",
+    "rlwinm index multiply",
+    "PowerPC lfs",
+    "PowerPC lfsx",
+    "Taylor expansion",
+    "mantissa high bits",
+    "IEEE-754 float"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that continue or fully match `logf` in `src/MSL/math.c`.",
+    "Search for cleanup of `float_nan` and `float_inf` platform-dependent definitions.",
+    "Search for later renames or relocation of `__ln_F` and `__one_over_F` lookup tables.",
+    "Find discussions or commits involving `lbl_803B9154` or `reciprocal_table_803B9154` table-base matching.",
+    "Search for other MSL math functions using `F32_BIT_CAST` or similar float bitfield macros."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

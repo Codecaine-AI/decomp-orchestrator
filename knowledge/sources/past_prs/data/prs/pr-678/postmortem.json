@@ -1,0 +1,126 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-678",
+  "pr": {
+    "number": 678,
+    "title": "Replace GEKKO define with MWCC __PPCGEKKO__",
+    "url": "https://github.com/doldecomp/melee/pull/678",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-01-14T07:46:30Z",
+    "merged_at": "2023-01-14T08:13:27Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Replaced the project-local GEKKO preprocessor define with MWCC's built-in __PPCGEKKO__ target define across build flags, runtime platform checks, Dolphin debug code, MSL header comments, and m2ctx preprocessing flags. Review pushed the change away from adding a compatibility abstraction in platform.h and toward direct find/replace use of __PPCGEKKO__, avoiding a redundant manual GEKKO define.",
+  "change_classification": {
+    "primary_type": "toolchain_define_cleanup",
+    "categories": [
+      "headers",
+      "tooling",
+      "build_flags",
+      "preprocessor_cleanup"
+    ],
+    "systems": [
+      "MSL",
+      "Runtime",
+      "Dolphin",
+      "Makefile",
+      "m2ctx"
+    ]
+  },
+  "key_files": [
+    "Makefile",
+    "src/Runtime/platform.h",
+    "src/MSL/stdbool.h",
+    "src/MSL/stddef.h",
+    "src/dolphin/base/PPCArch.h",
+    "src/dolphin/db/db.c",
+    "tools/m2ctx/m2ctx.py"
+  ],
+  "what_changed": [
+    "Removed -DGEKKO from the main Makefile CFLAGS because MWCC already supplies the target-specific __PPCGEKKO__ define for the Gekko processor.",
+    "Removed -DGEKKO from tools/m2ctx/m2ctx.py preprocessing arguments so context generation follows the same target define assumptions as the build.",
+    "Changed Runtime/platform.h checks from defined(__MWERKS__) && defined(GEKKO) to defined(__MWERKS__) && defined(__PPCGEKKO__) when defining MWERKS_GEKKO.",
+    "Changed Runtime/platform.h Gekko register block guard from #ifdef GEKKO to #ifdef __PPCGEKKO__.",
+    "Changed src/dolphin/db/db.c GNUC/Gekko conditional from defined(__GNUC__) && defined(GEKKO) to defined(__GNUC__) && defined(__PPCGEKKO__).",
+    "Updated MSL stdbool.h and stddef.h todo comments from 'Assumes GEKKO' to 'Assumes __PPCGEKKO__'.",
+    "Changed a comment in src/dolphin/base/PPCArch.h from 'GEKKO registers' to 'Gekko registers', aligning the prose with the processor name rather than the old macro spelling."
+  ],
+  "smart_moves": [
+    "Used the compiler-provided target macro instead of maintaining a duplicate project macro, reducing build configuration drift between normal compilation and preprocessing tools.",
+    "Kept m2ctx in sync with Makefile flags by removing the same -DGEKKO argument from both places.",
+    "Applied the rename broadly enough to cover runtime platform logic, Dolphin debug conditional compilation, and documentation comments rather than only build flags.",
+    "Accepted review feedback that a compatibility alias in platform.h would not remove the need for manual defines under non-MWCC compilers and would preserve unnecessary indirection."
+  ],
+  "decomp_lessons": [
+    "Prefer real compiler/toolchain predefined macros when they exist; project-local aliases can obscure the actual matching environment and create extra manual setup points.",
+    "When changing a preprocessor convention, update both compile flags and context-generation tools such as m2ctx so decompilation analysis sees the same macro environment as the build.",
+    "Avoid adding compatibility abstraction layers unless they solve a real portability problem; otherwise a direct find/replace can make the codebase easier to search and reason about.",
+    "Small macro cleanups can affect matching-adjacent infrastructure because headers, platform guards, asm/debug code, and preprocessing scripts may all depend on the same condition."
+  ],
+  "naming_conventions": [
+    "Use __PPCGEKKO__ for the Gekko target preprocessor condition instead of a custom GEKKO define.",
+    "Use MWERKS_GEKKO as the derived convenience macro only when both __MWERKS__ and __PPCGEKKO__ are defined.",
+    "Use 'Gekko' as human-readable prose for the processor name instead of all-caps GEKKO when not referring to a macro."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removing -DGEKKO from Makefile and m2ctx relies on MWCC's -proc gekko target selection to provide __PPCGEKKO__ automatically.",
+    "For non-MWCC toolchains such as GCC paths in db.c, target-specific conditional code should key off __PPCGEKKO__ directly if that path needs to emulate or provide the same macro.",
+    "Keeping preprocessing flags consistent across build and m2ctx avoids mismatched context output caused by stale manually-defined macros."
+  ],
+  "review_feedback": [
+    {
+      "file": "src/Runtime/platform.h",
+      "reviewer": "ribbanya",
+      "comment": "Suggested using direct find/replace instead of adding a platform.h alias from __PPCGEKKO__ to GEKKO."
+    },
+    {
+      "file": "src/Runtime/platform.h",
+      "author_response": "r-burns",
+      "comment": "Initially argued that GEKKO abstraction could help because GCC and other compilers would need the define manually."
+    },
+    {
+      "file": "src/Runtime/platform.h",
+      "reviewer": "ribbanya",
+      "comment": "Pointed out that users would need to manually define GEKKO either way, so they could manually define the compiler-style target macro instead."
+    },
+    {
+      "file": "src/Runtime/platform.h",
+      "author_response": "r-burns",
+      "comment": "Accepted the feedback and replaced all GEKKO uses directly."
+    }
+  ],
+  "searchable_terms": [
+    "GEKKO",
+    "__PPCGEKKO__",
+    "__MWERKS__",
+    "MWERKS_GEKKO",
+    "-DGEKKO",
+    "-proc gekko",
+    "m2ctx",
+    "Makefile CFLAGS",
+    "Runtime/platform.h",
+    "PPCArch.h",
+    "db.c",
+    "stdbool.h",
+    "stddef.h",
+    "Gekko registers",
+    "MWCC predefined macro",
+    "preprocessor target define"
+  ],
+  "follow_up_queries": [
+    "Search for any remaining uses of GEKKO as a macro after PR 678.",
+    "Check whether non-MWCC build or analysis paths define __PPCGEKKO__ consistently when targeting Gekko.",
+    "Audit other project-local target macros that duplicate compiler predefined macros.",
+    "Verify m2ctx preprocessing flags stay synchronized with Makefile CFLAGS for future toolchain changes."
+  ],
+  "confidence": 0.94,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

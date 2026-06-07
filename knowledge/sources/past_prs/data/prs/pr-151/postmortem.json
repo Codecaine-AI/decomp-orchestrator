@@ -1,0 +1,138 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-151",
+  "pr": {
+    "number": 151,
+    "title": "Work so far on matching lbcommand",
+    "url": "https://github.com/doldecomp/melee/pull/151",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-05T01:49:30Z",
+    "merged_at": "2021-12-05T03:15:03Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Continued lbcommand decompilation by replacing several raw/inline-asm command handlers with C implementations, renaming the dispatcher from Command_80005B64 to Command_Execute, correcting the command dispatch table to sequential Command_00 through Command_09 entries, and updating assembly callsite labels in fighter, item, and lb asm files. The PR also changed CommandInfo::event_return from a single pointer to a small pointer array to model the return stack behavior, added FLT_MAX to dolphin/types.h for timer initialization, and used pragma peephole around the C dispatcher to help match codegen.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-renaming",
+      "struct-modeling",
+      "asm-label-maintenance"
+    ],
+    "systems": [
+      "lbcommand",
+      "library",
+      "asm",
+      "include",
+      "fighter",
+      "item"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/lbcommand.c",
+    "src/melee/lb/lbcommand.h",
+    "asm/melee/ft/code_8006DBF4.s",
+    "asm/melee/it/code_80266F3C.s",
+    "asm/melee/lb/code_8000F9F8.s",
+    "include/dolphin/types.h",
+    "include/functions.h"
+  ],
+  "what_changed": [
+    "Renamed the command dispatcher symbol from Command_80005B64 to Command_Execute and updated references in include/functions.h and asm callsites.",
+    "Updated assembly call labels in asm/melee/ft/code_8006DBF4.s, asm/melee/it/code_80266F3C.s, and asm/melee/lb/code_8000F9F8.s from Command_80005B64 to Command_Execute without changing branch opcodes.",
+    "Changed the lbcommand dispatch table lbl_803B9840 from a void* table with sparse/old names to a typed function-pointer array: void (*lbl_803B9840[16])(CommandInfo*).",
+    "Reordered/renamed command handlers so dispatch indices map to Command_00, Command_01, Command_02, Command_03, Command_04, Command_05, Command_06, Command_07, Command_08, and Command_09.",
+    "Converted multiple previously inline-asm or NON_MATCHING command handlers into C, including SetLoop, Subroutine, Return, GoTo, and SetTimerAnimation behavior.",
+    "Changed CommandInfo::event_return from u32* event_return to u32* event_return[4], with a comment that the array size is currently made up.",
+    "Added FLT_MAX as 3.4028235E38 to include/dolphin/types.h and used it in Command_08 for timer setup.",
+    "Replaced the hand-written asm dispatcher with a C BOOL Command_Execute(CommandInfo* info, u32 command) that checks command < 10, calls lbl_803B9840[command](info), and returns TRUE/FALSE.",
+    "Wrapped Command_Execute with #pragma push, #pragma peephole on, and #pragma pop, indicating codegen tuning for matching."
+  ],
+  "smart_moves": [
+    "Typing lbl_803B9840 as an array of CommandInfo callback functions documents the dispatch table contract and avoids opaque void* function-pointer usage.",
+    "Renaming Command_80005B64 to Command_Execute made downstream asm callsites more searchable and semantically meaningful while preserving existing addresses/opcodes in asm labels.",
+    "Modeling event_return as an indexed stack/array enabled concise C expressions such as info->event_return[info->loop_count++] and info->event_return[info->loop_count -= 1], matching the observed stack-like return behavior better than a single pointer field.",
+    "Using FLT_MAX for the SetTimerAnimation command replaced a magic float constant with a named constant while retaining the exact value used by the assembly.",
+    "Keeping Command_04 and Command_09 as inline asm while converting simpler handlers to C reflects an incremental matching strategy: decompile what can match now and leave harder routines as asm.",
+    "The dispatcher C implementation preserves the original command range guard: commands below 10 dispatch through the table and return TRUE; others return FALSE."
+  ],
+  "decomp_lessons": [
+    "For command interpreters, first establish the dispatch table type and index-to-command mapping; this can unlock better names and smaller C handlers across the file.",
+    "If assembly shows repeated storage at struct base plus loop_count-scaled offsets, consider that a field may be an inline array/stack rather than a single pointer.",
+    "Semantic renames should be propagated to asm callsite labels and global function comments so future decomp work sees one canonical name.",
+    "When replacing inline asm with C, preserve exact pointer arithmetic forms where they correspond to lwz/stw patterns, such as incrementing data_position by one u32 slot before reading a target pointer.",
+    "Small standard constants used in matching, such as FLT_MAX, may need to be introduced into shared headers when the project lacks libc-style definitions.",
+    "Compiler pragmas can be used locally around newly decompiled functions to recover matching codegen without affecting surrounding code.",
+    "Document uncertainty directly in headers; this PR marks event_return[4] with 'Array Size is purely made-up for now', preventing the tentative size from being mistaken for confirmed game knowledge."
+  ],
+  "naming_conventions": [
+    "Dispatcher renamed from address-based Command_80005B64 to behavior-based Command_Execute.",
+    "Command handlers were normalized to command-index names Command_00 through Command_09 instead of mixed names like Command_10_ExecuteLoop, Command_10_Goto, and Command_80005AC4.",
+    "Comments describe command semantics separately from numeric names, e.g. SynchronousTimer, AsynchronousTimer, SetLoop, Execute Loop, Subroutine, Return, GoTo, and SetTimerAnimation.",
+    "The project retained the data label lbl_803B9840 for the dispatch table because no stronger semantic name was established in the diff."
+  ],
+  "assembly_or_matching_tactics": [
+    "Updated asm callsite symbol names only, preserving the original branch instruction bytes and target offsets.",
+    "Replaced the asm dispatcher with C using a typed function pointer table and a command < 10 guard.",
+    "Used #pragma peephole on around Command_Execute, suggesting the peephole optimizer was needed for matching the dispatcher.",
+    "Left harder routines as asm, notably Command_04 and Command_09, while converting simpler stack/timer/goto handlers to C.",
+    "C implementations used post-increment on loop_count and data_position pointer arithmetic to mirror the original indexed stw/lwz sequences.",
+    "The SetTimerAnimation command uses FLT_MAX instead of an inline asm load from the 3.4028235E38 constant."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-151",
+    "lbcommand",
+    "Command_Execute",
+    "Command_80005B64",
+    "lbl_803B9840",
+    "CommandInfo",
+    "event_return",
+    "loop_count",
+    "data_position",
+    "Command_00",
+    "Command_01",
+    "Command_02",
+    "Command_03",
+    "Command_04",
+    "Command_05",
+    "Command_06",
+    "Command_07",
+    "Command_08",
+    "Command_09",
+    "SynchronousTimer",
+    "AsynchronousTimer",
+    "SetLoop",
+    "Execute Loop",
+    "Subroutine",
+    "Return",
+    "GoTo",
+    "SetTimerAnimation",
+    "FLT_MAX",
+    "peephole",
+    "NON_MATCHING",
+    "asm/melee/ft/code_8006DBF4.s",
+    "asm/melee/it/code_80266F3C.s",
+    "asm/melee/lb/code_8000F9F8.s",
+    "include/dolphin/types.h",
+    "include/functions.h"
+  ],
+  "follow_up_queries": [
+    "Verify the true size of CommandInfo::event_return; the PR explicitly says event_return[4] size is made up.",
+    "Look for later PRs that rename lbl_803B9840 to a semantic dispatch table name.",
+    "Check subsequent lbcommand work for C matches of Command_04 and Command_09, which remained inline asm here.",
+    "Search whether FLT_MAX later moved to a more standard shared definition or changed precision spelling.",
+    "Inspect later struct updates to CommandInfo, especially loop_count_dup and unk_x18."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

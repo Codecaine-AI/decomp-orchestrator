@@ -1,0 +1,139 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1191",
+  "pr": {
+    "number": 1191,
+    "title": "Match parts of controller",
+    "url": "https://github.com/doldecomp/melee/pull/1191",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-02-03T04:57:06Z",
+    "merged_at": "2024-02-03T05:04:21Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched and named additional pieces of sysdolphin baselib controller handling. The PR moved several controller symbols from anonymous HSD_Controller_address names to descriptive HSD_Pad names, added partial C implementations/stubs in controller.c, exposed needed declarations in controller.h and dolphin pad.h, and updated assembly callsites and GALE01 symbols to use the new names.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "naming",
+      "symbol-renaming",
+      "partial-implementation"
+    ],
+    "systems": [
+      "sysdolphin/baselib/controller",
+      "dolphin/pad",
+      "asm",
+      "config/GALE01"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/controller.c",
+    "src/sysdolphin/baselib/controller.h",
+    "src/dolphin/pad/pad.h",
+    "asm/sysdolphin/baselib/controller.s",
+    "config/GALE01/symbols.txt",
+    "asm/melee/gm/gm_1A36.s",
+    "asm/melee/lb/lb_0198.s",
+    "asm/melee/ty/toy.s",
+    "asm/melee/ty/tyfigupon.s",
+    "asm/melee/ty/tylist.s"
+  ],
+  "what_changed": [
+    "Added partial controller.c implementations for helper/status functions including HSD_PadRawQueueShift, HSD_PadRawMerge, HSD_PadClampCheck1, HSD_PadCrossDir, HSD_PadRenewStatus, and HSD_PadReset.",
+    "Converted HSD_PadLibData, HSD_PadMasterStatus, and HSD_PadCopyStatus in controller.c from extern declarations into actual definitions.",
+    "Added NOT_IMPLEMENTED stubs for HSD_PadRenewMasterStatus, HSD_PadRenewCopyStatus, and HSD_PadZeroQueue while still giving them stable descriptive names and call signatures.",
+    "Renamed controller assembly functions and symbol table entries: HSD_Controller_80376D04 to HSD_PadFlushQueue, HSD_Controller_80377B54 to HSD_PadZeroQueue, HSD_Controller_80377CE8 to HSD_PadRenewStatus, and HSD_Controller_80377D18 to HSD_PadReset.",
+    "Updated assembly callsites in gm_1A36.s, lb_0198.s, toy.s, tyfigupon.s, and tylist.s to call the new HSD_Pad* names.",
+    "Extended src/dolphin/pad/pad.h with PAD_CHAN0-3 constants, PAD_CHAN0_BIT through PAD_CHAN3_BIT masks, PAD_ERR_NO_CONTROLLER, and a PADRecalibrate prototype.",
+    "Extended controller.h with HSD_PadFlushQueue, HSD_PadRenewRawStatus, HSD_PadRenewMasterStatus, HSD_PadZeroQueue, HSD_PadRenewStatus, and HSD_PadReset declarations."
+  ],
+  "smart_moves": [
+    "Renamed symbols at the same addresses in both config/GALE01/symbols.txt and assembly callsites, keeping the project-wide symbol graph consistent.",
+    "Used behavior-derived names that describe controller semantics rather than preserving address-based placeholder names.",
+    "Implemented HSD_PadRenewStatus as a small orchestration wrapper that matches the assembly sequence: renew raw status, renew master status, renew copy status, then zero the queue.",
+    "Implemented HSD_PadReset with the expected interrupt-protected critical section around rumble removal, per-channel rumble off, queue flush, PADRecalibrate, reset_switch clear, and interrupt restore.",
+    "Added missing Dolphin PAD constants and PADRecalibrate declaration instead of relying on undeclared externs or magic-only local declarations.",
+    "Left larger unmatched functions as NOT_IMPLEMENTED stubs while still carving out matched wrappers and names, allowing incremental progress without overclaiming complete controller decompilation."
+  ],
+  "decomp_lessons": [
+    "For controller work, small wrapper functions can often be matched first by recognizing ordered calls into raw/master/copy status renewal and queue cleanup.",
+    "When replacing HSD_Controller_address placeholders, update symbols.txt and every assembly callsite in the same change to avoid stale references.",
+    "Reset routines touching PAD state should be checked for OSDisableInterrupts/OSRestoreInterrupts bracketing and rumble shutdown side effects.",
+    "Header work is part of matching: adding SDK-like constants and prototypes can remove local extern clutter and make matched C more natural.",
+    "Address-based function names in asm may represent already-identifiable HSD_Pad operations; cross-reference call context before choosing final names.",
+    "Use NOT_IMPLEMENTED selectively for known but not-yet-matched functions so surrounding matched functions can land without pretending full coverage."
+  ],
+  "naming_conventions": [
+    "Renamed HSD_Controller_80376D04 to HSD_PadFlushQueue.",
+    "Renamed HSD_Controller_80377B54 to HSD_PadZeroQueue.",
+    "Renamed HSD_Controller_80377CE8 to HSD_PadRenewStatus.",
+    "Renamed HSD_Controller_80377D18 to HSD_PadReset.",
+    "Controller-related baselib functions follow the HSD_Pad* prefix rather than HSD_Controller_* once behavior is known.",
+    "Dolphin PAD constants use uppercase SDK-style names such as PAD_CHAN0, PAD_CHANMAX, PAD_CHAN0_BIT, PAD_ERR_NO_CONTROLLER, and PAD_ERR_NONE."
+  ],
+  "assembly_or_matching_tactics": [
+    "Matched HSD_PadRenewStatus as a direct call-chain wrapper corresponding to the assembly calls to HSD_PadRenewRawStatus, HSD_PadRenewMasterStatus, HSD_PadRenewCopyStatus, and HSD_PadZeroQueue.",
+    "Matched HSD_PadReset by reproducing the loop over four controller channels and calls to HSD_PadRumbleRemoveAll, HSD_PadRumbleOffN, HSD_PadFlushQueue with HSD_PAD_FLUSH_QUEUE_THROWAWAY, PADRecalibrate with 0xF0000000, and reset_switch clearing.",
+    "Used named constants/enums where available, such as HSD_PAD_FLUSH_QUEUE_THROWAWAY, while preserving required literal values like the PADRecalibrate mask.",
+    "For functions not yet converted to C, updated asm labels and .endfn names so the known symbol identity could still propagate through the codebase.",
+    "Added static helpers for raw queue shifting, raw status button merge, and cross-direction filtering to support gradual controller.c reconstruction."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "controller.c",
+    "controller.h",
+    "pad.h",
+    "HSD_PadFlushQueue",
+    "HSD_PadZeroQueue",
+    "HSD_PadRenewStatus",
+    "HSD_PadReset",
+    "HSD_PadRenewRawStatus",
+    "HSD_PadRenewMasterStatus",
+    "HSD_PadRenewCopyStatus",
+    "HSD_PadClampCheck1",
+    "HSD_PadCrossDir",
+    "HSD_PadRawQueueShift",
+    "HSD_PadRawMerge",
+    "HSD_PadLibData",
+    "HSD_PadMasterStatus",
+    "HSD_PadCopyStatus",
+    "HSD_PadRumbleRemoveAll",
+    "HSD_PadRumbleOffN",
+    "PADRecalibrate",
+    "PAD_CHAN0",
+    "PAD_CHAN1",
+    "PAD_CHAN2",
+    "PAD_CHAN3",
+    "PAD_CHANMAX",
+    "PAD_CHAN0_BIT",
+    "PAD_CHAN1_BIT",
+    "PAD_CHAN2_BIT",
+    "PAD_CHAN3_BIT",
+    "PAD_ERR_NO_CONTROLLER",
+    "HSD_Controller_80376D04",
+    "HSD_Controller_80377B54",
+    "HSD_Controller_80377CE8",
+    "HSD_Controller_80377D18",
+    "GALE01 symbols",
+    "sysdolphin baselib controller",
+    "NOT_IMPLEMENTED"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully implement HSD_PadFlushQueue, HSD_PadZeroQueue, HSD_PadRenewMasterStatus, or HSD_PadRenewCopyStatus.",
+    "Search for remaining HSD_Controller_* placeholders in sysdolphin/baselib/controller.s after PR 1191.",
+    "Compare PAD constant definitions against Dolphin SDK headers to confirm names and values.",
+    "Look for follow-up cleanup moving PAD_ERR_NO_CONTROLLER out of controller.h if duplicated with dolphin/pad/pad.h.",
+    "Search for later controller.c matches involving HSD_PadClampCheck3, HSD_PadADConvertCheck1, and HSD_PadRenewRawStatus."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

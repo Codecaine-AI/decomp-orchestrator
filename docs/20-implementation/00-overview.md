@@ -51,11 +51,11 @@ decomp-orchestrator/
 
 ## Child Sections
 
-- [Agents](agents/00-overview.md): centralized director, worker, PR-review, and
-  runtime prompt/session code.
+- [Agents](agents/00-overview.md): centralized director, worker, PR-review,
+  knowledge-curator, and runtime prompt/session code.
 - [CLI](cli/00-overview.md): operator command surface and command modules.
-- [Knowledge](knowledge/00-overview.md): manifest-selected references,
-  workflows, tools, decomp resources, and past PR library.
+- [Knowledge](knowledge/00-overview.md): source slices, CLI-first tools,
+  resource graph, agent context routing, and past PR library.
 - [State](state/00-overview.md): SQLite schema, state helpers, leases, events,
   reports, runs, and status.
 - [Appendix](99-appendix/10-design-source.md): original design source and

@@ -1,0 +1,155 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1895",
+  "pr": {
+    "number": 1895,
+    "title": "Match some plbonus functions",
+    "url": "https://github.com/doldecomp/melee/pull/1895",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-09-01T23:18:10Z",
+    "merged_at": "2025-09-01T23:21:44Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched a substantial slice of player bonus logic in src/melee/pl/plbonus.c, with supporting header/type cleanup across plbonus, plbonuslib, pltrick, and gm_16F1. The decomp.dev bot reported 7 new GALE01 matches totaling +8400 bytes and +0.22% matched code, including fn_8003B044, fn_8003C340, fn_8003BD60, fn_8003B9A4, fn_8003D2EC, pl_80039238, and fn_80038700, plus fn_8003CC84 improved to 97.94%. The PR introduced clearer bonus decision typing via Gm_DecType, renamed several generic fields/parameters around bonus kind/player concepts, and expanded pl/types.h structures enough to express the newly matched logic.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-layout",
+      "type-refinement",
+      "cleanup"
+    ],
+    "systems": [
+      "player-bonus",
+      "player-stats",
+      "game-mode",
+      "melee-core"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/pl/plbonus.c",
+      "why": "Main matching work; replaces multiple placeholder functions with C, adds setFlag/setPointValue helpers, and renames player/kind variables."
+    },
+    {
+      "path": "src/melee/pl/types.h",
+      "why": "Expanded pl_800386D8_t, StaleMoveTable, pl_StaleMoveTableExt_t, and pl_804D6470_t layouts to support matched plbonus logic."
+    },
+    {
+      "path": "src/melee/gm/gm_16F1.h",
+      "why": "Introduces Gm_DecType enum and updates gmDecisionGetType return type."
+    },
+    {
+      "path": "src/melee/gm/gm_16F1.c",
+      "why": "Applies kind naming and Gm_DecType return semantics in decision-table accessors."
+    },
+    {
+      "path": "src/melee/gm/gm_16F1.static.h",
+      "why": "Renames lbl_803D5A4C_t.x0 to kind and documents x5 as Gm_DecType."
+    },
+    {
+      "path": "src/melee/pl/plbonus.h",
+      "why": "Fixes prototypes for fn_80038700 and pl_80039238 to reflect real pointer/bool/float usage."
+    },
+    {
+      "path": "src/melee/pl/plbonuslib.c",
+      "why": "Adjusts return types to u32 and uses total_attack_count_struct.x598 naming."
+    },
+    {
+      "path": "src/melee/pl/pltrick.h",
+      "why": "Replaces a local unknown struct with a forward declaration of pl_800386D8_t and refines pl_80038628 to bool."
+    }
+  ],
+  "what_changed": [
+    "Implemented fn_80038700 as a sum over an int array range, using the corrected int* prototype.",
+    "Implemented pl_80039238 as a bool-returning time/window helper that conditionally sets point-valued bonus state or an external flag/value slot.",
+    "Matched several large plbonus functions: fn_8003B044, fn_8003B9A4, fn_8003BD60, fn_8003C340, and fn_8003D2EC; the bot reports each at 100%.",
+    "Improved fn_8003CC84 from 0.00% to 97.94%, but it was not reported as a full match.",
+    "Added Gm_DecType with Gm_DecType_Flag and Gm_DecType_Point, and changed gmDecisionGetType from int to Gm_DecType.",
+    "Renamed helper logic from setKindToOne_inline/setKindToValue_inline to setFlag/setPointValue, with assertions checking player != Gm_Player_Other and matching decision type.",
+    "Refined struct and field layouts in pl/types.h, including u32 arrays/counters, bitfields at x5BC, nested pl_800386D8_1B0_t, total_attack_count_struct usage, and many typed pl_804D6470_t threshold fields."
+  ],
+  "smart_moves": [
+    "Encoded the flag-vs-point distinction as an enum instead of raw 0/1 values, making assertions and callsites easier to audit while preserving matching behavior.",
+    "Used small semantic helpers setFlag and setPointValue to centralize x904 bonus table writes and their gmDecisionGetType invariants.",
+    "Carried the real data shape into headers and structs instead of forcing casts/local dummy structs, especially by reusing pl_800386D8_t from pltrick and exposing total_attack_count_struct fields.",
+    "Kept matching-sensitive code isolated with #pragma dont_inline around pl_800386D8, suggesting the function needed compiler control to preserve the expected codegen.",
+    "Renamed parameters like arg0/slot to player and arg1 to kind where evidence from access patterns was clear, improving later decomp readability without inventing high-level bonus names.",
+    "Switched several count-returning plbonuslib APIs from int to u32 where the backing fields are unsigned counters."
+  ],
+  "decomp_lessons": [
+    "When a table stores semantic categories as bytes, introducing a narrow enum can make decompiled conditionals self-documenting while still matching the original data layout.",
+    "For bonus/stat systems, first clarify the shared stale-move/total-attack-count structs; large functions often become expressible once arrays and nested offsets are modeled correctly.",
+    "Avoid per-file throwaway unknown structs if an existing project struct can be forward-declared and reused; this reduces duplicated layout guesses.",
+    "Replacing HSD_ASSERTMSG string assertions with HSD_ASSERT line-number assertions can be matching-relevant; use the form implied by the target function's codegen.",
+    "For reset loops over bonus tables, verify the indexed write is to x904[i], not accidentally x904[0] plus pointer arithmetic; this PR's resetBonuses form is a safer pattern.",
+    "Partial matches should be recorded explicitly: fn_8003CC84 improved strongly but was still not a full match according to the bot report."
+  ],
+  "naming_conventions": [
+    "Use player for player slot/index arguments when passed to Player_GetStaleMoveTableIndexPtr2 or related player APIs.",
+    "Use kind for bonus decision IDs passed into gmDecisionGetType and x904 bonus-table indexing.",
+    "Use Gm_DecType_Flag for true/false player bonuses and Gm_DecType_Point for integer-valued player bonuses.",
+    "Name boolean bonus setter helpers setFlag and integer bonus setter helpers setPointValue.",
+    "Prefer total_attack_count_struct for the embedded pl_800386D8_t inside StaleMoveTable, and x598 for the item-kind counter array when evidence matches plbonuslib usage.",
+    "Use u32 for nonnegative counter fields and return values in plbonuslib where the backing fields are unsigned."
+  ],
+  "assembly_or_matching_tactics": [
+    "Applied #pragma push / #pragma dont_inline on / #pragma pop around pl_800386D8 to keep it out-of-line for matching.",
+    "Used bool return types and bool literals where the generated control flow expected true/false semantics, notably pl_80039238 and setFlag writes.",
+    "Preserved table scan style in gm_16F1 while converting raw fields to curr->kind and returning Gm_DecType_Flag on sentinel fallback.",
+    "Introduced explicit float temporaries for calculations involving pl_CalculateAverage and Camera_80030E10, likely to stabilize floating-point codegen in large bonus checks.",
+    "Used corrected pointer/array prototypes in headers so callsites compile into indexed loads rather than opaque UNK parameter handling."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided slice.",
+    "Automated decomp.dev report for GALE01 confirmed +0.22% matched code, +8400 bytes, 7 new full matches, and one partial improvement."
+  ],
+  "searchable_terms": [
+    "pr-1895",
+    "plbonus",
+    "r-burns",
+    "fn_8003B044",
+    "fn_8003C340",
+    "fn_8003BD60",
+    "fn_8003B9A4",
+    "fn_8003D2EC",
+    "fn_8003CC84",
+    "pl_80039238",
+    "fn_80038700",
+    "pl_80039450",
+    "resetBonuses",
+    "setFlag",
+    "setPointValue",
+    "Gm_DecType",
+    "Gm_DecType_Flag",
+    "Gm_DecType_Point",
+    "gmDecisionGetType",
+    "lbl_803D5A4C_t.kind",
+    "pl_800386D8_t",
+    "pl_800386D8_1B0_t",
+    "StaleMoveTable",
+    "pl_StaleMoveTableExt_t",
+    "pl_804D6470_t",
+    "total_attack_count_struct",
+    "plbonuslib",
+    "pltrick"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that finish matching fn_8003CC84 in src/melee/pl/plbonus.c.",
+    "Search for additional uses of Gm_DecType to see whether bonus kind constants were later named.",
+    "Inspect later changes to pl_804D6470_t field names to replace xNN threshold fields with semantic bonus-config names.",
+    "Search for pl_800386D8_t layout refinements after this PR, especially x4, x1B0, x3E8, x504, and x598.",
+    "Find PRs that replace numeric bonus kind literals like 0x4F, 0x55, 0x6B, and 0x59 with named constants or enums."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

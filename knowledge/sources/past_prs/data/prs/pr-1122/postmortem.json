@@ -1,0 +1,156 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1122",
+  "pr": {
+    "number": 1122,
+    "title": "Match 97.10% of `dvdlow` (3.67 KB)",
+    "url": "https://github.com/doldecomp/melee/pull/1122",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-01-25T20:49:25Z",
+    "merged_at": "2024-01-25T20:50:42Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added a new decompilation of `src/dolphin/dvd/dvdlow.c`, reaching a reported 97.10% file match for the Dolphin DVD low-level layer. The PR implemented many weak DVDLow entry points, interrupt/alarm handling, DI/PI register interaction, workaround read scheduling, and updated related DVD/OS headers and platform macros needed for correct typing and section/weak attributes.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "hardware-registers",
+      "runtime-platform-macros"
+    ],
+    "systems": [
+      "dolphin/dvd",
+      "dolphin/os",
+      "Runtime",
+      "repo-build-flags"
+    ]
+  },
+  "key_files": [
+    "src/dolphin/dvd/dvdlow.c",
+    "src/dolphin/dvd/dvdlow.h",
+    "src/dolphin/dvd/dvd.h",
+    "src/dolphin/dvd/dvd.c",
+    "src/dolphin/os/OSInit.h",
+    "src/dolphin/os/OSInterrupt.c",
+    "src/dolphin/os/OSResetSW.c",
+    "src/Runtime/platform.h",
+    "src/placeholder.h",
+    "compile_flags.txt"
+  ],
+  "what_changed": [
+    "Created `src/dolphin/dvd/dvdlow.c` with 459 lines implementing the low-level DVD interface and matching report coverage of 97.10% for a 3.67 KB file.",
+    "Implemented or declared weak low-level DVD functions including `__DVDInitWA`, `__DVDInterruptHandler`, `DVDLowRead`, `DVDLowSeek`, `DVDLowReadDiskID`, `DVDLowStopMotor`, `DVDLowRequestError`, `DVDLowInquiry`, `DVDLowAudioStream`, `DVDLowRequestAudioStatus`, `DVDLowAudioBufferConfig`, `DVDLowReset`, `DVDLowBreak`, and `DVDLowClearCallback`.",
+    "Added internal DVD read workaround state and command sequencing via `CommandList`, `NextCommandNumber`, `ProcessNextCommand`, `SeekTwiceBeforeRead`, `WaitBeforeRead`, and `DoJustRead`.",
+    "Added timeout and workaround alarm handling with `AlarmForWA`, `AlarmForTimeout`, `AlarmForBreak`, `AlarmHandler`, `AlarmHandlerForTimeout`, and `SetTimeoutAlarm`.",
+    "Implemented direct DI/PI hardware register programming through `__DIRegs` and `__PIRegs` for DVD commands, interrupt cause handling, reset timing, and transfer setup.",
+    "Updated `dvdlow.h` prototypes from `void` returns to `bool` for most DVDLow command functions and gave parameters concrete types such as `DVDDiskID*`, `DVDDriveInfo*`, and `bool enable`.",
+    "Changed `DVDLowReadDiskID` to take `DVDDiskID*`; `dvd.c` now casts `tmpBuffer` to `DVDDiskID*` with an explicit `@todo Incorrect cast` note.",
+    "Named the previously anonymous DVD buffer struct as `DVDBuffer` and changed `bootFilePosition` from `u32` to `void*` in `dvd.h`.",
+    "Moved `SDATA` definition out of `placeholder.h` into `Runtime/platform.h` and added a `WEAK` macro using `__declspec(weak)` for MWERKS builds outside `M2CTX`.",
+    "Removed the old `MWERKS_GNUC` macro block from `Runtime/platform.h`.",
+    "Centralized `__PIRegs` declaration in `OSInit.h`, added `__DIRegs[16]`, and removed duplicate/local `__PIRegs` extern declarations from OS files.",
+    "Added `-Wno-undefined-internal` to `compile_flags.txt`, likely to tolerate internal declarations emitted by this decompilation pattern."
+  ],
+  "smart_moves": [
+    "Used `WEAK` declarations for SDK-style low-level DVD functions, matching the likely library linkage model while keeping M2CTX behavior clean through an empty macro outside MWERKS.",
+    "Centralized hardware register externs in `OSInit.h` instead of duplicating `__PIRegs` declarations across OS source files, reducing drift in register array sizes and addresses.",
+    "Improved header prototypes to carry actual return values and parameter types, which makes call sites and future matching work less dependent on casts or placeholder signatures.",
+    "Kept known type uncertainty visible by marking the `DVDLowReadDiskID((DVDDiskID*) &tmpBuffer, ...)` call with `@todo Incorrect cast` instead of silently hiding the mismatch.",
+    "Modeled asynchronous DVD command flow explicitly with small command queue state and alarm callbacks, which helps preserve control-flow shape for matching `DVDLowRead` and interrupt behavior.",
+    "Relocated section/linkage helper macros from `placeholder.h` to `Runtime/platform.h`, making `SDATA` and `WEAK` generally available rather than tied to placeholder infrastructure."
+  ],
+  "decomp_lessons": [
+    "For Dolphin SDK low-level modules, matching often requires preserving exact global state layout: booleans, volatile fields, command counters, alarms, callback globals, and previous/current transfer metadata all affect codegen.",
+    "Weak SDK symbols can be represented with a reusable `WEAK` macro gated on `__MWERKS__` and `!M2CTX`; this avoids scattering compiler-specific attributes through placeholder headers.",
+    "Hardware register externs should live in common OS headers with precise array sizes and `AT_ADDRESS` addresses so DVD, interrupt, and reset modules share the same declarations.",
+    "When prototypes are corrected from placeholders, update both headers and call sites together; return-type changes from `void` to `bool` can be required for matching even when callers ignore the result.",
+    "Keep casts that are known to be structurally suspicious annotated with TODOs. This preserves buildability while flagging type work for future cleanup.",
+    "Alarm and interrupt handlers may need temporary `OSContext` manipulation (`OSClearContext`, `OSSetCurrentContext`) to match SDK exception-callback behavior.",
+    "DVD DI command functions follow a repeated register-writing pattern: set `Callback`, clear `StopAtNextInt`, populate `__DIRegs[2..7]`, then install a timeout alarm."
+  ],
+  "naming_conventions": [
+    "SDK internal functions use double-underscore prefixes such as `__DVDInitWA`, `__DVDInterruptHandler`, and `__DVDLowSetWAType`.",
+    "Low-level DVD public functions use `DVDLow` prefixes, e.g. `DVDLowRead`, `DVDLowSeek`, `DVDLowReset`, and `DVDLowClearCallback`.",
+    "Global static DVDLow state uses PascalCase-like names from SDK style: `FirstRead`, `StopAtNextInt`, `LastLength`, `Callback`, `ResetOccurred`, `WaitingCoverClose`, `WorkAroundType`, and `NextCommandNumber`.",
+    "Alarm globals are named for purpose: `AlarmForWA`, `AlarmForTimeout`, and `AlarmForBreak`.",
+    "Hardware register arrays follow OS SDK names `__DIRegs` and `__PIRegs` and are declared with `AT_ADDRESS`.",
+    "Concrete struct names should replace anonymous placeholder structs when the SDK type is known or useful, as with `typedef struct DVDBuffer { ... } DVDBuffer;`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Introduced `WEAK` as `__declspec(weak)` for MWERKS builds to match weak SDK function linkage while compiling away under non-MWERKS or M2CTX.",
+    "Introduced `SDATA` as `__declspec(section \".sdata\")` in the platform layer, preserving small-data placement when needed by matching code.",
+    "Added `-Wno-undefined-internal` to suppress warnings introduced by matching-oriented internal/weak declarations.",
+    "Used `volatile` on interrupt-shared state such as `StopAtNextInt`, `LastResetEnd`, `ResetOccurred`, `WaitingCoverClose`, `LastReadFinished`, `LastCommandWasRead`, and `NextCommandNumber` to model hardware/interrupt interactions and influence codegen.",
+    "Used explicit casts from pointers to `u32` for DI DMA address registers, e.g. assigning `(u32) addr`, `(u32) diskID`, and `(u32) info` into `__DIRegs[5]`.",
+    "Preserved direct bitmask manipulation for interrupt cause decoding from `__DIRegs[0]` and cover/reset handling through `__DIRegs[1]`.",
+    "Preserved busy-wait reset timing in `DVDLowReset` using `__OSGetSystemTime()` and `OSMicrosecondsToTicks(12)`.",
+    "The PR body reported many functions at 100% match, with remaining mismatch concentrated in `__DVDInterruptHandler` at 91.01%, `DVDLowRead` at 94.27%, and `Read` at 99.93%."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The diff itself includes an inline `@todo Incorrect cast` on the `DVDLowReadDiskID((DVDDiskID*) &tmpBuffer, cbForStateCoverClosed)` call, documenting unresolved type uncertainty."
+  ],
+  "searchable_terms": [
+    "pr-1122",
+    "dvdlow",
+    "dolphin/dvd/dvdlow.c",
+    "DVDLowRead",
+    "DVDLowSeek",
+    "DVDLowReadDiskID",
+    "DVDLowReset",
+    "DVDLowBreak",
+    "DVDLowClearCallback",
+    "__DVDInterruptHandler",
+    "__DVDInitWA",
+    "__DVDLowSetWAType",
+    "DVDLowCallback",
+    "DVDDiskID",
+    "DVDBuffer",
+    "DVDDriveInfo",
+    "__DIRegs",
+    "__PIRegs",
+    "OSAlarm",
+    "AlarmForWA",
+    "AlarmForTimeout",
+    "AlarmHandlerForTimeout",
+    "ProcessNextCommand",
+    "SeekTwiceBeforeRead",
+    "WaitBeforeRead",
+    "HitCache",
+    "WorkAroundType",
+    "WorkAroundSeekLocation",
+    "StopAtNextInt",
+    "LastCommandWasRead",
+    "ResetOccurred",
+    "WaitingCoverClose",
+    "WEAK",
+    "SDATA",
+    "__declspec(weak)",
+    "__declspec(section \".sdata\")",
+    "compile_flags.txt",
+    "-Wno-undefined-internal",
+    "AT_ADDRESS",
+    "OSInit.h",
+    "OSInterrupt.c",
+    "OSResetSW.c"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that finish matching `__DVDInterruptHandler`, `DVDLowRead`, or `Read` in `src/dolphin/dvd/dvdlow.c`.",
+    "Search for future cleanup of the `@todo Incorrect cast` around `DVDLowReadDiskID` and `tmpBuffer`.",
+    "Check whether `DVDBuffer.bootFilePosition` remains `void*` or is refined in later DVD type cleanup.",
+    "Search for other PRs that reuse or modify the `WEAK` and `SDATA` macros in `Runtime/platform.h`.",
+    "Look for follow-up changes to `__DIRegs` and `__PIRegs` declarations or register array sizes in OS headers."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

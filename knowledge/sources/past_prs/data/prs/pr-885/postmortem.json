@@ -1,0 +1,143 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-885",
+  "pr": {
+    "number": 885,
+    "title": "Match `ftCo_Pass`",
+    "url": "https://github.com/doldecomp/melee/pull/885",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-28T11:49:13Z",
+    "merged_at": "2023-05-28T11:57:45Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common fighter pass-through-platform action by replacing most of the relevant ft_08A4 assembly with a new C translation unit, `ftCo_Pass.c`, and wiring it into the build. The PR also added typed declarations and struct fields needed to express the behavior: pass motion vars at fp+2340/fp+2344, ftCommonData fields at +0x464..+0x47C, collision helpers `mpColl_8004CBC0`/`mpColl_8004CBE8`, and a typed `ft_80082F28` prototype. The match report in the PR body says the new file and all listed functions reached 100%. There were no review comments in the provided slice.",
+  "change_classification": {
+    "primary_type": "decompilation-match",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-typing",
+      "build-integration",
+      "asm-reduction"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "ftCo_Pass",
+      "collision",
+      "asm/melee/ft",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_Pass.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Pass.h",
+    "asm/melee/ft/ft_08A4.s",
+    "obj_files.mk",
+    "src/melee/ft/chara/ftCommon/types.h",
+    "src/melee/ft/types.h",
+    "src/melee/mp/mpcoll.h",
+    "src/melee/ft/ft_081B.c",
+    "src/melee/ft/ft_081B.h",
+    "src/melee/ft/ft_0877.h",
+    "src/melee/ft/ft_08A4.h"
+  ],
+  "what_changed": [
+    "Added `src/melee/ft/chara/ftCommon/ftCo_Pass.c` with C implementations for `ft_80099F1C`, `ftCo_80099F9C`, `ft_8009A080`, `ft_8009A134`, `ft_8009A184`, `ftCo_8009A228`, `ftCo_Pass_Anim`, `ftCo_Pass_IASA`, `ftCo_Pass_Phys`, and `ftCo_Pass_Coll`.",
+    "Added `ftCo_Pass.h` declaring the matched pass-related functions with address comments and `ftCo_GObj*` signatures.",
+    "Removed the corresponding hand-written assembly from `asm/melee/ft/ft_08A4.s`, leaving later functions in that asm file intact, and changed remaining asm call sites from local labels `.L_80099F9C`/`.L_8009A228` to symbols `ftCo_80099F9C`/`ftCo_8009A228`.",
+    "Added `ftCo_Pass.c.o` to `obj_files.mk` so the new C object is linked before the remaining `ft_08A4.s.o`.",
+    "Added the `pass` overlay to `union ftCommon_MotionVars` with fields at fp+2340 and fp+2344: `bool x0` and `float x4`.",
+    "Refined `struct ftCommonData` around offsets +0x464..+0x47C, replacing an opaque byte array with `float x464`, `float x468`, `float x46C`, `float x470`, and three `UNK_T` words.",
+    "Added prototypes for collision helpers `mpColl_8004CBC0(CollData*)` and `mpColl_8004CBE8(CollData*)`.",
+    "Changed `ft_80082F28` from an unknown prototype to `void ft_80082F28(ftCo_GObj* gobj)` in both the source asm wrapper and header.",
+    "Moved pass declarations out of `ft_0877.h` and into the dedicated `ftCo_Pass.h`; multiple fighter/common source files gained an include for `ftCommon/ftCo_Pass.h` where they reference these functions.",
+    "Changed `ftCo_800C60C8` in `ft_08A4.h` from `UNK_RET/UNK_PARAMS` to `bool ftCo_800C60C8(ftCo_GObj* gobj)`.",
+    "Added a `MUST_MATCH` fallback definition of `NOT_IMPLEMENTED` as `asm { nop }` in `placeholder.h`."
+  ],
+  "smart_moves": [
+    "Factored the repeated platform-pass input/collision test into `ft_80099F1C`, matching repeated assembly patterns that compare downward left-stick input against `p_ftCommonData->x464`, check `x671_timer_lstick_tilt_y` against `x468`, and call `mpColl_8004CBC0`.",
+    "Introduced a dedicated `ftCo_Pass` header instead of leaving pass-specific prototypes in the broad `ft_0877.h`, improving ownership of common action declarations.",
+    "Used the existing motion-var union pattern to name the fp+2340/fp+2344 overlay for pass state, allowing `ftCo_80099F9C` to express the one-shot pass flag and timer setup directly.",
+    "Preserved exact matching for stack-sensitive functions by adding `#ifdef MUST_MATCH` unused stack padding arrays with `/// @todo Unused stack` comments.",
+    "Translated the IASA function as a chain of early-return checks using `RETURN_IF`, closely reflecting the assembly sequence of calls that exits once an action input succeeds.",
+    "Updated residual assembly branch targets to real function symbols after moving code to C, avoiding fragile local-label references across the C/asm boundary.",
+    "Typed enough neighboring APIs (`ftCo_800C60C8`, `ft_80082F28`, `mpColl_8004CBC0`, `mpColl_8004CBE8`) to keep the matched C readable while avoiding broad speculative renaming."
+  ],
+  "decomp_lessons": [
+    "When carving functions out of a large assembly file, update remaining assembly call sites to call the new C symbols explicitly; otherwise local-label references can hide cross-file dependencies.",
+    "Common-action matches often require small struct/header advances outside the new `.c` file: motion var overlays, common data offsets, collision helper prototypes, and caller includes all matter for a clean compile and link.",
+    "For unknown gameplay fields, offset-preserving names such as `x464`, `x468`, `x46C`, `x470`, `x0`, and `x4` are acceptable when semantics are not fully proven, especially if they unlock a verified match.",
+    "Use a dedicated action header (`ftCo_Pass.h`) once multiple fighters/common files need prototypes; this is preferable to leaving declarations in generic catch-all headers.",
+    "MUST_MATCH-only dummy locals can document stack artifacts without polluting normal builds, and should be marked as TODOs rather than treated as semantic variables.",
+    "Short action callback wrappers like `ftCo_Pass_Phys` and `ftCo_Pass_Coll` can match as direct delegates to existing physics/collision functions once their prototypes are correct."
+  ],
+  "naming_conventions": [
+    "New common action files follow `ftCo_<Action>.c` and `ftCo_<Action>.h`, here `ftCo_Pass`.",
+    "Action callbacks use the common suffix convention `Anim`, `IASA`, `Phys`, and `Coll`: `ftCo_Pass_Anim`, `ftCo_Pass_IASA`, `ftCo_Pass_Phys`, `ftCo_Pass_Coll`.",
+    "Still-unknown or not-yet-semantically-named functions retained address-style names such as `ft_80099F1C`, `ft_8009A080`, `ft_8009A134`, `ft_8009A184`, `ftCo_80099F9C`, and `ftCo_8009A228`.",
+    "The dedicated header guard used the address-style project convention `GALE01_099F1C`.",
+    "Struct fields without confirmed semantics retained offset-style names, e.g. `p_ftCommonData->x464`, `x468`, `x46C`, `x470`, and `fp->mv.co.pass.x0`/`x4`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed roughly 352 lines of pass-related assembly from `asm/melee/ft/ft_08A4.s` and replaced them with 135 lines of C in `ftCo_Pass.c`.",
+    "The PR body's match report lists `src/melee/ft/chara/ftCommon/ftCo_Pass.c` and each included function at 100%.",
+    "Used `#ifdef MUST_MATCH` stack padding (`u8 _[8] = { 0 };`) in several functions to account for unused stack space seen in the assembly.",
+    "Preserved float and integer behavior from the assembly: downward input threshold uses `<= -p_ftCommonData->x464`, tilt timer compares against `x468`, pass vertical velocity uses `x46C`, and pass state timer uses `x470`.",
+    "Matched motion transitions through `Fighter_ChangeMotionState`, including the `ftCo_MS_Pass` transition in `ftCo_8009A228` and a parameterized motion state in `ft_8009A184`.",
+    "After motion change, both transition helpers call `mpColl_8004CBE8(&fp->coll_data)` and set `fp->x671_timer_lstick_tilt_y = 0xFE`, mirroring the assembly side effects.",
+    "The IASA chain was expressed with `RETURN_IF(...)` calls for special-air, escape-air/item/attack-air/common checks, matching the assembly's repeated call-and-branch structure."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice."
+  ],
+  "searchable_terms": [
+    "pr-885",
+    "Match ftCo_Pass",
+    "ribbanya",
+    "ftCo_Pass.c",
+    "ftCo_Pass.h",
+    "ft_08A4.s",
+    "ft_80099F1C",
+    "ftCo_80099F9C",
+    "ft_8009A080",
+    "ft_8009A134",
+    "ft_8009A184",
+    "ftCo_8009A228",
+    "ftCo_Pass_Anim",
+    "ftCo_Pass_IASA",
+    "ftCo_Pass_Phys",
+    "ftCo_Pass_Coll",
+    "ftCo_MS_Pass",
+    "ftCommon_MotionVars pass",
+    "p_ftCommonData x464 x468 x46C x470",
+    "x671_timer_lstick_tilt_y",
+    "mpColl_8004CBC0",
+    "mpColl_8004CBE8",
+    "Fighter_ChangeMotionState",
+    "RETURN_IF",
+    "MUST_MATCH unused stack",
+    "ft_80082F28",
+    "ftCo_800C60C8",
+    "pass-through platform",
+    "platform pass"
+  ],
+  "follow_up_queries": [
+    "Can `fp->mv.co.pass.x0` and `fp->mv.co.pass.x4` be renamed once the pass state/timer semantics are confirmed?",
+    "Can `p_ftCommonData->x464`, `x468`, `x46C`, and `x470` be given semantic names related to platform pass input threshold, tilt timer, vertical velocity, and cooldown?",
+    "What are the precise semantics of `mpColl_8004CBC0` and `mpColl_8004CBE8` in platform pass collision handling?",
+    "Can `ft_80099F1C`, `ftCo_80099F9C`, `ft_8009A080`, `ft_8009A134`, `ft_8009A184`, and `ftCo_8009A228` be renamed after more adjacent ftCommon actions are understood?",
+    "Do other common action files need the `MUST_MATCH` unused-stack padding pattern used here?",
+    "Can remaining pass-related references in `ftCo_Squat_IASA` and `ftCo_SquatWait_IASA` be moved from assembly into C in a later match?"
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

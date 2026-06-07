@@ -1,0 +1,142 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-350",
+  "pr": {
+    "number": 350,
+    "title": "Match grlib",
+    "url": "https://github.com/doldecomp/melee/pull/350",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-04-09T17:55:25Z",
+    "merged_at": "2022-04-09T18:00:38Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Converted the stage ground library object from standalone assembly to C by deleting asm/melee/gr/grlib.s, adding src/melee/gr/grlib.c and grlib.h, and switching obj_files.mk to build the C object. The new C covers grlib particle/effect helpers, JObj effect cleanup traversal, stage animation object creation, stage animation state accessors, and stage-dependent vector logic, while leaving func_801C9EE8 as inline asm inside grlib.c. Supporting type/prototype work added StageAnim in stage.h, JObj translation inline accessors and HSD_JObjReqAnimAll in jobj.h, and corrected/added prototypes for HSD_ForeachAnim, HSD_JObjAnimAll, func_8001044C, func_8002A278, and func_801C0498.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "prototype-recovery",
+      "struct-recovery",
+      "stage-system"
+    ],
+    "systems": [
+      "melee/gr",
+      "stage",
+      "sysdolphin/baselib",
+      "jobj",
+      "aobj",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "asm/melee/gr/grlib.s",
+    "src/melee/gr/grlib.c",
+    "src/melee/gr/grlib.h",
+    "obj_files.mk",
+    "src/melee/gr/stage.h",
+    "src/sysdolphin/baselib/jobj.h",
+    "src/sysdolphin/baselib/aobj.c",
+    "include/functions.h",
+    "src/melee/gr/ground.c"
+  ],
+  "what_changed": [
+    "Removed the 786-line assembly file asm/melee/gr/grlib.s and replaced the build target in obj_files.mk with src/melee/gr/grlib.c.o.",
+    "Added src/melee/gr/grlib.c with C implementations for func_801C96E8 through func_801C9E60 and an inline asm body for func_801C9EE8.",
+    "Added particle/generator helper structs in grlib.c, including UnkGeneratorMember, UnkGeneratorStruct, UnkEffectStruct, and UnkAnimStruct, to express known offsets such as x54, xA2, x10_jobj, and x16_flags.",
+    "Added grlib.h declarations for grlib entry points including func_801C96F8, func_801C98A0, func_801C9908, func_801C9CEC, func_801C9E40, func_801C9E50, func_801C9E60, and func_801C9EE8.",
+    "Recovered StageAnim in stage.h with joint and anims fields and changed StageInfo.x6CC from void* to StageAnim*.",
+    "Added HSD_JObjReqAnimAll and inline HSD_JObjGetTranslationX/Y accessors to jobj.h, with assert_line calls matching baselib assert behavior.",
+    "Changed HSD_ForeachAnim from an untyped asm void(void) declaration to asm void HSD_ForeachAnim(void*, ...) and removed a duplicate extern from ground.c.",
+    "Updated include/functions.h prototypes for func_8001044C, func_8002A278, func_801C0498, HSD_ForeachAnim, and HSD_JObjAnimAll."
+  ],
+  "smart_moves": [
+    "Used narrow local structs with explicit padding/fill fields to recover only the offsets needed for matching instead of prematurely naming full particle or generator layouts.",
+    "Introduced StageAnim and typed StageInfo.x6CC so func_801C9CEC could naturally express joint loading and animation indexing.",
+    "Kept func_801C9EE8 as inline asm in the C file, allowing the object to move from asm to C while preserving a hard-to-match routine.",
+    "Added inline jobj_child and jobj_next helpers for null-safe child/next traversal in func_801C9908, matching the assembly pattern that guarded against NULL before field loads.",
+    "Used assert_line in func_801C9A70 and the JObj translation accessors to reproduce assertion callsites and line-number-sensitive codegen.",
+    "Made HSD_ForeachAnim variadic so the grlib call with flags callback arguments could be represented without overfitting the full baselib API."
+  ],
+  "decomp_lessons": [
+    "For partial decompilation of an object, moving the whole object to C can still be viable if remaining difficult functions are embedded as inline asm.",
+    "Stage globals often need small structural recovery before nearby code will become readable and matchable; here StageInfo.x6CC became a StageAnim pointer with joint and anims fields.",
+    "Baselib convenience accessors can be necessary for matching because they encode assertions and line numbers, not just simple field reads.",
+    "When a function walks intrusive linked lists and may delete/free the current node, preserve the next pointer before the deletion call; grlib does this for lbl_804D78FC effect cleanup.",
+    "Use exact flag constants from the assembly when names are not yet known, such as x16_flags |= 0x80, jobj->flags & 0x1000, and aobj->flags & 0x40000000.",
+    "Wrapper functions around unknown engine calls can often be matched with typed prototypes first, even before the callee names are understood."
+  ],
+  "naming_conventions": [
+    "Unknown recovered structs were named with _Unk*Struct or _Unk*Member prefixes and offset-style fields such as x54, xA2, x10_jobj, and x16_flags.",
+    "Static callback labels retained address-label names lbl_801C9BC8 and lbl_801C9C40 because semantic names were not established in the evidence.",
+    "Internal stage enum values in grlib.c used short uppercase stage identifiers RCRUISE, BIGBLUE, and ICEMTN with comments giving human-readable names.",
+    "The added grlib.h header guard is _grtlib_h_, which appears to preserve the submitted file text but looks like a typo relative to grlib; no review comment in this slice explains it."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced sdata2 constants 0.0f and 0.5f with C floating literals in grlib.c where possible.",
+    "Used direct struct assignment for S32Vec and Vec copies to reproduce three consecutive word loads/stores.",
+    "Used explicit if/else mapping from idx1 values 1..4 to idx0 values 0..3 in func_801C9CEC rather than a more abstract expression, matching the original branch structure.",
+    "Used a switch with assert_line(290, 0) in func_801C9A70 to match the default assertion path for invalid vector index values.",
+    "Added variadic HSD_ForeachAnim prototype and precise HSD_JObjAnimAll signature to make callsites type-check and match.",
+    "Preserved inline asm for func_801C9EE8, including loops over fighter/item lists and collision-box comparisons, rather than forcing an unmatured C translation."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in this PR slice.",
+    "Because there is no human text excerpt, reviewer intent and any requested fixes cannot be inferred from this evidence."
+  ],
+  "searchable_terms": [
+    "Match grlib",
+    "grlib",
+    "asm/melee/gr/grlib.s",
+    "src/melee/gr/grlib.c",
+    "src/melee/gr/grlib.h",
+    "obj_files.mk",
+    "StageAnim",
+    "StageInfo.x6CC",
+    "HSD_ForeachAnim",
+    "HSD_JObjAnimAll",
+    "HSD_JObjReqAnimAll",
+    "HSD_JObjGetTranslationX",
+    "HSD_JObjGetTranslationY",
+    "func_801C96E8",
+    "func_801C96F8",
+    "func_801C98A0",
+    "func_801C9908",
+    "func_801C9A10",
+    "func_801C9A70",
+    "func_801C9CEC",
+    "func_801C9E40",
+    "func_801C9E50",
+    "func_801C9E60",
+    "func_801C9EE8",
+    "lbl_801C9BC8",
+    "lbl_801C9C40",
+    "lbl_804D78FC",
+    "lbl_8049EF58",
+    "UnkEffectStruct",
+    "UnkGeneratorStruct",
+    "UnkGeneratorMember",
+    "RCRUISE",
+    "BIGBLUE",
+    "ICEMTN",
+    "assert_line"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename grlib functions func_801C96F8 through func_801C9EE8.",
+    "Find later PRs that replace inline asm func_801C9EE8 with C.",
+    "Search for corrections or uses of the grlib.h header guard _grtlib_h_.",
+    "Search for later struct refinements of UnkEffectStruct, UnkGeneratorStruct, and StageAnim.",
+    "Search for later type improvements to HSD_ForeachAnim and HSD_JObjAnimAll."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

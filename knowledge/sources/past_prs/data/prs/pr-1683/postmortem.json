@@ -1,0 +1,137 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1683",
+  "pr": {
+    "number": 1683,
+    "title": "Misc HSD match progress",
+    "url": "https://github.com/doldecomp/melee/pull/1683",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-07-12T01:33:16Z",
+    "merged_at": "2025-07-12T01:42:52Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched additional SysDolphin baselib HSD code in RObj orientation constraint handling and TExp DAG scheduling/register assignment. The PR replaced placeholder/UNK declarations with typed implementations for assign_reg and HSD_TExpSchedule, added a full resolveCnsOrientation implementation, adjusted related symbols/data strings, and improved texpdag.h prototypes. Evidence is mostly from the diff; there was no substantive PR body, review thread, or review comment excerpt.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-map",
+      "baselib-progress"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "HSD_RObj",
+      "HSD_TExpDag",
+      "config/GALE01"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/robj.c",
+    "src/sysdolphin/baselib/texpdag.c",
+    "src/sysdolphin/baselib/texpdag.h",
+    "config/GALE01/symbols.txt"
+  ],
+  "what_changed": [
+    "Implemented resolveCnsOrientation in src/sysdolphin/baselib/robj.c, replacing a NOT_IMPLEMENTED stub and removing the surrounding dont_inline pragma block.",
+    "Added a local inline helper jobj_parent(HSD_JObj*) to safely return a JObj parent or NULL, then used it repeatedly in orientation constraint traversal.",
+    "Made HSD_RObj_80406E74 static and used it as the three update IDs 0x32, 0x33, and 0x34 for axis-vector updates in resolveCnsOrientation.",
+    "Changed RObjUpdateFunc threshold comparison from an extern double symbol HSD_RObj_804DE6A0 to a literal 0.5, removing the extern declaration.",
+    "Included math_ppc.h in robj.c and used SQ with sqrtf and VECMag while reconstructing normalized/scaled basis vectors.",
+    "Added static data string HSD_RObj_80406F14 equal to \"(ptr && nitems) || !ptr\" in robj.c.",
+    "Implemented assign_reg in src/sysdolphin/baselib/texpdag.c, assigning TEV color and alpha destination registers by walking scheduled DAG nodes in reverse order and tracking remaining references in small u8 arrays.",
+    "Implemented HSD_TExpSchedule in texpdag.c, including dependency bitmask construction, make_full_dependancy_mtx/order_dag invocation, result list population, resource register color/alpha marking, and TEV input argument remapping through static lookup tables.",
+    "Added texpdag.c include of tobj.h, likely to expose HSD_TExp/HSD_TETev details needed by the new implementations.",
+    "Updated texpdag.h prototypes from UNK_RET/UNK_PARAMS placeholders to typed signatures for assign_reg, order_dag, and make_full_dependancy_mtx.",
+    "Updated config/GALE01/symbols.txt to split HSD_RObj_80406F98 string/data sizing and add HSD_RObj_80406FA8 at .data:0x80406FA8."
+  ],
+  "smart_moves": [
+    "The resolveCnsOrientation implementation mirrors matrix math structure explicitly: it handles the no-parent/root case with PSMTXCopy and the parented case with HSD_MtxInverseConcat followed by parent-chain concatenation.",
+    "The code preserves matching-sensitive stack/data behavior in texpdag.c by using fixed-size local arrays, explicit u8 scratch buffers, PAD_STACK(4), and static lookup tables for TEV argument encodings.",
+    "Using a small jobj_parent inline helper centralizes NULL-safe parent access and likely helps reproduce repeated compiler codegen patterns without spreading manual NULL checks everywhere.",
+    "The header update improves future decompilation by replacing opaque UNK prototypes with function signatures that document real parameter flow while still leaving unknown parameters as UNK_T where not fully typed.",
+    "The symbols.txt update recognizes that one previous data symbol covered multiple strings/data objects, splitting HSD_RObj_80406F98 and HSD_RObj_80406FA8 to better reflect actual .data layout."
+  ],
+  "decomp_lessons": [
+    "For HSD baselib matching, small static lookup tables and exact local array sizes can be important for reproducing compiler layout and register allocation, especially in scheduler-style functions.",
+    "When replacing an extern constant symbol with a literal, verify that the emitted constant pool and comparison type still match; this PR changed a threshold to literal 0.5 in RObjUpdateFunc.",
+    "Typed prototypes in headers should be advanced incrementally: concrete types for known arguments, UNK_T retained for uncertain order_dag and dependency-matrix scratch parameters.",
+    "Matrix constraint code may require preserving branch structure around root-vs-parented JObj transforms rather than trying to over-simplify the math into helper calls.",
+    "String/data symbol boundaries in config/GALE01/symbols.txt should be revisited when source-level static strings are introduced, because matching may reveal that a single old symbol actually spans multiple objects."
+  ],
+  "naming_conventions": [
+    "Preserved existing HSD-style names such as HSD_RObjInitAllocData, HSD_RObjFree, HSD_TExpSchedule, HSD_TExpMakeDag, and HSD_TExpGetType.",
+    "Kept address-derived data names for unknown/static objects, including HSD_RObj_80406E74, HSD_RObj_80406F14, HSD_RObj_80406F98, HSD_RObj_80406FA8, and HSD_TExpDag_80407AA0_*.",
+    "Used decomp temporary-style variable names such as var_r29, temp_r27, var_r24, temp_r5, sp1AC, sp12C, and sp2C where semantics were not fully recovered.",
+    "Introduced descriptive helper name jobj_parent for a small NULL-safe wrapper around HSD_JObj->parent.",
+    "Retained the misspelled existing function name make_full_dependancy_mtx in prototypes and calls rather than normalizing it to dependency."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used PAD_STACK(4) in assign_reg, indicating stack-shape padding was needed for matching.",
+    "Used u8 sp20[4] and u8 sp1C[4] initialized to zero for TEV color/alpha reference tracking, matching byte-sized scratch storage.",
+    "Walked assign_reg from num - 1 down to 0, decrementing reference counters before allocating destination registers from index 3 downward.",
+    "HSD_TExpSchedule used fixed stack arrays sp1AC[32], sp2C[32], and two 0x80-byte UNK_T scratch arrays, matching likely original stack frame layout.",
+    "Static arrays HSD_TExpDag_80407AA0_44, HSD_TExpDag_80407AA0_54, and HSD_TExpDag_80407AA0_64 encode TEV argument remap constants for color and alpha paths.",
+    "resolveCnsOrientation used explicit Mtx locals sp80 and sp40 plus HSD_ObjData sp70, likely reflecting original stack object placement.",
+    "The RObj orientation code uses VECMag, sqrtf, SQ, PSMTXCopy, PSMTXConcat, and HSD_MtxInverseConcat in a matching-conscious sequence rather than collapsing the math."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR context.",
+    "The PR had one issue comment according to counts, but the provided human_text_excerpt is empty, so no actionable reviewer or author discussion can be extracted."
+  ],
+  "searchable_terms": [
+    "PR1683",
+    "Misc HSD match progress",
+    "r-burns",
+    "HSD",
+    "SysDolphin",
+    "baselib",
+    "robj.c",
+    "texpdag.c",
+    "texpdag.h",
+    "symbols.txt",
+    "resolveCnsOrientation",
+    "jobj_parent",
+    "HSD_RObj_80406E74",
+    "HSD_RObj_80406F14",
+    "HSD_RObj_80406F98",
+    "HSD_RObj_80406FA8",
+    "RObjUpdateFunc",
+    "HSD_JObjGetFlags",
+    "HSD_JObjGetMtxPtr",
+    "HSD_MtxInverseConcat",
+    "PSMTXCopy",
+    "PSMTXConcat",
+    "VECMag",
+    "SQ",
+    "sqrtf",
+    "assign_reg",
+    "HSD_TExpSchedule",
+    "order_dag",
+    "make_full_dependancy_mtx",
+    "HSD_TExpDag",
+    "HSD_TETev",
+    "HSD_TExpGetType",
+    "HSD_TE_TEV",
+    "TEV register assignment",
+    "PAD_STACK"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully type order_dag, CalcDistance, make_full_dependancy_mtx, or SimplifySrc in src/sysdolphin/baselib/texpdag.c.",
+    "Check whether later RObj PRs rename HSD_RObj_80406E74 or the HSD_RObj_80406F14 assertion string to semantic names.",
+    "Search for follow-up fixes around resolveCnsOrientation matching, especially parent-chain matrix normalization and update_func argument typing.",
+    "Compare later config/GALE01/symbols.txt changes around .data:0x80406F98-.data:0x80406FD0 for final string/object boundaries.",
+    "Look for later replacement of UNK_T parameters in texpdag.h order_dag and make_full_dependancy_mtx prototypes."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

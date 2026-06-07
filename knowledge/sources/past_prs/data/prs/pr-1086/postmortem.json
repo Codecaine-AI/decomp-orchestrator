@@ -1,0 +1,152 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1086",
+  "pr": {
+    "number": 1086,
+    "title": "Bump m2c to `581031e`",
+    "url": "https://github.com/doldecomp/melee/pull/1086",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-01-19T23:21:06Z",
+    "merged_at": "2024-01-20T00:03:48Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Updated the vendored m2c tool to commit 581031e. The PR body explicitly notes improved support for `.L` style labels, and the diff shows broad parser/pattern-matcher changes around preserving dotted labels, distinguishing global/local/jump-target labels, merging consecutive labels, and matching label definitions/uses. It also refreshed m2c tooling dependencies and tests, moved CI to Python 3.8, updated Black pre-commit configuration, added `--knr` formatting documentation/CLI support, and expanded end-to-end coverage including gcc-division and mwcc27 outputs.",
+  "change_classification": {
+    "primary_type": "tooling_update",
+    "categories": [
+      "tooling",
+      "cleanup",
+      "dependency_update",
+      "test_update",
+      "parser_fix"
+    ],
+    "systems": [
+      "tools/m2c",
+      "assembly_parser",
+      "asm_pattern_matching",
+      "mips_support",
+      "ppc_support",
+      "end_to_end_tests",
+      "python_tooling"
+    ]
+  },
+  "key_files": [
+    "tools/m2c/m2c/asm_file.py",
+    "tools/m2c/m2c/asm_instruction.py",
+    "tools/m2c/m2c/asm_pattern.py",
+    "tools/m2c/m2c/flow_graph.py",
+    "tools/m2c/m2c/translate.py",
+    "tools/m2c/m2c/arch_mips.py",
+    "tools/m2c/m2c/arch_ppc.py",
+    "tools/m2c/m2c/main.py",
+    "tools/m2c/m2c/types.py",
+    "tools/m2c/README.md",
+    "tools/m2c/pyproject.toml",
+    "tools/m2c/poetry.lock",
+    "tools/m2c/.github/workflows/python-app.yml",
+    "tools/m2c/.pre-commit-config.yaml",
+    "tools/m2c/tests/end_to_end/gcc-division"
+  ],
+  "what_changed": [
+    "Bumped the vendored `tools/m2c` snapshot to commit `581031e`.",
+    "Added support, at least in some cases, for `.L` style labels as stated in the PR text.",
+    "Changed `Label` in `asm_file.py` from a single `name` to `names: List[str]`, with comments explaining that consecutive labels can be merged so pattern code can keep assuming non-consecutive labels.",
+    "Stopped stripping leading dots from some labels and data symbol mentions; branch targets and local labels now preserve names such as `.L00400834` in more places.",
+    "Introduced `LabelKind` values for global, local, and jump-target label handling, and made `jlabel` explicitly process jump targets rather than treating it like `glabel`/`dlabel`.",
+    "Adjusted assembly argument parsing so bare branch-like names become `AsmGlobalSymbol(\".\" + word)` rather than a separate `JumpTarget` argument in the parser path shown by the diff.",
+    "Extended pattern matching to track label definitions and label uses separately, allowing a symbolic label use to match any name in a merged label definition.",
+    "Added `AsmMatcher.branch_target_exists()` and used it in PPC branch replacement logic so a branch to an existing local target is not treated as an external/nonlocal branch replacement.",
+    "Updated MIPS sqrt patterns by splitting the previous GCC sqrt matcher into `GccSqrtPatternJal` and `GccSqrtPatternJalr`, including optional nop handling and a jalr-through-loaded-address variant.",
+    "Changed architecture `base_return_regs` from plain register lists to `(Register, floating)` tuples for MIPS and PPC, and updated translation/type logic to carry whether the guessed return register is floating point.",
+    "Added CLI/docs support for `--knr`, making it mutually exclusive with `--allman`; `--knr` sets function opening braces on separate lines without enabling full Allman behavior for if/else.",
+    "Updated Python tooling: CI setup from Python 3.7 to 3.8, Black hook source/revision to `black-pre-commit-mirror` 23.12.1, and Poetry metadata/lockfile to Python `^3.8`.",
+    "Regenerated or updated many m2c end-to-end expected outputs, with especially large churn in `tests/end_to_end/gcc-division`, including a new `mwcc27-o4p` assembly/output pair and flags files."
+  ],
+  "smart_moves": [
+    "Preserving dotted label names instead of repeatedly stripping `.` avoids losing information needed to match `.L` style branch targets and jump table entries.",
+    "Representing a label as multiple names is a practical compatibility layer: it supports consecutive labels while minimizing disruption to existing pattern code that assumed a single label position.",
+    "Separating label definitions from label uses in pattern state is more robust than a single symbolic-label map because a merged label definition can legally satisfy multiple concrete branch target spellings.",
+    "Adding `branch_target_exists()` before PPC external-branch replacement prevents local branches from being accidentally rewritten as nonlocal control flow.",
+    "Encoding whether a base return register is floating point lets return-value inference and type propagation distinguish integer and floating return paths without hardcoding per-register checks later.",
+    "Updating the tests alongside the tool bump made the vendored tool update auditable despite the large generated-output diff."
+  ],
+  "decomp_lessons": [
+    "When importing upstream decompiler tooling, capture the motivating parser behavior in the PR summary; here the key reusable fact is `.L` label support.",
+    "For assembly parsers, avoid normalizing away syntactic label prefixes unless every downstream user agrees on the normalized form; dotted local labels are semantically important for matching branch targets.",
+    "If pattern matchers assume no consecutive labels, either fix all assumptions or add an explicit merge representation like `Label.names` and teach lookup/matching code to search all aliases.",
+    "`jlabel` should be treated as an in-function jump target, not as a new global function label.",
+    "Branch-to-symbol heuristics should check whether the target exists locally before treating the branch as an external call/branch idiom.",
+    "Return register heuristics need type metadata; an integer register and a floating register may both be plausible base returns but imply different expression/type reconstruction.",
+    "Tool updates with large expected-output changes should include test fixtures that demonstrate the new syntax or compiler cases, such as `.L` labels and new mwcc27 gcc-division coverage."
+  ],
+  "naming_conventions": [
+    "The bumped m2c recognizes local label prefixes/patterns including `loc_`, `locret_`, `def_`, `lbl_`, `LAB_`, and newly shown `jump_` in the local-label regex.",
+    "Dotted local labels such as `.L00400834` are preserved in labels and branch targets instead of being stored as `L00400834`.",
+    "`LabelKind` names are `GLOBAL`, `LOCAL`, and `JUMP_TARGET`.",
+    "MIPS sqrt patterns were named specifically by call form: `GccSqrtPatternJal` and `GccSqrtPatternJalr`.",
+    "The new brace-style option is named `--knr` and is documented as `K&R braces`; it is mutually exclusive with `--allman`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use `Label.names` when searching blocks by label; the diff updates flow-graph lookup from `block.label.name == label` to membership in `block.label.names`.",
+    "Keep branch target strings in the same dotted form in both definitions and uses so `.L...` targets match directly.",
+    "For pattern definitions ending in `:`, construct `Label([part[:-1]])` rather than a single-name label.",
+    "For symbolic label matching, record the label definition once and allow uses only if they are contained in the definition's merged names.",
+    "Add optional instruction slots such as `nop?` in patterns when compiler output may include or omit delay-slot nops.",
+    "Match both direct `jal sqrtf` and indirect `lui/addiu/jalr` sqrtf call sequences for GCC MIPS sqrt lowering.",
+    "For PPC store-update instructions, update the base register and then store memory with separate handling for register-offset and address-mode forms, as shown by the arch_ppc eval changes.",
+    "Treat `gp_rel` like `sda2`/`sda21` in address-mode macro offset extraction, according to the translate.py diff excerpt."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR1086",
+    "m2c",
+    "581031e",
+    "ribbanya",
+    "tools/m2c",
+    ".L labels",
+    "dotted labels",
+    "Label.names",
+    "consecutive labels",
+    "LabelKind",
+    "jlabel",
+    "AsmMatcher.branch_target_exists",
+    "AsmGlobalSymbol",
+    "JumpTarget",
+    "asm_file.py",
+    "asm_instruction.py",
+    "asm_pattern.py",
+    "flow_graph.py",
+    "translate.py",
+    "arch_mips.py",
+    "arch_ppc.py",
+    "GccSqrtPatternJal",
+    "GccSqrtPatternJalr",
+    "base_return_regs",
+    "floating return register",
+    "K&R braces",
+    "--knr",
+    "--allman",
+    "Python 3.8",
+    "black-pre-commit-mirror",
+    "gcc-division",
+    "mwcc27-o4p",
+    "gp_rel"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rely on `.L` label parsing in tools/m2c.",
+    "Search for follow-up changes to `Label.names` or consecutive label handling.",
+    "Search for later m2c updates touching `base_return_regs` and return type inference.",
+    "Search for regressions or fixes around `jlabel` parsing and jump table labels.",
+    "Search for decomp PRs that mention using `--knr` m2c formatting."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,161 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2038",
+  "pr": {
+    "number": 2038,
+    "title": "some work on grgreens",
+    "url": "https://github.com/doldecomp/melee/pull/2038",
+    "state": "MERGED",
+    "author": "BR-",
+    "created_at": "2025-12-30T09:04:53Z",
+    "merged_at": "2025-12-30T09:41:10Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Expanded Green Greens stage decompilation by replacing many placeholder grGreens functions with C implementations, adding stage callback tables, stage parameter globals, block/wind helper logic, and stronger typed prototypes. The PR also introduced Green Greens-specific Ground vars and block vars in gr/types.h, renamed key symbols for the Green Greens init function and data globals, and adjusted adjacent APIs in ground, grmaterial, and ftdevice so the new stage code could call them with real types. Human review evidence is absent; the only comment was a decomp.dev bot report saying the GALE01 report was not found.",
+  "change_classification": {
+    "primary_type": "stage_decompilation",
+    "categories": [
+      "stage logic",
+      "headers",
+      "symbol naming",
+      "type recovery",
+      "callback wiring",
+      "struct layout"
+    ],
+    "systems": [
+      "stage",
+      "ground",
+      "fighter",
+      "items",
+      "material",
+      "config"
+    ]
+  },
+  "key_files": [
+    "src/melee/gr/grgreens.c",
+    "src/melee/gr/grgreens.h",
+    "src/melee/gr/types.h",
+    "config/GALE01/symbols.txt",
+    "src/melee/ft/ftdevice.c",
+    "src/melee/ft/ftdevice.h",
+    "src/melee/gr/ground.c",
+    "src/melee/gr/ground.h",
+    "src/melee/gr/grmaterial.c",
+    "src/melee/gr/grmaterial.h"
+  ],
+  "what_changed": [
+    "Renamed grGreens_80213464 to grGreens_Init in both symbols.txt and grgreens.h, and implemented it to fetch stage params via Ground_801C49F8, set stage_info flags, spawn multiple map IDs through grGreens_80213524, initialize ground systems, and clear grGr_804D6AAC.",
+    "Renamed Green Greens data symbols grGr_803E7638 to grGr_callbacks and grGr_804D6AA8 to grGr_params in config/GALE01/symbols.txt.",
+    "Added a static Green Greens StageCallbacks array in grgreens.c for seven map entries, replacing anonymous data with callback wiring to functions such as grGreens_8021360C, grGreens_802139C4, and grGreens_80214674.",
+    "Implemented grGreens_80213524 as a stage object factory using Ground_801C14D0, GET_GROUND, GObj_SetupGXLink, callback assignment, HSD_GObjProc_8038FD54, and OSReport failure reporting.",
+    "Implemented several simple map-object callbacks that run grAnime_801C8138 and set per-ground flags, including grGreens_8021360C, grGreens_802138BC, grGreens_80213910, and grGreens_8021394C.",
+    "Added Green Greens wind setup and query logic: grGreens_802139C4 initializes gv.greens state and registers fn_80213B1C through ftCo_800C06E8; grGreens_80213AB4 checks a Vec against a rectangular region; fn_80213B1C returns wind vectors based on gv.greens.x18 and grGr_params bounds/speed.",
+    "Added block-grid allocation and initialization in grGreens_80214674, allocating 5 by 6 Vec and grGreens_BlockVars arrays, zeroing them, initializing block data, registering fn_80214658 through Ground_801C10B8, and randomizing the block timer from grGr_params.",
+    "Implemented block material/object setup in grGreens_80214FA8 and grGreens_80215358, including mpJointSetCb2 callbacks, hiding/revealing JObjs, creating material item GObjs through grMaterial_801C8CFC, setting material params, assigning block state, and updating collision via mpLib calls.",
+    "Implemented grGreens_802159B8 to handle block break/hit effects using grMaterial_801C8E28, grMaterial_801C8D98, it_80275414, efSync_Spawn, Camera_80030E44, and Ground_801C5414.",
+    "Added struct grGreens_BlockVars with bitfields, object pointers, collision/material fields, and STATIC_ASSERT(sizeof(struct grGreens_BlockVars) == 0x20).",
+    "Expanded struct grGreens_GroundVars from a flags-only layout to include flags as a union with whole_thing plus Vec* x4, grGreens_BlockVars* x8_blocks, timers/state fields xC through x1C.",
+    "Changed the anonymous nested Ground.gv union in gr/types.h to a named union GroundVars2.",
+    "Strengthened grgreens.h prototypes by replacing multiple UNK_RET/UNK_PARAMS declarations with typed Ground_GObj, Fighter_GObj, Item_GObj, Vec, CollData, mpLib_GroundEnum, and bool/void signatures.",
+    "Changed Ground_801C14D0 return type from HSD_GObj* to Ground_GObj* in both ground.c and ground.h.",
+    "Changed ftCo_800C06E8 from UNK_RET/UNK_PARAMS to void ftCo_800C06E8(Ground_GObj* gobj, int arg1, void* func), with the implementation still NOT_IMPLEMENTED.",
+    "Exposed grMaterial_801C8D98 by removing its static forward declaration in grmaterial.c and adding a public declaration in grmaterial.h so Green Greens block code can call it."
+  ],
+  "smart_moves": [
+    "Renamed only the symbols whose purpose became clear, keeping unresolved functions address-named instead of over-naming weakly understood code.",
+    "Recovered a reusable grGreens_BlockVars struct with a size static assert, protecting later Green Greens work from silent layout drift.",
+    "Used small inline helpers getBlock and getVec for the 5 by 6 Green Greens grid indexing, reducing repeated pointer arithmetic and making the block-grid shape explicit.",
+    "Created a local randrange helper that handles both min/max orderings, matching stage param usage where timer bounds may be passed in either order.",
+    "Typed cross-module APIs only as needed by the new code: Ground_801C14D0 now returns Ground_GObj*, ftCo_800C06E8 takes a ground gobj and callback pointer, and grMaterial_801C8D98 is exported through the header.",
+    "Modeled Green Greens flags as a union with individual bitfields and a whole_thing integer, enabling both full reset assignments and bit-level access in a matching-friendly way.",
+    "Kept some functions as stubs or commented skeletons when implementation evidence was incomplete, rather than guessing full behavior."
+  ],
+  "decomp_lessons": [
+    "Stage modules often require coordinated type recovery outside the stage file; implementing Green Greens forced updates in fighter device, ground object creation, and material helpers.",
+    "When a stage has an object grid, define typed per-cell vars and helper accessors early; this makes later callbacks and item/material interactions easier to express and review.",
+    "Adding STATIC_ASSERTs for recovered per-stage structs is valuable because these structs are embedded in Ground.gv and are sensitive to offsets used by assembly.",
+    "Callback tables in data can justify both symbol renames and function prototype recovery, especially when the table entries map directly to stage object lifecycle callbacks.",
+    "Parameter blobs returned by Ground_801C49F8 can be represented as local static anonymous structs when the fields are only partially understood; use offset-based field names that encode meaning where known.",
+    "Do not over-complete partially understood functions: this PR leaves several functions as UNK_RET/UNK_PARAMS or skeletons while still landing matching/typing improvements around the parts that were understood.",
+    "Public/private helper visibility should follow actual callsites; grMaterial_801C8D98 needed to stop being treated as file-local once Green Greens code called it."
+  ],
+  "naming_conventions": [
+    "Recovered stage entrypoint name uses StageName_Init form: grGreens_Init replaces grGreens_80213464.",
+    "Recovered Green Greens globals use a grGr_ prefix plus descriptive suffixes: grGr_callbacks and grGr_params.",
+    "Unresolved functions retain address-based names such as grGreens_802150C4, fn_80215B84, and grGreens_80215D54.",
+    "Per-stage ground vars are named with the stage identifier in gr/types.h: struct grGreens_GroundVars and struct grGreens_BlockVars.",
+    "Partially understood struct fields preserve offset names while adding semantic hints, e.g. x0_blockTimerMin, x4_blockTimerMax, x8_blockBombChance, x34_windTimerMin, x3C_windSpeed, x40_left, x44_right, x48_top, x4C_bottom.",
+    "Bitfields in recovered structs used x1_N names until their meaning is known, while known high-level status/index fields were named status and index.",
+    "Typed callback helper names remain fn_address style when purpose is not firmly established, e.g. fn_80213B1C, fn_80214658, fn_802159B4, fn_80215D50."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used PAD_STACK annotations in grGreens_Init, fn_80213B1C, and grGreens_8021479C to preserve stack layout for matching.",
+    "Introduced STATIC_ASSERT(sizeof(struct grGreens_BlockVars) == 0x20) to lock recovered layout against expected codegen and offset behavior.",
+    "Represented Green Greens flags as a union so the code can assign gp->gv.greens.x0_flags.whole_thing = 0 while also accessing gp->gv.greens.x0_flags.b0.",
+    "Kept empty functions as explicit return bodies where needed, such as grGreens_80214654 and fn_80215D50, rather than relying on mismatching placeholder macros.",
+    "Used F32_MAX sentinel initialization in grGreens_8021483C, indicating matching work had started even though the function body remained incomplete.",
+    "Changed function return types to void where the implementation did not return meaningful values, such as fn_80214658, aligning the type with callsites like Ground_801C10B8.",
+    "Matched grid allocation sizes through expressions based on element type: HSD_MemAlloc(5 * 6 * sizeof(*gp->gv.greens.x4)) and similarly for x8_blocks."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided PR slice.",
+    "The only issue comment was from decomp-dev[bot]: 'Report for GALE01 (a45b43f - d4d1891)' followed by '[!] Report not found. Did the build succeed?' This provides no code review guidance."
+  ],
+  "searchable_terms": [
+    "pr-2038",
+    "some work on grgreens",
+    "BR-",
+    "grgreens",
+    "Green Greens",
+    "grGreens_Init",
+    "grGreens_80213464",
+    "grGreens_80213524",
+    "grGreens_802139C4",
+    "grGreens_80213AB4",
+    "fn_80213B1C",
+    "grGreens_80214674",
+    "fn_80214658",
+    "grGreens_80214FA8",
+    "grGreens_80215358",
+    "grGreens_802159B8",
+    "grGreens_BlockVars",
+    "grGreens_GroundVars",
+    "grGr_callbacks",
+    "grGr_params",
+    "GroundVars2",
+    "Ground_801C14D0",
+    "ftCo_800C06E8",
+    "grMaterial_801C8D98",
+    "StageCallbacks",
+    "Ground_801C49F8",
+    "Ground_801C10B8",
+    "mpJointSetCb2",
+    "mpLib_80055E9C",
+    "mpLib_80057424",
+    "HSD_MemAlloc",
+    "memzero",
+    "HSD_Randi",
+    "PAD_STACK",
+    "STATIC_ASSERT",
+    "windSpeed",
+    "blockTimer",
+    "blockBombChance",
+    "Gr_Greens_Block_Max"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching grGreens_80213C10, grGreens_8021483C, grGreens_80214B58, grGreens_802150C4, fn_80215B84, grGreens_80215D54, or grGreens_80215ED8 to see how this partial Green Greens work was completed.",
+    "Search for other stage PRs that rename stage init functions to StageName_Init and stage callback arrays to descriptive _callbacks globals.",
+    "Look for later changes to struct grGreens_BlockVars or grGreens_GroundVars to confirm field meanings for x1_1 through x1_7 and xC/x10/x14/x18/x1C.",
+    "Search uses of ftCo_800C06E8 after this PR to determine the intended callback type instead of void*.",
+    "Search uses of grMaterial_801C8D98 to see whether exporting it from grmaterial.h became a common pattern for stage material interactions."
+  ],
+  "confidence": 0.84,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

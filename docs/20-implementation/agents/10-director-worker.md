@@ -12,8 +12,8 @@ invocation path but keep role-specific prompts and output contracts separate.
 ## Director Slice
 
 The director slice builds prompts for one board-level decision cycle. It renders
-the director system prompt, current state, candidate targets, selected
-knowledge, and wake event context. The director output parser extracts
+the director system prompt, current state, candidate targets, resource map, and
+wake event context. The director output parser extracts
 structured scheduling decisions from the Pi response.
 
 | File | Purpose |
@@ -26,17 +26,18 @@ structured scheduling decisions from the Pi response.
 ## Worker Slice
 
 The worker slice builds prompts for one leased target. It carries the target
-packet, write-set rule, local regression requirements, selected knowledge,
-resource map, and output contract. The worker parser handles durable report
-data for the runner.
+packet, write-set rule, local regression requirements, selected worker context,
+resource map, optional repair request, and output contract. The worker return
+path gates durable report data through the post-return repair loop before the
+runner releases the lease.
 
 | File | Purpose |
 | --- | --- |
 | `src/agents/worker/packet.ts` | Defines the target-packet shape passed into worker prompts. |
 | `src/agents/worker/prompt.ts` | Builds worker prompt inputs and rendered prompt pair. |
-| `src/agents/worker/output.ts` | Parses worker output/report content. |
+| `src/agents/worker/output.ts` | Parses worker output/report content and evaluates return-gate repair reasons. |
 | `src/agents/worker/templates/system.md` | Defines worker authority, write safety, and validation rules. |
-| `src/agents/worker/templates/initial_user.md` | Carries the target packet, selected knowledge, resources, and report contract. |
+| `src/agents/worker/templates/initial_user.md` | Carries the target packet, selected worker context, resources, repair requests, and report contract. |
 
 ## Key Rules
 
@@ -44,8 +45,10 @@ data for the runner.
 - The worker must stay inside its lease and write set.
 - Rendered prompts are artifacts and are written beside Pi output.
 - Dry-run prompts and live Pi prompts use the same builders.
-- Knowledge is selected by role defaults and capability routes before prompt
-  rendering.
+- Worker context is selected by role defaults and capability routes before
+  prompt rendering.
+- Unsafe worker returns can be bounced back with `repair_request` before the
+  lease is released.
 
 ## Related
 

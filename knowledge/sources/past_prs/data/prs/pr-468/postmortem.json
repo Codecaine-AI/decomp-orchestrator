@@ -1,0 +1,157 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-468",
+  "pr": {
+    "number": 468,
+    "title": "Match `gx`, ongoing",
+    "url": "https://github.com/doldecomp/melee/pull/468",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2022-08-20T16:11:51Z",
+    "merged_at": "2022-08-22T10:48:25Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Ongoing GX decompilation PR that moved several GX objects from assembly/stubbed split files into C, notably GXMisc, GXTev, and GXDisplayList. It consolidated scattered GXMisc pieces into src/dolphin/gx/GXMisc.c, added C for GXCallDisplayList, switched obj_files.mk to build GXMisc.c, GXTev.c, and GXDisplayList.c, moved GX command opcodes into GXEnum.h, and tightened GX context/OS interrupt typing. There were no review comments in the slice; the PR body only says it could be merged at any time.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "build-config",
+      "struct-typing",
+      "gx-command-enums"
+    ],
+    "systems": [
+      "dolphin/gx",
+      "dolphin/os",
+      "sysdolphin/baselib",
+      "asm",
+      "src",
+      "include"
+    ]
+  },
+  "key_files": [
+    "obj_files.mk",
+    "src/dolphin/gx/GXMisc.c",
+    "src/dolphin/gx/GXTev.c",
+    "src/dolphin/gx/GXDisplayList.c",
+    "src/dolphin/gx/GXEnum.h",
+    "src/dolphin/gx/GXTev.h",
+    "src/dolphin/gx/__types.h",
+    "src/dolphin/gx/GXGeometry.c",
+    "src/dolphin/gx/GXLight.c",
+    "include/dolphin/os/OSInterrupt.h",
+    "include/sysdolphin/baselib/pobj.h",
+    "asm/dolphin/gx/GXDisplayList.s",
+    "asm/dolphin/gx/GXMisc/GXMisc_001.s",
+    "asm/dolphin/gx/GXMisc/GXMisc_003.s",
+    "src/dolphin/gx/GXMisc/GXMisc_002.c"
+  ],
+  "what_changed": [
+    "Deleted asm/dolphin/gx/GXDisplayList.s and added src/dolphin/gx/GXDisplayList.c implementing GXCallDisplayList with dirty-state flushing, optional __GXSendFlushPrim, and WGPIPE writes using GX_CMD_CALL_DL.",
+    "Collapsed the previous GXMisc split across asm/dolphin/gx/GXMisc/__GXMisc.s, GXMisc_001.s, GXMisc_003.s, and src/dolphin/gx/GXMisc/GXMisc_002.c into a single src/dolphin/gx/GXMisc.c.",
+    "GXMisc.c added C implementations for GXSetMisc, GXSetDrawDone, GXWaitDrawDone, GXPixModeSync, and multiple GXPoke* EFB register helpers, while retaining inline assembly blocks for interrupt-related routines such as GXTokenInterruptHandler, GXSetDrawDoneCallback, GXFinishInterruptHandler, and __GXPEInit.",
+    "obj_files.mk was updated to build src/dolphin/gx/GXMisc.c.o, src/dolphin/gx/GXTev.c.o, and src/dolphin/gx/GXDisplayList.c.o instead of their corresponding assembly or split-object predecessors.",
+    "Deleted src/dolphin/gx/GXCommandList.h and moved command opcodes/masks into GXEnum.h as a GXCommand enum, including GX_LOAD_BP_REG, GX_LOAD_CP_REG, GX_LOAD_XF_REG, GX_CMD_CALL_DL, GX_CMD_INVL_VC, GX_OPCODE_MASK, and GX_VAT_MASK.",
+    "Added src/dolphin/gx/GXTev.h with prototypes for TEV setup APIs such as GXSetTevOp, GXSetTevColorIn, GXSetTevAlphaIn, GXSetTevColorOp, GXSetTevAlphaOp, GXSetTevColor, GXSetTevOrder, and GXSetNumTevStages.",
+    "Reworked GXTev.c enough that obj_files.mk now uses the C object; the excerpt shows heavy use of INSERT_FIELD, WGPIPE.u8 = GX_LOAD_BP_REG, GX_WRITE_U32, and context cached BP-register words.",
+    "Renamed GXContext field x4F0 to x4F0_flags and updated users in GXGeometry.c, GXLight.c, GXMisc.c, and GXDisplayList.c.",
+    "Split the previous x4EC padding in GXContext into x4EC and GXBool x4ED, matching GXSetMisc's boolean write at offset 0x4ED.",
+    "Changed GXContext x100_data, x130_data, and x170_data arrays from s32 to u32, consistent with register/cache words being treated as unsigned bitfields.",
+    "Changed OSDisableInterrupts and OSEnableInterrupts return types from u32 to BOOL and OSRestoreInterrupts from void OSRestoreInterrupts(u32) to BOOL OSRestoreInterrupts(BOOL).",
+    "Added .balign 8 to the .sbss section in asm/dolphin/os/OS.s, likely to preserve small-BSS layout/alignment after removing GXMisc sbss assembly.",
+    "Updated include/sysdolphin/baselib/pobj.h to include GXEnum.h instead of the removed GXCommandList.h and removed local GX_VAT_MASK/GX_OPCODE_MASK defines now centralized in GXEnum.h."
+  ],
+  "smart_moves": [
+    "Centralized GX command constants in GXEnum.h instead of keeping a separate GXCommandList.h plus duplicated local defines; this reduces include churn and makes command names reusable across GX modules.",
+    "Kept nontrivial interrupt handlers as inline assembly inside GXMisc.c instead of blocking the whole object on difficult matches, allowing the object to be consolidated while preserving exact code for hard routines.",
+    "Used WGPIPE typed accesses and GX_WRITE_U32 for hardware FIFO writes, matching the assembly pattern while making command intent clearer.",
+    "Introduced x4F0_flags rather than leaving a generic x4F0 name, making dirty-state checks and bitwise updates easier to recognize across GXGeometry, GXLight, GXMisc, GXTev, and GXDisplayList.",
+    "Modeled the byte at GXContext offset 0x4ED as GXBool x4ED, matching GXSetMisc's boolean coercion and avoiding anonymous padding for a field with observable behavior.",
+    "Updated OS interrupt prototypes to BOOL so callers can store/restore interrupt state with semantically correct types instead of raw u32/void.",
+    "Preserved small-data layout by converting removed GXMisc .sbss globals into static C variables and adding .balign 8 in OS.s where needed."
+  ],
+  "decomp_lessons": [
+    "When a Dolphin SDK subsystem is split into many partial assembly/C files, consolidating into the SDK-like source file can simplify object ownership, but check sbss ordering and alignment after deleting assembly sbss fragments.",
+    "Hardware command constants are better represented as shared enums or typed constants than ad hoc macros in private headers; consumers like baselib/pobj.h should include the shared GX enum header.",
+    "Dirty-state context fields should be named by behavior, not just offset. A name like x4F0_flags makes repeated bit tests and ORs much easier to audit.",
+    "For partially matched files, inline assembly blocks can be a practical bridge: C-match easier leaf functions first, keep interrupt/context-switch handlers exact, and still remove standalone assembly objects from obj_files.mk.",
+    "Register-cache arrays that feed INSERT_FIELD and GX_WRITE_U32 should generally be unsigned u32, because the code is manipulating bitfields and BP/XF command words rather than signed integers.",
+    "Interrupt enable/restore APIs should use BOOL in headers if the decompiled call sites treat the returned state as a boolean saved interrupt state.",
+    "A small boolean field hidden in padding can be identified from assembly idioms such as arg != 0 stored to a byte; once identified, type it explicitly in the context struct."
+  ],
+  "naming_conventions": [
+    "GX command names use GX_* constants in the GXCommand enum, e.g. GX_LOAD_BP_REG, GX_LOAD_CP_REG, GX_LOAD_XF_REG, GX_CMD_CALL_DL, GX_CMD_INVL_VC, GX_OPCODE_MASK, and GX_VAT_MASK.",
+    "GXContext offset-derived fields still use x-prefixed offset names, but behavioral suffixes are acceptable when known, e.g. x4F0_flags.",
+    "Boolean context bytes are typed as GXBool when their storage and use are boolean, e.g. x4ED.",
+    "Temporary unmatched/static small-data symbols remained as lbl_804D7320, lbl_804D7324, and lbl_804D7328 when no better name was evidenced.",
+    "GX public APIs keep SDK-style names: GXSetMisc, GXSetDrawDone, GXWaitDrawDone, GXPixModeSync, GXPokeAlphaMode, GXPokeBlendMode, GXSetTevOp, GXSetTevColorIn, GXSetTevAlphaOp, GXCallDisplayList.",
+    "Private/internal GX initialization keeps double-underscore SDK style, e.g. __GXPEInit, __GXSetDirtyState, __GXSendFlushPrim."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced standalone assembly files with C objects through obj_files.mk only after corresponding C files existed for GXMisc, GXTev, and GXDisplayList.",
+    "For GXDisplayList, matched the assembly sequence directly: test __GXContexts.main->x4F0_flags, call __GXSetDirtyState, test __GXContexts.main->x0.u32, call __GXSendFlushPrim, then write command byte and two words to WGPIPE.",
+    "For GXSetDrawDone, reproduced the BP command write with WGPIPE.u8 = GX_LOAD_BP_REG and WGPIPE.u32 = 0x45000002, followed by eight zero writes and PPCSync before restoring interrupts.",
+    "For GXWaitDrawDone, matched the interrupt-disabled wait loop around OSSleepThread(&GXDrawDoneThreadQueue) until lbl_804D7328[0] becomes true.",
+    "Used small inline helpers in GXSetMisc to force the same code structure for writing x4, updating x0.u16[0], setting x2, and marking dirty flag bit 8.",
+    "In GXTev.c, used INSERT_FIELD on cached context words plus WGPIPE/GX_WRITE_U32 writes to express BP-register packing while preserving matching-sensitive bitfield order.",
+    "Retained nofralloc inline asm for difficult interrupt routines that manipulate OS contexts and callbacks, avoiding a premature C rewrite of stack/context-sensitive code."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The only human PR text excerpt says: \"Can be merged at any time.\""
+  ],
+  "searchable_terms": [
+    "pr-468",
+    "Match gx ongoing",
+    "ribbanya",
+    "GXMisc.c",
+    "GXTev.c",
+    "GXDisplayList.c",
+    "GXCallDisplayList",
+    "GXSetMisc",
+    "GXSetDrawDone",
+    "GXWaitDrawDone",
+    "GXPixModeSync",
+    "GXPokeAlphaMode",
+    "GXPokeBlendMode",
+    "GXPokeZMode",
+    "GXTokenInterruptHandler",
+    "GXFinishInterruptHandler",
+    "GXSetDrawDoneCallback",
+    "__GXPEInit",
+    "GXDrawDoneThreadQueue",
+    "GXCommand",
+    "GXEnum.h",
+    "GXCommandList.h deleted",
+    "GX_LOAD_BP_REG",
+    "GX_CMD_CALL_DL",
+    "GX_OPCODE_MASK",
+    "GX_VAT_MASK",
+    "WGPIPE",
+    "GX_WRITE_U32",
+    "INSERT_FIELD",
+    "x4F0_flags",
+    "x4ED",
+    "OSDisableInterrupts BOOL",
+    "OSRestoreInterrupts BOOL",
+    ".balign 8 sbss",
+    "obj_files.mk gx"
+  ],
+  "follow_up_queries": [
+    "Search later PRs for renames of lbl_804D7320, lbl_804D7324, and lbl_804D7328 to recover the real GX token/draw-done callback names.",
+    "Check subsequent GXMisc PRs to see whether inline asm versions of GXTokenInterruptHandler, GXFinishInterruptHandler, GXSetDrawDoneCallback, and __GXPEInit were converted to C.",
+    "Look for later cleanup of GXEnum.h TODO about WriteBP-style defines or inlines for common WGPIPE command patterns.",
+    "Search for further typing of GXContext fields around x0, x4, x1D0, x204, x4EC, x4ED, and x4F0_flags.",
+    "Verify whether OSRestoreInterrupts returning BOOL was retained or adjusted in later OS header cleanup."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

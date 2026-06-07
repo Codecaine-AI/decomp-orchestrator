@@ -1,0 +1,142 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-147",
+  "pr": {
+    "number": 147,
+    "title": "Move lbcommand out of asm with some attempted non-matching",
+    "url": "https://github.com/doldecomp/melee/pull/147",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-04T18:07:26Z",
+    "merged_at": "2021-12-04T18:07:31Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Moved the lbcommand unit from a standalone asm object into src/melee/lb/lbcommand.c, deleting asm/melee/lb/lbcommand.s and removing its asm object from obj_files.mk. The PR kept many routines as inline asm in C while adding attempted NON_MATCHING C versions for some command handlers. It also renamed the exported dispatcher from func_80005B64 to Command_80005B64 at known asm callsites, expanded lbcommand.h prototypes, and refined CommandInfo field naming from unk_x10 to event_return.",
+  "change_classification": {
+    "primary_type": "decompilation-migration-with-inline-asm",
+    "categories": [
+      "decomp-matching",
+      "non-matching-attempts",
+      "asm-to-c-migration",
+      "headers",
+      "symbol-renaming",
+      "build-system"
+    ],
+    "systems": [
+      "lb",
+      "lbcommand",
+      "asm",
+      "src/melee/lb",
+      "include",
+      "obj_files.mk",
+      "fighter-asm-callsites",
+      "item-asm-callsites"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/lbcommand.c",
+    "src/melee/lb/lbcommand.h",
+    "asm/melee/lb/lbcommand.s",
+    "obj_files.mk",
+    "include/functions.h",
+    "asm/melee/ft/code_8006DBF4.s",
+    "asm/melee/it/code_80266F3C.s",
+    "asm/melee/lb/code_8000F9F8.s",
+    "asm/melee/lb/lbcollision.s"
+  ],
+  "what_changed": [
+    "Deleted asm/melee/lb/lbcommand.s, which previously contained lbcommand text, the lbl_803B9840 command function table, and lbl_804D79E8 sdata2 constants.",
+    "Added most of the deleted assembly into src/melee/lb/lbcommand.c as inline asm functions using asm void and nofralloc, preserving instruction-by-instruction behavior while moving ownership to the C translation unit.",
+    "Added a lbl_803B9840 function-pointer table in C with 16 entries: Command_00, Command_04, Command_08, Command_0C, Command_10_ExecuteLoop, Command_10_Goto, Command_80005AC4, Command_80005AE4, Command_80005B00, Command_80005B18, followed by NULL entries.",
+    "Added attempted C implementations under #ifdef NON_MATCHING for Command_0C, Command_10_Goto, and Command_80005AC4 while keeping matching inline asm versions in the default build.",
+    "Renamed references to the dispatcher func_80005B64 as Command_80005B64 in asm callsites in ft/code_8006DBF4.s, it/code_80266F3C.s, and lb/code_8000F9F8.s.",
+    "Updated lbcommand.h to include global.h and dolphin/types.h, renamed CommandInfo.unk_x10 to event_return, and added prototypes for the moved command handlers.",
+    "Updated include/functions.h comments/prototypes to use Command_80005B64 and expose func_80021C48() for the inline asm call from Command_80005B18.",
+    "Removed $(BUILD_DIR)/asm/melee/lb/lbcommand.o from TEXT_O_FILES because lbcommand now builds from src/melee/lb/lbcommand.o.",
+    "Inserted an extra .4byte NULL in asm/melee/lb/lbcollision.s sdata2 before lbl_804D79F0, likely to preserve data layout after moving lbcommand constants, though the diff alone does not explain the precise linker/layout reason."
+  ],
+  "smart_moves": [
+    "Migrated the object out of asm without requiring all functions to match immediately, using inline asm as a bridge so the file could live in src while preserving behavior.",
+    "Kept non-matching C attempts guarded by NON_MATCHING, making the decompilation reasoning available for future work without risking the matching build.",
+    "Gave semantic names to several command handlers, especially Command_0C, Command_10_ExecuteLoop, and Command_10_Goto, while preserving address-based names for less-understood routines such as Command_80005AC4.",
+    "Updated all known assembly callsites to the new dispatcher symbol name, avoiding split symbol usage between func_80005B64 and Command_80005B64.",
+    "Renamed a CommandInfo field from unk_x10 to event_return based on observed command-loop behavior, improving later readability without over-renaming every unknown field."
+  ],
+  "decomp_lessons": [
+    "For early decomp work, moving an asm file into C can be valuable even when most routines remain inline asm; it centralizes prototypes, tables, and NON_MATCHING experiments in the source tree.",
+    "When converting a command interpreter, preserving the dispatch table order is critical. Here lbl_803B9840 retained 16 slots and NULL padding while mapping opcode-like entries to command functions.",
+    "Guard speculative C rewrites with #ifdef NON_MATCHING and keep a matching inline asm fallback until instruction output is confirmed.",
+    "If a moved asm unit contained data or sdata2 constants, check neighboring object layout and section padding. This PR had to compensate in lbcollision.s with a NULL word after lbcommand.s deletion.",
+    "Renaming externally-called symbols requires updating raw asm callsites and broad prototype/comment registries, not only the C file that defines the symbol.",
+    "Field names can be advanced incrementally when supported by usage patterns; event_return is more useful than unk_x10 for loop/goto command analysis, while other unknown fields were left conservative."
+  ],
+  "naming_conventions": [
+    "Command handlers use the Command_XX form for apparent command/opcode values, such as Command_00, Command_04, Command_08, and Command_0C.",
+    "Behavioral suffixes were used where the same apparent command group needed clarification: Command_10_ExecuteLoop and Command_10_Goto.",
+    "Unmatched or not-yet-understood handlers retained address-based names with a Command_ prefix, such as Command_80005AC4, Command_80005AE4, Command_80005B00, Command_80005B18, and Command_80005B64.",
+    "The dispatcher formerly known as func_80005B64 was renamed to Command_80005B64, signaling that it belongs to the command subsystem rather than being a generic unknown function.",
+    "CommandInfo member unk_x10 was renamed to event_return based on its use as a saved data_position/return target in loop and goto handling."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used inline asm functions with nofralloc to transplant exact assembly from asm/melee/lb/lbcommand.s into src/melee/lb/lbcommand.c.",
+    "Used #ifdef NON_MATCHING blocks to keep attempted C source for Command_0C, Command_10_Goto, and Command_80005AC4 while defaulting to matching inline asm.",
+    "Preserved labels inside inline asm, such as lbl_80005A6C, lbl_80005B9C, and lbl_80005BA0, where branches depended on local labels.",
+    "Preserved the indirect dispatch sequence in Command_80005B64: bounds check against 0x0A, index into lbl_803B9840, load function pointer into r12, mtctr/mtlr-style branch via blrl in the original listing, return 1 for handled commands and 0 otherwise.",
+    "Represented the former lbl_804D79E8 float constant use in Command_80005B00 as an inline asm lfs of 3.4028235E38 rather than relying on the old sdata2 symbol.",
+    "Added a NULL word in lbcollision.s sdata2, suggesting section alignment or small-data layout needed manual preservation after deleting lbcommand.s."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-147",
+    "PsiLupan",
+    "lbcommand",
+    "asm/melee/lb/lbcommand.s",
+    "src/melee/lb/lbcommand.c",
+    "src/melee/lb/lbcommand.h",
+    "CommandInfo",
+    "event_return",
+    "unk_x10",
+    "lbl_803B9840",
+    "lbl_804D79E8",
+    "Command_00",
+    "Command_04",
+    "Command_08",
+    "Command_0C",
+    "Command_10_ExecuteLoop",
+    "Command_10_Goto",
+    "Command_80005AC4",
+    "Command_80005AE4",
+    "Command_80005B00",
+    "Command_80005B18",
+    "Command_80005B64",
+    "func_80005B64",
+    "func_80021C48",
+    "NON_MATCHING",
+    "nofralloc",
+    "inline asm",
+    "command dispatch table",
+    "loop_count",
+    "data_position",
+    "frame_count",
+    "timer",
+    "obj_files.mk",
+    "lbcollision.s",
+    "sdata2 NULL padding"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match Command_0C, Command_10_Goto, Command_80005AC4, Command_80005AE4, Command_80005B00, Command_80005B18, or Command_80005B64.",
+    "Search for later renames or type refinements of CommandInfo fields data_position, loop_count, event_return, loop_count_dup, and unk_x18.",
+    "Investigate why lbcollision.s needed an inserted .4byte NULL after deleting lbcommand.s and whether later linker-section cleanup removed that workaround.",
+    "Search for all remaining callsites of Command_80005B64 and whether its signature was later corrected to include the command id argument.",
+    "Compare this PR with later asm-to-C migrations that use inline asm plus NON_MATCHING blocks as an intermediate step."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

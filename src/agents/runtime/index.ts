@@ -3,7 +3,10 @@ export { extractCompleteObjectsFromArray, numberField, parseJsonObject, stripPiF
 export {
   DEFAULT_PI_MODEL,
   DEFAULT_PI_PROVIDER,
+  DEFAULT_PI_SESSION_DIR_NAME,
   DEFAULT_PI_THINKING_LEVEL,
+  defaultPiSessionDir,
+  defaultPiSessionRoot,
   runPiAgent,
   type PiRunOptions,
 } from "./pi-agent.js";

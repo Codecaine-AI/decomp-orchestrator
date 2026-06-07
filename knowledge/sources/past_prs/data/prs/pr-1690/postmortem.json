@@ -1,0 +1,122 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1690",
+  "pr": {
+    "number": 1690,
+    "title": "Add translation unit support for decomp.py",
+    "url": "https://github.com/doldecomp/melee/pull/1690",
+    "state": "MERGED",
+    "author": "thefoxcam",
+    "created_at": "2025-07-14T14:53:14Z",
+    "merged_at": "2025-07-16T01:02:28Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Updated tools/decomp.py so its single positional m2c input can be either a function name or a translation-unit path such as melee/it/items/itheiho. The script now attempts to resolve the input as a function via find_obj/has_function; if no object containing that function is found, it treats the input as a translation unit, builds the corresponding ASM path, and invokes m2c without --function. --write remains function-only and now errors for translation-unit input.",
+  "change_classification": {
+    "primary_type": "tooling",
+    "categories": [
+      "tooling",
+      "decomp-matching",
+      "workflow",
+      "cli-behavior"
+    ],
+    "systems": [
+      "tools",
+      "m2c integration",
+      "decomp.py"
+    ]
+  },
+  "key_files": [
+    "tools/decomp.py"
+  ],
+  "what_changed": [
+    "Changed the argparse description and positional argument from a function-only input to m2c_input, documented as accepting either a function name like it_8026B9A8 or a translation unit path like melee/it/items/itheiho.",
+    "Kept one positional input instead of requiring separate --function or --translation-unit flags in the final diff shown.",
+    "Added input classification logic: call find_obj(OBJ_ROOT, m2c_input); if it finds an object containing that function, use the matching .s file and pass --function m2c_input to m2c.",
+    "Added translation-unit fallback: if find_obj returns None, treat m2c_input as a path under ASM_ROOT with .s suffix and run m2c without a --function argument.",
+    "Changed --write help text to clarify it is function-input only.",
+    "Added an explicit error path for --write with translation-unit input: print that it is currently unimplemented and exit.",
+    "Guarded write-back with is_function so translation-unit decomp output is not inserted into a source file.",
+    "Changed the not-found error from function-oriented wording to an ASM-path error: 'Asm file does not exist at path {asm_file}'."
+  ],
+  "smart_moves": [
+    "Resolved the CLI ambiguity by reusing existing project knowledge: has_function/find_obj can distinguish real function symbols from translation-unit paths, avoiding a brittle slash-based heuristic.",
+    "Preserved current function-name workflow by keeping a single positional argument and only falling back to translation-unit mode when no matching function object is found.",
+    "Avoided overextending the feature by explicitly rejecting --write for translation-unit input rather than silently writing to the wrong source file.",
+    "Built translation-unit assembly paths with Path(m2c_input).with_suffix('.s'), matching the existing object-to-assembly convention used for functions.",
+    "Used m2c_args as an optional list so --function is only emitted when m2c should restrict output to a single function."
+  ],
+  "decomp_lessons": [
+    "For decomp tooling that accepts either symbols or paths, prefer symbol-table/object-file checks over syntax heuristics when the repository already has reliable helpers such as has_function and find_obj.",
+    "Maintaining backward-compatible CLI behavior matters for frequently used scripts; adding translation-unit support did not require users to start passing --function for the existing common case.",
+    "Translation-unit decompilation should not automatically reuse function-level writeback logic. Source insertion for whole TUs needs separate design and should be disabled until implemented safely.",
+    "When adapting m2c calls, omit --function for whole translation units and include it only for function-scoped decompilation.",
+    "Error messages should shift from symbol-centric to path-centric when a tool starts accepting file-like inputs."
+  ],
+  "naming_conventions": [
+    "The generalized positional CLI value was named m2c_input rather than function, reflecting that it may be a function symbol or translation-unit path.",
+    "The mode flag was named is_function, making downstream writeback gating explicit.",
+    "Existing project root constants such as OBJ_ROOT, ASM_ROOT, SRC_ROOT, and CTX_FILE remained the organizing convention for path construction.",
+    "Example function names follow project symbol style such as it_8026B9A8.",
+    "Example translation-unit inputs use source-relative paths without extension, such as melee/it/items/itheiho."
+  ],
+  "assembly_or_matching_tactics": [
+    "Function input path: find_obj scans object files and has_function identifies whether the requested symbol exists; the located object path is converted to the matching .s assembly file.",
+    "Translation-unit input path: if find_obj returns None, interpret the input as a relative assembly path under ASM_ROOT and append/replace with .s via with_suffix('.s').",
+    "m2c invocation tactic: pass '--function <name>' only when the input was confirmed to be a function; for TU input, pass the assembly file without --function.",
+    "Existence of the computed asm_file gates execution; missing TU paths now fail with an ASM-file path error instead of a missing-function error."
+  ],
+  "review_feedback": [
+    {
+      "author": "r-burns",
+      "feedback": "Asked whether --function could remain the default behavior because that is how the script currently works, and suggested the script could infer file paths since function names cannot contain slashes.",
+      "outcome": "The final diff kept a single positional input and preserved function-first behavior. The author noted a better inference method: rely on has_function/find_obj rather than slash detection."
+    },
+    {
+      "author": "thefoxcam",
+      "feedback": "Explained concern that slash detection could prevent root-level translation-unit input, then recognized that has_function and find_obj allow unambiguous classification.",
+      "outcome": "Implemented inference by trying find_obj first and treating None as translation-unit input."
+    }
+  ],
+  "searchable_terms": [
+    "PR1690",
+    "decomp.py",
+    "translation unit support",
+    "TU input",
+    "m2c_input",
+    "find_obj",
+    "has_function",
+    "OBJ_ROOT",
+    "ASM_ROOT",
+    "SRC_ROOT",
+    "CTX_FILE",
+    "m2c",
+    "--function",
+    "--write",
+    "is_function",
+    "asm_file",
+    "with_suffix",
+    "melee/it/items/itheiho",
+    "it_8026B9A8",
+    "tooling",
+    "function versus translation unit",
+    "slash heuristic",
+    "writeback function only"
+  ],
+  "follow_up_queries": [
+    "How should --write be implemented safely for translation-unit input in tools/decomp.py?",
+    "Are there root-level translation units where slash-based path inference would fail, validating the find_obj-first approach?",
+    "Should the type cast for args.m2c_input be str rather than bool in tools/decomp.py?",
+    "Should decomp.py validate translation-unit paths against SRC_ROOT or known build metadata before invoking m2c?",
+    "Can the error message distinguish between missing function symbols and missing translation-unit assembly files more explicitly?"
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

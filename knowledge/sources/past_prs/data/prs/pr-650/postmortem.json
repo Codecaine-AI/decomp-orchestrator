@@ -1,0 +1,179 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-650",
+  "pr": {
+    "number": 650,
+    "title": "Fix `deprecated-non-prototype` warnings, pass 1",
+    "url": "https://github.com/doldecomp/melee/pull/650",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-05T14:26:32Z",
+    "merged_at": "2023-01-06T09:08:21Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "First pass toward enabling stricter prototype enforcement, described as working toward `-requireprotos`. The PR removed broad warning suppression in `compile_flags.txt`, fixed a typo in `-Wno-unused-parameter`, and converted many old-style empty-parameter declarations like `foo()` or `void (*cb)()` into explicit prototypes such as `foo(void)` or typed callback signatures. It touched Dolphin, MSL, sysdolphin baselib, fighter headers, and tooling, mostly as header/prototype cleanup rather than gameplay logic. Review discussion focused on the tradeoff between clean callback syntax and strict-prototype/tooling compatibility, plus a temporary object-file rename from `OS.c.o` to `OSInit.c.o` despite debug maps saying `OS.c` is correct.",
+  "change_classification": {
+    "primary_type": "prototype_warning_cleanup",
+    "categories": [
+      "cleanup",
+      "fix",
+      "headers",
+      "tooling",
+      "types-structs",
+      "naming"
+    ],
+    "systems": [
+      "Dolphin",
+      "MSL",
+      "sysdolphin-baselib",
+      "fighter",
+      "melee-core",
+      "repo-tooling",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "compile_flags.txt",
+    "obj_files.mk",
+    "tools/issues.sh",
+    "include/dolphin/types.h",
+    "include/dolphin/ai/ai.h",
+    "include/dolphin/pad/pad.h",
+    "include/dolphin/vi/vi.h",
+    "include/stdio.h",
+    "include/sysdolphin/baselib/aobj.h",
+    "src/sysdolphin/baselib/aobj.c",
+    "include/sysdolphin/baselib/displayfunc.h",
+    "include/sysdolphin/baselib/fobj.h",
+    "include/sysdolphin/baselib/cobj.h",
+    "include/sysdolphin/baselib/fog.h",
+    "include/sysdolphin/baselib/list.h",
+    "include/sysdolphin/baselib/mobj.h",
+    "include/sysdolphin/baselib/tobj.h",
+    "include/sysdolphin/baselib/wobj.h",
+    "src/dolphin/gx/GXStubs.h",
+    "src/dolphin/gx/GXStubs.c",
+    "src/dolphin/os/OSInit.h",
+    "src/MSL/abort_exit.c"
+  ],
+  "what_changed": [
+    "Changed many non-prototype declarations with empty parentheses into explicit `void` parameter lists, for example `AIDCallback()` became `AIDCallback(void)`, `VIGetTvFormat()` became `VIGetTvFormat(void)`, `HSD_CObjAlloc()` became `HSD_CObjAlloc(void)`, and `EXI2_Init()` became `EXI2_Init(void)`.",
+    "Updated function pointer typedefs and struct members to be strict-prototype compatible, for example `typedef void (*module##_UnkCallback##number)();` became `typedef void (*module##_UnkCallback##number)(void)` and `int (*unk3C)();` became `int (*unk3C)(void)`.",
+    "Added or refined typed prototypes where argument evidence was available, including `HSD_EraseRect(f32 top_res, f32 bottom_res, f32 left_res, f32 right_res, f32 neg_z_val, BOOL enable_color, BOOL enable_alpha, BOOL enable_depth)`, `FogUpdateFunc(HSD_Fog* fog, u32 type, FObjData* fv)`, `HSD_CObjSetScissorx4(HSD_CObj*, s32, s32, s32, s32)`, and `HSD_CObjSetViewportfx4(HSD_CObj*, f32, f32, f32, f32)`.",
+    "Changed `callbackForeachFunc` in `include/sysdolphin/baselib/aobj.h` and `src/sysdolphin/baselib/aobj.c` from accepting `void (*func)()` to accepting `void* func`, apparently to avoid old-style function pointer prototypes and allow internal casting at call sites.",
+    "Added `src/dolphin/gx/GXStubs.h` and included it in `GXStubs.c`/`GXTransform.c`, giving `__GXSetRange` an explicit prototype `void __GXSetRange(f32 nearz, f32)` and changing the stub definition from `void __GXSetRange(void)` to `void __GXSetRange(f32 nearz, f32 arg1)`.",
+    "Removed obsolete or unsafe bare prototypes from `include/sysdolphin/baselib/mtx.h`, specifically `func_80379310()` and `HSD_MtxSRT()` in the excerpt.",
+    "Cleaned up `compile_flags.txt` by removing `-Wnone`, keeping `-Wall`/`-Wextra`, and fixing the misspelled warning option `-Wno-unused-paramemter` to `-Wno-unused-parameter`.",
+    "Changed `obj_files.mk` to build `src/dolphin/os/OSInit.c.o` instead of `src/dolphin/os/OS.c.o`, though review noted `OS.c` is the debug-map-correct file name.",
+    "Added `tools/issues.sh` with 12 lines, likely tooling support for tracking warning issues, but the provided excerpt does not show its contents."
+  ],
+  "smart_moves": [
+    "Targeted the mechanical source of `deprecated-non-prototype`/strict-prototype warnings in headers, which prevents warning noise from spreading across translation units.",
+    "Used `foo(void)` for no-argument functions rather than old-style `foo()`, aligning C declarations with strict prototype expectations and modern tooling.",
+    "Where enough information was available, replaced unknown empty prototypes with real typed signatures instead of blindly using placeholders.",
+    "Introduced a dedicated `GXStubs.h` for `__GXSetRange`, making the stub declaration visible and consistent between the definition and callers.",
+    "Fixed warning configuration at the root by removing `-Wnone`; this makes future warning cleanup meaningful rather than masked by a global disable.",
+    "Accepted some local ugliness, especially in `aobj.c` callback handling, as a tradeoff for stricter compile/tooling behavior; the review discussion explicitly weighed this cost."
+  ],
+  "decomp_lessons": [
+    "For decomp headers, an empty parameter list `func()` should not be used as a no-argument prototype; prefer `func(void)` when the function takes no arguments.",
+    "Function pointer declarations need the same treatment as normal functions: use `void (*cb)(void)` for no-argument callbacks, or a typed argument list when known.",
+    "When a callback can legally have several incompatible signatures, converting it to a typed function pointer may force casts; using `void*` can satisfy strict-prototype cleanup but should be documented or reviewed because it loses type information.",
+    "Strict warning flags can expose hidden header hygiene problems. Cleanup is most valuable when paired with compile flag changes that stop masking the warnings.",
+    "Do not rename source/object files solely for convenience without checking debug maps. In this PR, review stated that `OS.c` was the correct name from debug maps even though `OSInit.c` helped with compilation under Wine/case-sensitive header issues.",
+    "Case and path conflicts around Dolphin headers, such as `dolphin/os.h` versus a possible `dolphin/os/OS.h`, can force temporary compromises; long-term resolution may require directory/header restructuring.",
+    "Adding a local header for a stubbed function can be preferable to leaving `UNK_FUNC` declarations when the function signature is known from use sites."
+  ],
+  "naming_conventions": [
+    "Header guards were normalized in at least `include/sysdolphin/baselib/displayfunc.h` from `_displayfunc_c_` to `INCLUDE_SYSDOLPHIN_BASELIB_DISPLAYFUNC_H`.",
+    "Review feedback says `OS.c` is the correct Dolphin OS translation-unit name according to debug maps; `OSInit.c` was treated as a temporary compile-oriented compromise.",
+    "No broad new symbol naming convention was established beyond replacing old-style prototypes with explicit `void` or known typed signatures.",
+    "Argument names appeared where useful in definitions, for example `exit(int code)` and `__GXSetRange(f32 nearz, f32 arg1)`, but the evidence does not show a project-wide parameter naming policy."
+  ],
+  "assembly_or_matching_tactics": [
+    "This PR was not primarily an assembly matching PR; the evidence points to header/prototype/tooling cleanup.",
+    "Prototype fixes can still support matching by making C declarations agree with call signatures and by allowing stricter compiler/tooling modes to run without aborting.",
+    "For stub functions such as `__GXSetRange`, infer the real parameter list from callers before changing the definition; here the stub was updated to take two `f32` arguments.",
+    "Avoid relying on `UNK_FUNC(name)` or bare `name()` when the required signature can be recovered from surrounding code or call sites."
+  ],
+  "review_feedback": [
+    {
+      "file": "obj_files.mk",
+      "author": "r-burns",
+      "feedback": "`OS.c` is the correct file name as provided by debug maps; changing the object path to `OSInit.c.o` is not name-accurate."
+    },
+    {
+      "file": "obj_files.mk",
+      "author": "ribbanya",
+      "feedback": "The rename was motivated by Wine/case/path compilation issues around `os.h` versus wanting `OS.h`; author considered the wrong name temporary because Dolphin code was expected to be outsourced later."
+    },
+    {
+      "file": "obj_files.mk",
+      "author": "r-burns",
+      "feedback": "A cleaner long-term approach might be `dolphin/os/OS.h` for this translation unit and `dolphin/os.h` as the module catchall, but that would require restructuring."
+    },
+    {
+      "file": "src/sysdolphin/baselib/aobj.c",
+      "author": "r-burns",
+      "feedback": "For `callbackForeachFunc`, not specifying exact callback argument types may be cleaner; requiring explicit casts adds little useful information."
+    },
+    {
+      "file": "src/sysdolphin/baselib/aobj.c",
+      "author": "ribbanya",
+      "feedback": "Author argued the casts were a small price for strict prototype compliance and noted `-requireprotos` would abort on non-compliant code, though later acknowledged uncertainty."
+    },
+    {
+      "file": "src/sysdolphin/baselib/aobj.c",
+      "author": "r-burns",
+      "feedback": "Reviewer tested and found `void (*func)()` compiles with `-requireprotos`, but accepted that the stricter `-Werror=strict-prototypes` flag is probably a net improvement for modern tooling."
+    }
+  ],
+  "searchable_terms": [
+    "deprecated-non-prototype",
+    "strict-prototypes",
+    "requireprotos",
+    "-Werror=strict-prototypes",
+    "compile_flags.txt",
+    "-Wnone",
+    "-Wno-unused-parameter",
+    "old-style prototype",
+    "empty parentheses",
+    "foo(void)",
+    "function pointer prototype",
+    "callbackForeachFunc",
+    "void (*func)()",
+    "void (*func)(void)",
+    "void* func",
+    "AIDCallback",
+    "CALLBACK_PLACEHOLDER",
+    "HSD_EraseRect",
+    "FogUpdateFunc",
+    "HSD_CObjSetScissorx4",
+    "HSD_CObjSetViewportfx4",
+    "GXStubs.h",
+    "__GXSetRange",
+    "OS.c",
+    "OSInit.c",
+    "debug maps",
+    "Wine compile",
+    "dolphin/os.h",
+    "displayfunc.h header guard"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that complete `-requireprotos` or enable `-Werror=strict-prototypes` globally.",
+    "Check whether the temporary `obj_files.mk` change from `OS.c.o` to `OSInit.c.o` was later reverted or replaced with a debug-map-correct restructuring.",
+    "Search for remaining `void (*name)()` callback declarations after PR #650.",
+    "Search for remaining function declarations using empty parentheses `()` instead of `(void)`.",
+    "Inspect later changes to `callbackForeachFunc` to see whether `void* func` was kept or replaced by a better typed callback abstraction.",
+    "Review `tools/issues.sh` contents and later usage to understand how warning cleanup was tracked."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

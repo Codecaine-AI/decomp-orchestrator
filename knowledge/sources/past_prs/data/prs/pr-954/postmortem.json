@@ -1,0 +1,117 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-954",
+  "pr": {
+    "number": 954,
+    "title": "Remove itHit struct",
+    "url": "https://github.com/doldecomp/melee/pull/954",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-07-03T20:35:22Z",
+    "merged_at": "2023-07-03T20:47:58Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Removed the item-local itHit struct and replaced item hitbox uses with the shared HitCapsule layout. The PR rationale was that item collision code passed &Item->x5D4 into functions expecting HitCapsule, and known regions of itHit and HitCapsule were identical. Item::x5D4_hitboxes became an array of small wrappers containing HitCapsule hit plus the trailing x138 field, function prototypes were updated from itHit* to HitCapsule*, and field accesses were translated from copied itHit names to HitCapsule names such as hit.state and hit.damage.",
+  "change_classification": {
+    "primary_type": "types-structs",
+    "categories": [
+      "headers",
+      "naming",
+      "types-structs",
+      "struct-deduplication"
+    ],
+    "systems": [
+      "item",
+      "collision",
+      "library"
+    ]
+  },
+  "key_files": [
+    "src/melee/it/types.h",
+    "src/melee/it/forward.h",
+    "src/melee/it/it_266F.h",
+    "src/melee/it/it_26B1.h",
+    "src/melee/it/it_26B1.c",
+    "src/melee/it/item.c",
+    "src/melee/lb/lbcollision.h"
+  ],
+  "what_changed": [
+    "Deleted struct itHit from src/melee/it/types.h, removing a duplicate item-hitbox layout with copied-looking named members.",
+    "Removed typedef forward declarations for itHit and itHurt from src/melee/it/forward.h.",
+    "Changed it_80272460 from taking itHit* to taking HitCapsule* in src/melee/it/it_266F.h.",
+    "Changed it_8026B1D4 from taking itHit* to taking HitCapsule* in both declaration and definition.",
+    "Updated it_8026B1D4 to read HitCapsule::damage instead of itHit::xC_damage_staled.",
+    "Changed Item::x5D4_hitboxes from itHit x5D4_hitboxes[4] to an anonymous wrapper array containing HitCapsule hit and s32 x138.",
+    "Updated item.c hitbox iteration to check hit.state against HitCapsule_Disabled instead of using x0_toggle, read hit.damage instead of xC_damage_staled, and pass &x5D4_hitboxes[i].hit to it_80272460.",
+    "Added a comment marking the 0x134 offset in struct HitCapsule near the owner/hit_grabbed_victim_only union."
+  ],
+  "smart_moves": [
+    "Used call-site evidence to justify the type merge: item collision code was already passing Item::x5D4 storage to APIs that conceptually expected HitCapsule.",
+    "Preserved the full item hitbox storage size by wrapping HitCapsule with a trailing s32 x138 rather than blindly replacing it with a bare HitCapsule array.",
+    "Translated semantic fields to the existing shared HitCapsule names instead of keeping duplicate or m-ex-derived itHit field names.",
+    "Narrowed API signatures to the shared collision type, reducing future divergence between item hitboxes and general hit capsules."
+  ],
+  "decomp_lessons": [
+    "When two structs appear layout-compatible, verify through real call sites and known identical regions before merging them.",
+    "Prefer one authoritative shared collision struct over parallel item-specific copies when the binary usage supports it.",
+    "If a removed struct has extra trailing data relative to the replacement type, model that explicitly with a wrapper so offsets remain preserved.",
+    "Copied external struct/member names should be treated as provisional; remove or rename them when the project can independently verify the layout and semantics.",
+    "Field renames during struct deduplication should use established semantic names from the retained type, e.g. HitCapsule::damage and HitCapsule::state."
+  ],
+  "naming_conventions": [
+    "Use HitCapsule for item hitbox data when item collision storage matches the shared hit capsule layout.",
+    "Use the nested member name hit for the HitCapsule portion of Item::x5D4_hitboxes wrapper entries.",
+    "Use HitCapsule_Disabled for disabled hitbox state checks instead of item-local boolean toggle names.",
+    "Prefer established HitCapsule member names such as damage and state over itHit-style offset names like xC_damage_staled and x0_toggle.",
+    "Keep unknown trailing storage named by offset, as with x138, when its purpose is not established."
+  ],
+  "assembly_or_matching_tactics": [
+    "Struct replacement was done by preserving layout-sensitive offsets: Item::x5D4_hitboxes still stores four entries, each containing a HitCapsule plus trailing x138.",
+    "Pointer adjustments were made explicitly at use sites: callers now pass &temp_item->x5D4_hitboxes[i].hit when a HitCapsule* is required.",
+    "Matching-friendly field substitutions mapped old offsets to equivalent HitCapsule fields, notably xC_damage_staled to damage and x0_toggle to hit.state != HitCapsule_Disabled."
+  ],
+  "review_feedback": [
+    {
+      "file": "src/melee/it/types.h",
+      "author": "r-burns",
+      "comment": "The removed itHit struct and named members appeared to have been copied from m-ex, and the author stated that removing and independently verifying them was in line with the project's current approach."
+    }
+  ],
+  "searchable_terms": [
+    "pr-954",
+    "Remove itHit struct",
+    "itHit",
+    "HitCapsule",
+    "Item::x5D4_hitboxes",
+    "x5D4_hitboxes",
+    "HitCapsule_Disabled",
+    "it_80272460",
+    "it_8026B1D4",
+    "xC_damage_staled",
+    "damage",
+    "x0_toggle",
+    "hit.state",
+    "item collision",
+    "itcoll",
+    "struct deduplication",
+    "m-ex copied names",
+    "independently verify",
+    "lbcollision.h",
+    "src/melee/it/types.h"
+  ],
+  "follow_up_queries": [
+    "Audit remaining item collision structs for duplicated HitCapsule or HurtCapsule layouts.",
+    "Search for remaining references to m-ex-derived field names in item collision code.",
+    "Investigate the purpose of the trailing x138 field in Item::x5D4_hitboxes wrapper entries.",
+    "Verify whether removed itHurt forward declaration had no remaining users or should map to HurtCapsule in a similar cleanup."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

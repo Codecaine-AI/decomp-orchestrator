@@ -1,0 +1,150 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1174",
+  "pr": {
+    "number": 1174,
+    "title": "Match `ifStatus_PercentOnDeathAnimationThink`",
+    "url": "https://github.com/doldecomp/melee/pull/1174",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-02-01T17:46:01Z",
+    "merged_at": "2024-02-01T17:48:33Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the previously stubbed `ifStatus_802F491C` as `ifStatus_PercentOnDeathAnimationThink`, a HUD damage-percent death animation update routine. The PR replaced the address-style symbol in `symbols.txt` and assembly callsites, implemented the function in C with JObj translation/dirty-matrix handling, random velocity initialization, assert-preserving helper code, and moved related ifstatus data out of asm. It also cleaned HUD damage types by renaming `HudValue`/`HudFlags` to `IfDamageState`/`IfDamageFlags`, adding an `IfDamagePlace` enum for hundreds/tens/ones/percent slots, and replacing individual digit fields with indexed arrays.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "function-match",
+      "headers",
+      "struct-cleanup",
+      "symbol-rename",
+      "asm-data-removal"
+    ],
+    "systems": [
+      "melee-if",
+      "hud",
+      "damage-percent-display",
+      "baselib-jobj",
+      "asm",
+      "config",
+      "item"
+    ]
+  },
+  "key_files": [
+    "src/melee/if/ifstatus.c",
+    "src/melee/if/types.h",
+    "src/melee/if/forward.h",
+    "src/melee/if/ifstatus.h",
+    "asm/melee/if/ifstatus.s",
+    "asm/melee/if/ifstatus_data.s",
+    "config/GALE01/symbols.txt",
+    "src/melee/it/items/itcerebi.c"
+  ],
+  "what_changed": [
+    "`ifStatus_802F491C` was renamed to `ifStatus_PercentOnDeathAnimationThink` in `config/GALE01/symbols.txt` and in the remaining assembly callsite in `asm/melee/if/ifstatus.s`.",
+    "`src/melee/if/ifstatus.c` replaced the `NOT_IMPLEMENTED` body with a C implementation that updates four HUD percent-token JObjs, initializes randomized x/y velocities when a flag is set, applies per-frame translation, marks matrices dirty, and applies a downward velocity decrement.",
+    "The matched function uses `HSD_Randf`, `fabsf_bitwise`, `HSD_JObjSetMtxDirtySub`, and preserved JObj assertions with literal file/string evidence (`jobj.h`, `jobj`) and line numbers such as 993, 1006, 1102, and 1114.",
+    "`ifStatus_PercentOnDeathAnimationThink` was made `static` in C and removed from `ifstatus.h`, indicating it is an internal think callback rather than exported API.",
+    "`asm/melee/if/ifstatus_data.s` was deleted, with related data/static globals now represented from C-side declarations in `ifstatus.c` and type definitions.",
+    "`HudFlags` became `IfDamageFlags`; `HudValue` became `IfDamageState`; and `unk40` was renamed to `randomize_velocity` at existing use sites.",
+    "`IfDamagePlace` was introduced with `Hundreds`, `Tens`, `Ones`, `Percent`, and `HUD_PLACE_MAX`, allowing digit/percent-sign state to be represented as arrays indexed by place.",
+    "`IfDamageState` fields were compacted from individually named digit members into arrays: `translation_x`, `translation_y`, `velocity_x`, `velocity_y`, and `jobjs`, all sized by `HUD_PLACE_MAX`.",
+    "`Element_803F9628` fields were renamed from `unk0`, `unk4`, etc. to offset-style names such as `x0`, `x4`, `x8`, and `xC`, and an affected cleanup path in `ifStatus_802F7220` was updated accordingly.",
+    "`src/melee/it/items/itcerebi.c` received small nonfunctional cleanup around static declaration ordering and a trailing comma in `ItemStateTable`."
+  ],
+  "smart_moves": [
+    "Used a domain name, `PercentOnDeathAnimationThink`, for the matched function instead of leaving the address-derived `ifStatus_802F491C`, while keeping the address comment and symbol map evidence.",
+    "Modeled repeated digit/percent-sign state as arrays plus an `IfDamagePlace` enum, reducing brittle per-field duplication and matching the loop over four JObjs in the target code.",
+    "Kept the matched routine file-local by declaring it `static` and removing the public header declaration, which avoids advertising an internal callback as API.",
+    "Used small inline helpers for JObj translation, matrix-dirty behavior, and assertion sites to steer codegen while keeping recognizable C structure.",
+    "Preserved assert strings and line numbers through an `ASSERT_NOT_NULL` macro, which is important for matching functions that inline HSD JObj assertion behavior.",
+    "Used an sbss toggle (`ifStatus_804D6D61`) to reproduce alternating positive/negative randomized x velocities for percent-token explosion movement.",
+    "Carried constant evidence into comments, including `100.0f`, `-100.0f`, `0.6083f`, `0.3041f`, `0.811f`, `1.2165f`, and `0.2028f`, making future refinement easier."
+  ],
+  "decomp_lessons": [
+    "When a HUD struct has repeated fields for hundreds/tens/ones/percent, an enum-indexed array can both improve names and match loops over four elements.",
+    "For JObj-heavy matches, helper functions may need to be `inline` and shaped around exact assert and dirty-matrix call patterns rather than purely idiomatic C.",
+    "Do not export matched functions unnecessarily; if an assembly routine is only used as an internal callback, a `static` C declaration plus symbol-map name can be enough.",
+    "Migrating data out of `*_data.s` can be coupled with a function match, but only when the C declarations and section/static storage reproduce the original layout.",
+    "Bitfield names can encode behavioral discoveries from a match; here `unk40` becoming `randomize_velocity` was supported by the random-velocity initialization path.",
+    "Offset-style field names such as `x0`/`x4` are preferable to misleading `unk0` names when the exact semantics are still unknown but offset stability matters.",
+    "The evidence for local helper names like `foo`, `jobj_unk_x`, `jobj_unk_y`, and temporary `UnkX` is weak; they appear to be matching scaffolding rather than final semantic names."
+  ],
+  "naming_conventions": [
+    "`ifStatus_802F491C` -> `ifStatus_PercentOnDeathAnimationThink` for a newly matched ifstatus HUD death-animation think routine.",
+    "`HudValue` -> `IfDamageState`, naming the per-player HUD damage display state rather than a generic value.",
+    "`HudFlags` -> `IfDamageFlags`, naming the bitfield group by subsystem and role.",
+    "`unk40` -> `randomize_velocity`, based on the flag triggering random x/y velocity initialization.",
+    "`IfDamagePlace` enum values use display-place terms: `Hundreds`, `Tens`, `Ones`, `Percent`, with `HUD_PLACE_MAX` as the array bound.",
+    "Repeated place-specific fields use array names with axis/role suffixes: `translation_x`, `translation_y`, `velocity_x`, `velocity_y`, and `jobjs`.",
+    "For still-unknown structs, offset-style names like `x0`, `x4`, `x8`, `xC`, and `x10` replaced older `unk0`/`unk4` style in `Element_803F9628`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Renamed the assembly label and symbol map entry while matching the function in C, keeping address `0x802F491C` and size `0x268` stable.",
+    "Used inline JObj helpers (`jobj_translate_x`, `jobj_translate_y`, `jobj_flagCheckSetMtxDirtySub`) to reproduce instruction ordering around translation updates and dirty-matrix propagation.",
+    "Preserved HSD assertion behavior with `__assert(\"jobj.h\", line, \"jobj\")` and exact line constants to match inlined JObj accessors.",
+    "Used `fabsf_bitwise(jobj->translate.x) < 100.0f` and `translate.y > -100.0f` gates to mirror float comparisons from the assembly.",
+    "Used `(&value->x34_vec.x)[i]` and `(&value->x44_vec.x)[i]` indexing over `Vec4` storage to match array-like access to four x/y velocity lanes.",
+    "Introduced a seemingly artificial `jobj_get` helper and repeated calls/casts in the y-path, likely to force the same reload/register behavior as the target assembly.",
+    "Preserved global/static storage for `ifStatus_803F9628`, `ifStatus_804D6D60`, and `ifStatus_804D6D61`, with `ifStatus_804D6D61` controlling alternating random sign generation.",
+    "Kept unused parameters in `ifStatus_PercentOnDeathAnimationThink(UnkX* value, s32 arg1, s32 arg2)` to match the callback ABI even though only `value` is used in the shown implementation."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The PR body only states `Resolves #533, resolves #683`; no reviewer rationale or requested changes are available."
+  ],
+  "searchable_terms": [
+    "pr-1174",
+    "ribbanya",
+    "ifStatus_PercentOnDeathAnimationThink",
+    "ifStatus_802F491C",
+    "ifstatus.c",
+    "ifstatus.s",
+    "ifstatus_data.s",
+    "ifStatus_HudInfo",
+    "IfDamageState",
+    "IfDamageFlags",
+    "IfDamagePlace",
+    "HUD_PLACE_MAX",
+    "Hundreds",
+    "Tens",
+    "Ones",
+    "Percent",
+    "randomize_velocity",
+    "HSD_JObjSetMtxDirtySub",
+    "HSD_Randf",
+    "fabsf_bitwise",
+    "jobj.h",
+    "jobj",
+    "translation_x",
+    "translation_y",
+    "velocity_x",
+    "velocity_y",
+    "jobjs",
+    "Element_803F9628",
+    "Thing_803F9628",
+    "ifStatus_804D6D61",
+    "damage percent HUD",
+    "percent on death animation",
+    "Resolves #533",
+    "Resolves #683"
+  ],
+  "follow_up_queries": [
+    "Search later PRs for replacement of temporary local names `UnkX`, `FlagsX`, `foo`, `jobj_unk_x`, and `jobj_unk_y` with semantic HUD damage names.",
+    "Check follow-up ifstatus matches around `ifStatus_802F4B84`, `ifStatus_802F4EDC`, and `ifStatus_802F5B48` for reuse of `IfDamageState` and `IfDamagePlace`.",
+    "Audit whether the deleted `ifstatus_data.s` data was fully represented in C after this PR or refined in later data-migration PRs.",
+    "Look for subsequent review or commits around issue #533 and #683 to confirm the intended semantics of `PercentOnDeathAnimationThink` and `randomize_velocity`.",
+    "Search for additional HUD percent digit animation code that can reuse enum-indexed arrays for hundreds/tens/ones/percent slots."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

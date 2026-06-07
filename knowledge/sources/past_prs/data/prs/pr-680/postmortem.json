@@ -1,0 +1,151 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-680",
+  "pr": {
+    "number": 680,
+    "title": "Match dolphin dsp_task",
+    "url": "https://github.com/doldecomp/melee/pull/680",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-01-15T02:55:36Z",
+    "merged_at": "2023-01-15T03:19:50Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Dolphin DSP task module by deleting asm/dolphin/dsp/dsp_task.s and replacing it with src/dolphin/dsp/dsp_task.c, wiring the new C object into obj_files.mk, and adding a header prototype for __DSP_exec_task. The PR body says it was based on SMB decomp. The new C covers DSP task interrupt handling, mailbox handshakes, task execution/booting, priority insertion, and task removal while preserving matching-sensitive details such as explicit polling loops, global DSP task pointers, callback dispatch, magic mailbox constants, and a MUST_MATCH force_active unused string.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "build-system"
+    ],
+    "systems": [
+      "dolphin",
+      "dsp",
+      "os-interrupts",
+      "build"
+    ]
+  },
+  "key_files": [
+    "asm/dolphin/dsp/dsp_task.s",
+    "src/dolphin/dsp/dsp_task.c",
+    "src/dolphin/dsp/dsp.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Removed the 676-line assembly implementation at asm/dolphin/dsp/dsp_task.s.",
+    "Added a 313-line C implementation at src/dolphin/dsp/dsp_task.c.",
+    "Changed obj_files.mk to build $(BUILD_DIR)/src/dolphin/dsp/dsp_task.c.o instead of $(BUILD_DIR)/asm/dolphin/dsp/dsp_task.s.o.",
+    "Added void __DSP_exec_task(DSPTaskInfo*, DSPTaskInfo*) to src/dolphin/dsp/dsp.h.",
+    "Defined DSP task globals in C: __DSP_curr_task, __DSP_first_task, __DSP_last_task, __DSP_tmp_task, __DSP_rude_task, and __DSP_rude_task_pending.",
+    "Implemented __DSPHandler with interrupt context save/restore, DSP mailbox reads, message dispatch on 0xDCD10000 through 0xDCD10004, task state transitions, rude-task handling, and callback invocation.",
+    "Implemented __DSP_exec_task to send previous-task DRAM fields and next-task IRAM/DRAM/vector fields to the DSP through DSPSendMailToDSP, with DSPCheckMailToDSP polling after each send.",
+    "Implemented __DSP_boot_task with the boot mailbox command sequence and debug prints for task boot parameters.",
+    "Implemented __DSP_insert_task as priority-ordered linked-list insertion over DSPTaskInfo prev/next links.",
+    "Implemented __DSP_remove_task to clear flags, mark state 3, unlink first/last/middle tasks, and update current/first/last task globals."
+  ],
+  "smart_moves": [
+    "Used an existing SMB decomp as a reference, according to the PR body, which is appropriate for matching shared Dolphin SDK code.",
+    "Kept mailbox handshakes structurally explicit: every DSPSendMailToDSP call is followed by a while (DSPCheckMailToDSP() != 0) polling loop, mirroring the assembly control flow.",
+    "Preserved interrupt-handler context behavior by allocating a local OSContext, calling OSClearContext/OSSetCurrentContext before handling the DSP message, then restoring the incoming context at the end.",
+    "Modeled the assembly's large compare/branch tree as a switch over DSP mailbox message constants, making the behavior searchable without losing the message cases.",
+    "Used direct DSPTaskInfo field names such as state, flags, init_cb, res_cb, done_cb, req_cb, next, prev, priority, iram_mmem_addr, iram_length, iram_addr, dram_mmem_addr, dram_length, dram_addr, dsp_init_vector, and dsp_resume_vector rather than leaving offset-based logic in assembly.",
+    "Preserved a matching-sensitive unused string with #ifdef MUST_MATCH, #pragma force_active, and a static char unused[] for \"__DSP_add_task() : Added task    : 0x%08X\\n\"."
+  ],
+  "decomp_lessons": [
+    "For Dolphin SDK code, comparing against another decompilation project can provide a strong semantic skeleton, but matching still depends on local details such as build object order, prototypes, globals, and exact polling structure.",
+    "When replacing an asm file with C, update obj_files.mk in the same PR so the matched source object replaces the asm object cleanly.",
+    "Mailbox-driven hardware code often matches best when written with simple explicit loops and repeated calls rather than abstract helpers, because the original assembly usually has one call/poll sequence per mailbox word.",
+    "Interrupt handlers may require local OSContext stack layout and explicit OSClearContext/OSSetCurrentContext calls to match generated code and preserve semantics.",
+    "Magic DSP mailbox constants should remain visible in the matched C when no named constants are present in the evidence; inventing enum names would reduce evidence fidelity.",
+    "Unused SDK strings may need force_active guards under MUST_MATCH to preserve rodata without affecting non-matching builds.",
+    "If a formerly local asm symbol is referenced across C files, expose its prototype in the relevant Dolphin header rather than relying on implicit declarations."
+  ],
+  "naming_conventions": [
+    "Internal Dolphin DSP symbols use a double-underscore prefix, e.g. __DSPHandler, __DSP_exec_task, __DSP_boot_task, __DSP_insert_task, __DSP_remove_task.",
+    "Global DSP task scheduler state follows __DSP_<role>_task naming, e.g. __DSP_curr_task, __DSP_first_task, __DSP_last_task, __DSP_tmp_task, __DSP_rude_task.",
+    "The pending boolean uses the same internal prefix and descriptive suffix: __DSP_rude_task_pending.",
+    "Callback fields in DSPTaskInfo use short role names with _cb suffix: init_cb, res_cb, done_cb, req_cb.",
+    "Task-link fields use conventional linked-list names prev and next.",
+    "The implementation uses concise parameter names a and b in __DSP_exec_task, matching-oriented rather than self-documenting; future cleanup should avoid renaming unless proven safe for matching."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted the deleted assembly labels for __DSPHandler, __DSP_exec_task, __DSP_boot_task, __DSP_insert_task, and __DSP_remove_task into C functions.",
+    "Matched hardware register manipulation in __DSPHandler as temp = __DSPRegs[5]; __DSPRegs[5] = (temp & -41) | 0x80.",
+    "Used an explicit local pad array and OSContext sp10 in __DSPHandler, likely to influence stack layout; evidence shows u8 pad[8] and OSContext sp10.",
+    "Kept DSPCheckMailFromDSP and DSPCheckMailToDSP wait loops as empty continue loops to preserve branch shape.",
+    "Represented 0xDCD10002 as 0xDCD10003 when the current task has flag bit 1 set, matching the assembly's pre-switch message rewrite.",
+    "Preserved mailbox constants in-place: 0xDCD10000, 0xDCD10001, 0xDCD10002, 0xDCD10003, 0xDCD10004, 0xCDD10001, 0xCDD10002, 0xCDD10003, and boot constants such as 0x80F3A001, 0x80F3C002, 0x80F3A002, 0x80F3B002, 0x80F3D001.",
+    "Used casts to u32 for pointer-valued mailbox sends, e.g. dram_mmem_addr and iram_mmem_addr.",
+    "Used #ifdef MUST_MATCH with #pragma push, #pragma force_active on, and #pragma pop to keep an otherwise unused static string in the object."
+  ],
+  "review_feedback": [
+    "One collaborator review by ribbanya approved the PR.",
+    "No review comments or issue comments were present in the provided PR slice.",
+    "No explicit reviewer rationale or requested changes were available."
+  ],
+  "searchable_terms": [
+    "PR680",
+    "Match dolphin dsp_task",
+    "r-burns",
+    "SMB decomp",
+    "asm/dolphin/dsp/dsp_task.s",
+    "src/dolphin/dsp/dsp_task.c",
+    "src/dolphin/dsp/dsp.h",
+    "obj_files.mk",
+    "__DSPHandler",
+    "__DSP_exec_task",
+    "__DSP_boot_task",
+    "__DSP_insert_task",
+    "__DSP_remove_task",
+    "__DSP_curr_task",
+    "__DSP_first_task",
+    "__DSP_last_task",
+    "__DSP_tmp_task",
+    "__DSP_rude_task",
+    "__DSP_rude_task_pending",
+    "DSPTaskInfo",
+    "DSPCheckMailFromDSP",
+    "DSPReadMailFromDSP",
+    "DSPSendMailToDSP",
+    "DSPCheckMailToDSP",
+    "OSClearContext",
+    "OSSetCurrentContext",
+    "__DSPRegs",
+    "MUST_MATCH",
+    "force_active",
+    "0xDCD10000",
+    "0xDCD10001",
+    "0xDCD10002",
+    "0xDCD10003",
+    "0xDCD10004",
+    "0xCDD10001",
+    "0xCDD10002",
+    "0xCDD10003",
+    "0x80F3A001",
+    "0x80F3C002",
+    "0x80F3A002",
+    "0x80F3B002",
+    "0x80F3D001",
+    "dolphin dsp task scheduler",
+    "DSP mailbox handshake",
+    "rude task"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename DSP mailbox magic constants or introduce enums/macros for 0xDCD100xx and 0xCDD100xx.",
+    "Check whether later DSP matching work reuses the SMB decomp reference strategy.",
+    "Search for subsequent edits to DSPTaskInfo field names or layout after dsp_task.c landed.",
+    "Look for later PRs touching __DSP_boot_task debug prints or the MUST_MATCH unused string.",
+    "Compare other Dolphin SDK asm-to-C conversions that update obj_files.mk and expose new internal prototypes in headers."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,184 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-611",
+  "pr": {
+    "number": 611,
+    "title": "Match dolphin dvd",
+    "url": "https://github.com/doldecomp/melee/pull/611",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-12-17T06:18:03Z",
+    "merged_at": "2022-12-17T06:21:33Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched a large portion of Dolphin DVD code by replacing most of asm/dolphin/dvd/dvd.s with C in src/dolphin/dvd/dvd.c. The PR notes the implementation was \"Modified from prime decomp\". It added DVD state-machine code, callbacks, cancellation/error handling, reset/cover-close logic, low-level DVD command dispatch, and supporting header definitions such as OSAlarm, DVDDriveInfo, DVDReset, and OSPhysicalToCached. Review evidence is minimal: one approval with no body and no inline comments.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "library-port"
+    ],
+    "systems": [
+      "dolphin/dvd",
+      "dolphin/os",
+      "asm",
+      "include",
+      "src"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "asm/dolphin/dvd/dvd.s",
+      "role": "Removed most hand-written/disassembled DVD assembly; diff shows 2667 deleted lines and only a small residual assembly section."
+    },
+    {
+      "path": "src/dolphin/dvd/dvd.c",
+      "role": "Added the C implementation for the DVD state machine and public/internal DVD control functions."
+    },
+    {
+      "path": "src/dolphin/dvd/dvd_private.h",
+      "role": "New private header containing forward declarations for static DVD callback/state functions needed to order the C implementation."
+    },
+    {
+      "path": "include/dolphin/os/OSAlarm.h",
+      "role": "New OSAlarm type/header with OSAlarmHandler and OSAlarm layout used by DVD cover-close reset timing."
+    },
+    {
+      "path": "include/dolphin/dvd/dvd.h",
+      "role": "Added DVDDriveInfo and DVDReset declaration; cleaned DVDFileInfo typedef/formatting."
+    },
+    {
+      "path": "include/dolphin/os/os.h",
+      "role": "Added cached address conversion macros OS_CACHED_REGION_PREFIX, OS_BASE_CACHED, and OSPhysicalToCached."
+    },
+    {
+      "path": "src/dolphin/os/OSSerial.c",
+      "role": "Changed AlarmHandler from global asm to static asm, likely to avoid symbol conflict with the new DVD-side AlarmHandler."
+    }
+  ],
+  "what_changed": [
+    "Converted a large DVD assembly block into C: asm/dolphin/dvd/dvd.s dropped from a 2675-line text section to a small residual section, while src/dolphin/dvd/dvd.c gained 1173 lines.",
+    "Added DVD runtime state globals in dvd.c, including executing, IDShouldBe, bootInfo, PauseFlag, PausingFlag, AutoFinishing, FatalErrorFlag, CurrCommand, Canceling, CancelCallback, ResumeFromHere, CancelLastError, LastError, NumInternalRetry, ResetRequired, FirstTimeInBootrom, DVDInitialized, and LastState.",
+    "Implemented state/callback flow around stateReadingFST, cbForStateReadingFST, cbForStateError, stateTimeout, stateGettingError, CategorizeError, CheckCancel, cbForStateGettingError, unrecovered-error retry callbacks, stateGoToRetry, stateCheckID variants, stateCoverClosed, stateMotorStopped, stateReady, stateBusy, DVDReset, and DVDCancelAsync.",
+    "Modeled boot info as OSBootInfo with magic and fst_start fields, and used bootInfo->magic instead of the earlier boot_magic placeholder.",
+    "Added OSAlarm.h and used OSCreateAlarm/OSSetAlarm style reset delay logic in stateCoverClosed, including an internal AlarmHandler that resets DVD and resumes stateCoverClosed_CMD.",
+    "Added DVDDriveInfo to the public DVD header and used sizeof(DVDDriveInfo) for the inquiry command path.",
+    "Added OSPhysicalToCached macros in os.h to support address conversion needs in the broader DVD implementation.",
+    "Made src/dolphin/os/OSSerial.c's asm AlarmHandler static, which avoids exporting a colliding AlarmHandler name after DVD code introduced its own static AlarmHandler."
+  ],
+  "smart_moves": [
+    "Reused Prime decomp as a starting point instead of reconstructing the entire DVD state machine manually; the PR body explicitly says it was modified from prime decomp.",
+    "Kept the many mutually recursive static state functions manageable by introducing src/dolphin/dvd/dvd_private.h with forward declarations.",
+    "Preserved the original DVD state-machine shape: named states and callbacks mirror labels from the removed asm, such as stateReadingFST, cbForStateGettingError, stateGoToRetry, stateMotorStopped, and stateReady.",
+    "Encoded hardware/drive error behavior in named helper routines such as CategorizeError, stateError, CheckCancel, and stateTimeout, making previously label-heavy assembly control flow searchable and maintainable.",
+    "Matched low-level volatile hardware access explicitly through an extern volatile IO struct at 0xCC006000, including the error register used by cbForStateGettingError.",
+    "Resolved symbol hygiene proactively by making OSSerial.c's existing AlarmHandler static when a DVD AlarmHandler was introduced."
+  ],
+  "decomp_lessons": [
+    "Large SDK subsystems can often be matched by porting from a sibling decomp, but the imported code still needs local adaptation for headers, symbol visibility, struct names, globals, and project style.",
+    "For state-machine decompilation, preserving original state/callback names from assembly labels makes review and future debugging much easier than flattening the logic.",
+    "Private forward-declaration headers can be a practical tactic when many static functions are cyclically referenced; this avoids disruptive function reordering solely for C declaration order.",
+    "When matching SDK code, public headers may need to grow at the same time as source files: here DVDDriveInfo, DVDReset, OSAlarm, and cached-address macros were prerequisites for the C implementation.",
+    "Be alert for accidental global symbol collisions introduced by newly decompiled C functions; marking unrelated asm helpers static can be part of making a new C translation link cleanly.",
+    "Volatile hardware register structs and fixed-address externs are preferable to opaque integer loads once the register layout needed by the function is understood."
+  ],
+  "naming_conventions": [
+    "DVD state functions use lower camel-case with a state prefix, e.g. stateReadingFST, stateGettingError, stateGoToRetry, stateCoverClosed, stateMotorStopped, stateReady, and stateBusy.",
+    "DVD callback functions use cbForState... names, e.g. cbForStateReadingFST, cbForStateGettingError, cbForStateGoToRetry, cbForStateMotorStopped, and cbForStateBusy.",
+    "Internal DVD globals in this slice use SDK-like PascalCase or mixed-case names such as DummyCommandBlock, ResetAlarm, LastState, FatalErrorFlag, ResumeFromHere, LastError, NumInternalRetry, and ResetRequired.",
+    "Public SDK types and APIs retain Dolphin-style prefixes: DVDCommandBlock, DVDFileInfo, DVDDriveInfo, DVDReset, OSAlarm, OSAlarmHandler, and OSPhysicalToCached.",
+    "The imported code uses intType for DVD low-level callback interrupt/status arguments."
+  ],
+  "assembly_or_matching_tactics": [
+    "The core tactic was asm-to-C replacement: 2667 lines deleted from asm/dolphin/dvd/dvd.s and 1173 lines added to src/dolphin/dvd/dvd.c.",
+    "Used small inline helpers, including stateError and CheckCancel, to reproduce recurring assembly sequences without duplicating every callback tail.",
+    "Used magic error constants visible in the assembly, including 0x1234567, 0x1234568, 0x20400, 0x62800, 0x23A00, 0xB5A01, and 0x31100, in the C categorization/timeout paths.",
+    "Matched low-level branch behavior through explicit intType tests: intType == 16 for timeouts, intType & 1 for success-like paths, and intType & 2 for error-like paths.",
+    "Preserved retry/resume behavior through state variables such as LastState, ResumeFromHere, NumInternalRetry, CurrCommand, Canceling, and CancelCallback.",
+    "Used fixed-address externs for hardware and OS data, including IO at 0xCC006000 and __OSBusClock at 0x800000F8.",
+    "Introduced the public/private header declarations required for the C compiler to accept the new ordering and signatures without leaving assembly labels as the primary source."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "RevoSucks",
+      "state": "APPROVED",
+      "submitted_at": "2022-12-17T06:18:39Z",
+      "body": ""
+    },
+    {
+      "note": "No issue comments, review comments, or substantive reviewer feedback were present in the provided PR slice."
+    }
+  ],
+  "searchable_terms": [
+    "pr-611",
+    "Match dolphin dvd",
+    "r-burns",
+    "prime decomp",
+    "asm/dolphin/dvd/dvd.s",
+    "src/dolphin/dvd/dvd.c",
+    "src/dolphin/dvd/dvd_private.h",
+    "include/dolphin/os/OSAlarm.h",
+    "include/dolphin/dvd/dvd.h",
+    "include/dolphin/os/os.h",
+    "src/dolphin/os/OSSerial.c",
+    "stateReadingFST",
+    "cbForStateReadingFST",
+    "cbForStateError",
+    "stateTimeout",
+    "stateGettingError",
+    "CategorizeError",
+    "CheckCancel",
+    "cbForStateGettingError",
+    "cbForUnrecoveredError",
+    "cbForUnrecoveredErrorRetry",
+    "stateGoToRetry",
+    "stateCheckID",
+    "stateCoverClosed",
+    "stateMotorStopped",
+    "stateReady",
+    "stateBusy",
+    "DVDCancelAsync",
+    "DVDReset",
+    "DVDLowRead",
+    "DVDLowRequestError",
+    "DVDLowStopMotor",
+    "DVDLowSeek",
+    "DVDLowAudioBufferConfig",
+    "DVDLowReadDiskID",
+    "DVDLowWaitCoverClose",
+    "DVDLowInquiry",
+    "DVDLowClearCallback",
+    "DVDLowBreak",
+    "DummyCommandBlock",
+    "ResetAlarm",
+    "LastState",
+    "FatalErrorFlag",
+    "Canceling",
+    "CancelCallback",
+    "ResumeFromHere",
+    "NumInternalRetry",
+    "LastError",
+    "DVDDriveInfo",
+    "OSAlarm",
+    "OSPhysicalToCached",
+    "AlarmHandler static"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that refined src/dolphin/dvd/dvd.c after the Prime decomp import.",
+    "Search for subsequent removal of remaining asm/dolphin/dvd/dvd.s residual symbols.",
+    "Check whether OSAlarm.h was later expanded with OSCreateAlarm and OSSetAlarm prototypes.",
+    "Look for later naming cleanup around DVD private globals such as IO.unk0, IO.unk4, tmpBuffer, and ResetAlarm.",
+    "Search for PRs touching DVDCancelAsync or DVD error categorization constants after this match."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

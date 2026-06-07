@@ -1,0 +1,143 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1800",
+  "pr": {
+    "number": 1800,
+    "title": "More table typing",
+    "url": "https://github.com/doldecomp/melee/pull/1800",
+    "state": "MERGED",
+    "author": "lukechampine",
+    "created_at": "2025-08-06T19:03:43Z",
+    "merged_at": "2025-08-07T00:13:28Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Typed more function-pointer table entries across game-mode and stage code, replacing many `UNK_RET ... (UNK_PARAMS)` declarations with concrete signatures such as `void (*)(MinorScene*)`, `void (*)(HSD_GObj*)`, `void (*)(int)`, and StageData callback shapes. The PR also declared and typed the `gm_803DF94C` table via a new `gm_803DF94C_t` struct, adjusted `gm_803DE1B8_MinorScenes` symbol data to 4-byte entries, and expanded the Go `tools/table-typer` utility to understand `MinorScene`, `StageData`, and `gm_803DF94C_t` tables. The author noted this reduced remaining asm tables containing `UNK_RET` functions to 69. decomp.dev reported no GALE01 output changes.",
+  "change_classification": {
+    "primary_type": "table-function-prototype-typing",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "tooling",
+      "symbol-metadata"
+    ],
+    "systems": [
+      "game-mode",
+      "stage",
+      "ground",
+      "config",
+      "tooling"
+    ]
+  },
+  "key_files": [
+    "config/GALE01/symbols.txt",
+    "src/melee/gm/gm_1B03.h",
+    "src/melee/gm/gm_1B03.c",
+    "src/melee/gm/gm_1BA8.h",
+    "src/melee/gm/gm_1BA8.c",
+    "src/melee/gm/gmhomerun.h",
+    "src/melee/gm/types.h",
+    "src/melee/gr/*.h",
+    "src/melee/gr/*.c",
+    "tools/table-typer/c.go",
+    "tools/table-typer/main.go",
+    "tools/table-typer/README.md"
+  ],
+  "what_changed": [
+    "Changed `gm_803DE1B8_MinorScenes` in `config/GALE01/symbols.txt` from `data:byte` to `data:4byte`, consistent with table-pointer/function-pointer interpretation.",
+    "Replaced a large block of `gm_1B03.h` unknown prototypes with `void func(MinorScene*)`, and updated `gm_801B607C` in `gm_1B03.c` from `void(void)` to `void(MinorScene*)`.",
+    "In `gm_1BA8.h`, typed multiple game-mode callbacks as `void(MinorScene*)`, object callbacks as `void(HSD_GObj*)`, and integer callbacks as `void(int)`; corresponding definitions in `gm_1BA8.c` were updated where present.",
+    "Added `gm_803DF94C_t` to `src/melee/gm/types.h` with two function-pointer fields: `void (*x0)(HSD_GObj*)` and `void (*x4)(int)`.",
+    "Declared many `gm_804D43xx`/`gm_804D44xx` objects as `gm_803DF94C_t` and defined `gm_803DF94C[]` as an array of pointers to them in `gm_1BA8.c`; exported it in `gm_1BA8.h`.",
+    "Updated `gmhomerun.h` so `gm_801B98E8` takes `MinorScene*` instead of unknown parameters.",
+    "Typed many stage and target-test ground callbacks across `src/melee/gr` files, including StageData-like signatures such as `void(bool)`, `bool(void)`, `DynamicsDesc*(enum_t)`, and `bool(Vec3*, int, HSD_JObj*)`.",
+    "Expanded `tools/table-typer` table definitions: removed explicit `NumAsmEntries` and now uses `len(tableType.Fields)`; added table layouts for `MinorScene`, `StageData`, and `gm_803DF94C_t`.",
+    "Improved `tools/table-typer` signature rewriting with `FuncSignature.setType`, preserving or trimming parameter names and adding default names when the inferred type has more parameters than the original signature.",
+    "Added `defaultName` logic for generated parameter names, including `gobj` for GObj pointer types, `vec` for `Vec3*`, `jobj` for `HSD_JObj*`, and `arg` otherwise.",
+    "Hardened table-typer parsing slightly: handles missing closing parenthesis by skipping multi-line signatures, parses table declarations with a broader regex, detects `UNK_RET` with `fmt.Appendf`, and only keeps 4-byte asm table entries when extracting asm tables.",
+    "Documented table-typer limitations: it cannot properly parse multiple declarations like `Foo bar[], baz[];`, cannot parse multi-line function signatures, and needs proper C parsing instead of regex/substrings."
+  ],
+  "smart_moves": [
+    "Used table layout knowledge to bulk-convert unknown function prototypes instead of hand-inferring each callback independently.",
+    "Added concrete table-type support to the automation before applying broad header changes, making the same MinorScene/StageData/gm_803DF94C_t inference reusable for future tables.",
+    "Kept callback signatures aligned with actual table slot roles: `MinorScene*` for minor scene callbacks, `HSD_GObj*` for object callbacks, `int` for small mode/index callbacks, and StageData-specific callback signatures for ground stage files.",
+    "Updated C definitions where headers changed, preventing prototype/definition drift for functions like `gm_801B607C`, `gm_801BEC80`, `gm_801BF728`, and StageData callbacks.",
+    "Added the `gm_803DF94C_t` struct before declaring the table array, giving future decomp work a named representation for a previously opaque table.",
+    "Recorded tool limitations in README instead of implying full C parsing support; this is important because regex-based rewriting can silently miss multi-line or multiple declarations.",
+    "decomp.dev reported `No changes` for GALE01, indicating the typing/prototype work preserved output matching."
+  ],
+  "decomp_lessons": [
+    "Function-pointer tables are strong evidence for callback prototypes: infer return and parameter types from the table type, then apply them consistently to headers and definitions.",
+    "When an asm/data table is actually pointer-sized entries, symbol metadata should use `data:4byte`; leaving it as bytes blocks automated table interpretation.",
+    "For MinorScene tables, callback slots in this PR were modeled as `void(MinorScene*)`, and even previously `void(void)` definitions were updated to accept the unused scene pointer.",
+    "For StageData tables, common callback slots include `void(void)`, `void(bool)`, `bool(void)`, `DynamicsDesc*(enum_t)`, and `bool(Vec3*, int, HSD_JObj*)`; future stage typing should compare against this field layout before inventing bespoke signatures.",
+    "Bulk table typing can reduce `UNK_RET` noise without changing codegen, making later decomp work easier to search and reason about.",
+    "Automation that rewrites prototypes must also handle parameter-name count mismatches; preserving existing names where possible and defaulting missing names avoids broken function definitions.",
+    "Regex/substr C parsing is useful for quick wins but fragile; avoid relying on it for multi-line function signatures or multiple declarations on one line unless the tool is upgraded."
+  ],
+  "naming_conventions": [
+    "Kept address-based game-mode symbol names such as `gm_801B607C`, `gm_803DF94C`, and `gm_804D4330` where semantic names were not known.",
+    "Named the new table-entry struct after the table address, `gm_803DF94C_t`, matching existing decomp convention for anonymous/unknown data structures.",
+    "Exported the table as `extern gm_803DF94C_t* gm_803DF94C[]`, preserving the address-based symbol while giving it a concrete element type.",
+    "For generated parameter names in table-typer, pointer object parameters default to `gobj`, `Vec3*` defaults to `vec`, `HSD_JObj*` defaults to `jobj`, and unknown/default parameters use `arg`.",
+    "Stage function names retained existing prefixes such as `grCorneria_`, `grBattle_`, `grTFox_`, etc.; the PR changed types, not symbol naming."
+  ],
+  "assembly_or_matching_tactics": [
+    "Changed table symbol data kind from byte to 4-byte where the table consists of pointer-sized entries.",
+    "Matched asm table entry counts by checking divisibility against `len(tableType.Fields)` rather than a separate `NumAsmEntries`, reducing duplicated table metadata in the tool.",
+    "During asm table extraction, skipped non-4-byte entries with a TODO for other sizes; this focuses function-pointer inference on entries that can name functions.",
+    "Used table-typer's `UNK_RET` candidate scan to find declarations that could be rewritten to concrete table-derived signatures.",
+    "Validated the PR with decomp.dev, which reported no GALE01 changes."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided slice.",
+    "The only issue comment was from decomp.dev: `Report for GALE01 ... No changes`.",
+    "The PR body states the motivation/outcome: declarations were added for `gm_803DF94C`, and the remaining asm tables containing `UNK_RET` functions dropped to 69."
+  ],
+  "searchable_terms": [
+    "PR1800",
+    "More table typing",
+    "table-typer",
+    "UNK_RET",
+    "UNK_PARAMS",
+    "MinorScene",
+    "StageData",
+    "StageCallbacks",
+    "gm_803DF94C",
+    "gm_803DF94C_t",
+    "gm_803DE1B8_MinorScenes",
+    "gm_1B03",
+    "gm_1BA8",
+    "gmhomerun",
+    "DynamicsDesc",
+    "HSD_GObj",
+    "Ground_GObj",
+    "Vec3",
+    "HSD_JObj",
+    "data:4byte",
+    "decomp.dev no changes",
+    "grbattle",
+    "grcorneria",
+    "grflatzone",
+    "grfourside",
+    "grgarden",
+    "grstadium",
+    "grtest",
+    "target test stage callbacks"
+  ],
+  "follow_up_queries": [
+    "Find remaining asm tables containing `UNK_RET` after PR #1800 and compare them against table-typer supported layouts.",
+    "Search for `MinorScene` callback declarations that still use `UNK_RET` or `UNK_PARAMS`.",
+    "Search for `StageData` tables with callback prototypes still declared as unknown or mismatched with table-typer's StageData field layout.",
+    "Audit declarations with multiple variables per line or multi-line function signatures before running `tools/table-typer`, because the README says those cases are not parsed properly.",
+    "Search for uses of `gm_803DF94C` and `gm_803DF94C_t` to see whether fields `x0` and `x4` can be given semantic names."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,102 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-507",
+  "pr": {
+    "number": 507,
+    "title": "Match `DSPAddTask`",
+    "url": "https://github.com/doldecomp/melee/pull/507",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2022-08-27T23:36:48Z",
+    "merged_at": "2022-08-27T23:38:56Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Dolphin DSP library function `DSPAddTask` in C and removed its handwritten assembly implementation from `asm/dolphin/dsp/dsp.s`. The new C implementation disables interrupts, inserts the task into the DSP task queue, initializes `task->state` and `task->flags`, restores interrupts, boots the task if it became `__DSP_first_task`, and returns the input task pointer. The PR was tracked in issue #480 and had no review comments in the provided slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c-port",
+      "dolphin-sdk"
+    ],
+    "systems": [
+      "dolphin",
+      "dsp",
+      "asm",
+      "src"
+    ]
+  },
+  "key_files": [
+    "asm/dolphin/dsp/dsp.s",
+    "src/dolphin/dsp/dsp.c"
+  ],
+  "what_changed": [
+    "Deleted the `DSPAddTask` assembly body from `asm/dolphin/dsp/dsp.s`.",
+    "Added a C implementation of `DSPAddTask` to `src/dolphin/dsp/dsp.c`.",
+    "The C function calls `OSDisableInterrupts`, saves the returned interrupt state in `intrEnabled`, calls `__DSP_insert_task(task)`, sets `task->state = 0`, sets `task->flags = 1`, restores interrupts with `OSRestoreInterrupts(intrEnabled)`, conditionally calls `__DSP_boot_task(task)` when `task == __DSP_first_task`, and returns `task`.",
+    "Nearby formatting in `src/dolphin/dsp/dsp.c` was adjusted, including spacing around casts, shifts, and `return` expressions.",
+    "The diff shows a deliberately odd-looking extra standalone semicolon after `return (HW_REG(0xCC005004, u16) >> 15) & 1;` in `DSPCheckMailFromDSP`, likely retained for matching/codegen reasons, though the slice does not explain it."
+  ],
+  "smart_moves": [
+    "The matched C mirrors the original assembly control flow closely: disable interrupts, insert task, write two task fields, restore interrupts, then perform the first-task boot check outside the interrupt-disabled section.",
+    "Using `BOOL intrEnabled = OSDisableInterrupts();` preserves the original interrupt state returned in r3 and later passed to `OSRestoreInterrupts`, matching the assembly's r31 save/restore pattern.",
+    "The function returns the original `task` pointer after all side effects, matching the assembly's final `mr r3, r30` before return.",
+    "The condition `if (task == __DSP_first_task) __DSP_boot_task(task);` directly models the post-restore compare and conditional branch/call sequence from the assembly.",
+    "Field names `state` and `flags` on `DSPTaskInfo` are validated by the offsets written in assembly: offset 0 receives 0 and offset 8 receives 1."
+  ],
+  "decomp_lessons": [
+    "For SDK-style queue functions, preserve the exact critical-section boundary: here `__DSP_insert_task` and field initialization happen with interrupts disabled, but `__DSP_boot_task` happens after interrupts are restored.",
+    "When porting an assembly function, verify the return value explicitly; this function returns the input `DSPTaskInfo*`, not a status code.",
+    "Assembly register lifetimes can guide clean C variable naming: the saved interrupt state from `OSDisableInterrupts` became `intrEnabled`, while the task pointer remained the return value.",
+    "Small formatting or syntactic quirks in neighboring code, including seemingly redundant semicolons, may be intentional matching artifacts and should not be casually cleaned up during a matching PR.",
+    "Removing an assembly symbol after adding the matching C version keeps the decompilation progress clear and avoids duplicate symbol definitions."
+  ],
+  "naming_conventions": [
+    "`DSPAddTask` uses the public Dolphin DSP API naming style with a `DSP` prefix and PascalCase.",
+    "Internal Dolphin DSP helpers and globals use the double-underscore `__DSP_` prefix, as seen in `__DSP_insert_task`, `__DSP_boot_task`, and `__DSP_first_task`.",
+    "The task type is named `DSPTaskInfo`, and the new function signature is `DSPTaskInfo* DSPAddTask(DSPTaskInfo* task)`.",
+    "The saved interrupt-state local is named `intrEnabled`, matching the boolean-like return value used by `OSRestoreInterrupts`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Translated the deleted assembly prologue/body/epilogue into a compact C function without changing observable sequencing.",
+    "Matched the r30-preserved input pointer by using `task` consistently for insertion, field writes, comparison, boot call, and return.",
+    "Matched the r31-preserved interrupt state by storing `OSDisableInterrupts()` in a local and passing that exact local to `OSRestoreInterrupts`.",
+    "Preserved the original order of side effects: `__DSP_insert_task`, `task->state = 0`, `task->flags = 1`, interrupt restore, compare against `__DSP_first_task`, optional `__DSP_boot_task`.",
+    "The assembly removal confirms the C emitted matching code for `DSPAddTask` closely enough to retire the handwritten version."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR507",
+    "DSPAddTask",
+    "DSPTaskInfo",
+    "DSPTaskInfo state",
+    "DSPTaskInfo flags",
+    "__DSP_insert_task",
+    "__DSP_boot_task",
+    "__DSP_first_task",
+    "OSDisableInterrupts",
+    "OSRestoreInterrupts",
+    "Dolphin DSP",
+    "dsp.c",
+    "dsp.s",
+    "asm to C",
+    "match DSPAddTask",
+    "tracked in #480",
+    "ribbanya"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs touching `DSPTaskInfo` to confirm or refine the meaning of `state` and `flags`.",
+    "Search for other Dolphin DSP task queue functions such as `DSPAssertTask`, `__DSP_insert_task`, and `__DSP_boot_task` for reusable matching patterns.",
+    "Check issue #480 for broader tracking context around DSP decompilation progress.",
+    "Investigate whether the standalone semicolon in `DSPCheckMailFromDSP` was required for matching or was later cleaned up."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

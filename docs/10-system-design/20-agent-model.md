@@ -48,7 +48,7 @@ Each agent receives:
 - A system prompt that defines authority, role boundaries, safety rules, and
   output contract.
 - An initial user prompt that contains the current run state or assigned target
-  packet, selected knowledge, available tools, and required output path.
+  packet, selected context, available resources/tools, and required output path.
 
 Rendered prompts are artifacts. They are part of the audit trail and should be
 preserved beside agent output.

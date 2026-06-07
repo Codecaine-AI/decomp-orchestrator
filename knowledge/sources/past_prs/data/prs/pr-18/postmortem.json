@@ -1,0 +1,140 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-18",
+  "pr": {
+    "number": 18,
+    "title": "Split text.s into 2 parts to pull out some PPC EABI Runtime files",
+    "url": "https://github.com/doldecomp/melee/pull/18",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2020-07-09T04:37:19Z",
+    "merged_at": "2020-07-09T13:05:34Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Split the monolithic assembly text section into multiple assembly files so known CodeWarrior/PPC EABI runtime routines could be isolated and named. The PR introduced dedicated asm files for runtime support such as Gecko_setjmp, NMWException, __init_cpp_exceptions, __va_arg, and runtime.s, moved most remaining text into asm/text_2.s, left a small asm/text_1.s boundary region, updated ldscript.lcf, and renamed callsites from generic func_80322xxx labels to runtime helper names like __cvt_fp2unsigned, __cvt_dbl_usll, __cvt_sll_dbl, __div2i, __shl2i, and __shr2u.",
+  "change_classification": {
+    "primary_type": "asm-split-and-runtime-symbol-identification",
+    "categories": [
+      "code-change",
+      "assembly-organization",
+      "symbol-naming",
+      "linker-script-update"
+    ],
+    "systems": [
+      "asm",
+      "PPC EABI runtime",
+      "CodeWarrior runtime",
+      "linker-script",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "asm/text_1.s",
+    "asm/text_2.s",
+    "asm/runtime.s",
+    "asm/Gecko_setjmp.s",
+    "asm/NMWException.s",
+    "asm/__init_cpp_exceptions.s",
+    "asm/__va_arg.s",
+    "ldscript.lcf",
+    "asm/aobj.s",
+    "asm/cobj.s",
+    "asm/code_80008D30.s",
+    "asm/code_8037E708.s",
+    "asm/perf.s"
+  ],
+  "what_changed": [
+    "Split the prior large text assembly into asm/text_1.s and asm/text_2.s to create boundaries around identified PPC EABI runtime code.",
+    "Added asm/runtime.s containing extracted runtime helper code; the context only gives file-level evidence and callsite names, not the full contents.",
+    "Added asm/Gecko_setjmp.s with __setjmp and longjmp implementations saving/restoring LR, CR, r1/r2, GPRs r13-r31, FPRs f14-f31, and FPSCR state.",
+    "Added asm/NMWException.s with __destroy_global_chain, __unregister_fragment, and __register_fragment symbols for global destructor chain / exception fragment registration logic.",
+    "Added asm/__init_cpp_exceptions.s with GetR2, __init_cpp_exceptions, and __fini_cpp_exceptions around fragment registration and unregistering state stored in SDA labels.",
+    "Added asm/__va_arg.s with the __va_arg runtime implementation.",
+    "Updated callsites in existing assembly files to replace generic labels with identified runtime helper names, including func_803228C0 to __cvt_fp2unsigned, func_80322E54 to __cvt_dbl_usll, func_80322DA0 to __cvt_sll_dbl, func_80322A08 to __div2i, func_80322D30 to __shl2i, and func_80322D54 to __shr2u.",
+    "Updated ldscript.lcf to account for the newly separated assembly files and text boundaries.",
+    "Touched asm/aobj.s, asm/cobj.s, asm/code_80008D30.s, asm/code_8037E708.s, and asm/perf.s primarily to update branch target symbol names after runtime extraction."
+  ],
+  "smart_moves": [
+    "Created file boundaries around known vendor/runtime code instead of leaving all code in a single monolithic text.s, making future decompilation and library identification easier.",
+    "Used recognized CodeWarrior/PPC EABI routine names for extracted symbols, improving semantic searchability and reducing reliance on address-based func_ labels.",
+    "Preserved address-annotated assembly while only changing labels and file organization, which is a low-risk way to improve structure without changing machine code intent.",
+    "Renamed callsites across unrelated game/engine assembly to point at the newly identified runtime helpers, making cross-file dependencies explicit.",
+    "Separated standard support routines such as setjmp/longjmp, varargs handling, C++ exception initialization/finalization, and integer/float conversion helpers into dedicated files that can later be matched against known runtime libraries."
+  ],
+  "decomp_lessons": [
+    "When a contiguous block matches known compiler runtime code, isolate it into vendor/runtime-specific assembly files before attempting higher-level decompilation.",
+    "Runtime library recognition can unlock many generic func_ labels at once because game code often calls the same conversion, division, shift, varargs, and exception helpers repeatedly.",
+    "Linker script updates are part of assembly splitting work; file boundaries must preserve original section order and addresses.",
+    "Callsite relabeling is valuable even before full C decompilation because it documents ABI/runtime semantics and improves later matching efforts.",
+    "For CodeWarrior/PPC EABI support code, look for clusters around __va_arg, __setjmp/longjmp, __register_fragment, __unregister_fragment, __init_cpp_exceptions, __fini_cpp_exceptions, GetR2, __div2i, __shl2i, __shr2u, __cvt_fp2unsigned, __cvt_dbl_usll, and __cvt_sll_dbl."
+  ],
+  "naming_conventions": [
+    "Use standard runtime names with leading double underscores for compiler support helpers: __va_arg, __setjmp, __init_cpp_exceptions, __fini_cpp_exceptions, __register_fragment, __unregister_fragment, __destroy_global_chain.",
+    "Use known conversion helper names instead of address-derived names: __cvt_fp2unsigned, __cvt_dbl_usll, __cvt_sll_dbl.",
+    "Use known 64-bit arithmetic helper names instead of generic func labels: __div2i, __shl2i, __shr2u.",
+    "GetR2 was capitalized exactly as shown in the extracted __init_cpp_exceptions assembly.",
+    "Assembly file names mirror recognized runtime modules/symbols, including Gecko_setjmp.s, NMWException.s, __init_cpp_exceptions.s, and __va_arg.s."
+  ],
+  "assembly_or_matching_tactics": [
+    "Identify PPC EABI runtime functions by instruction patterns and ABI behavior: setjmp saves LR/CR/r1/r2, GPR nonvolatiles, FPR nonvolatiles, and FPSCR; longjmp restores them and returns 1 when the provided value is zero.",
+    "Use C++ exception fragment registration patterns to identify __register_fragment, __unregister_fragment, __init_cpp_exceptions, and __fini_cpp_exceptions, including SDA-stored state and GetR2 usage.",
+    "Recognize varargs machinery by register-save-area and overflow-area manipulation in __va_arg.",
+    "After extracting a runtime region, update all branch labels in remaining assembly so calls refer to semantic runtime symbols while preserving original branch opcodes/addresses.",
+    "Use a split text_1/text_2 approach when only a middle runtime block is ready to extract and the rest of the text section still needs to remain assembly."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-18",
+    "PsiLupan",
+    "split_runtime",
+    "text.s",
+    "text_1.s",
+    "text_2.s",
+    "runtime.s",
+    "PPC EABI Runtime",
+    "CodeWarrior runtime",
+    "Gecko_setjmp",
+    "__setjmp",
+    "longjmp",
+    "NMWException",
+    "__destroy_global_chain",
+    "__register_fragment",
+    "__unregister_fragment",
+    "__init_cpp_exceptions",
+    "__fini_cpp_exceptions",
+    "GetR2",
+    "__va_arg",
+    "__cvt_fp2unsigned",
+    "__cvt_dbl_usll",
+    "__cvt_sll_dbl",
+    "__div2i",
+    "__shl2i",
+    "__shr2u",
+    "ldscript.lcf",
+    "asm/aobj.s",
+    "asm/cobj.s",
+    "asm/code_80008D30.s",
+    "asm/code_8037E708.s",
+    "asm/perf.s",
+    "SDA_BASE",
+    "runtime helper",
+    "assembly split",
+    "symbol identification"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that decompile or replace asm/runtime.s with C sources.",
+    "Find later PRs touching __va_arg or CodeWarrior varargs ABI structs.",
+    "Find later PRs that further split text_1.s or text_2.s into named library files.",
+    "Find later PRs involving PPC EABI helpers __div2i, __shl2i, __shr2u, __cvt_fp2unsigned, __cvt_dbl_usll, or __cvt_sll_dbl.",
+    "Find linker script changes that depended on this runtime extraction."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

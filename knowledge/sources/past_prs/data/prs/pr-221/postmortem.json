@@ -1,0 +1,139 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-221",
+  "pr": {
+    "number": 221,
+    "title": "Split out lbheap and fix an sdata2 split",
+    "url": "https://github.com/doldecomp/melee/pull/221",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-23T05:06:54Z",
+    "merged_at": "2021-12-23T05:06:58Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Separated the lb heap assembly block out of asm/melee/lb/code_8000F9F8.s into a new asm/melee/lb/lbheap.s object, added that object to obj_files.mk, and corrected an sdata2 placement issue by moving lbl_804D7C80 through lbl_804D7CC0 constants into asm/melee/lb/code_80019230.s. The PR is mostly a mechanical assembly/object split with data-section hygiene, not a C decompilation change.",
+  "change_classification": {
+    "primary_type": "assembly_object_split",
+    "categories": [
+      "asm split",
+      "build configuration",
+      "data section fix",
+      "sdata2 relocation",
+      "module organization"
+    ],
+    "systems": [
+      "melee/lb",
+      "lbheap",
+      "heap management",
+      "asm",
+      "obj_files.mk",
+      "sdata2"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "asm/melee/lb/code_8000F9F8.s",
+      "role": "source assembly file that had the lbheap block and related data removed",
+      "evidence": "752 deleted lines, including func_800158D0 through the lbheap report/data symbols and sdata/sdata2 labels"
+    },
+    {
+      "path": "asm/melee/lb/lbheap.s",
+      "role": "new split assembly module for lbheap",
+      "evidence": "723 added lines; contains .text functions starting at func_800158D0, .data strings such as \"lbheap.c\", .bss lbl_80431FA0, and .sdata lbl_804D37A0"
+    },
+    {
+      "path": "asm/melee/lb/code_80019230.s",
+      "role": "target for corrected sdata2 split",
+      "evidence": "46 added lines defining lbl_804D7C80 through lbl_804D7CC0 in .section .sdata2"
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "build object registration",
+      "evidence": "added $(BUILD_DIR)/asm/melee/lb/lbheap.o to TEXT_O_FILES after code_8000F9F8.o"
+    }
+  ],
+  "what_changed": [
+    "Removed a contiguous lbheap-related assembly/data block from asm/melee/lb/code_8000F9F8.s.",
+    "Created asm/melee/lb/lbheap.s with macros.inc, a .text range comment for 0x8000F9F8-0x80016158, and the moved functions beginning at func_800158D0.",
+    "Moved lbheap data into the new file, including lbl_803BA380 data, strings such as \"lbheap.c\" and \"[lbHeap] -- Report --\\n\", bss symbol lbl_80431FA0, and sdata symbol lbl_804D37A0.",
+    "Added asm/melee/lb/lbheap.o to obj_files.mk so the new assembly file participates in the build link order.",
+    "Fixed an sdata2 split by removing lbl_804D7C80 through lbl_804D7CC0 from code_8000F9F8.s and appending them to asm/melee/lb/code_80019230.s under .section .sdata2."
+  ],
+  "smart_moves": [
+    "Used the source string \"lbheap.c\" as evidence for naming the new assembly module lbheap.s, giving future decompilation work a more meaningful file boundary than code_8000F9F8.s.",
+    "Kept build order explicit by adding lbheap.o immediately after code_8000F9F8.o in TEXT_O_FILES, preserving the local object sequence around the split.",
+    "Separated the lbheap module while also correcting section ownership for trailing sdata2 constants, avoiding a split that would leave constants attached to the wrong object.",
+    "The diff appears mostly mechanical: deleted assembly/data from one file and reintroduced it in the new file or corrected file, which is a low-risk way to improve module boundaries before C decompilation."
+  ],
+  "decomp_lessons": [
+    "When an assembly blob contains clear embedded source-file strings such as \"lbheap.c\", split the blob into a named module before attempting C work.",
+    "A file split must account for all sections, not just .text. This PR moved .data, .bss, and .sdata for lbheap into lbheap.s while handling unrelated .sdata2 constants separately.",
+    "Do not assume nearby sdata2 labels belong to the newly split module. Here lbl_804D7C80-lbl_804D7CC0 were moved to code_80019230.s instead of lbheap.s, implying section boundary/order mattered more than textual proximity.",
+    "After adding a new asm file, update obj_files.mk in the correct link-order position; otherwise matching can fail even if the assembly contents are unchanged.",
+    "Large anonymous function ranges can be made more searchable and reviewable by carving out known subsystems while preserving existing labels until semantic names are available."
+  ],
+  "naming_conventions": [
+    "New assembly file name lbheap.s mirrors the embedded source filename string \"lbheap.c\".",
+    "Existing unknown symbol names were preserved, e.g. func_800158D0, func_80015900, lbl_80431FA0, lbl_804D37A0, and lbl_804D7C80, rather than inventing semantic names without evidence.",
+    "The object path follows the project convention $(BUILD_DIR)/asm/melee/lb/<module>.o for undecompiled lb assembly modules."
+  ],
+  "assembly_or_matching_tactics": [
+    "Perform assembly splits by moving entire contiguous labeled regions and their associated section data, preserving labels and instruction text.",
+    "Maintain explicit section directives in the new file: .text, .data, .bss, and .sdata are present in lbheap.s.",
+    "For small-data constants, preserve exact labels, alignment, and .4byte payloads when relocating between assembly files.",
+    "Use obj_files.mk link order as part of matching strategy; the new lbheap.o was inserted directly after code_8000F9F8.o.",
+    "The sdata2 constants lbl_804D7C80, lbl_804D7C84, lbl_804D7C88, lbl_804D7C8C, lbl_804D7C90, lbl_804D7C94, lbl_804D7C98, lbl_804D7CA0, lbl_804D7CA8, lbl_804D7CB0, lbl_804D7CB8, and lbl_804D7CC0 were preserved byte-for-byte while moved under .section .sdata2 in code_80019230.s."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review bodies were present in the provided PR slice, so there is no direct reviewer feedback to extract."
+  ],
+  "searchable_terms": [
+    "pr-221",
+    "PsiLupan",
+    "lb-split",
+    "Split out lbheap and fix an sdata2 split",
+    "asm/melee/lb/lbheap.s",
+    "asm/melee/lb/code_8000F9F8.s",
+    "asm/melee/lb/code_80019230.s",
+    "obj_files.mk",
+    "lbheap.c",
+    "lbHeap",
+    "sdata2",
+    "lbl_804D7C80",
+    "lbl_804D7CC0",
+    "lbl_80431FA0",
+    "lbl_804D37A0",
+    "lbl_803BA380",
+    "func_800158D0",
+    "func_800158E8",
+    "func_80015900",
+    "func_80015BB8",
+    "func_80015BD0",
+    "func_80015CA8",
+    "func_80015D6C",
+    "func_80015DF8",
+    "OSCreateHeap",
+    "OSDestroyHeap",
+    "OSDisableInterrupts",
+    "OSRestoreInterrupts",
+    "HSD_GetHeap",
+    "HSD_MemAlloc",
+    "HSD_Free"
+  ],
+  "follow_up_queries": [
+    "Which later PR decompiled asm/melee/lb/lbheap.s into C?",
+    "What struct is represented by lbl_80431FA0 entries of size 0x1c?",
+    "Why do lbl_804D7C80-lbl_804D7CC0 belong after code_80019230.s rather than lbheap.s?",
+    "Are func_800158D0 through func_80016158 later renamed to lbHeap APIs?",
+    "Does obj_files.mk link-order placement around code_8000F9F8.o affect other lb module splits?"
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

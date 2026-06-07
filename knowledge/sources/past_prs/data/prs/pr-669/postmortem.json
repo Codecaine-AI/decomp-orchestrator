@@ -1,0 +1,178 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-669",
+  "pr": {
+    "number": 669,
+    "title": "Fix `implicit-function-declaration` warnings, pass 10",
+    "url": "https://github.com/doldecomp/melee/pull/669",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-12T06:49:21Z",
+    "merged_at": "2023-01-12T08:29:04Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Pass 10 of implicit-function-declaration cleanup moved large fighter type/enum/struct definitions out of `ft/fighter.h` into new `ft/types.h`, added missing headers/prototypes across player, fighter, stage, item, PAD, and game-mode code, and reorganized platform/MSL standard typedefs so `<stddef.h>` resolves through `src/MSL`. The PR also made matching-sensitive type fixes, notably introducing `uint` as `unsigned int` separate from `u32`/`unsigned long`, using `U32_MAX`/`F32_MAX`, and adjusting player APIs and KO counters to preserve unsigned-int comparison codegen.",
+  "change_classification": {
+    "primary_type": "implicit-declaration header/prototype fix",
+    "categories": [
+      "fix",
+      "headers",
+      "types-structs",
+      "decomp-matching",
+      "include-path-cleanup",
+      "prototype-correction"
+    ],
+    "systems": [
+      "MSL",
+      "Runtime",
+      "fighter",
+      "player",
+      "stage",
+      "item",
+      "Dolphin OS/PAD",
+      "interface",
+      "collision",
+      "game-mode",
+      "baselib",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "Makefile",
+    "compile_flags.txt",
+    "src/MSL/stddef.h",
+    "src/stddef.h",
+    "src/Runtime/platform.h",
+    "src/melee/ft/fighter.h",
+    "src/melee/ft/types.h",
+    "src/melee/pl/player.c",
+    "src/melee/pl/player.h",
+    "src/dolphin/os/OSReset.c",
+    "src/dolphin/os/OSReset.h",
+    "src/dolphin/pad/Pad.h",
+    "src/melee/lb/lbcommand.c",
+    "src/math.h",
+    "src/string.h",
+    "src/cstring.h"
+  ],
+  "what_changed": [
+    "Added `src/MSL/stddef.h` with `wchar_t`, `ssize_t`, `size_t`, `intptr_t`, `uintptr_t`, and `NULL`; removed the old root `src/stddef.h` shim.",
+    "Added `src/MSL` to both `SYSTEM_INCLUDE_DIRS` in `Makefile` and `compile_flags.txt` so standard-style includes such as `<stddef.h>` resolve without using nonstandard `<MSL/stddef.h>` paths.",
+    "Updated `Runtime/platform.h` to include `<stddef.h>`, define `MWERKS_GNUC`, add `typedef unsigned int uint`, move stddef-like typedefs out, simplify `TRUE`/`FALSE`, remove `NULL`, and replace a local `FLT_MAX` macro with `U8_MAX`, `U16_MAX`, `U32_MAX`, and `F32_MAX`.",
+    "Moved roughly 2000 lines of fighter enums, action IDs, flags, structs, and fighter data declarations from `src/melee/ft/fighter.h` into new `src/melee/ft/types.h`; `fighter.h` now includes `ft/types.h`.",
+    "Replaced a large block of local `extern` declarations in `player.c` with real includes for fighter, game-mode, interface, player, and baselib headers.",
+    "Changed many `player.c`/`player.h` signatures and locals from `s32`/`u32` to matching-sensitive `int`, `uint`, or `enum_t`, and replaced magic sizes like `6`/`33` with `PL_SLOT_MAX`/`FTKIND_MAX`.",
+    "Changed `StaticPlayer::kos_by_player` from `s32[6]` to `uint[6]`, matching code that does unsigned comparisons while avoiding `u32` because that typedef maps to `unsigned long` and did not match.",
+    "Added or corrected prototypes in headers such as `Pad.h`, `ft_unknown_006.h`, `ftdata.h`, `code_801601C4.h`, `pl_unknown_001.h`, item/stage/interface headers, and related C files to eliminate implicit function declarations.",
+    "Touched `OSReset.c` to use more precise `BOOL` naming and control-flow style, add `MUST_MATCH` unused stack padding, call `__PADDisableRecalibration` through a declared prototype, and clean up reset constants.",
+    "Adjusted `math.h` pragmas to be guarded for Metrowerks and changed `lbcommand.c`/`ftlib.c` float-maximum initialization sites to use `F32_MAX`."
+  ],
+  "smart_moves": [
+    "Moved shared fighter types to `ft/types.h` specifically to avoid circular dependencies instead of leaving large definitions in `fighter.h`.",
+    "Resolved standard-header layering by adding `src/MSL` to the include path, preserving standard-style `<stddef.h>` includes rather than hardcoding `<MSL/stddef.h>` in consumers.",
+    "Introduced `uint` to represent HAL-style/default `unsigned int` separately from project `u32` (`unsigned long`), which enabled matching for unsigned comparisons without lying about the ABI type.",
+    "Converted local implicit-declaration bandaids in `player.c` into real header dependencies, improving global type checking and reducing duplicated extern prototypes.",
+    "Used symbolic maxima (`U32_MAX`, `F32_MAX`) instead of magic literals where the decomp needed exact platform-sized constants while keeping callsites readable.",
+    "Used `MUST_MATCH` guarded unused stack arrays to preserve known stack layout/matching behavior without pretending the variables have semantic use."
+  ],
+  "decomp_lessons": [
+    "When header inclusion creates cycles, split pure shared types/enums/structs into a dedicated `types.h` rather than forcing large subsystem headers to include each other.",
+    "`u32` is not always a safe replacement for an unsigned integer in matching work: in this tree `u32` is `unsigned long`, while some HAL code appears to rely on C `int`/`unsigned int` width and comparison behavior.",
+    "Fixing implicit-function-declaration warnings should usually mean adding/correcting prototypes in the owning header and including that header, not adding file-local externs.",
+    "Keep C standard library compatibility by putting MSL headers on the system include path; consumers should be able to write `<stddef.h>` and `<string.h>`-style includes.",
+    "Platform-wide typedef and constant knowledge belongs in `Runtime/platform.h`; standard typedefs and `NULL` belong in `stddef.h` according to review feedback.",
+    "For matching-sensitive unused locals, document them as unused stack and guard with `#ifdef MUST_MATCH` so intent is clear.",
+    "Replacing magic array bounds with known enum/slot constants like `FTKIND_MAX` and `PL_SLOT_MAX` improves safety while staying faithful when the constants are already established."
+  ],
+  "naming_conventions": [
+    "`src/melee/ft/types.h` uses include guard `MELEE_FT_TYPES_H` and centralizes fighter type names such as `FighterKind`, `CharacterKind`, `ftCommonAction`, `Fighter`, and fighter flags.",
+    "Use `PL_SLOT_MAX` instead of literal player slot count `6` and `FTKIND_MAX` instead of literal fighter mapping count `33`.",
+    "Use `uint` for HAL/default unsigned-int cases where `u32`/`unsigned long` breaks matching.",
+    "Use all-caps max-value macros in platform headers: `U8_MAX`, `U16_MAX`, `U32_MAX`, `F32_MAX`.",
+    "Boolean macros were normalized from parenthesized `#define TRUE (1)` / `FALSE (0)` to `#define TRUE 1` / `FALSE 0`.",
+    "Helper naming was cleaned up from `hasExtraFighterID` to `hasExtraFighterId`, matching project-style mixed-case `Id` rather than all-caps `ID` in that local helper.",
+    "Unknown or matching-only data was documented with `@todo`, including comments such as unused stack and suspected duplicate structs."
+  ],
+  "assembly_or_matching_tactics": [
+    "Changed `kos_by_player` and related accessors to `uint` so comparisons such as `kos < U32_MAX` match unsigned-int behavior; review explicitly notes `u32` would not match.",
+    "Kept exact float maximum semantics through `F32_MAX 3.4028235E38`, used in `ftlib.c` min-distance/min-diff initialization and discussed for `lbcommand.c` timer initialization.",
+    "Added `#ifdef MUST_MATCH` unused stack byte arrays in player and OS reset code to preserve stack layout only when matching is required.",
+    "Changed function parameter and local types in player routines from fixed-width aliases to `int`, `uint`, or `enum_t` where evidence indicated generated code depended on default C integer types.",
+    "OS reset cleanup preserved control-flow shape with explicit `continue` in loops and `while (...) continue;` patterns in places likely relevant to matching.",
+    "Moved standard typedefs out of `Runtime/platform.h` into MSL `stddef.h`, then included `<stddef.h>` from platform to keep type availability without duplicate typedef definitions."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "file": "src/melee/ft/fighter.h",
+      "feedback": "Fighter definitions were moved to `ft/types.h` to avoid circular dependencies."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/melee/pl/player.h",
+      "feedback": "`u32` would not match for `kos_by_player`; the field is used in unsigned comparisons, supporting the idea that HAL's default data type was `int` rather than `long`."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/stddef.h",
+      "feedback": "`stddef.h` content was moved to `MSL`."
+    },
+    {
+      "author": "r-burns",
+      "file": "src/string.h",
+      "feedback": "Including a standard header through a nonstandard path defeats the purpose; `src/MSL` should be on the include path."
+    },
+    {
+      "author": "r-burns",
+      "file": "src/melee/lb/lbcommand.c",
+      "feedback": "Suggested using standard `FLT_MAX`; subsequent discussion accepted leaving a hardcoded/project `F32_MAX` for now to guarantee f32 bit-for-bit behavior."
+    },
+    {
+      "author": "r-burns",
+      "file": "src/Runtime/platform.h",
+      "feedback": "`NULL` also belongs in `stddef.h`, though the reviewer said it did not need to be fixed there immediately."
+    }
+  ],
+  "searchable_terms": [
+    "implicit-function-declaration",
+    "pass 10",
+    "src/MSL/stddef.h",
+    "SYSTEM_INCLUDE_DIRS src/MSL",
+    "compile_flags -Isrc/MSL",
+    "Runtime/platform.h uint",
+    "F32_MAX",
+    "U32_MAX",
+    "NULL stddef",
+    "ft/types.h",
+    "fighter.h circular dependencies",
+    "FighterKind",
+    "CharacterKind",
+    "ftCommonAction",
+    "PL_SLOT_MAX",
+    "FTKIND_MAX",
+    "kos_by_player",
+    "HAL default int not long",
+    "u32 will not match",
+    "MUST_MATCH unused stack",
+    "Player_UpdateKOsBySlot",
+    "Pad.h __PADDisableRecalibration",
+    "OSReset.c",
+    "lbcommand FLT_MAX F32_MAX"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that further split large subsystem headers into `types.h` files to break circular includes.",
+    "Search for remaining uses of `u32` where `uint` or `int` may be required for unsigned-int matching.",
+    "Audit whether `NULL` fully migrated to MSL `stddef.h` and whether all consumers include it through `<stddef.h>`.",
+    "Look for later resolution of the `F32_MAX` versus `FLT_MAX` platform constant discussion.",
+    "Search for `MUST_MATCH` unused stack comments added after this PR to identify reusable stack-preservation patterns."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

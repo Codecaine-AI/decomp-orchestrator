@@ -1,0 +1,143 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1767",
+  "pr": {
+    "number": 1767,
+    "title": "itdrmariopill.c matches",
+    "url": "https://github.com/doldecomp/melee/pull/1767",
+    "state": "MERGED",
+    "author": "lukechampine",
+    "created_at": "2025-07-29T18:50:03Z",
+    "merged_at": "2025-07-30T00:01:53Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Dr. Mario pill item source file, described by the author as their first 100% match. The PR added the Dr. Mario pill ItemStateTable, implemented several spawn/setup entry points, adjusted function prototypes in the header, and refactored local code shape with helper macros, inline helpers, and no-inline wrapper chains to satisfy matching constraints. Review discussion specifically called out the wrapper-chain approach as suspicious and suggested that a cleaner future solution would be to find the original call chain, possibly through Mario fireball or related item code.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "item-state-table",
+      "spawn-logic",
+      "code-shape-refactor"
+    ],
+    "systems": [
+      "item",
+      "Dr. Mario pill",
+      "fighter-item interaction"
+    ]
+  },
+  "key_files": [
+    "src/melee/it/items/itdrmariopill.c",
+    "src/melee/it/items/itdrmariopill.h"
+  ],
+  "what_changed": [
+    "Added forward declarations for Dr. Mario pill item state callbacks and defined ItemStateTable it_803F75D0 with seven state entries using callbacks such as it_802C0C0C, it_802C0C68, it_802C0CC4, it_802C0E48, it_802C1114, it_802C1148, it_802C1234, it_802C1340, and it_802C1360.",
+    "Added includes for baselib/gobj.h and db/db.h to support GObj helpers and debug/linking calls such as db_80225DD8.",
+    "Reworked it_802C061C to use GET_ITEM, local Vec3 storage, ftLib_80086644, HSD_JObjSetTranslate, HSD_JObjSetRotationY, and HSD_JObjSetRotationZ. The diff changed the final rotation reset from SetRotationY to SetRotationZ.",
+    "Introduced copy_jobj_scale as an inline helper that copies source JObj scale Y into all three scale components before HSD_JObjSetScale.",
+    "Reworked it_802C1234 to preserve the original item GObj, use GET_ITEM/GET_JOBJ, test the linked fighter GObj through ftCo_800BF228, and copy fighter JObj scale onto the pill item when appropriate.",
+    "Implemented it_802C09C4 as a Dr. Mario pill spawn/setup routine taking Fighter_GObj parent_gobj, Vec3 position, arg2, ItemKind, msid, Fighter_Part, and facing_dir. It initializes SpawnItem, creates the item with Item_80268B18, changes state via it_802C1180 wrapper calls, sets animation/update state, clears item command variables, assigns accessory callback and owner fields, stores parent and facing direction in drmariopill item vars, and optionally calls Item_8026AB54 when msid == 2.",
+    "Refactored it_802C0CC4 to use GET_ITEM and GET_ATTRS and compare horizontal velocity magnitude from my_sqrtf against attrs->x10 before playing Item_8026AE84.",
+    "Refactored it_802C0B5C to use GET_ITEM and GET_ATTRS and compute initial pill velocity from attrs x0/x4, facing_dir, cosf, and sinf.",
+    "Changed it_802C0E48 from s32 to bool and split child-JObj visibility flag handling into inline helper it_802C0E48_flags. The function now uses GET_JOBJ/GET_ITEM, ftDr_Init_80149844, ftDr_Init_801498EC, ftLib_800869D4, and it_802C0E48_sub to handle attached/owned pill behavior.",
+    "Added it_802C0510 and it_802C0850 spawn/setup functions with shared SpawnItem initialization patterns, item creation via Item_80268B18, state/setup calls, debug attachment via db_80225DD8 in relevant paths, accessory callback assignment, owner/item-var initialization, and physics/update calls.",
+    "Added several static no-inline wrapper functions around it_802C0B5C, it_802C0DF8, and it_802C1180 to force code generation/call shape needed for matching.",
+    "Updated itdrmariopill.h prototype for it_802C09C4 from loosely typed enum_t/bool/bool parameters to s32 arg2, ItemKind arg3, s32 arg4, Fighter_Part arg5, and f32 facing_dir."
+  ],
+  "smart_moves": [
+    "Used GET_ITEM, GET_JOBJ, and GET_ATTRS macros to reduce raw user_data and article-data casts while preserving matching-sensitive code shape.",
+    "Factored repeated scale-copy logic into a small inline helper, matching the observed all-components-from-scaleY behavior without duplicating assignment noise.",
+    "Separated it_802C0E48 child-JObj flag toggling into it_802C0E48_flags, making a matching-sensitive function easier to reason about while preserving the exact ClearFlags/SetFlags behavior.",
+    "Corrected the public header signature for it_802C09C4 to expose concrete item/fighter types, improving call-site type information for future matching work.",
+    "Kept the original custom my_sqrtf note that this file needs 4 iterations instead of the usual 3, preserving an important matching-specific math detail."
+  ],
+  "decomp_lessons": [
+    "For item spawn routines, matching often depends on exact SpawnItem initialization order: kind, prev_pos with z forced to 0, it_8026BB68-derived spawn.pos, facing_dir, damage, zero velocity, parent pointers, flag b0, x40, and then Item_80268B18.",
+    "Accessory-linked items may need both owner fields and item-specific vars initialized consistently: owner, xDD4_itemVar.drmariopill.x4 parent pointer, xDD4_itemVar.drmariopill.x0 facing direction, on_accessory callback, and xDC8 flags.",
+    "Small helper extraction can improve readability without necessarily breaking matching, but only if inlining/no-inlining behavior is controlled deliberately.",
+    "No-inline wrapper chains can be a temporary matching tactic, but reviewers considered them a sign that the real original call chain may not yet be identified.",
+    "Header prototypes should be tightened once evidence supports concrete parameter types; replacing bool/enum placeholders with ItemKind, Fighter_Part, s32, and f32 makes later decomp work safer.",
+    "When an item mirrors fighter scale, the observed behavior here copied HSD_JObjGetScaleY from the fighter JObj into x, y, and z of the item scale vector."
+  ],
+  "naming_conventions": [
+    "File-local matching helpers used address-based names plus suffixes such as _no_inline, _no_inline2, and _no_inline3 when their purpose was codegen control rather than semantic naming.",
+    "The item state table retained the address-style symbol name it_803F75D0.",
+    "The attributes macro is named GET_ATTRS and casts ip->xC4_article_data->x4_specialAttributes to itDrMarioPillAttributes*.",
+    "Function parameters in the updated header use project types ItemKind, Fighter_Part, Fighter_GObj, Item_GObj, Vec3, s32, and f32 rather than generic bool/int placeholders.",
+    "Ambiguous parameters in it_802C09C4 were left as arg2, arg3, arg4, and arg5 where semantics were not fully established, avoiding invented names."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used chained no-inline wrappers around it_802C1180, it_802C0DF8, and it_802C0B5C to force particular call structure for matching.",
+    "Used static inline helpers such as copy_jobj_scale and it_802C0E48_flags to control emitted code shape while grouping repeated logic.",
+    "Preserved a custom my_sqrtf implementation noted as requiring 4 iterations instead of the usual 3.",
+    "Introduced PAD_STACK(4) in it_802C0E48 after refactoring, indicating stack-shape tuning was still relevant.",
+    "Changed some local declarations and assignment grouping, such as scale.x = scale.y = scale.z = mag, to fit expected generated code."
+  ],
+  "review_feedback": [
+    {
+      "author": "lukechampine",
+      "file": "src/melee/it/items/itdrmariopill.c",
+      "comment": "surely there is a less insane way to do this...?",
+      "context": "Commented on added no-inline wrapper chains around pill setup/state functions."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/melee/it/items/itdrmariopill.c",
+      "comment": "Yeah, by finding the original call chain. Maybe it's calling something from Mario fireball or elsewhere, which is calling something else.",
+      "context": "Suggested that the wrapper chains might be masking a missing original call chain, possibly through Mario fireball or related code."
+    }
+  ],
+  "searchable_terms": [
+    "pr-1767",
+    "itdrmariopill.c matches",
+    "Dr Mario pill",
+    "drmariopill",
+    "it_803F75D0",
+    "ItemStateTable",
+    "it_802C09C4",
+    "it_802C0850",
+    "it_802C0510",
+    "it_802C061C",
+    "it_802C0B5C",
+    "it_802C0DF8",
+    "it_802C0E48",
+    "it_802C1180",
+    "it_802C1234",
+    "itDrMarioPillAttributes",
+    "GET_ATTRS",
+    "GET_ITEM",
+    "GET_JOBJ",
+    "SpawnItem",
+    "Item_80268B18",
+    "Item_80268E5C",
+    "Item_8026AB54",
+    "db_80225DD8",
+    "ftDr_Init_80149844",
+    "ftDr_Init_801498EC",
+    "ftLib_80086644",
+    "ftLib_800869D4",
+    "ftCo_800BF228",
+    "HSD_JObjSetScale",
+    "HSD_JObjGetScaleY",
+    "HSD_JObjSetRotationZ",
+    "no_inline wrapper chain",
+    "Mario fireball call chain",
+    "first 100% match"
+  ],
+  "follow_up_queries": [
+    "Search for later PRs touching itdrmariopill.c to see whether the no-inline wrapper chains were replaced by the real original call chain.",
+    "Compare Dr. Mario pill spawn/setup routines against Mario fireball item code for shared helper calls or original call-chain evidence.",
+    "Audit call sites of it_802C09C4 after the header signature change to confirm parameter meanings for arg2, msid/arg4, and Fighter_Part.",
+    "Look for matching notes around my_sqrtf 4-iteration behavior in other item files."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

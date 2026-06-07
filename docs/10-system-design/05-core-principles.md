@@ -58,8 +58,8 @@ move down a layer:
 | Former surface | New role inside orchestrator |
 | --- | --- |
 | `decomp-find` | Board scan, candidate-prior features, linked-blocker awareness, and progress metrics. |
-| `melee-decomp` | Worker playbook for one file or symbol: gather context, edit source, verify, and stop before guessing. |
-| `melee-decomp-sweep` | Optional experimental-search mode for bounded source-shape experiments, result shards, Pareto selection, and learned patterns. |
+| `melee-decomp` | Worker system prompt and co-located context for one file or symbol: gather evidence, edit source, verify, and stop before guessing. |
+| `melee-decomp-sweep` | Last-resort experimental tooling for bounded source-shape experiments, kept out of default prompt context. |
 | Run director | Pi-agent Sudoku player: decide which square to touch next based on the whole board and every new fact. |
 
 ## Runtime Principle

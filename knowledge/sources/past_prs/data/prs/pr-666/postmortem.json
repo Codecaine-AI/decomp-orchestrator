@@ -1,0 +1,157 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-666",
+  "pr": {
+    "number": 666,
+    "title": "Delete `include` directory",
+    "url": "https://github.com/doldecomp/melee/pull/666",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-12T00:00:28Z",
+    "merged_at": "2023-01-12T04:43:40Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Removed the separate top-level `include` tree by moving headers into `src`, updating build/tool include paths, and resolving a few duplicate or divergent headers while doing so. The PR primarily simplified repository layout and include search configuration: `SYSTEM_INCLUDE_DIRS` and `ASFLAGS` now point at `src`, `compile_flags.txt` dropped `-Iinclude`, formatting only scans `src`, and `gen.sh` generates/consumes context includes under `src`. Some headers were pure renames from `include` to `src`, while duplicate Dolphin headers were consolidated into the existing `src` copies, notably `src/dolphin/pad/Pad.h` and `src/dolphin/os/OSMutex.h`.",
+  "change_classification": {
+    "primary_type": "repo-layout-header-migration",
+    "categories": [
+      "headers",
+      "build-system",
+      "tooling",
+      "include-path-cleanup",
+      "types-structs"
+    ],
+    "systems": [
+      "repo-root",
+      "include",
+      "src",
+      "dolphin",
+      "dolphin/pad",
+      "dolphin/os",
+      "sysdolphin/baselib",
+      "docs"
+    ]
+  },
+  "key_files": [
+    "Makefile",
+    "compile_flags.txt",
+    "gen.sh",
+    "include/dir.dox",
+    "src/dolphin/pad/Pad.h",
+    "src/dolphin/pad/Pad.c",
+    "src/dolphin/pad/PadClamp.c",
+    "src/dolphin/os/OSMutex.h",
+    "src/sysdolphin/baselib/controller.h",
+    "src/sysdolphin/baselib/rumble.c",
+    "src/Runtime/platform.h",
+    "src/dolphin/os/OSThread.h",
+    "src/macros.inc"
+  ],
+  "what_changed": [
+    "Deleted the top-level `include` directory after moving its contents into `src`; the PR body explicitly documents the migration commands: `rsync -r --remove-source-files include/* src` and `find . -type d -empty -delete`.",
+    "Updated the Makefile include search configuration from `SYSTEM_INCLUDE_DIRS := include include/dolphin src` to `SYSTEM_INCLUDE_DIRS := src`.",
+    "Changed assembler include path from `ASFLAGS := -mgekko -I include` to `ASFLAGS := -mgekko -I src`.",
+    "Changed the `format` target to scan only `src` instead of both `src include`.",
+    "Removed `-Iinclude` from `compile_flags.txt`, leaving `src` as the relevant project include root for tooling.",
+    "Updated `gen.sh` so generated context include files are built from headers under `src/`, written to `src/$ctx_includes`, and passed to `tools/m2ctx/m2ctx.py` from that location.",
+    "Deleted `include/dir.dox`, whose TODO had said to move contents to `src` and delete the directory after Makefile/tool references were fixed.",
+    "Removed duplicate include-tree headers such as `include/dolphin/base/PPCArch.h`, `include/dolphin/os/OSMutex.h`, and `include/dolphin/pad/pad.h`.",
+    "Merged declarations from `include/dolphin/pad/pad.h` into `src/dolphin/pad/Pad.h`, adding `PAD_CHANMAX`, `PAD_ERR_NONE`, `PAD_SPEC_2`, `PADStatus`, and PAD/VI function prototypes.",
+    "Changed PAD users from `<dolphin/pad/pad.h>` to `<dolphin/pad/Pad.h>` in `src/dolphin/pad/Pad.c`, `src/dolphin/pad/PadClamp.c`, and `src/sysdolphin/baselib/controller.h`.",
+    "Updated `src/dolphin/os/OSMutex.h` with declarations from the deleted include copy, including `Runtime/platform.h`, mutex function prototypes, `BOOL OSTryLockMutex`, and a field rename from `count` to `lock` at offset 0x0C."
+  ],
+  "smart_moves": [
+    "The migration handled build files, editor/tool flags, formatting, assembly include paths, and m2ctx generation together, avoiding a half-migrated state where only C compilation worked.",
+    "The change preserved include spelling rooted at logical paths like `<dolphin/os/OSThread.h>` and `<Runtime/platform.h>` while changing the physical include root to `src`, minimizing churn in most source files.",
+    "Duplicate headers were not blindly kept after the move; the PR consolidated relevant declarations into existing `src` headers such as `Pad.h` and `OSMutex.h`.",
+    "The PR removed the documentation TODO file (`include/dir.dox`) only after satisfying its stated condition: move the contents and update references such as the Makefile.",
+    "The Makefile added a forward-looking TODO about separating `dolphin` and `sysdolphin` as system includes and eventually fixing quote-vs-angle include style, preserving design intent for later cleanup."
+  ],
+  "decomp_lessons": [
+    "When eliminating an include root in a decomp repo, update every consumer class: compiler flags, assembler flags, IDE/clang flags, formatting scripts, context-generation scripts, and source includes.",
+    "Header moves are safest when logical include paths remain stable and only the search root changes; this limits source churn and reduces matching risk.",
+    "If both `include/foo.h` and `src/foo.h` exist, migration is an opportunity to reconcile them rather than preserve divergent duplicates.",
+    "Generated m2c/m2ctx context headers are part of the include topology; they must move with the include root or future matching work will silently use stale paths.",
+    "Build-system cleanup can unblock future header discipline, but quote includes versus system includes should be planned carefully because tools must understand the distinction.",
+    "Do not leave stale documentation or TODO directories after completing the migration; remove the marker once its task is complete."
+  ],
+  "naming_conventions": [
+    "`dolphin/pad/Pad.h` became the active PAD header path, replacing the lowercase `dolphin/pad/pad.h` include path in touched users.",
+    "`PADStatus` retains official-style PAD field names such as `button`, `stickX`, `stickY`, `substickX`, `substickY`, `triggerLeft`, `triggerRight`, `analogA`, `analogB`, and `err`.",
+    "`OSMutex` field at offset 0x0C was named `lock` in the surviving header rather than `count`, matching the deleted include-tree version.",
+    "Include guards from the deleted PAD header (`_PAD_H_`) replaced the previous `DOLPHIN_PAD_PAD_H` guard in `src/dolphin/pad/Pad.h`; the evidence shows this as part of the consolidation, not as a reviewed naming rule.",
+    "Dolphin OS function declarations retained official-style names such as `OSInitMutex`, `OSLockMutex`, `OSUnlockMutex`, `__OSUnlockAllMutex`, and `OSTryLockMutex`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Changed assembler include root from `include` to `src` via `ASFLAGS := -mgekko -I src`, preserving access to assembly include files such as `macros.inc` after migration.",
+    "Kept `MUST_MATCH` handling unchanged under `NON_MATCHING`, so the include-root migration did not alter matching mode behavior.",
+    "Updated `gen.sh` context generation for m2c/m2ctx so all headers are discovered under `src` and the generated context include file is also stored under `src`.",
+    "Retained angle-bracket include style for moved headers while using `src` as the system include root; the Makefile TODO notes this distinction still needs future cleanup."
+  ],
+  "review_feedback": [
+    {
+      "author": "r-burns",
+      "comment": "Looks good, but do you mind waiting until my item PR gets merged?",
+      "resolution": "ribbanya replied, \"Don't mind at all.\" The PR was merged later the same day.",
+      "type": "coordination"
+    },
+    {
+      "author": "unknown",
+      "comment": "No inline review comments were present in the provided slice.",
+      "resolution": "No code-review-driven changes are evident from the provided excerpt.",
+      "type": "absence-of-evidence"
+    }
+  ],
+  "searchable_terms": [
+    "PR666",
+    "Delete include directory",
+    "include to src migration",
+    "SYSTEM_INCLUDE_DIRS src",
+    "ASFLAGS -I src",
+    "compile_flags remove -Iinclude",
+    "gen.sh ctx_includes",
+    "m2ctx",
+    "m2c_macros",
+    "include/dir.dox",
+    "dolphin/pad/Pad.h",
+    "dolphin/pad/pad.h",
+    "PADStatus",
+    "PAD_CHANMAX",
+    "PAD_ERR_NONE",
+    "PAD_SPEC_2",
+    "PADControlMotor",
+    "PADClamp",
+    "PADRead",
+    "PADReset",
+    "PADTypeAndStatusCallback",
+    "OSMutex",
+    "OSMutex lock",
+    "OSInitMutex",
+    "OSLockMutex",
+    "OSUnlockMutex",
+    "__OSUnlockAllMutex",
+    "OSTryLockMutex",
+    "PPCArch.h",
+    "Runtime/platform.h",
+    "sysdolphin/baselib/controller.h",
+    "rumble.c",
+    "header consolidation",
+    "repository layout cleanup"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that implement the Makefile TODO for treating `dolphin` and `sysdolphin` as system includes.",
+    "Search for remaining references to `include/` or `-Iinclude` after PR #666.",
+    "Search for remaining lowercase `<dolphin/pad/pad.h>` includes after PR #666.",
+    "Investigate whether `OSMutex.lock` versus `OSMutex.count` appears in later struct-layout or matching fixes.",
+    "Find PRs that further normalize quote includes versus angle-bracket includes in `src`."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,150 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-963",
+  "pr": {
+    "number": 963,
+    "title": "itHammer matching",
+    "url": "https://github.com/doldecomp/melee/pull/963",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2023-09-13T21:28:35Z",
+    "merged_at": "2023-09-13T21:48:18Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Hammer item implementation by replacing asm/melee/it/items/ithammer.s with src/melee/it/items/ithammer.c and adding ithammer.h. The PR body says it rebased a previous draft, corrected struct-usage typing issues, and matched data. The C version reconstructs the Hammer item state table, special attributes struct, state callbacks, animation/state transitions, gravity/fall behavior, random special-attribute selection, and owner effect vector logic while updating obj_files.mk to build the C object instead of the asm object.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "asm-to-c",
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "item-state-table",
+      "cleanup"
+    ],
+    "systems": [
+      "item",
+      "item-hammer",
+      "it/items",
+      "build-system",
+      "asm"
+    ]
+  },
+  "key_files": [
+    "asm/melee/it/items/ithammer.s",
+    "src/melee/it/items/ithammer.c",
+    "src/melee/it/items/ithammer.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted the 507-line Hammer item assembly file asm/melee/it/items/ithammer.s.",
+    "Added a 215-line C implementation in src/melee/it/items/ithammer.c for functions in the it_80293D94 through it_80294344 range.",
+    "Added src/melee/it/items/ithammer.h with include guard MELEE_IT_ITEMS_ITHAMMER_H, an itHammerData struct, the extern ItemStateTable it_803F6150 declaration, and Hammer function prototypes.",
+    "Changed obj_files.mk so the build uses $(BUILD_DIR)/src/melee/it/items/ithammer.c.o instead of the corresponding asm object.",
+    "Reconstructed ItemStateTable it_803F6150 with six state entries using callbacks such as it_80293FF4, it_80294080, it_80294170, it_8029424C, it_8029427C, it_80294304, it_8029430C, and it_80294310.",
+    "Introduced itHammerData with fields x0, x4, and x8, used by it_80293DCC to select a random value with HSD_Randf/HSD_Randi based on x8 / 100.0f.",
+    "Rebuilt repeated Hammer item behavior around Item_80268E5C state changes, xD4C countdown/state flag checks, it_80272CC0/it_80272A3C joint or model cleanup, and item physics callbacks like it_80272860.",
+    "Implemented owner/effect vector logic in it_80293E34 using lb_8000B1CC, lbVector_Normalize, sign/absolute-value handling of result.x, and it_80299C48."
+  ],
+  "smart_moves": [
+    "Moved the file from asm to C and updated obj_files.mk in the same PR, making the matching status explicit and preventing stale asm from remaining in the build.",
+    "Added a dedicated itHammerData struct for the Hammer special attributes rather than leaving the article data as raw offsets; this directly addresses the PR body's note about correcting typing issues from struct usages.",
+    "Factored the repeated xD4C <= 0 cleanup pattern into a small static inline helper named thing, reducing duplicated calls to it_80272CC0(..., 3) followed by it_80272A3C.",
+    "Used existing item system types and helpers, including Item_GObj, Item, Article, ItemAttr, ItemStateTable, GET_ITEM, and ITEM_ANIM_UPDATE, which makes the translation align with nearby item decomp conventions.",
+    "Preserved address-based symbol names for still-unnamed functions, avoiding speculative semantic naming while still making the code buildable and matchable.",
+    "Kept the Hammer item state table data in C, which was important because the PR body explicitly says it also matches data."
+  ],
+  "decomp_lessons": [
+    "For item decompilation, matching often requires both code and item data: state tables like ItemStateTable it_803F6150 need to move alongside the functions that reference them.",
+    "When article special attributes are accessed through xC4_article_data->x4_specialAttributes, introducing a small item-specific struct can resolve typing issues and make random/parameter logic clearer.",
+    "Repeated item lifecycle checks around Item.xD4C can often be expressed as a helper, but the helper name should remain conservative if semantics are not known.",
+    "Small expression choices can matter for matching: it_80293E34 uses ternaries for sign selection and absolute-value behavior on result.x, reflecting the assembly's branch/floating-point conversion pattern.",
+    "Formatting of nested state-table arrays can create noisy diffs or reviewer concern; trailing commas inside inner arrays may interact poorly with clang-format in this codebase.",
+    "Use established item callback signatures and return types when reconstructing state callbacks: several callbacks return bool/int zero, while others are void animation or physics callbacks."
+  ],
+  "naming_conventions": [
+    "File names use the item prefix style: ithammer.c and ithammer.h under src/melee/it/items/.",
+    "Unidentified functions retain address-style names such as it_80293D94, it_8029402C, and it_80294310.",
+    "Item-specific special attributes are named with an item-prefixed struct, itHammerData.",
+    "The header guard follows the path-derived all-caps convention MELEE_IT_ITEMS_ITHAMMER_H.",
+    "Global item state table symbols retain address-style data names, here ItemStateTable it_803F6150[].",
+    "Struct fields remain offset-like names x0, x4, and x8 when semantic names are not evidenced."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted a full item asm file to C and removed the asm object from the build list.",
+    "Matched random range logic from assembly with HSD_Randf() < temp_r31->x8 / 100.0f and HSD_Randi(temp_r31->x4 - temp_r31->x0) + temp_r31->x0.",
+    "Matched bitfield checks from Item.xDC8_word.flags for entered-hitlag behavior in it_80293D94.",
+    "Used Vec3 stack temporaries, lb_8000B1CC joint position reads, lbVector_Normalize, and ternaries for sign/absolute value to represent the PowerPC floating-point/vector sequence in it_80293E34.",
+    "Used Item_80268E5C with numeric animation/state IDs and ITEM_ANIM_UPDATE to mirror repeated state transitions.",
+    "Used a static inline helper for repeated branch tail code, likely helping code generation while removing manual duplication.",
+    "Preserved external declarations for not-yet-declared item helpers such as it_8026D62C, it_8026DF34, it_8026E15C, it_8026E8C4, it_80272CC0, and it_80299C48."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "file": "src/melee/it/items/ithammer.c",
+      "feedback": "Suggested removing commas at the end of each inner array in ItemStateTable initialization to make formatting less crazy."
+    },
+    {
+      "author": "PsiLupan",
+      "file": "src/melee/it/items/ithammer.c",
+      "feedback": "Explained that the trailing-comma style followed precedent already set in other item files, though those files were not formatted."
+    }
+  ],
+  "searchable_terms": [
+    "pr-963",
+    "itHammer matching",
+    "ithammer",
+    "Hammer item",
+    "PsiLupan",
+    "asm/melee/it/items/ithammer.s",
+    "src/melee/it/items/ithammer.c",
+    "src/melee/it/items/ithammer.h",
+    "obj_files.mk",
+    "ItemStateTable",
+    "it_803F6150",
+    "itHammerData",
+    "xC4_article_data",
+    "x4_specialAttributes",
+    "xD4C",
+    "xDC8_word",
+    "HSD_Randf",
+    "HSD_Randi",
+    "lb_8000B1CC",
+    "lbVector_Normalize",
+    "it_80299C48",
+    "Item_80268E5C",
+    "ITEM_ANIM_UPDATE",
+    "it_80272CC0",
+    "it_80272A3C",
+    "it_80293D94",
+    "it_80293DCC",
+    "it_80293E34",
+    "it_80293F58",
+    "it_80293F84",
+    "it_8029402C",
+    "it_802940FC",
+    "it_802941A4",
+    "it_802941F8",
+    "it_802942B0",
+    "it_80294344",
+    "trailing commas",
+    "nested array formatting"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename Hammer functions or replace address-style symbols in src/melee/it/items/ithammer.c.",
+    "Search for follow-up cleanup of the helper named thing in ithammer.c.",
+    "Check whether itHammerData fields x0, x4, and x8 were later given semantic names.",
+    "Look for later header cleanup moving extern declarations for it_8026D62C, it_8026DF34, it_8026E15C, it_8026E8C4, it_80272CC0, or it_80299C48 into shared headers.",
+    "Compare formatting of ItemStateTable initializers in other item files after the trailing-comma review comment."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

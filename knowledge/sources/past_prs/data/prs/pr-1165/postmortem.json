@@ -1,0 +1,125 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1165",
+  "pr": {
+    "number": 1165,
+    "title": "Match `mpColl_800477E0`",
+    "url": "https://github.com/doldecomp/melee/pull/1165",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-02-01T00:11:48Z",
+    "merged_at": "2024-02-01T00:13:05Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the map-collision function `mpColl_800477E0` in `src/melee/mp/mpcoll.c`, resolving #1064. The implementation preserves/restores ECB bottom coordinates when `x130_flags & 0x10` is set, updates collision state through existing `mpColl_*` helpers, computes a static boolean `mpColl_804D649C` from ECB correction extents against `flt_804D7FD8`, calls `mpColl_80043754(mpColl_80046904, arg0, 1U)`, forwards the result into `mpColl_80043324`, and returns it as `bool`. The PR also reorganized `mpcoll.h` into an address-commented prototype list, moved the old broader header contents into a new `mpcoll.dox`, and updated object-file bookkeeping.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "object-list-maintenance",
+      "documentation-header-split"
+    ],
+    "systems": [
+      "melee-core",
+      "mp",
+      "mpcoll",
+      "asm",
+      "headers",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "src/melee/mp/mpcoll.c",
+    "src/melee/mp/mpcoll.h",
+    "src/melee/mp/mpcoll.dox",
+    "asm/melee/mp/mpcoll.s",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Added a C implementation of `bool mpColl_800477E0(CollData* arg0)` to `src/melee/mp/mpcoll.c`.",
+    "Added file-scope `static bool mpColl_804D649C;` used by the matched function.",
+    "`mpColl_800477E0` now calls `mpColl_80041C8C`, conditionally preserves `arg0->x84_ecb.bottom.{x,y}`, dispatches either `mpColl_800424DC(arg0, 6U)` or `mpColl_8004293C(arg0)` depending on `arg0->x104`, calls `mpColl_80042384`, snapshots `env_flags` into `x138`, clears `env_flags`, computes `mpColl_804D649C`, calls `mpColl_80043754`, then calls `mpColl_80043324` with the returned value.",
+    "Changed the `mpColl_800477E0` declaration from `void mpColl_800477E0(CollData*)` to `bool mpColl_800477E0(CollData*)` in the public header.",
+    "Reworked `src/melee/mp/mpcoll.h` to use the guard `GALE01_041C78`, remove the direct `ft/fighter.h` include, and present prototypes with address comments such as `/* 0477E0 */`.",
+    "Created `src/melee/mp/mpcoll.dox` containing the previous broad prototype/header content, including the `MELEE_MP_MPCOLL_H` guard and Doxygen-style `Coll_InitECB` note.",
+    "Updated `asm/melee/mp/mpcoll.s`; the old raw `.global mpColl_800477E0` assembly block was replaced by generated-style `.fn mpColl_800477E0, global` / `.endfn mpColl_800477E0` output, and the file gained `.file \"mpcoll.c\"`.",
+    "Removed `$(BUILD_DIR)/src/melee/mp/mpcoll.c.o` from the `TEXT_O_FILES` block in `obj_files.mk`."
+  ],
+  "smart_moves": [
+    "The match preserves `x84_ecb.bottom.x` and `.y` only when the original flag condition requires it, mirroring the control-flow dependency visible in the target behavior rather than simplifying it away.",
+    "The return from `mpColl_80043754` is explicitly stored as `bool ret` and returned as a boolean; the author left an evidence note that the callback return is only set to 0 or 1.",
+    "The implementation reuses existing `mpColl_*` helper functions instead of open-coding surrounding collision update logic, which keeps the matched function small and aligned with known call boundaries.",
+    "The header cleanup adds address comments to prototypes, making future cross-referencing and symbol search easier in a partially decompiled module.",
+    "Moving the older header contents to `mpcoll.dox` preserves useful declaration/documentation material while allowing the compiled header to be tightened."
+  ],
+  "decomp_lessons": [
+    "When a callee/callback chain only produces 0 or 1, using `bool` for the matched function return can be important for matching and for documenting intent.",
+    "Preserve temporary field values around helper calls when flags indicate the original code protects those fields; here, ECB bottom coordinates are saved and restored around ECB/collision refresh helpers.",
+    "For large modules, address-commented prototypes in headers are useful searchable anchors and help keep function-order knowledge close to declarations.",
+    "Header dependencies matter for matching and build stability: removing an unnecessary direct include such as `ft/fighter.h` from a normal header can reduce coupling, while `.dox` can retain documentation-only declarations.",
+    "Static file-scope state may need to be introduced with the exact storage class and type used by a matched routine; this PR introduces `static bool mpColl_804D649C` alongside the function that writes it.",
+    "Diffs for a single matched function in a large asm file may be huge because generated assembly formatting and object boundaries change; inspect the C diff and symbol-specific hunk before inferring broad logic changes."
+  ],
+  "naming_conventions": [
+    "Unidentified map-collision functions keep the `mpColl_800xxxxx` address-based naming style.",
+    "Header prototypes are prefixed with address comments like `/* 0477E0 */ bool mpColl_800477E0(CollData*);`.",
+    "Collision data parameters commonly use `CollData*` and, where names are known, short names such as `cd`; unknown parameters remain `arg0`, `arg1`, etc.",
+    "ECB-related local names use descriptive prefixes such as `ecb_x` and `ecb_y` when derived from `x84_ecb.bottom`.",
+    "Documentation-only legacy declarations were moved to `mpcoll.dox` while the compiled header uses the address-derived guard `GALE01_041C78`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Matched `mpColl_800477E0` by adding equivalent C and replacing the old raw assembly block for that symbol in `asm/melee/mp/mpcoll.s` with generated `.fn`/`.endfn` assembly output.",
+    "Used explicit casts and constants visible in the C implementation, including `(s32) arg0->x104 == 1`, `6U`, and `1U`, to preserve codegen-sensitive behavior.",
+    "Retained a scratch/reference comment for the callback return path: `mpColl_80043754` returns `mpColl_80046904`'s return value, described as `var_22` from a decomp.me scratch and likely boolean.",
+    "Computed `mpColl_804D649C` using two ECB correction height comparisons against `flt_804D7FD8`; this avoids introducing unexplained magic literals in the matched C.",
+    "Kept helper-call ordering explicit: reset/update collision state, preserve selected ECB bottom values, set `x138`/clear `env_flags`, then call the callback walker and final `mpColl_80043324` update."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review records were present in the provided PR slice.",
+    "The PR body only states `Resolves #1064.`, so intent beyond matching `mpColl_800477E0` is inferred from the diff rather than reviewer discussion."
+  ],
+  "searchable_terms": [
+    "pr-1165",
+    "mpColl_800477E0",
+    "mpcoll",
+    "mpColl_804D649C",
+    "CollData",
+    "x84_ecb",
+    "ecb bottom",
+    "x130_flags",
+    "x104",
+    "env_flags",
+    "x138",
+    "xA4_ecbCurrCorrect",
+    "flt_804D7FD8",
+    "mpColl_80043754",
+    "mpColl_80046904",
+    "mpColl_80043324",
+    "mpColl_800424DC",
+    "mpColl_8004293C",
+    "mpColl_80042384",
+    "mpColl_80041C8C",
+    "GALE01_041C78",
+    "mpcoll.dox",
+    "obj_files.mk",
+    "Resolves #1064",
+    "decomp.me scratch NL2sf"
+  ],
+  "follow_up_queries": [
+    "Inspect issue #1064 for the original scratch/matching discussion around `mpColl_800477E0`.",
+    "Search later PRs for `mpColl_804D649C` to see whether the static boolean was renamed or its semantics were discovered.",
+    "Search later PRs touching `mpcoll.h` or `mpcoll.dox` for conventions around moving declarations from compiled headers into documentation-only `.dox` files.",
+    "Look for later matches of neighboring functions `mpColl_800471F8`, `mpColl_800473CC`, `mpColl_800478F4`, and `mpColl_80047A08` to reuse the ECB preservation and callback-return patterns.",
+    "Check whether `mpColl_80046904` was later matched/renamed to confirm the boolean return assumption noted in this PR."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

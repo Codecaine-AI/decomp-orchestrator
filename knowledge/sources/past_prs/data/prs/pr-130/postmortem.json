@@ -1,0 +1,91 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-130",
+  "pr": {
+    "number": 130,
+    "title": "Fix postprocess assert caused by properly ordered code",
+    "url": "https://github.com/doldecomp/melee/pull/130",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-11-29T05:14:06Z",
+    "merged_at": "2021-11-29T05:14:11Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Fixed a tooling-side postprocess.py assertion triggered by code whose epilogue instructions appeared in a valid order. The change separates tracking of an `addi r1, r1, 0x18` stack-restore instruction from tracking of `mtlr`, so the postprocessor can record an epilogue ending in `blr` without misclassifying the `addi` as an `mtlr` position.",
+  "change_classification": {
+    "primary_type": "tooling_fix",
+    "categories": [
+      "fix",
+      "tooling",
+      "postprocess",
+      "elf_processing",
+      "epilogue_detection"
+    ],
+    "systems": [
+      "tools",
+      "postprocess.py"
+    ]
+  },
+  "key_files": [
+    "tools/postprocess.py"
+  ],
+  "what_changed": [
+    "In `impl_postprocess_elf`, added a separate `addi_pos` variable initialized alongside `mtlr_pos`.",
+    "When encountering `blr` (`0x4E800020`), the postprocessor now appends an epilogue using `addi_pos` if an `addi r1, r1, 0x18` was seen and no `mtlr` was pending.",
+    "After processing a `blr`, both `mtlr_pos` and `addi_pos` are reset.",
+    "When encountering `addi r1, r1, 0x18` (`0x38210018`) with no pending `mtlr`, the code now records it in `addi_pos` instead of overloading `mtlr_pos`."
+  ],
+  "smart_moves": [
+    "Avoided overloading `mtlr_pos` with a non-`mtlr` instruction position, making the epilogue scanner's state more semantically accurate.",
+    "Kept the fix narrowly scoped to the postprocess epilogue-detection logic, with only one changed file and a small diff.",
+    "Handled the `addi`-then-`blr` case explicitly rather than weakening or removing the later assertion entirely."
+  ],
+  "decomp_lessons": [
+    "Tooling that scans generated assembly should track instruction roles separately; using one variable for multiple instruction kinds can produce false asserts once code ordering improves.",
+    "A postprocess assertion failure is not always evidence of bad generated code; it may indicate that the tool's pattern recognizer is too narrow.",
+    "When matching epilogues, treat stack restoration instructions like `addi r1, r1, imm` as distinct from link-register restoration instructions like `mtlr`."
+  ],
+  "naming_conventions": [
+    "Existing local naming pattern uses instruction-position variables with `_pos` suffix, such as `mtlr_pos`; the fix extends this with `addi_pos`.",
+    "Hex instruction constants are documented with nearby comments, e.g. `# addi r1, r1, 0x18` for `0x38210018`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Recognizes `blr` by exact instruction word `0x4E800020`.",
+    "Recognizes `addi r1, r1, 0x18` by exact instruction word `0x38210018`.",
+    "Epilogue detection records instruction-position pairs, including `(mtlr_pos, blr_pos)` and now the fallback `(addi_pos, blr_pos)` when there is no pending `mtlr`.",
+    "State is cleared at `blr` boundaries to avoid carrying epilogue candidates into subsequent instruction scans."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR130",
+    "postprocess.py",
+    "impl_postprocess_elf",
+    "postprocess assert",
+    "properly ordered code",
+    "epilogue detection",
+    "mtlr_pos",
+    "addi_pos",
+    "blr",
+    "0x4E800020",
+    "addi r1 r1 0x18",
+    "0x38210018",
+    "do_ctor_realign",
+    "do_old_stack",
+    "do_symbol_fixup",
+    "PsiLupan"
+  ],
+  "follow_up_queries": [
+    "Find later changes to tools/postprocess.py epilogue detection involving mtlr_pos or addi_pos.",
+    "Search for postprocess assertion failures involving lone mtlr or addi r1 r1 0x18.",
+    "Review whether other instruction scanners overload position variables for multiple instruction roles."
+  ],
+  "confidence": 0.84,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

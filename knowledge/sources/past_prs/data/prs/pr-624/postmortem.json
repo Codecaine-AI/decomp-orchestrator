@@ -1,0 +1,164 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-624",
+  "pr": {
+    "number": 624,
+    "title": "Misc dolphin matching from prime",
+    "url": "https://github.com/doldecomp/melee/pull/624",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-12-24T23:32:00Z",
+    "merged_at": "2022-12-25T01:43:15Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched a broad set of Dolphin SDK/library code by moving more functionality out of raw asm into C, especially OS cache/memory/reboot code, DSP task assertion logic, and portions of PAD/PADClamp. The PR also added/expanded headers and named several data symbols so remaining asm became more searchable and interoperable with C. Evidence for the 'from prime' source is limited to the PR title; the diff itself shows concrete Dolphin SDK matching and symbol cleanup.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "symbol-naming",
+      "build-system"
+    ],
+    "systems": [
+      "dolphin/os",
+      "dolphin/pad",
+      "dolphin/dsp",
+      "dolphin/hio",
+      "build"
+    ]
+  },
+  "key_files": [
+    "src/dolphin/os/OSCache.c",
+    "src/dolphin/os/OSMemory.c",
+    "src/dolphin/os/OSReboot.c",
+    "src/dolphin/dsp/dsp.c",
+    "src/dolphin/pad/Pad.c",
+    "src/dolphin/pad/PadClamp.c",
+    "asm/dolphin/pad/Pad.s",
+    "asm/dolphin/pad/Padclamp.s",
+    "asm/dolphin/hio/hio.s",
+    "include/dolphin/os/OSSerial.h",
+    "include/dolphin/os/OSError.h",
+    "include/dolphin/pad/pad.h",
+    "obj_files.mk",
+    "Makefile"
+  ],
+  "what_changed": [
+    "Deleted asm/dolphin/dsp/dsp.s and implemented DSPAssertTask in src/dolphin/dsp/dsp.c, with typed DSPTaskInfo externs for __DSP_curr_task, __DSP_first_task, __DSP_last_task, __DSP_tmp_task, __DSP_rude_task, and __DSP_rude_task_pending.",
+    "Reworked DSP register access to use __DSPRegs and OS_INTR_DSP_DSP instead of raw HW_REG constants and numeric interrupt 7.",
+    "Substantially rewrote src/dolphin/os/OSCache.c, replacing many commented asm blocks with concise inline asm functions and C helpers/constants for cache/L2/DMA error handling.",
+    "Removed asm-only data files OSCache_data.s, OSMemory_data.s, and OSReboot_data.s by moving data into C declarations or statics.",
+    "Converted OSMemory reset/protection handling toward C: added __MEMRegs, static OnReset, OSResetFunctionInfo lbl_80402348, and C MEMIntrruptHandler using OS_ERROR_PROTECTION.",
+    "Renamed OSReboot data from anonymous labels to C statics Header, SaveStart, SaveEnd, and Prepared, and updated asm references accordingly.",
+    "Added include/dolphin/os/OSSerial.h with SI channel, error, type, and wireless constants plus prototypes for SIProbe, SIGetTypeString, SIRefreshSamplingRate, and SISetSamplingRate.",
+    "Added src/dolphin/pad/Pad.c implementing PADEnable, PADDisable, DoReset, UpdateOrigin, PADOriginCallback, PADOriginUpdateCallback, and PADProbeCallback while leaving PADTypeAndStatusCallback and other code in asm.",
+    "Added src/dolphin/pad/PadClamp.c with PADClampRegion data and ClampStick/PADClamp logic, shrinking asm/dolphin/pad/Padclamp.s.",
+    "Renamed several remaining asm data/function symbols: ExiHandler, DbgHandler, TxHandler, RxHandler, ExiCallback, __PADFixBits, Type, Origin, ResettingChan, AnalogMode, Spec, Initialized, EnabledBits, ResettingBits, RecalibrateBits, WaitingBits, CheckingBits, PendingBits, SamplingRate, SamplingCallback, and recalibrated.",
+    "Updated include/dolphin/pad/pad.h with dolphin/types.h, PAD_CHANMAX, PAD_ERR_NONE, PAD_SPEC_2, and a typed PADClamp(PADStatus*) prototype.",
+    "Updated obj_files.mk to add src/dolphin/pad/Pad.c.o and PadClamp.c.o and remove now-obsolete asm/data objects.",
+    "Added a Makefile Frank rule for src/dolphin/pad C objects, matching the existing dolphin/card object-fixing pattern."
+  ],
+  "smart_moves": [
+    "Moved only matched or matchable subsets of PAD into C while retaining still-needed asm for the rest of Pad.s, reducing risk in a large module rather than forcing an all-at-once rewrite.",
+    "Introduced OSSerial.h before using SI constants in PAD code, replacing magic error/type bits with reusable names that future SI/PAD work can share.",
+    "Turned anonymous data labels into meaningful C statics where possible, allowing deletion of separate *_data.s files and making ownership/locality clearer.",
+    "Kept low-level cache/BAT functions as inline asm but cleaned them into named parameters, local labels, and SDK-style constants, preserving exact instruction control while improving readability.",
+    "Used typed externs such as DSPTaskInfo* instead of void* to make field accesses like task->priority and task->state explicit and safer.",
+    "Extended the Frank build fixup path to dolphin/pad C objects, acknowledging that matched PAD C needed the same profile/vanilla object reconciliation mechanism already used elsewhere."
+  ],
+  "decomp_lessons": [
+    "When decompiling SDK libraries, create shared headers for hardware constants early; it lets newly matched C code avoid duplicated magic numbers and makes later files easier to match.",
+    "Anonymous data asm can often be retired by introducing C statics with the same placement-sensitive names and then updating remaining asm references to those names.",
+    "Partial asm-to-C conversion is valuable: implementing callbacks and helpers in C while leaving hard functions in asm still shrinks the unmatched surface and improves symbol context.",
+    "For memory-mapped hardware, volatile fixed-address arrays such as __MEMRegs or existing register arrays can make C match while documenting register banks better than raw literal addresses.",
+    "Low-level cache primitives may remain inline asm, but the decomp win comes from replacing address-comment dumps with concise assembly using semantic constants like HID0_DCE, L2CR_L2E, and HID2_* error bits.",
+    "Reset callbacks and OS error handlers should use SDK-style typed signatures and named error IDs; OSMemory's switch to OnReset(BOOL) and OS_ERROR_PROTECTION is a useful pattern.",
+    "Build-system cleanup must accompany object migration: remove deleted asm/data objects and add new C objects in obj_files.mk, then add any object post-processing rules needed by the module."
+  ],
+  "naming_conventions": [
+    "Dolphin SI constants use SI_* prefixes: SI_MAX_CHAN, SI_ERROR_NO_RESPONSE, SI_CHAN_BIT(chan), SI_TYPE_GC, SI_GC_WAVEBIRD, and SI_WIRELESS_*.",
+    "PAD constants use PAD_* prefixes: PAD_CHANMAX, PAD_ERR_NONE, PAD_SPEC_2, PAD_CHAN0_BIT.",
+    "Private SDK/global implementation symbols often keep double-underscore names, as with __PADFixBits, __DSP_curr_task, __DSP_rude_task_pending, __MEMRegs, and __OSErrorTable.",
+    "Former anonymous HIO labels were renamed to role-based handler names: ExiHandler, DbgHandler, TxHandler, RxHandler, and ExiCallback.",
+    "Former PAD data labels were renamed to concise state names: Type, Origin, ResettingChan, XPatchBits, AnalogMode, Spec, EnabledBits, ResettingBits, WaitingBits, CheckingBits, PendingBits, SamplingRate, SamplingCallback, and recalibrated.",
+    "OSReboot bss/sbss labels became file-local semantic statics: Header, SaveStart, SaveEnd, Prepared.",
+    "Hardware/cache bit definitions were named after registers and fields, e.g. MSR_IR, MSR_DR, L2CR_L2E, L2CR_L2I, SRR1_DMA_BIT, HID0_ICE, HID0_DCE, HID2_DCHERR, HID2_DNCERR, HID2_DCMERR, HID2_DQOERR."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced large commented asm blocks in OSCache.c with compact inline asm using register parameters such as register void* addr and register size_t nbytes.",
+    "Used local inline-asm labels like @1 and @2 instead of global lbl_* labels where functions stayed as asm.",
+    "Preserved exact low-level instructions for cache operations, including dcbi, dcbf, dcbst, dcbz, icbi, sync/sc, mtctr, bdnz, and SPR access.",
+    "Kept BAT/MMU configuration functions in OSMemory.c as asm but cleaned formatting and removed pragma/comment noise around the same instruction sequences.",
+    "Matched DSPAssertTask in C by structuring the control flow around interrupt disable/restore, current-task equality, priority comparison, rude-task pending state, and a helper for the hardware command.",
+    "Matched PAD origin adjustment with a switch on AnalogMode & 0x700 and explicit field masking/subtraction on PADStatus fields.",
+    "Reduced asm file sizes by deleting matched functions from Pad.s and Padclamp.s while keeping remaining unmatched functions and data in asm with improved symbol names.",
+    "Adjusted object lists to avoid duplicate definitions once C statics replaced separate *_data.s objects."
+  ],
+  "review_feedback": [
+    {
+      "source": "issue comment",
+      "author": "r-burns",
+      "text": "Rebased",
+      "actionable_lesson": "No substantive reviewer feedback was present in the provided slice; only a rebase note is evidenced."
+    }
+  ],
+  "searchable_terms": [
+    "Misc dolphin matching from prime",
+    "r-burns",
+    "Dolphin SDK",
+    "Prime",
+    "OSCache.c",
+    "OSMemory.c",
+    "OSReboot.c",
+    "OSSerial.h",
+    "OSError.h",
+    "Pad.c",
+    "PadClamp.c",
+    "PADTypeAndStatusCallback",
+    "PADOriginCallback",
+    "PADOriginUpdateCallback",
+    "PADProbeCallback",
+    "UpdateOrigin",
+    "ClampStick",
+    "DSPAssertTask",
+    "DSPSomething",
+    "__DSPRegs",
+    "__DSP_rude_task",
+    "__DSP_rude_task_pending",
+    "OS_ERROR_PROTECTION",
+    "MEMIntrruptHandler",
+    "__MEMRegs",
+    "OnReset",
+    "OSResetFunctionInfo",
+    "ExiHandler",
+    "DbgHandler",
+    "TxHandler",
+    "RxHandler",
+    "ExiCallback",
+    "__PADFixBits",
+    "SI_ERROR_NO_RESPONSE",
+    "SI_GC_WAVEBIRD",
+    "PAD_CHANMAX",
+    "PAD_SPEC_2",
+    "Frank",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that finish decompiling asm/dolphin/pad/Pad.s after PADTypeAndStatusCallback.",
+    "Find later cleanup of OSSerial.h constants and SI prototypes.",
+    "Find PRs that rename remaining PAD globals such as Type, Origin, EnabledBits, and PendingBits into headers.",
+    "Find later OSCache matching changes involving LCEnable, L2Enable, DMAErrorHandler, or __OSCacheInit.",
+    "Find review or commit context explaining the 'from prime' source mentioned in the PR title."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

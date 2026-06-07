@@ -1,0 +1,147 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-928",
+  "pr": {
+    "number": 928,
+    "title": "Match HSD tev",
+    "url": "https://github.com/doldecomp/melee/pull/928",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-06-15T04:46:27Z",
+    "merged_at": "2023-06-15T04:56:28Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched most of sysdolphin/baselib TEV setup/state code in C and removed the matching assembly object for tev.s from the build. The PR converted TEV stage, channel-count, texgen-count, TEV register, and invalidation helpers into C, while leaving HSD_SetupChannel as inline asm with typed symbols. It also tightened related headers and GX prototypes needed by the match.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "state-management",
+      "graphics"
+    ],
+    "systems": [
+      "sysdolphin/baselib/tev",
+      "dolphin/gx",
+      "build"
+    ]
+  },
+  "key_files": [
+    "asm/sysdolphin/baselib/tev.s",
+    "src/sysdolphin/baselib/tev.c",
+    "src/sysdolphin/baselib/tev.h",
+    "src/sysdolphin/baselib/texp.h",
+    "src/dolphin/gx/GXTev.h",
+    "src/dolphin/gx/GXTev.c",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted asm/sysdolphin/baselib/tev.s, a 976-line assembly file containing HSD_SetupChannelAll, HSD_StateRegisterTexGen, HSD_StateSetNumTexGens, HSD_StateInitTev, HSD_StateGetNumTevStages, HSD_StateAssignTev, HSD_StateSetNumTevStages, HSD_SetupTevStage, HSD_SetupTevStageAll, HSD_Channel2Num, HSD_Index2TevStage, HSD_TevStage2Index, HSD_TevStage2Num, HSD_SetTevRegAll, HSD_TexCoordID2Num, ChanUpdateFunc, and invalidation routines.",
+    "Removed $(BUILD_DIR)/asm/sysdolphin/baselib/tev.s.o from obj_files.mk so the C object supplies the matched code.",
+    "Expanded src/sysdolphin/baselib/tev.c with static TEV/channel state including TevReg, prev_ch, current_tev, num_tex_gens, prev_num_chans, prev_amb_invalid, and prev_mat_invalid.",
+    "Kept HSD_SetupChannel as MWERKS inline asm but changed its parameter from void* to HSD_Chan* and retargeted internal asm symbol references from anonymous HSD_Tev_* globals to the new static C state names.",
+    "Added C implementations for channel count setup, texgen count registration, TEV stage assignment/setup, TEV stage/index conversion helpers, TEV register flushing, channel animation update, and TEV/channel/texgen invalidation functions.",
+    "Updated tev.h prototypes to use HSD_Chan*, HSD_TevDesc*, int, and f32* types and added declarations for the newly matched helper functions.",
+    "Changed HSD_TevConf clr_clamp and alpha_clamp in texp.h from u32 to u8, matching the byte loads used by the TEV setup code.",
+    "Fixed GXSetTevColorS10 declaration/definition to take GXColorS10 by value instead of GXColor* and removed a duplicate declaration in GXTev.h."
+  ],
+  "smart_moves": [
+    "Removed only the standalone tev.s object while preserving HSD_SetupChannel as inline asm, allowing incremental progress: the matched C helpers could replace assembly without requiring the largest channel setup routine to be fully decompiled at the same time.",
+    "Introduced descriptive static state names for previously address-style globals, making the state machine easier to understand while still allowing the inline asm to reference the same storage labels.",
+    "Used typed structures and prototypes, especially HSD_Chan* and HSD_TevDesc*, to expose real field access in the matched C implementation instead of continuing with void* placeholders.",
+    "Preserved compiler-sensitive behavior with pragmas: HSD_SetupTevStageAll is wrapped with dont_inline, and apparently otherwise-unreferenced functions are guarded with MUST_MATCH/force_active blocks.",
+    "Matched stage and channel conversion helpers as explicit switch statements with __assert(__FILE__, line, \"0\") fallbacks, preserving the original control-flow/error behavior visible in the deleted assembly.",
+    "Added a small unused local array in HSD_SetupTevStage, likely as stack-shape padding for matching; the evidence is the explicit u32 unused[2] immediately before the GX calls."
+  ],
+  "decomp_lessons": [
+    "For partially decompiled modules, it is acceptable to keep one difficult function as inline asm while removing the module-level .s file once the surrounding functions match in C.",
+    "When assembly uses byte loads for struct fields, update the struct definition rather than forcing awkward casts at every use site; this PR changed TEV clamp fields to u8.",
+    "Header accuracy matters for matching: the GXSetTevColorS10 signature had to change from pointer-style GXColor* to by-value GXColorS10 to agree with the C call site and inline asm definition.",
+    "State invalidation routines can reveal the intended meaning of static globals: prev_ch is restored from invalid_prev_ch, previous ambient/material invalid flags are set, and prev_num_chans is reset to -1.",
+    "Switch statements over contiguous GX stage IDs can be used to reproduce jump-table-heavy assembly even when the returned value is identity-like.",
+    "Keep original assert line numbers when matching baselib helpers; HSD_Channel2Num, HSD_Index2TevStage, HSD_TevStage2Index, HSD_TevStage2Num, and HSD_TexCoordID2Num all use explicit line constants in their default cases."
+  ],
+  "naming_conventions": [
+    "Public baselib TEV functions use the HSD_ prefix, for example HSD_SetupTevStageAll, HSD_StateSetNumTevStages, and HSD_TexCoordID2Num.",
+    "Internal invalidation entry points use leading underscores, for example _HSD_StateInvalidateColorChannel, _HSD_StateInvalidateTevStage, _HSD_StateInvalidateTevRegister, and _HSD_StateInvalidateTexCoordGen.",
+    "This PR replaced address-like HSD_Tev_804D* state names with descriptive static names such as current_tev, num_tex_gens, prev_num_chans, prev_amb_invalid, and prev_mat_invalid.",
+    "TEV stage conversion helpers are named by direction and domain: HSD_Index2TevStage, HSD_TevStage2Index, HSD_TevStage2Num, HSD_TexCoordID2Num, and HSD_Channel2Num.",
+    "The matched code keeps GX naming and enum-style constants when calling the Dolphin GX API, such as GXSetTevSwapMode(..., GX_TEV_SWAP0, GX_TEV_SWAP0)."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted the old module assembly and removed its object from obj_files.mk only after adding C replacements in src/sysdolphin/baselib/tev.c.",
+    "Retained MWERKS inline asm for HSD_SetupChannel, with symbol references adjusted to C static objects such as TevReg, prev_amb_invalid, and prev_mat_invalid.",
+    "Used #pragma dont_inline on HSD_SetupTevStageAll to preserve call/layout behavior.",
+    "Used #ifdef MUST_MATCH plus #pragma force_active around functions that may need to remain emitted for matching even if not referenced by ordinary C flow.",
+    "Used explicit switch cases for 0..15 TEV stage mappings and 0xFF sentinel cases to mirror original branch/jump-table behavior and default asserts.",
+    "Adjusted struct field widths to match assembly access size: clr_clamp and alpha_clamp became u8 because HSD_SetupTevStage reads clamp values as bytes."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "Match HSD tev",
+    "HSD_SetupChannelAll",
+    "HSD_SetupChannel",
+    "HSD_StateRegisterTexGen",
+    "HSD_StateSetNumTexGens",
+    "HSD_StateInitTev",
+    "HSD_StateGetNumTevStages",
+    "HSD_StateAssignTev",
+    "HSD_StateSetNumTevStages",
+    "HSD_SetupTevStage",
+    "HSD_SetupTevStageAll",
+    "HSD_Channel2Num",
+    "HSD_Index2TevStage",
+    "HSD_TevStage2Index",
+    "HSD_TevStage2Num",
+    "HSD_SetTevRegAll",
+    "HSD_TexCoordID2Num",
+    "ChanUpdateFunc",
+    "_HSD_StateInvalidateColorChannel",
+    "_HSD_StateInvalidateTevStage",
+    "_HSD_StateInvalidateTevRegister",
+    "_HSD_StateInvalidateTexCoordGen",
+    "TevReg",
+    "prev_ch",
+    "invalid_prev_ch",
+    "current_tev",
+    "num_tex_gens",
+    "prev_num_chans",
+    "GXSetTevColorS10",
+    "GXColorS10",
+    "GXSetNumChans",
+    "GXSetNumTexGens",
+    "GXSetNumTevStages",
+    "GXSetTevOrder",
+    "GXSetTevOp",
+    "GXSetTevColorOp",
+    "GXSetTevColorIn",
+    "GXSetTevAlphaOp",
+    "GXSetTevAlphaIn",
+    "GXSetTevSwapMode",
+    "GXSetTevKColorSel",
+    "GXSetTevKAlphaSel",
+    "HSD_TevConf",
+    "clr_clamp u8",
+    "alpha_clamp u8",
+    "dont_inline",
+    "force_active",
+    "asm removal",
+    "sysdolphin baselib tev"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully decompile HSD_SetupChannel and remove the remaining inline asm from tev.c.",
+    "Search for follow-up changes to prev_num_chans or HSD_StateSetNumChans to confirm whether the state cache update semantics were later refined.",
+    "Look for PRs touching HSD_TevConf layout after clr_clamp and alpha_clamp were changed to u8.",
+    "Search for GXSetTevColorS10 signature changes to see whether the by-value GXColorS10 convention was reused elsewhere."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

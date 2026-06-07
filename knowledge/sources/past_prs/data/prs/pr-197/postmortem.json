@@ -1,0 +1,152 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-197",
+  "pr": {
+    "number": 197,
+    "title": "Match HSD_DObj",
+    "url": "https://github.com/doldecomp/melee/pull/197",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-17T20:18:01Z",
+    "merged_at": "2021-12-17T20:18:08Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the sysdolphin baselib DObj unit by replacing asm/sysdolphin/baselib/dobj.s with src/sysdolphin/baselib/dobj.c, adding DObj and MObj headers, wiring the build to compile the C object, and propagating newly identified HSD_DObj, HSD_MObj, HSD_PObj, and class-system symbol names through assembly callsites and global variable labels. Several difficult DObj routines remained as inline asm under NON_MATCHING guards, with comments citing string section or extern issues, while simpler wrappers and traversal logic were expressed in C.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-renaming",
+      "build-system"
+    ],
+    "systems": [
+      "sysdolphin/baselib",
+      "dobj",
+      "mobj",
+      "pobj",
+      "class",
+      "asm-callsite-labels",
+      "build"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/dobj.c",
+    "src/sysdolphin/baselib/dobj.h",
+    "src/sysdolphin/baselib/mobj.h",
+    "asm/sysdolphin/baselib/dobj.s",
+    "src/sysdolphin/baselib/class.h",
+    "include/functions.h",
+    "include/variables.h",
+    "asm/data.s",
+    "obj_files.mk",
+    "e_files.mk"
+  ],
+  "what_changed": [
+    "Deleted the old 614-line asm/sysdolphin/baselib/dobj.s and added a 520-line C implementation at src/sysdolphin/baselib/dobj.c.",
+    "Added src/sysdolphin/baselib/dobj.h defining HSD_DObj, HSD_DObjDesc, HSD_DObjInfo, HSD_ShapeAnimDObj, HSD_DOBJ/HSD_DOBJ_INFO/HSD_DOBJ_METHOD macros, and public DObj API prototypes.",
+    "Added src/sysdolphin/baselib/mobj.h with MObj animation constants, material animation opcodes, structure declarations, and MObj API surface needed by DObj and related code.",
+    "Changed obj_files.mk from building asm/sysdolphin/baselib/dobj.o to src/sysdolphin/baselib/dobj.o, and added src/sysdolphin/baselib/dobj.o to EPILOGUE_UNSCHEDULED in e_files.mk.",
+    "Renamed DObj globals in asm/data.s: lbl_80405450 became hsdDObj and now points to DObjInfoInit; lbl_80407590 became hsdClass.",
+    "Updated many assembly callsites to use identified DObj names, including HSD_DObjSetFlags, HSD_DObjClearFlags, HSD_DObjModifyFlags, HSD_DObjAddAnimAll, HSD_DObjReqAnimAll, HSD_DObjLoadDesc, HSD_DObjRemoveAll, and HSD_DObjResolveRefsAll.",
+    "Updated MObj and PObj-related unknown function labels in include/functions.h and callsites, including HSD_MObjAnim, HSD_MObjRemoveAnimByFlags, HSD_MObjLoadDesc, HSD_PObjLoadDesc, HSD_PObjRemoveAnimAllByFlags, HSD_PObjAddAnimAll, HSD_PObjReqAnimAllByFlags, HSD_PObjAnimAll, HSD_PObjRemoveAll, and HSD_PObjResolveRefsAll.",
+    "Named class-system helpers hsdInitClassInfo, hsdNew, and hsdSearchClassInfo, and updated class.s/cobj.s/fog.s/jobj.s/lobj.s/mobj.s/pobj.s/tobj.s/wobj.s references accordingly.",
+    "Adjusted class.h so HSD_CLASS_METHOD casts an arbitrary object to HSD_Class before reading class_info, and added a next_p(p) helper macro for linked-list traversal.",
+    "Implemented DObj operations in C for current DObj tracking, flags get/set/clear/modify, animation removal/add/request/step over DObj lists, descriptor loading, removal, allocation, reference resolution, display, release, amnesia, and class-info initialization, though some functions are retained as asm inside #else branches."
+  ],
+  "smart_moves": [
+    "The PR did not only match dobj.c in isolation; it propagated the symbol discoveries through existing assembly users, making future cross-system decompilation easier to search and reason about.",
+    "Using HSD_DObjInfo hsdDObj and HSD_Class hsdClass labels in data.s tied class metadata to real C-side names, which is useful for later baselib class hierarchy work.",
+    "The added dobj.h captures exact field offsets for HSD_DObj: parent at 0x00, next at 0x04, mobj at 0x08, pobj at 0x0C, aobj at 0x10, and flags at 0x14.",
+    "The DObj list APIs consistently use null-safe early returns and for-loop traversal over next pointers, matching patterns reusable for other HSD object lists.",
+    "The PR used NON_MATCHING C versions as documentation while preserving matching with inline asm for functions blocked by section/string/extern issues.",
+    "DObj behavior was decomposed around lower-level MObj/PObj/AObj APIs rather than duplicating work, making names like HSD_DObjAddAnimAll and HSD_DObjReqAnimAllByFlags self-validating through their callees.",
+    "The next_p(p) macro in class.h supports parallel traversal of linked animation lists with possible NULL inputs, as seen in HSD_DObjAddAnimAll."
+  ],
+  "decomp_lessons": [
+    "When a matched unit exposes many previously unknown symbols, update assembly callsites and include prototypes in the same PR so the rest of the tree benefits immediately.",
+    "For HSD class-based objects, name both the global class info object and the init function; these data labels often unlock hsdNew/hsdInitClassInfo usage and method-table offsets.",
+    "Headers for adjacent systems may be needed before the target unit can be cleanly expressed; here DObj matching required MObj and PObj function/struct knowledge.",
+    "Keep C versions of nonmatching functions under NON_MATCHING when they explain intent, but use inline asm fallbacks to preserve the build and matching status.",
+    "String placement and extern layout can be matching blockers; comments like 'Non-matching due to section of the strings' and 'Non-matching because a mess of externs' are useful breadcrumbs for future cleanup.",
+    "Class method access macros must be structurally correct for inherited HSD objects; HSD_CLASS_METHOD was changed to cast to HSD_Class before reading class_info.",
+    "Descriptor-loading functions in baselib commonly recurse through next descriptors, allocate via hsdNew or a default class object, then dispatch through a method-table load function."
+  ],
+  "naming_conventions": [
+    "HSD_DObj* functions use Pascal-style subsystem prefixes, e.g. HSD_DObjSetFlags, HSD_DObjClearFlags, HSD_DObjModifyFlags, HSD_DObjLoadDesc, HSD_DObjResolveRefsAll.",
+    "Class info globals use lower camel-style hsd names, e.g. hsdDObj and hsdClass.",
+    "Class helper functions use lower camel-style hsd names, e.g. hsdNew, hsdSearchClassInfo, hsdInitClassInfo.",
+    "Struct typedefs follow HSD_* names over underlying _HSD_* tags, e.g. struct _HSD_DObj typedefed to HSD_DObj.",
+    "Object-cast and class-info macros use HSD_DOBJ, HSD_DOBJ_INFO, and HSD_DOBJ_METHOD.",
+    "Linked-list bulk functions carry an All suffix, e.g. HSD_DObjRemoveAnimAllByFlags, HSD_DObjAddAnimAll, HSD_DObjAnimAll, HSD_DObjRemoveAll.",
+    "ByFlags suffix is used for APIs that mask/select animation channels or object behavior, e.g. HSD_DObjReqAnimAllByFlags and HSD_MObjRemoveAnimByFlags."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced the asm object in obj_files.mk with the C object only after adding the needed C source and headers.",
+    "Used inline asm implementations inside #else branches for DObjLoad, HSD_DObjLoadDesc, HSD_DObjAlloc, and DObjInfoInit while retaining NON_MATCHING C bodies as intent documentation.",
+    "Preserved matching when symbol names changed by editing assembly labels and branch targets without changing machine code bytes.",
+    "Renamed global data labels hsdDObj and hsdClass while keeping their addresses stable, enabling cleaner lis/addi relocation labels in assembly.",
+    "Used #pragma push/#pragma peephole on around small inline helper sections such as hsdDelete/HSD_DObjRemove and release/amnesia helpers, suggesting compiler-output sensitivity.",
+    "For flag modification, both public and inline versions use the expression pattern dobj->flags = dobj->flags & ~mask | flags & mask, matching observed codegen needs.",
+    "For linked animation traversal, HSD_DObjAddAnimAll advances DObj, MatAnim, and ShapeAnimDObj lists together using dp = dp->next and next_p for possibly-null animation lists."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-197",
+    "Match HSD_DObj",
+    "PsiLupan",
+    "HSD_DObj",
+    "HSD_DObjInfo",
+    "HSD_DObjDesc",
+    "HSD_ShapeAnimDObj",
+    "hsdDObj",
+    "DObjInfoInit",
+    "DObjLoad",
+    "DObjRelease",
+    "DObjAmnesia",
+    "HSD_DObjSetFlags",
+    "HSD_DObjClearFlags",
+    "HSD_DObjModifyFlags",
+    "HSD_DObjRemoveAnimAllByFlags",
+    "HSD_DObjAddAnimAll",
+    "HSD_DObjReqAnimAllByFlags",
+    "HSD_DObjReqAnimAll",
+    "HSD_DObjAnimAll",
+    "HSD_DObjLoadDesc",
+    "HSD_DObjRemoveAll",
+    "HSD_DObjAlloc",
+    "HSD_DObjResolveRefsAll",
+    "HSD_DObjDisp",
+    "HSD_MObjAnim",
+    "HSD_MObjRemoveAnimByFlags",
+    "HSD_MObjLoadDesc",
+    "HSD_PObjLoadDesc",
+    "HSD_PObjResolveRefsAll",
+    "hsdClass",
+    "hsdNew",
+    "hsdSearchClassInfo",
+    "hsdInitClassInfo",
+    "next_p",
+    "NON_MATCHING",
+    "asm/sysdolphin/baselib/dobj.s",
+    "src/sysdolphin/baselib/dobj.c",
+    "src/sysdolphin/baselib/dobj.h",
+    "src/sysdolphin/baselib/mobj.h"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that remove the inline asm/NON_MATCHING fallbacks in DObjLoad, HSD_DObjLoadDesc, HSD_DObjAlloc, or DObjInfoInit.",
+    "Search for later cleanup of string-section issues around dobj.c and lbl_80405494.",
+    "Search for PRs that fully decompile HSD_MObj and HSD_PObj after the function names introduced here.",
+    "Check whether hsdDelete was later moved into class.h or a shared class implementation instead of remaining inline/local.",
+    "Look for later revisions to HSD_DObjInfo, especially the update callback field and method-table offsets."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,151 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-764",
+  "pr": {
+    "number": 764,
+    "title": "Refactor `StateVars` and `x222C` (`EntityVars`), pass 1",
+    "url": "https://github.com/doldecomp/melee/pull/764",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-03-20T07:10:01Z",
+    "merged_at": "2023-03-21T04:30:12Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large code-quality refactor that split fighter polymorphic per-entity variables at 0x222C into `Fighter::ev` / `*_EntityVars` and action-state transient variables at 0x2340 into `Fighter::sv` / `*_StateVars`, moving many character-specific layouts out of the monolithic `ft/types.h` into per-character `types.h` and `forward.h` headers. The PR changed 223 files, mostly fighter character sources and headers, replacing older `fp->sa.*` and raw state var fields like `x234C_stateVar4` with named `fp->ev.*` or `fp->sv.*` accesses. It also documented EV/SV terminology in the glossary and made supporting include/build cleanup.",
+  "change_classification": {
+    "primary_type": "code_quality_refactor",
+    "categories": [
+      "headers",
+      "struct_layout",
+      "naming",
+      "fighter_refactor",
+      "documentation",
+      "tooling"
+    ],
+    "systems": [
+      "fighter",
+      "fighter_state_vars",
+      "fighter_entity_vars",
+      "character_headers",
+      "baselib_headers",
+      "docs",
+      "build_tooling"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/types.h",
+    "src/melee/ft/forward.h",
+    "docs/glossary.md",
+    "Makefile",
+    "tools/asm-differ/diff_settings.py",
+    "src/melee/ft/chara/ftCaptain/types.h",
+    "src/melee/ft/chara/ftCaptain/types.dox",
+    "src/melee/ft/chara/ftCaptain/forward.h",
+    "src/melee/ft/chara/ftCaptain/ftCaptain.h",
+    "src/melee/ft/chara/ftCaptain/ftCaptain_SpecialS.c",
+    "src/melee/ft/chara/ftCaptain/ftCaptain_SpecialS.h",
+    "src/melee/ft/chara/ftCommon/types.h",
+    "src/melee/ft/chara/ftDonkey/types.h",
+    "src/melee/ft/chara/ftGameWatch/ftGameWatch_StateVars.h",
+    "src/melee/ft/chara/ftMasterHand/types.h",
+    "src/melee/ft/chara/ftNess/ftNess_StateVars.h",
+    "src/sysdolphin/baselib/forward.h"
+  ],
+  "what_changed": [
+    "Replaced the old `Fighter::sa` special-attributes style storage for many 0x222C fields with a new `Fighter::ev` union described as Entity Variables. Examples in the diff include `fp->sa.clink.x222C` becoming `fp->ev.cl.x222C`, `fp->sa.masterhand.x222C` becoming `fp->ev.mh.x222C`, and Captain Falcon/Ganondorf Raptor Boost flags becoming `fp->ev.ca.during_specials_start` and `fp->ev.ca.during_specials`.",
+    "Introduced or renamed per-character state-variable unions using the `ftCharacter_StateVars` pattern, and placed them under `Fighter::sv` at the 0x2340 action-state variable region. Examples include `union ftCaptain_StateVars`, `union ftDonkey_StateVars`, `union ftFox_StateVars`, `union ftGameWatch_StateVars`, `union ftMasterHand_StateVars`, `union ftNess_StateVars`, and others.",
+    "Changed many direct raw state fields such as `x234C_stateVar4` into character/action-specific `sv` fields. Donkey Kong SpecialN code, for example, moved copied arm-swing counts from raw state-var fields into `fp->sv.dk.specialn.xC` while persistent arm-swing count stayed in `fp->ev.dk.x222C`.",
+    "Added per-character `types.h` and `forward.h` files so character attributes, entity vars, action enums, and state vars no longer all live in the central fighter header. Captain Falcon received a new `ftCaptain/types.h` containing `struct ftCaptain_EntityVars`, `struct ftCaptainAttributes`, and `union ftCaptain_StateVars`.",
+    "Reduced `src/melee/ft/types.h` substantially, replacing a large inline set of per-character state layouts with `union FighterEntityVars ev` and `union Fighter_StateVars sv` members that reference per-character types.",
+    "Added glossary entries for `EV` as Entity Variables used by `HSD_GObj::user_data` structs such as `Fighter::ev`, and `SV` as State Variables specific to an `ActionState` and used by `Fighter::sv`.",
+    "Renamed several identifiers toward project-style names, such as `AS_CAPTAIN_SPECIALS`-style enum entries becoming `ftCaptain_AS_SpecialS`-style entries and `lbl_800E28C8` becoming `ftCaptain_800E28C8`.",
+    "Cleaned header include style in many touched files, replacing long `<melee/...>` and old `<Runtime/platform.h>` / `<sysdolphin/baselib/...>` includes with local project includes such as `\"ft/types.h\"`, `\"ft/fighter.h\"`, `<platform.h>`, and `<baselib/forward.h>`.",
+    "Added Captain Falcon SpecialS header documentation and prototypes in `ftCaptain_SpecialS.h`, separating Side Special declarations from the broad `ftCaptain.h` header.",
+    "Made build/tooling side changes: `Makefile` removed `$(*D)` from `INCLUDE_DIRS`, split `$(INCLUDES)` onto its own CFLAGS line, added a `VERBOSE=1` path to pass `-verbose`, and `Cargo.lock` updated Rust dependency versions."
+  ],
+  "smart_moves": [
+    "Separated persistent fighter/entity state from transient action-state state instead of continuing to overload `sa` and raw `x2340`-style fields. This makes variable lifetime visible in code: `ev` for non-transient per-fighter data and `sv` for action-state-local scratch data.",
+    "Kept the physical offsets explicit in the new structures and documentation, e.g. `ftCaptain_EntityVars` documents 0x222C and 0x2230, while `Fighter_StateVars` is annotated at 0x2340 with a fixed-size backing array. This preserves decomp layout evidence while improving names.",
+    "Used unions for per-character polymorphism rather than separate ad hoc fields, matching the underlying memory reuse model of the fighter struct and avoiding layout growth.",
+    "Moved character-specific definitions into character-local `types.h`/`forward.h` headers, reducing central header churn and making later per-character decomp work easier to isolate.",
+    "Documented abbreviations (`EV`, `SV`, `gr`, `grav`) in `docs/glossary.md`, which helps make the new short member names searchable and consistent across future PRs.",
+    "Applied the refactor mechanically across many files while preserving offset names where semantics are still unknown, e.g. `fp->ev.dk.x222C` and unknown nested `sv` fields. This avoids inventing names without evidence while still clarifying lifetime/location."
+  ],
+  "decomp_lessons": [
+    "When a reused memory region has two different lifetimes, encode that distinction in the struct model. In this PR, 0x222C data became `ev` Entity Variables, while 0x2340 action-state scratch became `sv` State Variables.",
+    "Prefer `ftCharacter_EntityVars` and `ftCharacter_StateVars` types over dumping all per-character fields into `Fighter`. It makes character-specific reverse engineering easier and prevents unrelated fighters from depending on each other’s layouts.",
+    "Use unions plus offset comments/filler arrays to model polymorphic game structs accurately without changing ABI or struct size.",
+    "Do not force semantic names when only an offset is known. Keeping names like `x222C` under the correct namespace, such as `fp->ev.dk.x222C`, is still an improvement over ambiguous global raw fields.",
+    "Move large function prototype blocks and special-move declarations out of broad character headers into move-specific headers when possible. This reduces include coupling and makes matching work less fragile.",
+    "Add glossary documentation when introducing short naming conventions such as `ev`, `sv`, `gr`, or `grav`; otherwise future contributors may reinterpret abbreviations inconsistently."
+  ],
+  "naming_conventions": [
+    "`Fighter::ev` means Entity Variables: per-fighter polymorphic variables located around 0x222C and stored by `HSD_GObj::user_data` structs.",
+    "`Fighter::sv` means State Variables: action-state-specific polymorphic variables located around 0x2340.",
+    "Per-character entity/state types use project-style prefixes and underscores, e.g. `struct ftCaptain_EntityVars`, `union ftCaptain_StateVars`, `union ftDonkey_StateVars`, `union ftMasterHand_StateVars`.",
+    "Fighter union members use short two-letter character IDs where possible, such as `ca` for Captain, `gn` for Ganondorf, `dk` for Donkey Kong, `fx`/`fc` for Fox/Falco, `mh`/`ch` for Master Hand/Crazy Hand, `mr`/`dr` for Mario/Dr. Mario, and `cl` for Young Link/CLink.",
+    "Action enum constants are moved toward `ftCharacter_AS_ActionName`, e.g. `ftCaptain_AS_SpecialN`, `ftCaptain_AS_SpecialAirS`, rather than older all-caps `AS_CAPTAIN_*` names.",
+    "Attribute member names are lower_snake_case and move-prefixed, e.g. Captain Falcon attributes like `specialn_stick_range_y_pos`, `specials_grav`, and `specials_terminal_vel`.",
+    "Include guards use full path-style uppercase names such as `MELEE_FT_CHARA_FTCAPTAIN_TYPES_H` and `MELEE_FT_CHARA_FTCAPTAIN_FTCAPTAIN_SPECIALS_H`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Namespace refactors can improve readability without changing generated code when they only rename struct paths and preserve offsets/types.",
+    "For action-state scratch fields, replace raw `x2340`/`x234C` aliases with nested union members matching the action, e.g. `fp->sv.ca.specials.grav` for aerial Raptor Boost gravity.",
+    "For persistent object pointers and counters at 0x222C, use `fp->ev.*` rather than `fp->sa.*` so code does not confuse character special attributes with per-entity runtime variables.",
+    "Keep unknown fields as offset-style names inside the correct union when semantics are not established; this preserves matching flexibility and avoids misleading reviewers.",
+    "Header slimming and forward declarations are useful for large decomp refactors: move full definitions to `types.h`, expose only `forward.h` where possible, and include concrete headers only in `.c` files that need layout access.",
+    "The Makefile `VERBOSE=1` addition can help diagnose compiler include/order or CodeWarrior flag issues during large header refactors."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review bodies were present in the provided PR slice, so no human review feedback can be extracted."
+  ],
+  "searchable_terms": [
+    "StateVars",
+    "EntityVars",
+    "Fighter::sv",
+    "Fighter::ev",
+    "fp->sv",
+    "fp->ev",
+    "x222C",
+    "x2340",
+    "x234C_stateVar4",
+    "ftCaptain_EntityVars",
+    "ftCaptain_StateVars",
+    "ftCommon_StateVars",
+    "ftDonkey_StateVars",
+    "ftGameWatch_StateVars",
+    "ftMasterHand_StateVars",
+    "ftNess_StateVars",
+    "ftSeak_StateVars",
+    "ftZelda_StateVars",
+    "during_specials_start",
+    "during_specials",
+    "specials_grav",
+    "Raptor Boost",
+    "Gerudo Dragon",
+    "EV glossary",
+    "SV glossary",
+    "HSD_GObj user_data",
+    "union FighterEntityVars",
+    "union Fighter_StateVars",
+    "ftCharacter types.h",
+    "ftCharacter forward.h",
+    "code-quality"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that continue `StateVars` / `EntityVars` pass 2 or finish converting remaining `sa` users.",
+    "Search for remaining raw `x2340`, `x2344`, `x2348`, and `x234C_stateVar` fields after PR 764.",
+    "Audit all `Fighter::ev` union members that still use `x222C` names and identify candidates for semantic names.",
+    "Look for follow-up reviews or regressions related to the Makefile include path removal of `$(*D)`.",
+    "Compare later per-character `types.h` patterns against `ftCaptain/types.h` introduced in this PR."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,140 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-704",
+  "pr": {
+    "number": 704,
+    "title": "Match `grticeclimber`, pass 1",
+    "url": "https://github.com/doldecomp/melee/pull/704",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-18T10:51:51Z",
+    "merged_at": "2023-01-19T09:30:41Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "First matching pass for the Target Test Ice Climbers stage module `grticeclimber`: most of the hand-written assembly was replaced with C, a new stage header was added, the C object was added to the build while the residual asm object stayed present, and two grmaterial prototypes were exposed. The PR body says it resolved most of issue #617. There were no review comments; the only recorded review was approval.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "stage-decompilation",
+      "headers",
+      "build-system",
+      "partial-asm-retention"
+    ],
+    "systems": [
+      "stage",
+      "grticeclimber",
+      "ground",
+      "grmaterial",
+      "asm",
+      "obj_files.mk"
+    ]
+  },
+  "key_files": [
+    "asm/melee/gr/grticeclimber.s",
+    "src/melee/gr/grticeclimber.c",
+    "src/melee/gr/grticeclimber.h",
+    "src/melee/gr/grmaterial.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted 338 lines from `asm/melee/gr/grticeclimber.s`, including the prior assembly implementations and data for many `func_80220Fxx` and `lbl_80221xxx` symbols.",
+    "Added `src/melee/gr/grticeclimber.c` with 211 lines implementing the stage callbacks, `StageCallbacks lbl_803E8A98`, `StageData lbl_803E8AF4`, initialization logic, gobj setup, callback dispatch, and several trivial callback stubs.",
+    "Added `src/melee/gr/grticeclimber.h` with prototypes for the stage init callbacks, per-ground callbacks, `func_80220FB4`, `func_80221288`, `lbl_80221208`, and related external stage functions.",
+    "Added `$(BUILD_DIR)/src/melee/gr/grticeclimber.c.o` to `TEXT_O_FILES` in `obj_files.mk` while keeping `$(BUILD_DIR)/asm/melee/gr/grticeclimber.s.o`, indicating a split C/asm object during this pass.",
+    "Added prototypes `func_801C8CDC(void)` and `func_801C8E08(void)` to `src/melee/gr/grmaterial.h` for functions needed by the new C translation.",
+    "Converted raw stage data from `.4byte` assembly into typed C initializers: `StageCallbacks` entries and `StageData` with file path `\"/GrTIc.dat\"`, stage id `47`, and callback pointers.",
+    "Recreated stage startup behavior in C: sets `stage_info.unk8C.b4 = false`, `stage_info.unk8C.b5 = true`, creates ground objects for ids 0, 1, and 2, then calls common stage setup functions `func_801C39C0`, `func_801C3BB4`, `func_801C4210`, and `func_801C42AC`.",
+    "Reimplemented `func_80220FB4` as the ground-object factory/setup helper: fetches a gobj by id, clears callbacks, installs the GX link with `GObj_SetupGXLink`, conditionally installs callback fields, invokes callback0, schedules callback2 with `func_8038FD54`, and reports failure with `OSReport`.",
+    "Kept `lbl_80221208` as MWERKS inline assembly inside the new C file under `#ifdef MWERKS_GEKKO`, preserving exact codegen for a harder-to-match effect/camera/material sequence.",
+    "Represented the unknown data table formerly at `lbl_803E8B5C` as a `u32` array with a `@todo Unknown struct` note rather than inventing a structure."
+  ],
+  "smart_moves": [
+    "Used typed `StageCallbacks` and `StageData` initializers to replace raw `.4byte` data without requiring all callback names or meanings to be solved first.",
+    "Preserved exact matching for the stubborn `lbl_80221208` routine by embedding MWERKS inline assembly instead of forcing a risky nonmatching C rewrite.",
+    "Kept a mixed C/asm build arrangement by adding the C object while retaining the asm object, enabling incremental decompilation of `grticeclimber` instead of requiring the whole file to be converted at once.",
+    "Documented codegen sensitivity in `func_80220FB4` with `@todo Cannot be moved below @c cb due to an inline`, warning future editors that variable ordering affects the match.",
+    "Modeled stage info bitfield writes as `stage_info.unk8C.b4` and `stage_info.unk8C.b5`, improving readability over the original `rlwimi`/byte manipulation while still matching behavior.",
+    "Left the packed table `lbl_803E8B5C` as raw `u32` data with an explicit unknown-struct todo, which is safer than inventing semantics without evidence."
+  ],
+  "decomp_lessons": [
+    "For stage target-test modules, converting the callback table and `StageData` first can unlock large chunks of matching C even when some routines remain unknown or inline-asm-only.",
+    "When an assembly routine includes calls such as `HSD_JObjSetFlagsAll`, `func_8000B1CC`, `ef_Spawn`, `func_80030E44`, `func_801C53EC`, and `func_801C8CDC`, preserving it as inline asm can be an acceptable pass-1 tactic if C codegen is not yet understood.",
+    "Ground object setup patterns are reusable: get `Ground*` from `HSD_GObjGetUserData`, clear `x8_callback` and `xC_callback`, call `GObj_SetupGXLink`, conditionally store `x1C_callback`, invoke an init callback, and optionally schedule a proc callback with `func_8038FD54`.",
+    "Build-system migration can be staged: add the new `src/...c.o` next to the old `asm/...s.o` and remove only the assembly ranges that have C replacements.",
+    "Use existing common ground helpers where possible. This PR used helpers/macros such as `Ground_JObjInline1`, `func_801C8138`, `func_801C2FE0`, and `func_801C7FF8` instead of open-coding the assembly sequences.",
+    "Unknown packed data arrays should be carried forward with address labels and a clear `@todo`, preserving matchability and future searchability until the structure is identified."
+  ],
+  "naming_conventions": [
+    "The module follows the stage-file naming pattern `grticeclimber.c` and `grticeclimber.h` under `src/melee/gr/`.",
+    "Unidentified functions and labels retained address-derived names such as `func_80220F10`, `func_80220FB4`, `lbl_80220F14`, `lbl_8022109C`, and `lbl_803E8A98`.",
+    "Stage callback arrays and stage data retained their original data-label names, e.g. `lbl_803E8A98` for `StageCallbacks` and `lbl_803E8AF4` for `StageData`.",
+    "Trivial callbacks were still given typed signatures such as `bool lbl_802210C8(HSD_GObj*)` returning `false` and `void lbl_802210D0(HSD_GObj*) {}`.",
+    "The new header uses the guard `MELEE_GR_GRTICECLIMBER_H`, matching the repository's all-caps path-derived include guard style.",
+    "The stage asset path was represented directly in C as `\"/GrTIc.dat\"`, preserving the exact original string."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed matched assembly from `asm/melee/gr/grticeclimber.s` while leaving remaining assembly and constants in place.",
+    "Used MWERKS inline assembly for `lbl_80221208` with `#pragma push`, `asm void`, `nofralloc`, and `clang-format off/on` to preserve exact instruction output.",
+    "Used a local variable ordering constraint in `func_80220FB4`; the comment states `HSD_GObj* gobj` cannot be moved below `cb` because of an inline-related matching issue.",
+    "Translated assembly callback tables into typed C data while preserving symbol names and callback pointer ordering.",
+    "Represented bit flags as C expressions such as `(1 << 30) | (1 << 31)` and `(1 << 0)` instead of raw hex where the original data permitted it.",
+    "Used `extern f32 const lbl_804DBCB8` and `extern f32 const lbl_804DBCBC` for sdata2 float constants consumed by matched C rather than moving those constants in this pass."
+  ],
+  "review_feedback": [
+    "No review comments were present in the PR slice.",
+    "One recorded review by `r-burns` approved the PR with an empty body.",
+    "The PR body states `Resolves most of #617` and includes `Co-authored-by: jeffm <jeffmao99@berkeley.edu>`."
+  ],
+  "searchable_terms": [
+    "pr-704",
+    "grticeclimber",
+    "GrTIc.dat",
+    "Target Test Ice Climbers",
+    "stage decompilation",
+    "StageCallbacks",
+    "StageData",
+    "lbl_803E8A98",
+    "lbl_803E8AF4",
+    "lbl_803E8B5C",
+    "func_80220F10",
+    "lbl_80220F14",
+    "func_80220FB4",
+    "lbl_80221208",
+    "func_80221288",
+    "stage_info.unk8C.b4",
+    "stage_info.unk8C.b5",
+    "Ground_JObjInline1",
+    "HSD_GObjGetUserData",
+    "GObj_SetupGXLink",
+    "func_8038FD54",
+    "OSReport",
+    "ef_Spawn",
+    "HSD_JObjSetFlagsAll",
+    "func_801C8CDC",
+    "func_801C8E08",
+    "obj_files.mk",
+    "MWERKS_GEKKO",
+    "inline asm",
+    "Cannot be moved below cb due to an inline",
+    "Resolves most of #617",
+    "ribbanya",
+    "jeffm"
+  ],
+  "follow_up_queries": [
+    "Inspect later PRs for completion of `grticeclimber` after this pass, especially replacement of inline asm `lbl_80221208` and any remaining assembly in `asm/melee/gr/grticeclimber.s`.",
+    "Search for identification of the unknown `lbl_803E8B5C` table structure.",
+    "Compare `grticeclimber` against other target-test stage modules such as `grtfox`, `grtfalco`, `grtkirby`, and `grtkoopa` for shared callback-table patterns.",
+    "Check whether the header signature for `func_80220F10` was later normalized, since the diff excerpt shows the C definition taking `bool arg0` while the new header declares `int`.",
+    "Look for later naming cleanup of address-derived callbacks once target-test ground object roles were understood."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

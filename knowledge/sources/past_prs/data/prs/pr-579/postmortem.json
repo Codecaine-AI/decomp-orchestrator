@@ -1,0 +1,172 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-579",
+  "pr": {
+    "number": 579,
+    "title": "Migrate `os` to C",
+    "url": "https://github.com/doldecomp/melee/pull/579",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2022-10-26T00:57:25Z",
+    "merged_at": "2022-10-27T17:31:31Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large experimental migration of Dolphin `os` translation units from standalone `.s` assembly into C files, often using C with inline assembly plus separate `_data.s` files for remaining data sections. The stated goal was to make even very large TUs easier to work on incrementally: move `.text` into C first, create headers and provisional types, identify data, later migrate data and match functions. The PR removed full assembly sources such as `asm/dolphin/os/OSThread.s`, `OSReset.s`, `OSResetSW.s`, and `OSMemory.s`, added or expanded corresponding `src/dolphin/os/*.c` files, split data into files like `OSCache_data.s`, `OSContext_data.s`, `OSInterrupt_data.s`, and updated headers/build lists. Review discussion noted that much SDK OS code is handwritten assembly and therefore may be low-value or busy work for new contributors, while the author argued that placeholder `unk_t` signatures are useful because compiler errors force real signatures when symbols are used elsewhere.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "asm-to-c-migration",
+      "decomp-matching",
+      "headers",
+      "tooling-workflow",
+      "types-structs",
+      "sdk-os"
+    ],
+    "systems": [
+      "dolphin/os",
+      "asm",
+      "src",
+      "include",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "src/dolphin/os/OSThread.c",
+    "asm/dolphin/os/OSThread.s",
+    "src/dolphin/os/OSReset.c",
+    "asm/dolphin/os/OSReset.s",
+    "src/dolphin/os/OSResetSW.c",
+    "asm/dolphin/os/OSResetSW.s",
+    "src/dolphin/os/OSMemory.c",
+    "asm/dolphin/os/OSMemory.s",
+    "src/dolphin/os/OS.c",
+    "src/dolphin/os/OSSerial.c",
+    "src/dolphin/os/OSExi.c",
+    "src/dolphin/os/OSCache.c",
+    "src/dolphin/os/OSContext.c",
+    "src/dolphin/os/OSInterrupt.c",
+    "src/dolphin/os/OSRtc.c",
+    "src/dolphin/os/OSAlarm.c",
+    "src/dolphin/os/OSTime.c",
+    "include/dolphin/os/OSContext.h",
+    "include/dolphin/os/init/__start.h",
+    "src/dolphin/os/OSAudioSystem.h",
+    "obj_files.mk",
+    "asm/dolphin/os/OSCache_data.s",
+    "asm/dolphin/os/OSContext_data.s",
+    "asm/dolphin/os/OSInterrupt_data.s",
+    "asm/dolphin/os/OSMemory_data.s",
+    "asm/dolphin/os/OSError_data.s"
+  ],
+  "what_changed": [
+    "Migrated a broad set of Dolphin OS `.text` sections from assembly files into C translation units under `src/dolphin/os`.",
+    "Deleted full assembly implementations for several OS modules, notably `OSThread.s` with about 1870 deleted lines, `OSReset.s`, `OSResetSW.s`, and `OSMemory.s`.",
+    "Added large C implementations or C wrappers for OS modules, including `OSThread.c`, `OSReset.c`, `OSResetSW.c`, and `OSMemory.c`.",
+    "Split remaining data and bss content into per-module `_data.s` files such as `OSCache_data.s`, `OSContext_data.s`, `OSInterrupt_data.s`, `OSMemory_data.s`, `OSReboot_data.s`, `OSExi_data.s`, `OSRtc_data.s`, `OSSerial_data.s`, `OSThread_data.s`, and `OSTime_data.s`.",
+    "Renamed `asm/dolphin/os/OSError.s` to `asm/dolphin/os/OSError_data.s` with 100% similarity according to the diff excerpt.",
+    "Updated existing OS C files including `OS.c`, `OSSerial.c`, `OSExi.c`, `OSCache.c`, `OSContext.c`, `OSInterrupt.c`, `OSRtc.c`, `OSAlarm.c`, `OSTime.c`, `OSReboot.c`, `OSUartExi.c`, and `OSFont.c`.",
+    "Adjusted headers including `include/dolphin/os/OSContext.h`, `include/dolphin/os/init/__start.h`, and added `src/dolphin/os/OSAudioSystem.h`.",
+    "Updated `obj_files.mk` to reflect the migration of object files from assembly to C and the introduction of separate data assembly files."
+  ],
+  "smart_moves": [
+    "Used an incremental migration workflow: first move `.text` into C, then create headers/types, then identify and migrate data, and only then clean up and match functions.",
+    "Kept unmatched code in C translation units rather than requiring a whole TU to be matched at once, making it possible to work on individual functions inside very large TUs.",
+    "Separated leftover data into `_data.s` files, preserving exact section layout and labels while allowing text code to live in C.",
+    "Leveraged the compiler as a type-pressure tool: placeholder `unk_t` was preferred over `void` because it causes compiler complaints when signatures leak elsewhere, forcing contributors to define real signatures.",
+    "Called out tool support explicitly: `dadosod` can copy assembly from C-inlined assembly, and `asm-differ` can compare C-inlined assembly versions more easily than code originating only in `.s` files.",
+    "Documented the migration workflow in the PR body so future module migrations could reuse the same staged process."
+  ],
+  "decomp_lessons": [
+    "Migrating a TU to C does not require all functions to be matched immediately; C files can temporarily contain inline assembly while headers and types improve around them.",
+    "For large TUs, a partial C migration can expose call relationships, shared data types, and public interfaces more clearly than raw assembly.",
+    "Data sections can be isolated into `_data.s` files as a transitional state when text has moved to C but data has not yet been fully typed or migrated.",
+    "Using a sentinel unknown type can be more useful than defaulting to `void`, because it creates compile-time pressure to recover real function signatures.",
+    "SDK modules, especially OS code, may contain significant handwritten assembly; reviewers may consider them lower priority for new contributors because matching may be mechanical or busy work rather than high-value gameplay decomp.",
+    "A migration strategy that works for OS may be even more beneficial in gameplay systems such as `ft`, where header cleanup and extern cleanup can produce more visible decomp value."
+  ],
+  "naming_conventions": [
+    "Per-module leftover data assembly files use the pattern `asm/dolphin/os/<Module>_data.s`, for example `OSCache_data.s`, `OSContext_data.s`, `OSInterrupt_data.s`, and `OSMemory_data.s`.",
+    "Dolphin OS C sources retain SDK-style names under `src/dolphin/os`, such as `OSReset.c`, `OSResetSW.c`, `OSThread.c`, `OSMemory.c`, and `OSSerial.c`.",
+    "Existing unknown labels were preserved in data files where names were not recovered, such as `lbl_80401BF0`, `lbl_80401E20`, `lbl_80402318`, and `lbl_804A7C80`.",
+    "Known OS globals were preserved with their SDK-style names where available, including `__OSLastInterruptSrr0`, `__OSLastInterrupt`, and `__OSLastInterruptTime`.",
+    "The discussion references `unk_t` as an intentional placeholder type rather than silently erasing uncertainty with `void`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Move assembly `.text` into C translation units first, potentially as inline assembly, to enable per-function matching work inside the C file.",
+    "Keep data and bss in assembly `_data.s` files until types and layout are understood well enough to migrate them safely.",
+    "Use `asm-differ` against generated assembly from C-inlined assembly when matching individual functions.",
+    "Use `dadosod` or similar tooling to copy a function's inline assembly into a scratch for matching.",
+    "Preserve alignment directives, section declarations, string literals, `.4byte` entries, and `.skip` sizes in data assembly files to avoid layout drift.",
+    "When hardware or low-level SDK routines are handwritten assembly, expect that some functions may remain inline assembly or be lower priority for matching."
+  ],
+  "review_feedback": [
+    {
+      "author": "PsiLupan",
+      "feedback": "Noted that many SDK OS functions are handwritten assembly and questioned the value for new contributors, saying the work may mostly remove `unk_t` and convert things to `void`; SDK had been marked low-priority for this reason."
+    },
+    {
+      "author": "PsiLupan",
+      "feedback": "Said there was no issue with doing the migration, but recommended not pointing new contributors at it because much of it is busy work."
+    },
+    {
+      "author": "ribbanya",
+      "feedback": "Responded that `unk_t` is a placeholder, and that using it instead of `void` is useful because compiler errors force real signatures when the type appears in places like `functions.h`."
+    },
+    {
+      "author": "ribbanya",
+      "feedback": "Acknowledged that OS may have been a strange first candidate because much of it is handwritten assembly, but said the same approach was already helping clean up headers and externs in `ft` work."
+    }
+  ],
+  "searchable_terms": [
+    "Migrate os to C",
+    "asm to C migration",
+    "Dolphin OS",
+    "SDK handwritten asm",
+    "inline asm",
+    "unk_t",
+    "void placeholder",
+    "data sections",
+    "_data.s",
+    "OSCache_data.s",
+    "OSContext_data.s",
+    "OSInterrupt_data.s",
+    "OSMemory_data.s",
+    "OSThread.c",
+    "OSThread.s",
+    "OSReset.c",
+    "OSReset.s",
+    "OSResetSW.c",
+    "OSMemory.c",
+    "OSSerial.c",
+    "OSExi.c",
+    "OSContext.h",
+    "obj_files.mk",
+    "dadosod",
+    "asm-differ",
+    "headers",
+    "extern cleanup",
+    "translation unit migration",
+    "__OSLastInterruptSrr0",
+    "__OSLastInterrupt",
+    "__OSLastInterruptTime",
+    "OSRegisterResetFunction",
+    "OSGetConsoleSimulatedMemSize",
+    "__OSInitMemoryProtection"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that complete migration of Dolphin OS `_data.s` files into C data definitions.",
+    "Find PR #580 for the build.sh assembly dump tooling mentioned as follow-up from this migration.",
+    "Search for subsequent `ft` migration PRs by ribbanya that reused this workflow and cleaned up headers or externs.",
+    "Search for uses of `unk_t` in function declarations after this PR to see where placeholder signatures forced cleanup.",
+    "Check whether OS handwritten assembly functions remained inline assembly or were later matched in C."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

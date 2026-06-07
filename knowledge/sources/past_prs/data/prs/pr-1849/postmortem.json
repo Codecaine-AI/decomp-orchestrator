@@ -1,0 +1,134 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1849",
+  "pr": {
+    "number": 1849,
+    "title": "Partially match `lb_00F9`",
+    "url": "https://github.com/doldecomp/melee/pull/1849",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2025-08-16T23:35:36Z",
+    "merged_at": "2025-08-16T23:49:49Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Partially decompiled and matched the `lb_00F9` library unit by replacing placeholders for `lb_800101C8` and `lb_800117F4` with matching C, updating their headers and call sites, and refining `lb_80011A50_t` field names around scale, angle, and count state. The decomp.dev report credited two new 100% function matches totaling +984 bytes and a +0.03% matched-code increase.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-field-naming",
+      "prototype-correction",
+      "inline-helper"
+    ],
+    "systems": [
+      "melee/lb",
+      "fighter",
+      "sysdolphin/baselib",
+      "GX rendering",
+      "dynamics"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/lb_00F9.c",
+    "src/melee/lb/lb_00F9.h",
+    "src/melee/lb/types.h",
+    "src/melee/ft/ftdrawcommon.c",
+    "src/sysdolphin/baselib/jobj.h"
+  ],
+  "what_changed": [
+    "Implemented `lb_800101C8(Vec3*, Vec3*)`, replacing an `/// #lb_800101C8` placeholder with vector accumulation logic over the global `lb_804D63B0` linked list and a final `lbVector_Normalize(arg1)` call.",
+    "Implemented `lb_800117F4(DynamicsDesc*, GXColor*, UNK_T, int, u32)`, replacing an `/// #lb_800117F4` placeholder with GX line-strip drawing of dynamic jobj positions using `HSD_StateInitDirect`, current camera viewing matrix setup, `GXBegin`, `GXPosition3f32`, and `GXColor4u8`.",
+    "Updated `lb_00F9.h` prototypes for `lb_800101C8`, `lb_800103B8`, and `lb_800117F4` from unknown signatures to typed `Vec3*`, `DynamicsDesc*`, and `GXColor*` signatures.",
+    "Changed `lb_800103B8` from an unknown no-argument stub-style wrapper into `void lb_800103B8(Vec3* a, Vec3* b)` forwarding to `lb_800101C8(a, b)`.",
+    "Renamed fields in `struct lb_80011A50_t`: `x20` to `unk_scale`, `x2C` to `unk_angle_float`, and `unk_count1` to `unk_angle_int`, then propagated those names through constructors/copy/update code.",
+    "Included `lb/lbvector.h` in `lb_00F9.c` to support `lbVector_Normalize` usage.",
+    "Added `HSD_JObjSetMtxDirtyInline` to `src/sysdolphin/baselib/jobj.h`, guarded by `jobj != NULL && !HSD_JObjMtxIsDirty(jobj)`, with a todo referencing `lb_800117F4`.",
+    "Adjusted `ftDrawCommon_800805C8` to call the corrected `lb_800117F4` prototype, explicitly casting `&spAC` to `GXColor*` while passing `&spA8`, `phi_r26->dynamics_num`, and `arg1`."
+  ],
+  "smart_moves": [
+    "Recovered concrete function signatures before updating call sites, reducing unknown `UNK_RET`/`UNK_PARAMS` surface in the lb header.",
+    "Used semantic-but-still-cautious field names such as `unk_scale`, `unk_angle_float`, and `unk_angle_int` where the diff shows behavior but not final domain naming certainty.",
+    "Introduced a local inline helper for the JObj matrix-dirty pattern instead of open-coding the null/dirty check in the matched function, making the required codegen reusable.",
+    "Preserved match-sensitive control-flow structure in `lb_800117F4`, including an explicit `goto block_5` and local stack padding.",
+    "Matched rendering behavior by identifying that the argument used as color data should be typed as `GXColor*`, then used half-intensity RGB for early vertices and full RGB for later vertices based on `i < arg3`.",
+    "Kept the fighter call site compiling against the new prototype with an explicit `(GXColor*) &spAC` cast rather than reworking surrounding stack locals in `ftdrawcommon.c`."
+  ],
+  "decomp_lessons": [
+    "When a placeholder function exposes a misleading call-site type, matching may require correcting the callee prototype and then adding narrowly scoped casts at legacy call sites.",
+    "A linked-list struct can often be renamed incrementally from usage patterns: here scale decays by `x24`, a counter decrements, and an angle integer advances into `cosf(angle_int * angle_float)`.",
+    "For GX debug/dynamics drawing code, exact matches may depend on camera/view-matrix setup, line width constants, vertex format constants, and preserving the ordering of position and color writes.",
+    "Inline baselib helpers can be necessary to reproduce library idioms around JObj matrix dirtiness; add them in headers when the same pattern is likely reusable.",
+    "Stack-shape and control-flow artifacts such as `PAD_STACK`, `goto` labels, and extra inner scopes are legitimate matching tools in this codebase when evidence comes from successful decomp.dev matches.",
+    "A PR can be titled 'partially match' at the module level even when individual functions newly added in the slice are 100% matched."
+  ],
+  "naming_conventions": [
+    "`lb_00F9` functions retained address-based names such as `lb_800101C8`, `lb_800103B8`, and `lb_800117F4`.",
+    "Unconfirmed struct fields use `unk_` prefixes with behavior hints, e.g. `unk_scale`, `unk_angle_float`, `unk_angle_int`, and `unk_count0`.",
+    "Known math/vector parameters were typed as `Vec3*`; rendering color data was typed as `GXColor*`; dynamics data used `DynamicsDesc*`.",
+    "Inline helpers in baselib follow the `HSD_JObj...Inline` naming pattern, as with `HSD_JObjSetMtxDirtyInline`.",
+    "Temporary match variables in the diff preserve decompiler-style names such as `var_r30`, `var_f0`, `cur`, and `block_5` where clearer semantic names were not established."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `PAD_STACK(8 * 4)` in `lb_800117F4` to satisfy stack layout/codegen needs.",
+    "Used a `goto block_5` branch shape for the `arg1->a`/`arg4` gate in `lb_800117F4` instead of flattening the condition.",
+    "Loaded the camera viewing matrix into a local `Mtx view_mtx` and passed `&view_mtx[0]` to both `HSD_CObjGetViewingMtx` and `GXLoadPosMtxImm`.",
+    "Factored the matrix-dirty check into `HSD_JObjSetMtxDirtyInline`, likely to force the same inline expansion around `HSD_JObjMtxIsDirty` and `HSD_JObjSetMtxDirtySub`.",
+    "Used explicit float/double-looking constants and expressions such as `0.5 *`, `1.0 + cosf(...)`, `0.05 * lbVector_Normalize(...)`, and reciprocal square calculation to match floating-point codegen.",
+    "Kept scoped temporaries inside loops, including `float x/y/z` extracted from `jobj->mtx` and `f32 scale1`, rather than aggressively simplifying expressions."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the slice.",
+    "The decomp.dev bot reported matched code increased to 38.90%, +0.03%, +984 bytes.",
+    "The bot reported two new 100% matches in `main/melee/lb/lb_00F9`: `lb_800101C8` (+496 bytes) and `lb_800117F4` (+488 bytes)."
+  ],
+  "searchable_terms": [
+    "pr-1849",
+    "Partially match lb_00F9",
+    "ribbanya",
+    "lb_00F9",
+    "lb_800101C8",
+    "lb_800103B8",
+    "lb_800117F4",
+    "lb_80011A50_t",
+    "lb_804D63B0",
+    "lbVector_Normalize",
+    "DynamicsDesc",
+    "DynamicsData",
+    "GXColor",
+    "GXBegin",
+    "GX_LINESTRIP",
+    "GX_VTXFMT0",
+    "GXPosition3f32",
+    "GXColor4u8",
+    "HSD_JObjSetMtxDirtyInline",
+    "HSD_JObjSetupMatrix",
+    "HSD_JObjMtxIsDirty",
+    "HSD_JObjSetMtxDirtySub",
+    "HSD_CObjGetViewingMtx",
+    "HSD_CObjGetCurrent",
+    "GXLoadPosMtxImm",
+    "GXSetLineWidth",
+    "unk_scale",
+    "unk_angle_float",
+    "unk_angle_int",
+    "ftDrawCommon_800805C8",
+    "PAD_STACK"
+  ],
+  "follow_up_queries": [
+    "Search for additional call sites of `lb_800117F4` that may still depend on the old unknown signature or require safer color-typed stack locals.",
+    "Investigate whether `lb_80011A50_t` fields `x0`, `x1`, `x4`, `x10`, `x14`, `x18`, `x1C`, and `x24` can be semantically named from the newly matched force/scale behavior.",
+    "Look for other jobj matrix dirty patterns that can reuse or validate `HSD_JObjSetMtxDirtyInline`.",
+    "Use the matched `lb_800101C8` behavior to identify the gameplay or visual subsystem represented by the global `lb_804D63B0` linked list.",
+    "Check neighboring unmatched functions in `lb_00F9.c`, especially `lb_8001044C`, for dependencies on the corrected `lb_80011A50_t` field meanings."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

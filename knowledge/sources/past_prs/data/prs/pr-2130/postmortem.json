@@ -1,0 +1,240 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2130",
+  "pr": {
+    "number": 2130,
+    "title": "Match all remaining functions in itbox.c",
+    "url": "https://github.com/doldecomp/melee/pull/2130",
+    "state": "MERGED",
+    "author": "malvarezcastillo",
+    "created_at": "2026-01-25T13:41:32Z",
+    "merged_at": "2026-01-26T20:13:58Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the remaining previously stubbed/placeholder functions in src/melee/it/items/itbox.c, turning the box/crate item logic into C for spawning, opening, collision, damage, rotation, accessory-follow behavior, and cleanup. The PR also replaced anonymous box item vars and special attributes with named fields, tightened itbox.h prototypes, and updated CONTRIBUTING.md to codify reviewer feedback that empty stubs should be `{}` instead of `{ return; }`.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "item-logic",
+      "headers",
+      "naming",
+      "style-guidance"
+    ],
+    "systems": [
+      "item",
+      "box",
+      "crate",
+      "effects",
+      "collision",
+      "camera",
+      "docs"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/it/items/itbox.c",
+      "role": "Main implementation: replaced many `/// #symbol` placeholders with matched C for box item spawning, animation, physics, collision, damage/opening, despawn, accessory, effects, and rotation behavior."
+    },
+    {
+      "path": "src/melee/it/itCommonItems.h",
+      "role": "Struct/header work: renamed `itBox_ItemVars` fields and added `itBoxAttributes` with named spawn weights and thresholds."
+    },
+    {
+      "path": "src/melee/it/items/itbox.h",
+      "role": "Prototype cleanup: replaced several `UNK_RET`/`UNK_PARAMS` and generic `HSD_GObj*` signatures with typed `Item_GObj*`, `bool`, `void`, and explicit argument lists."
+    },
+    {
+      "path": ".github/CONTRIBUTING.md",
+      "role": "Style documentation: updated empty stub guidance to prefer `{}` over `{ return; }`."
+    }
+  ],
+  "what_changed": [
+    "Implemented `it_80286088` as a box accessory item spawn path: validates parent/JObj, derives position with `lb_8000B1CC`, builds a `SpawnItem`, calls `Item_80268B18`, initializes box item vars, randomizes X/Y rotation velocity using `HSD_Randf`, and enters state setup through item helper calls.",
+    "Changed box spawn initialization in `it_3F14_Logic1_Spawned` to clear `opened` and `spawned_gobj`, set `xDCE_flag.b7`, and call `it_8028655C` rather than using old anonymous fields.",
+    "Changed destroy cleanup in `it_3F14_Logic1_Destroyed` from removing a stored JObj to destroying all effects for `spawned_gobj` with `efLib_DestroyAll`, then nulling the pointer.",
+    "Implemented item-spawn random roll helpers `it_80286248` and `it_80286340`, using weighted arguments for item outcomes and empty/special rolls.",
+    "Implemented `it_802863BC` to detect floor collision via `Collide_FloorMask`, compare bounce direction to vertical with `lbVector_AngleXY`, clear velocity/vector fields, and mark ground state when below `bounce_angle_threshold`.",
+    "Implemented motion callbacks including `itBox_UnkMotion0_Anim`, `itBox_UnkMotion1_Phys`, `itBox_UnkMotion3_Coll`, `itBox_UnkMotion4_Coll`, `itBox_UnkMotion8_Phys`, and `it_8028733C`.",
+    "Added an inline helper `itBox_TryOpen_inline` to share box break/open behavior across collision and hit callbacks: spawn effect `0x427`, roll for item spawn vs empty, then call `it_80286BA0` or `it_80286AA4`.",
+    "Implemented empty-open path `it_80286AA4`, including clearing movement, setting `opened`, setting `despawn_timer = 40`, spawning smoke-like effect `0x78` via `lb_800119DC`, and transitioning to state 6.",
+    "Implemented item-spawning open path `it_80286BA0`, including sound/camera calls, weighted item spawn, hiding JObjs via `HSD_JObjSetFlagsAll`, setting opened/despawn state, and transitioning to state 7.",
+    "Implemented hit/damage callbacks for `DmgDealt`, `Clanked`, `HitShield`, `Reflected`, and `DmgReceived`, with guards against reopening when `opened != 0` and threshold-based opening using `damage_threshold`.",
+    "Implemented `it_3F14_Logic1_EnteredAir` to either settle back to grounded state after upright bounce detection or transition to state 5.",
+    "Implemented floating/accessory behavior: state 8 physics clamps randomized rotation velocities and wraps rotation by tau; `it_8028733C` tracks a parent/spawned GObj's JObj translation, updates position/velocity/collision, and transitions when appropriate.",
+    "Renamed `itBox_ItemVars` fields from `xDD4`, `xDD8`, `xDDC` to `opened`, `despawn_timer`, `spawned_gobj`, `rot_vel_x`, and `rot_vel_y`.",
+    "Added `itBoxAttributes` with named fields for spawn weights, empty/special weights, damage threshold, bounce angle threshold, and break velocity threshold.",
+    "Updated `.github/CONTRIBUTING.md` to state that empty stub functions should use `{}` rather than `{ return; }`."
+  ],
+  "smart_moves": [
+    "Centralized repeated break/open logic in `itBox_TryOpen_inline`, which avoided duplicating effect spawn plus weighted random decision code across collision and combat callbacks while still supporting matching-sensitive inlining.",
+    "Used named item vars and attribute fields to make the matched logic self-documenting: `opened`, `despawn_timer`, `spawned_gobj`, `rot_vel_x`, `rot_vel_y`, `spawn_weight_0`, `empty_weight`, `damage_threshold`, and related fields reveal the box state machine more clearly than raw offsets.",
+    "Kept matching-sensitive padding and codegen controls visible where needed, including `PAD_STACK`, dummy pad arrays, and a `#pragma dont_inline` region around `it_80286340` in the submitted diff excerpt.",
+    "Folded reviewer feedback into the final diff: the rotation scale became a `static double const`, zero-vector initialization was simplified to chained assignment, and `2 * M_PI` was used locally for tau in at least one physics function.",
+    "Promoted a PR-local style discussion into repository guidance by updating CONTRIBUTING.md for empty stub formatting."
+  ],
+  "decomp_lessons": [
+    "For matching item state machines, naming per-item variables in `itCommonItems.h` can unlock much clearer implementations and reduces the risk of mixing state flags, timers, object pointers, and rotation velocities.",
+    "When several callbacks share behavior, small nested/static inline helpers can be a matching tactic and a readability win; reviewers noted this is often preferable to relying on `#pragma` to force code shape.",
+    "Prefer local or file-scope floating constants over preprocessor macros when only a numeric constant is needed for matching/readability.",
+    "Repository convention for no-op functions is now explicit: empty stubs should be written as `{}` rather than `{ return; }`.",
+    "For math constants, existing project style prefers `2 * M_PI`; if a reusable tau constant is introduced, reviewer feedback suggested it belongs in `math.h`, not as an ad hoc per-file macro.",
+    "Chained zero initialization such as `zero.x = zero.y = zero.z = 0.0F;` is accepted and was preferred over separate reversed component assignments when it still matches.",
+    "Attribute naming in decomp PRs can be provisional; the author explicitly invited maintainers to reject guesses for `special_spawn_weight`, `bounce_angle_threshold`, and `Collide_FloorMask`."
+  ],
+  "naming_conventions": [
+    {
+      "old": "itBox_ItemVars.xDD4",
+      "new": "itBox_ItemVars.opened",
+      "reason": "Used as a boolean/int guard to prevent reopening after the box has opened or broken."
+    },
+    {
+      "old": "itBox_ItemVars.xDD8",
+      "new": "itBox_ItemVars.despawn_timer",
+      "reason": "Countdown after opening, initialized to 40 and decremented in motion 7 animation."
+    },
+    {
+      "old": "itBox_ItemVars.xDDC",
+      "new": "itBox_ItemVars.spawned_gobj",
+      "reason": "Stores a related/spawned GObj used for accessory follow behavior and cleanup."
+    },
+    {
+      "old": "additional box item-var offsets",
+      "new": "rot_vel_x, rot_vel_y",
+      "reason": "Fields store randomized rotation velocities used by thrown/floating box physics."
+    },
+    {
+      "old": "itBoxAttributes.x10",
+      "new": "special_spawn_weight",
+      "reason": "Author-described naming guess for additional special item roll weight."
+    },
+    {
+      "old": "itBoxAttributes.x18",
+      "new": "bounce_angle_threshold",
+      "reason": "Author-described naming guess; used as the angle cutoff for upright floor-bounce settling."
+    },
+    {
+      "old": "0x18000",
+      "new": "Collide_FloorMask",
+      "reason": "Author-described naming guess for the floor collision mask used by `it_802863BC`."
+    },
+    {
+      "old": "anonymous box attributes",
+      "new": "spawn_weight_0, spawn_weight_1, spawn_weight_2, empty_weight, damage_threshold, break_vel_threshold",
+      "reason": "Names match observed use in weighted item spawn, empty roll, damage opening, and landing-break logic."
+    }
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `PAD_STACK` and explicit unused pad arrays to preserve stack layout in matched functions.",
+    "Wrapped `it_80286340` with `#pragma push`, `#pragma dont_inline on`, and `#pragma pop` in the diff excerpt; reviewer said nested inline functions are often a cleaner way to solve similar matching issues without pragmas.",
+    "Used small scoped temporaries around `HSD_Randf()` calls for rotation velocity calculations, likely to influence register/lifetime/codegen shape.",
+    "Used `static inline void itBox_TryOpen_inline(Item_GObj*)` to share code while allowing the compiler to inline into multiple callbacks.",
+    "Used explicit vector component clearing and chained assignments to control generated stores while keeping code readable.",
+    "Used local constants such as `static double const ROT_VEL_SCALE`, `double const tau = 2 * M_PI`, and macros for `DEG_TO_RAD`, `MAX_ROT_VEL`, and `TAU` in the shown diff to express exact floating constants needed by rotation math."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "file": "src/melee/it/items/itbox.c",
+      "feedback": "Use a `float const` inside or outside the function instead of a macro-style definition for `ROT_VEL_SCALE`.",
+      "outcome_evidence": "Final diff excerpt shows `static double const ROT_VEL_SCALE = 0.03490658476948738;`."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/melee/it/items/itbox.c",
+      "feedback": "Simplify zero-vector initialization to `zero.x = zero.y = zero.z = 0.0F;`.",
+      "outcome_evidence": "Final diff excerpt uses chained assignment in `it_80286248`."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/melee/it/items/itbox.c",
+      "feedback": "Nested inline functions can often solve matching issues without needing `#pragma`; use of pragma was acceptable but not ideal.",
+      "outcome_evidence": "Diff still shows a `#pragma dont_inline` region around `it_80286340`, and also adds `itBox_TryOpen_inline`."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/melee/it/items/itbox.c",
+      "feedback": "Do not put `return` in empty functions; leave them as `{}`.",
+      "outcome_evidence": "Final diff shows empty physics functions such as `void itBox_UnkMotion0_Phys(Item_GObj* gobj) {}` and CONTRIBUTING.md was updated accordingly."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/melee/it/items/itbox.c",
+      "feedback": "Project style usually uses `2 * M_PI`; if defining tau, put it in `math.h`.",
+      "outcome_evidence": "Final diff shows `double const tau = 2 * M_PI;` in `itBox_UnkMotion1_Phys`, though another local `#define TAU` still appears later for state 8 physics."
+    },
+    {
+      "author": "malvarezcastillo",
+      "file": "PR body",
+      "feedback": "Author flagged naming guesses as optional for maintainers: `x10` to `special_spawn_weight`, `x18` to `bounce_angle_threshold`, and `0x18000` to `Collide_FloorMask`.",
+      "outcome_evidence": "Those names appear in the final diff excerpt."
+    },
+    {
+      "author": "malvarezcastillo",
+      "file": "PR comments",
+      "feedback": "Author noted a rebase mistake and then said it should be good to go.",
+      "outcome_evidence": "Issue comments excerpt contains both statements."
+    }
+  ],
+  "searchable_terms": [
+    "pr-2130",
+    "itbox.c",
+    "Match all remaining functions in itbox.c",
+    "itBox_ItemVars",
+    "itBoxAttributes",
+    "opened",
+    "despawn_timer",
+    "spawned_gobj",
+    "rot_vel_x",
+    "rot_vel_y",
+    "spawn_weight_0",
+    "spawn_weight_1",
+    "spawn_weight_2",
+    "empty_weight",
+    "special_spawn_weight",
+    "damage_threshold",
+    "bounce_angle_threshold",
+    "break_vel_threshold",
+    "Collide_FloorMask",
+    "it_80286088",
+    "it_80286248",
+    "it_80286340",
+    "it_802863BC",
+    "it_80286AA4",
+    "it_80286BA0",
+    "it_802870A4",
+    "it_8028733C",
+    "itBox_TryOpen_inline",
+    "itBox_UnkMotion0_Anim",
+    "itBox_UnkMotion1_Phys",
+    "itBox_UnkMotion3_Coll",
+    "itBox_UnkMotion4_Coll",
+    "itBox_UnkMotion8_Phys",
+    "it_3F14_Logic1_DmgReceived",
+    "it_3F14_Logic1_EnteredAir",
+    "empty stub functions",
+    "dont_inline",
+    "PAD_STACK",
+    "2 * M_PI",
+    "ROT_VEL_SCALE",
+    "DEG_TO_RAD",
+    "MAX_ROT_VEL",
+    "TAU"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching `itBoxAttributes` to see whether the guessed field names `special_spawn_weight` and `bounce_angle_threshold` were retained or revised.",
+    "Search for later removal or replacement of the `#pragma dont_inline` around `it_80286340` with nested inline helpers.",
+    "Check whether local `#define TAU` in `itbox.c` was later replaced by `2 * M_PI` or a shared math constant.",
+    "Search for other item PRs that updated `itCommonItems.h` item-var structs from anonymous offsets to semantic field names.",
+    "Look for subsequent changes to accessory-follow behavior around `it_8028733C` and cleanup via `efLib_DestroyAll`."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

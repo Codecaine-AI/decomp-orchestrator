@@ -1,0 +1,147 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1578",
+  "pr": {
+    "number": 1578,
+    "title": "Match OS, OSReset",
+    "url": "https://github.com/doldecomp/melee/pull/1578",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-07T02:44:58Z",
+    "merged_at": "2025-06-07T02:50:00Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched Dolphin OS.c and OSReset.c by completing missing SDK initialization/reset behavior, adding required internal prototypes and an OSThread API declaration, and flipping both objects from NonMatching to Matching in configure.py. The OSInit changes add startup timestamp capture, BI2/debug flag handling, alarm and memory-protection init calls, HID2 masking, arena clearing, and more accurate MetroTRK/debug handling. The OSReset changes add hot reset support, active-thread cancellation, reset-type-specific reboot/reset behavior, cache/LC and memory-clear handling, pad recalibration preservation, and an adjusted OSGetResetCode implementation.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "sdk-behavior-restoration",
+      "configure-update"
+    ],
+    "systems": [
+      "external-sdk",
+      "dolphin-os",
+      "os-init",
+      "os-reset",
+      "threading",
+      "memory-protection",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "configure.py",
+    "extern/dolphin/src/dolphin/os/OS.c",
+    "extern/dolphin/src/dolphin/os/OSReset.c",
+    "extern/dolphin/src/dolphin/os/__os.h",
+    "extern/dolphin/include/dolphin/os/OSThread.h"
+  ],
+  "what_changed": [
+    "Marked dolphin/os/OS.c and dolphin/os/OSReset.c as Object(Matching, ...) in configure.py.",
+    "Changed EnableMetroTRKInterrupts declaration in OS.c to an explicit extern declaration.",
+    "Added global/internal OS startup state in OS.c, including __OSStartTime and BI2DebugFlagHolder.",
+    "Added ClearArena() in OS.c with boot-region-aware clearing logic using 0x812FDFF0 and 0x812FDFEC when OSGetResetCode() reports the special 0x80000000 path.",
+    "Expanded OSInit() to record __OSStartTime, handle BI2 startup/debug data from cached physical addresses, write BI2 debug flag and PAD spec bytes to 0x30E8/0x30E9, default __DVDLongFileNameFlag to 1, call OSInitAlarm(), clear HID2 bit 0x40000000, call __OSInitMemoryProtection(), and clear arena before enabling interrupts.",
+    "Added OSCancelThread declaration to extern/dolphin/include/dolphin/os/OSThread.h.",
+    "Added __OSInitMemoryProtection() and __OSDoHotReset(int) internal declarations to extern/dolphin/src/dolphin/os/__os.h.",
+    "Added OSReset.c helpers: __PADDisableRecalibration(int) declaration, CancelThreads(), and __OSDoHotReset(int).",
+    "Updated OSResetSystem() to distinguish reset modes: reset == 1 for hardware reset path, reset == 0 for reboot path via __OSReboot, and reset == 2 for pad recalibration disable/restore handling.",
+    "OSResetSystem() now disables LC, cancels active ready/running-like threads, zeros several low-memory regions, controls VI register state, invalidates instruction cache before reset, and restores pad recalibration state.",
+    "Changed OSGetResetCode() to return 0x80000000 when byte 0x800030E2 is nonzero, otherwise compute the reset code as (__PIRegs[9] & ~7) >> 3."
+  ],
+  "smart_moves": [
+    "Converted the objects to Matching only after adding behavior-level fixes across both source and header/configuration files, rather than relying on superficial formatting changes.",
+    "Introduced a small ClearArena() helper to isolate the boot-region exception logic and keep OSInit() closer to SDK structure.",
+    "Used a local copy of next = thread->linkActive.next before OSCancelThread(thread), which avoids corrupting traversal when cancellation mutates active-thread links.",
+    "Handled reset modes explicitly with reset == 1 and reset == 0 instead of broad reset != 0 logic, which better reflects separate hot/hard reset and reboot control flow.",
+    "Added missing internal prototypes in __os.h and public thread prototype in OSThread.h so matched C can call real cross-module SDK functions without ad hoc local declarations everywhere.",
+    "Preserved and restored pad recalibration state around reset == 2 behavior, matching a subtle SDK side effect rather than just matching the obvious reset branch.",
+    "Used memory-mapped low-memory symbols/addresses directly where the SDK behavior depends on fixed boot information locations."
+  ],
+  "decomp_lessons": [
+    "For Dolphin SDK OS modules, matching often requires restoring exact initialization order: time capture, interrupts, boot info, arena bounds, exception/system call/alarm/module/interrupt/SRAM/thread/audio init, HID2 update, memory protection, reports, debug interrupt enabling, arena clearing, then interrupt restore.",
+    "Reset code paths are sensitive to reset type values; replacing broad boolean reset checks with exact reset-mode comparisons can be necessary for matching and correctness.",
+    "Low-memory boot-info scratch bytes such as 0x800030E8, 0x800030E9, and 0x800030E2 can affect OS init/reset behavior and should be modeled explicitly when reconstructing Dolphin OS sources.",
+    "When a function walks intrusive OS queues and may remove/cancel nodes, save the next pointer before invoking the mutating operation.",
+    "Matching library objects may require synchronizing public SDK headers, internal headers, and build configuration together; a source-only patch can leave unresolved declarations or prevent clean matching promotion.",
+    "Special reset code 0x80000000 has downstream arena-clearing implications, so OSGetResetCode() and OSInit()/ClearArena() need to be considered together."
+  ],
+  "naming_conventions": [
+    "Internal Dolphin OS functions use double-underscore prefixes, e.g. __OSInitMemoryProtection, __OSDoHotReset, __OSResetSWInterruptHandler, __OSStartTime.",
+    "Public SDK API names keep OS-prefixed PascalCase/CamelCase style, e.g. OSInit, OSResetSystem, OSGetResetCode, OSCancelThread.",
+    "Local helper functions in these SDK reconstructions use PascalCase-style names such as ClearArena and CancelThreads.",
+    "Memory-mapped boot-region macros were named in all caps as BOOT_REGION_START and BOOT_REGION_END.",
+    "Temporary or unknown fixed-address data may remain weakly named when evidence is limited, as shown by `u8 unk : 0x800030E2;` in the diff excerpt."
+  ],
+  "assembly_or_matching_tactics": [
+    "Kept the existing static asm Reset(unsigned long resetCode) helper and adjusted C callers to pass resetCode scaled by 8 or shifted left by 3 as needed.",
+    "Used fixed-address memory-mapped accesses and bit operations to reproduce SDK behavior, including (__PIRegs[9] & ~7) >> 3 and clearing HID2 with PPCMthid2(PPCMfhid2() & 0xBFFFFFFF).",
+    "Added dummy stack padding in OSResetSystem via `u8 _[8];`, likely to influence stack layout for matching; the diff provides no reviewer explanation, so this inference is evidence-limited.",
+    "Declared `u8 unk : 0x800030E2;` to model a byte at a fixed low-memory address used by OSGetResetCode().",
+    "Reordered and inserted OSInit calls to match the SDK's expected control-flow and side-effect sequence rather than only matching final observable state.",
+    "Used explicit casts to u32 and void* around arena and boot-info pointer arithmetic to control generated code shape."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "No PR body or human text excerpt was available, so rationale is inferred from title, changed files, and diff only."
+  ],
+  "searchable_terms": [
+    "PR1578",
+    "Match OS OSReset",
+    "r-burns",
+    "Dolphin OS",
+    "OS.c",
+    "OSReset.c",
+    "configure.py",
+    "Object Matching",
+    "Object NonMatching",
+    "OSInit",
+    "OSResetSystem",
+    "OSGetResetCode",
+    "__OSDoHotReset",
+    "ClearArena",
+    "CancelThreads",
+    "__OSStartTime",
+    "BI2DebugFlag",
+    "BI2DebugFlagHolder",
+    "__DVDLongFileNameFlag",
+    "__PADSpec",
+    "OSInitAlarm",
+    "__OSInitMemoryProtection",
+    "EnableMetroTRKInterrupts",
+    "PPCMthid2",
+    "PPCMfhid2",
+    "__OSActiveThreadQueue",
+    "OSCancelThread",
+    "__PADDisableRecalibration",
+    "__OSReboot",
+    "LCDisable",
+    "ICFlashInvalidate",
+    "__VIRegs",
+    "__PIRegs",
+    "BOOT_REGION_START",
+    "BOOT_REGION_END",
+    "0x800030E2",
+    "0x800030E8",
+    "0x800030E9",
+    "0x812FDFF0",
+    "0x812FDFEC"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename `unk : 0x800030E2` or replace it with a documented low-memory reset flag symbol.",
+    "Check subsequent OSMemory.c work for how __OSInitMemoryProtection() was matched and declared.",
+    "Find PRs touching OSResetSW.c or OSReboot.c to see how __OSDoHotReset and OSResetSystem reset-mode behavior integrate.",
+    "Search for later cleanup around BI2DebugFlag, __DVDLongFileNameFlag, and __PADSpec low-memory handling.",
+    "Compare other Dolphin SDK OS module matching PRs for use of fixed-address declarations and stack padding tactics."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

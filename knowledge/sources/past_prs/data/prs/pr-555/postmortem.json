@@ -1,0 +1,133 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-555",
+  "pr": {
+    "number": 555,
+    "title": "Match HSD perf",
+    "url": "https://github.com/doldecomp/melee/pull/555",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-09-07T04:58:50Z",
+    "merged_at": "2022-09-07T09:41:53Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the SysDolphin baselib HSD performance-stat module by replacing asm/sysdolphin/baselib/perf.s with src/sysdolphin/baselib/perf.c and a new public header. The new C code defines HSD_PerfStat, HSD_PerfLastStat, HSD_PerfCurrentStat, start_time tracking, frame/stat reset logic, OSGetTime-based CPU/draw/total timing, and envelope-blending counting with an assert. obj_files.mk was updated to build the C object instead of the asm object, and a remaining asm reference in baselib_unknown_002.s was renamed from lbl_80407188 to HSD_PerfLastStat.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "asm-to-c",
+      "symbol-naming",
+      "build-system"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "perf",
+      "asm",
+      "src",
+      "include",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/perf.c",
+    "include/sysdolphin/baselib/perf.h",
+    "asm/sysdolphin/baselib/perf.s",
+    "asm/sysdolphin/baselib/baselib_unknown_002.s",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted the 277-line hand-written assembly file asm/sysdolphin/baselib/perf.s.",
+    "Added src/sysdolphin/baselib/perf.c implementing HSD_PerfInitStat, HSD_PerfSetStartTime, HSD_PerfSetCPUTime, HSD_PerfSetDrawTime, HSD_PerfSetTotalTime, and HSD_PerfCountEnvelopeBlending.",
+    "Added include/sysdolphin/baselib/perf.h declaring HSD_PerfStat and the HSD perf API.",
+    "Defined HSD_PerfStat with f32 cpu_time, draw_time, total_time, u32 unused, and u32 count[32], matching the 0x90-byte stat blocks present in the removed assembly.",
+    "Defined global HSD_PerfLastStat and HSD_PerfCurrentStat as zero-initialized HSD_PerfStat instances.",
+    "Replaced anonymous data label lbl_80407188 with the named symbol HSD_PerfLastStat in asm/sysdolphin/baselib/baselib_unknown_002.s.",
+    "Changed obj_files.mk so the build uses $(BUILD_DIR)/src/sysdolphin/baselib/perf.c.o instead of $(BUILD_DIR)/asm/sysdolphin/baselib/perf.s.o."
+  ],
+  "smart_moves": [
+    "The struct layout cleanly explains the assembly data: three timing floats plus an unused u32 before a 32-entry counter array, totaling 0x90 bytes.",
+    "HSD_PerfInitStat expresses the assembly copy-and-clear behavior directly as HSD_PerfLastStat = HSD_PerfCurrentStat followed by memset of HSD_PerfCurrentStat.",
+    "The repeated timing functions were reduced to readable C using OSGetTime() - start_time divided by a float conversion of (*(u32*)0x800000F8 / 4 / 60), matching the assembly’s conversion and frequency-scaling pattern.",
+    "The assertion string and line evidence from the asm were preserved as assert_line(0xA4, n < 32), keeping source-line-sensitive matching information.",
+    "Renaming lbl_80407188 to HSD_PerfLastStat in a neighboring asm file avoided leaving cross-file references to an obsolete anonymous label after the data moved to C."
+  ],
+  "decomp_lessons": [
+    "When an asm file contains both functions and data blocks, matching the C source may require naming data symbols first so other asm files can continue to reference them.",
+    "Copy loops over fixed-size data blocks can often be represented by struct assignment if the inferred struct size and field layout match the original memory footprint.",
+    "Zeroing a whole stat object with memset can match a fixed-size assembly memset when sizeof(the inferred struct) equals the original byte count.",
+    "For performance/timing code, preserve exact hardware-register expressions and casts; the expression using address 0x800000F8, division by 4, division by 60, and an f32 cast is likely important for matching.",
+    "Source-line-sensitive assertions should use assert_line with the original line number rather than a generic assert when matching HSD/baselib code."
+  ],
+  "naming_conventions": [
+    "HSD perf public functions use the HSD_Perf prefix, for example HSD_PerfInitStat and HSD_PerfSetCPUTime.",
+    "Global stat objects are named HSD_PerfLastStat and HSD_PerfCurrentStat.",
+    "The stat type is named HSD_PerfStat and is typedefed from struct _HSD_PerfStat.",
+    "The new header uses the include path sysdolphin/baselib/perf.h and a lowercase guard _hsd_perf_h_.",
+    "The counter field is named count and the timing fields use descriptive snake_case names: cpu_time, draw_time, total_time."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced perf.s with C only after its functions, globals, and data layout were represented in perf.c/perf.h.",
+    "Modeled the old lbl_80407188 data block as HSD_PerfLastStat and HSD_PerfCurrentStat as typed HSD_PerfStat globals.",
+    "Used struct assignment for the assembly’s 0x90-byte copy from current stat to last stat.",
+    "Used memset(&HSD_PerfCurrentStat, 0, sizeof(HSD_PerfStat)) to match the assembly memset of 0x90 bytes.",
+    "Kept the direct hardware memory read (*(u32*)0x800000F8) in the timing denominator to reproduce the assembly’s timer-frequency calculation.",
+    "Used assert_line(0xA4, n < 32) to preserve the assembly’s assert call with line 0xA4 and condition text n < 32.",
+    "Updated obj_files.mk from the asm object path to the C object path as the final build integration step."
+  ],
+  "review_feedback": [
+    "No issue comments or review comments were present in the provided PR slice.",
+    "The PR had one review recorded, but the slice contains no review body or actionable reviewer feedback."
+  ],
+  "searchable_terms": [
+    "PR555",
+    "Match HSD perf",
+    "r-burns",
+    "HSD_Perf",
+    "HSD_PerfStat",
+    "HSD_PerfLastStat",
+    "HSD_PerfCurrentStat",
+    "HSD_PerfInitStat",
+    "HSD_PerfSetStartTime",
+    "HSD_PerfSetCPUTime",
+    "HSD_PerfSetDrawTime",
+    "HSD_PerfSetTotalTime",
+    "HSD_PerfCountEnvelopeBlending",
+    "start_time",
+    "OSGetTime",
+    "OSTime",
+    "assert_line",
+    "0xA4",
+    "n < 32",
+    "0x800000F8",
+    "__cvt_sll_flt",
+    "perf.c",
+    "perf.h",
+    "perf.s",
+    "sysdolphin",
+    "baselib",
+    "obj_files.mk",
+    "asm-to-c",
+    "lbl_80407188",
+    "lbl_804D76F8",
+    "lbl_804D76FC",
+    "lbl_804DE718"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that include sysdolphin/baselib/perf.h or use HSD_PerfStat fields.",
+    "Search for remaining lbl_80407188 references after PR 555 to confirm all references were renamed to HSD_PerfLastStat.",
+    "Compare other HSD timing modules that use (*(u32*)0x800000F8 / 4 / 60) for reusable matching patterns.",
+    "Search for assert_line usage with original HSD source line numbers in baselib decompilation work."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

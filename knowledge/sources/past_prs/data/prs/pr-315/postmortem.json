@@ -1,0 +1,189 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-315",
+  "pr": {
+    "number": 315,
+    "title": "Match `HSD_TObj`",
+    "url": "https://github.com/doldecomp/melee/pull/315",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2022-02-26T00:13:40Z",
+    "merged_at": "2022-08-22T15:36:01Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched part of `HSD_TObj` by moving `MakeTextureMtx` from `asm/sysdolphin/baselib/tobj.s` into C, adding the needed Dolphin GX/MTX declarations, and renaming `func_8037A120` to the descriptive `HSD_MkRotationMtx`. The PR also introduced a large `asm/sysdolphin/baselib/mtx.s` slice for remaining/non-C matrix baselib code and adjusted callsites in fighter and background flash assembly to use the new symbol name. The body notes the work was initially non-matching because the author chose not to extern floats; the final review was approved as up-to-date and OK.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "baselib texture object",
+      "matrix math",
+      "headers",
+      "symbol naming",
+      "asm cleanup"
+    ],
+    "systems": [
+      "sysdolphin/baselib/tobj",
+      "sysdolphin/baselib/mtx",
+      "dolphin/gx",
+      "dolphin/mtx",
+      "melee/ft",
+      "melee/lb"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/sysdolphin/baselib/tobj.c",
+      "why": "Added C implementation of `MakeTextureMtx`, including repeat assertions, scale/rotation/translation setup, GX mirror handling, and MTX/HSD matrix calls."
+    },
+    {
+      "path": "asm/sysdolphin/baselib/tobj.s",
+      "why": "Removed the old assembly body for `MakeTextureMtx` and replaced deleted float labels with `.set` aliases into the C-generated sdata2 region."
+    },
+    {
+      "path": "include/sysdolphin/baselib/tobj.h",
+      "why": "Exposed `MakeTextureMtx(HSD_TObj*)` and changed `wrap_t` from `u32` to `s32`."
+    },
+    {
+      "path": "src/sysdolphin/baselib/mtx.c",
+      "why": "Renamed `func_8037A120` to `HSD_MkRotationMtx`."
+    },
+    {
+      "path": "include/sysdolphin/baselib/mtx.h",
+      "why": "Updated the matrix header prototype to `HSD_MkRotationMtx(Mtx, Vec*)`."
+    },
+    {
+      "path": "asm/sysdolphin/baselib/mtx.s",
+      "why": "Added a large assembly slice for baselib matrix routines including `HSD_MtxInverseConcat`, `HSD_MkRotationMtx`, allocation helpers, and related functions."
+    },
+    {
+      "path": "include/dolphin/mtx.h",
+      "why": "Added Dolphin MTX C/PS prototypes and aliases such as `MTXTrans`, `MTXConcat`, `MTXScale`, and rotation helpers needed by the C code."
+    },
+    {
+      "path": "include/dolphin/gx/gxtypes.h",
+      "why": "Added GX texture matrix/map/wrap types and basic GX structs/constants, including `GX_MIRROR` used by `MakeTextureMtx`."
+    },
+    {
+      "path": "include/functions.h",
+      "why": "Removed duplicated generic MTX prototypes after adding more appropriate Dolphin MTX headers; retained unresolved baselib declarations where still needed."
+    },
+    {
+      "path": "include/math.h",
+      "why": "Added `FLT_EPSILON` constant used in the texture matrix scale-zero checks."
+    },
+    {
+      "path": "asm/melee/ft/ft_unknown_006.s",
+      "why": "Updated assembly callsites from `func_8037A120` to `HSD_MkRotationMtx`."
+    },
+    {
+      "path": "asm/melee/lb/lbbgflash.s",
+      "why": "Updated assembly callsite from `func_8037A120` to `HSD_MkRotationMtx`."
+    }
+  ],
+  "what_changed": [
+    "Moved `MakeTextureMtx` out of `asm/sysdolphin/baselib/tobj.s` into `src/sysdolphin/baselib/tobj.c`.",
+    "Implemented `MakeTextureMtx` in C with local `Vec scale`, `Mtx m`, `Vec trans`, `Quaternion rot`, and an assertion that `tobj->repeat_s && tobj->repeat_t`.",
+    "Matched texture-matrix behavior by computing scale from repeat counts divided by `tobj->scale`, guarding near-zero scales with `__fabsf(...) < FLT_EPSILON`, negating Z rotation, negating X/Y translation, applying `GX_MIRROR` wrap adjustment to Y translation, then applying translate, rotation, and scale via MTX calls.",
+    "Renamed `func_8037A120` to `HSD_MkRotationMtx` in C, baselib header, and external assembly callsites.",
+    "Added `include/dolphin/gx/gxtypes.h` with GX texture matrix IDs, texture map IDs, post-transform texture matrix IDs, wrap modes, FIFO/render/light/color structs, and GX boolean/enable constants.",
+    "Added/expanded `include/dolphin/mtx.h` with C_MTX and PSMTX prototypes plus `MTX*` aliases to the paired-single implementations.",
+    "Changed `HSD_TObj.wrap_t` type from `u32` to `s32` in `include/sysdolphin/baselib/tobj.h`.",
+    "Added a large `asm/sysdolphin/baselib/mtx.s` file for baselib matrix routines still represented in assembly.",
+    "Cleaned `include/functions.h` by removing duplicate generic PSMTX prototypes now covered by Dolphin MTX headers.",
+    "Replaced deleted `tobj.s` sdata2 float objects with `.set` aliases such as `tobj_c_sdata2_start`, `lbl_804DE3EC`, `lbl_804DE3F0`, and `lbl_804DE3F8`, preserving references while allowing C-owned constants."
+  ],
+  "smart_moves": [
+    "Used a descriptive baselib name, `HSD_MkRotationMtx`, and propagated it through headers and assembly callsites instead of leaving `func_8037A120` anonymous.",
+    "Introduced proper Dolphin GX and MTX headers rather than keeping broad declarations in `include/functions.h`, making future texture/matrix decomp work less dependent on catch-all prototypes.",
+    "Avoided externing floats by letting the C translation own constants and patching legacy assembly references with `.set` aliases; this is a useful tactic when matching C code would otherwise be distorted by forced external float labels.",
+    "Preserved the exact original assertion string `\"tobj->repeat_s && tobj->repeat_t\"` and line number evidence (`589` / `0x24d`) from the removed assembly body.",
+    "Used MTX macro aliases (`MTXTrans`, `MTXConcat`, `MTXScale`) while declaring them as PSMTX-backed, matching Dolphin naming patterns and keeping the C code readable.",
+    "Kept remaining matrix routines in assembly in `asm/sysdolphin/baselib/mtx.s`, limiting the C conversion to the function being matched rather than forcing a full baselib mtx conversion at once."
+  ],
+  "decomp_lessons": [
+    "For HSD texture-object matrix code, `repeat_s`, `repeat_t`, `scale`, `rotate`, `translate`, and `wrap_t` interact directly in the matrix construction; matching depends on reproducing the exact order: translate, concatenate rotation, scale, concatenate again.",
+    "When a function uses file-local constants that were previously in assembly sdata2, `.set` aliases can bridge old labels to C-emitted constants and avoid non-matching extern-float workarounds.",
+    "Prefer moving SDK-style declarations into `include/dolphin/...` headers instead of accumulating duplicates in `include/functions.h`; this improves type consistency and reuse across unrelated callsites.",
+    "Renaming a known baselib helper should include assembly callsite updates, not just C/header changes, so searchability and linker symbols stay coherent across unmatched files.",
+    "Small struct field signedness can matter for matching and comparisons; this PR changed `HSD_TObj.wrap_t` to `s32`, likely to better match the generated compare against `GX_MIRROR` in `MakeTextureMtx`. Evidence for the exact rationale is not present beyond the diff.",
+    "A PR can start as non-matching due to float handling decisions but still be useful once the constant-placement strategy is resolved; the PR body explicitly mentions avoiding extern floats as an early blocker."
+  ],
+  "naming_conventions": [
+    "Known HSD baselib matrix helpers should use `HSD_` names when identified, e.g. `func_8037A120` -> `HSD_MkRotationMtx`.",
+    "Dolphin matrix API declarations follow paired C/PS prefixes (`C_MTX*`, `PSMTX*`) with `MTX*` macros aliasing to `PSMTX*`.",
+    "GX types use SDK-like names such as `GXTexMtx`, `GXTexMapID`, `GXPTTexMtx`, `GXTexWrapMode`, `GX_TEXMTX0`, `GX_TEXMAP_NULL`, and `GX_MIRROR`.",
+    "Texture object fields retain concise HSD naming: `repeat_s`, `repeat_t`, `wrap_s`, `wrap_t`, `rotate`, `scale`, `translate`, `mtx`.",
+    "Temporary sdata2 aliasing used a descriptive anchor name, `tobj_c_sdata2_start`, plus original labels as offsets from that anchor."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed only the matched `MakeTextureMtx` assembly from `asm/sysdolphin/baselib/tobj.s`, leaving the rest of `tobj.s` intact.",
+    "Replaced deleted `tobj.s` float data labels with `.set` aliases to maintain references without reintroducing duplicate constants.",
+    "Used `FLT_EPSILON` plus `__fabsf` ternaries to match near-zero float branch behavior for scale calculations.",
+    "Preserved call ordering and in-place destination behavior: `MTXTrans(tobj->mtx, ...)`, `HSD_MkRotationMtx(m, &rot)`, `MTXConcat(m, tobj->mtx, tobj->mtx)`, `MTXScale(m, ...)`, `MTXConcat(m, tobj->mtx, tobj->mtx)`.",
+    "Updated existing assembly callsites in `ft_unknown_006.s` and `lbbgflash.s` to branch-link to the renamed `HSD_MkRotationMtx`, proving the symbol was shared outside `tobj`.",
+    "Added `asm/sysdolphin/baselib/mtx.s` as a large assembly coverage file for matrix routines not yet fully decompiled, keeping the build/link map consistent while progressing TObj."
+  ],
+  "review_feedback": [
+    "No inline review comments were present in the slice.",
+    "One approving review by ribbanya said: \"Up-to-date and `OK`.\"",
+    "The PR body records an early caveat: the work was non-matching at first because the author decided not to extern floats and opened the PR for posterity while planning to finish the full file."
+  ],
+  "searchable_terms": [
+    "pr315",
+    "PsiLupan",
+    "Match HSD_TObj",
+    "HSD_TObj",
+    "MakeTextureMtx",
+    "TObjSetupMtx",
+    "HSD_MkRotationMtx",
+    "func_8037A120",
+    "HSD_MtxInverseConcat",
+    "asm/sysdolphin/baselib/tobj.s",
+    "src/sysdolphin/baselib/tobj.c",
+    "asm/sysdolphin/baselib/mtx.s",
+    "src/sysdolphin/baselib/mtx.c",
+    "include/sysdolphin/baselib/tobj.h",
+    "include/sysdolphin/baselib/mtx.h",
+    "include/dolphin/mtx.h",
+    "include/dolphin/gx/gxtypes.h",
+    "GXTexMtx",
+    "GXTexMapID",
+    "GXPTTexMtx",
+    "GXTexWrapMode",
+    "GX_MIRROR",
+    "MTXTrans",
+    "MTXConcat",
+    "MTXScale",
+    "PSMTXConcat",
+    "PSMTXScale",
+    "PSMTXTrans",
+    "FLT_EPSILON",
+    "__fabsf",
+    "extern floats",
+    "sdata2",
+    ".set tobj_c_sdata2_start",
+    "wrap_t",
+    "repeat_s",
+    "repeat_t",
+    "tobj->repeat_s && tobj->repeat_t",
+    "lbbgflash",
+    "ft_unknown_006"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that continue matching `src/sysdolphin/baselib/tobj.c` after `MakeTextureMtx`.",
+    "Search for subsequent cleanup or C conversion of functions introduced in `asm/sysdolphin/baselib/mtx.s`, especially `HSD_MtxInverseConcat`.",
+    "Check whether `FLT_EPSILON` in `include/math.h` was later renamed, corrected, or moved to a standard float header.",
+    "Search later PRs for more `func_8037A120` references to confirm `HSD_MkRotationMtx` naming propagated completely.",
+    "Look for PRs that reuse the `.set` alias technique for C-emitted float constants replacing assembly sdata2 labels."
+  ],
+  "confidence": 0.84,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

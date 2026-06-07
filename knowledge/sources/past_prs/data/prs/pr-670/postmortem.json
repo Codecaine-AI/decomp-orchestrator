@@ -1,0 +1,154 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-670",
+  "pr": {
+    "number": 670,
+    "title": "Fix `generate_context.sh`",
+    "url": "https://github.com/doldecomp/melee/pull/670",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-12T11:47:44Z",
+    "merged_at": "2023-01-13T08:50:20Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Fixed the context-generation tooling by making `tools/generate_context.sh` produce a generated include aggregator under `build/`, run `m2ctx.py` with Python 3, optionally clang-format the generated context, and write `build/ctx.c`. `tools/m2ctx/m2ctx.py` was adjusted to resolve the repo root, use `src/MSL` instead of `include` as an include path, define `GEKKO`, and invoke the Windows MWCC preprocessor through `wine` on non-Windows hosts. Review discussion also captured temporary context-compilation fixes around `FILE` placement and enum sentinel naming, but those files were not present in the final changed-files list for this slice.",
+  "change_classification": {
+    "primary_type": "tooling_fix",
+    "categories": [
+      "fix",
+      "tooling",
+      "context_generation",
+      "build_support"
+    ],
+    "systems": [
+      "tools/generate_context.sh",
+      "tools/m2ctx",
+      "MWCC preprocessing",
+      "context headers"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "tools/generate_context.sh",
+      "role": "final changed file; shell wrapper for generating m2ctx context from project headers"
+    },
+    {
+      "path": "tools/m2ctx/m2ctx.py",
+      "role": "final changed file; Python MWCC preprocessing driver used by context generation"
+    },
+    {
+      "path": "src/common_structs.h",
+      "role": "review-discussed earlier/stale hunk; reviewer said FILE-related definitions belonged in stdio.h"
+    },
+    {
+      "path": "src/melee/ft/types.h",
+      "role": "review-discussed earlier/stale hunk; ASID_MAX naming was debated as a temporary context-compilation aid"
+    }
+  ],
+  "what_changed": [
+    "`generate_context.sh` now declares `#!/usr/bin/env bash` and suppresses noisy directory-stack output with `pushd ... > /dev/null` and `popd > /dev/null`.",
+    "`generate_context.sh` now finds headers only under `src`, emits `#include <...>` lines into `build/ctx_includes.h`, and strips either `src/MSL/` or `src/` from include paths.",
+    "The generated include aggregator moved from a root-level `ctx_includes.h` to `build/ctx_includes.h`; the final context output is written to `build/ctx.c` via `tee`.",
+    "`generate_context.sh` now captures `python3 tools/m2ctx/m2ctx.py build/ctx_includes.h` output into a shell variable before writing it, enabling optional formatting.",
+    "If `clang-format` is available, the generated context text is formatted before being written.",
+    "`m2ctx.py` now resolves the repository root with `(here / '../../').resolve()` instead of keeping a relative path.",
+    "`m2ctx.py` imports `os` and, on non-Windows platforms, prefixes the MWCC command with `wine` or the `WINE` environment variable.",
+    "`m2ctx.py` adds `-DGEKKO` to MWCC flags.",
+    "`m2ctx.py` changes the include search path from `include` to `src/MSL`, while retaining `src`.",
+    "`m2ctx.py` removes the prior `normalize_path` helper and passes `str(mwcc_command)` with `cwd=root` to `subprocess.check_output`."
+  ],
+  "smart_moves": [
+    "Kept generated context artifacts under `build/`, avoiding root-directory clutter from `ctx_includes.h` and making generated outputs easier to ignore or clean.",
+    "Used `python3` explicitly for `m2ctx.py`, matching the script shebang and avoiding ambiguity on systems where `python` may be Python 2 or absent.",
+    "Made the MWCC invocation portable by automatically using Wine outside Windows and allowing override through the `WINE` environment variable.",
+    "Resolved the repository root once in `m2ctx.py`, reducing path ambiguity when the script is called from different working directories.",
+    "Added optional `clang-format` without making it a hard dependency; context generation still works when the formatter is not installed.",
+    "Aligned include paths with the project's `src/MSL` header layout, which matters for compiling/preprocessing context against the decomp tree's library headers."
+  ],
+  "decomp_lessons": [
+    "Context-generation scripts should mirror the actual include tree used by the decomp project; stale include roots like `include` can break generated context as headers move under `src/MSL` and `src`.",
+    "When invoking proprietary Windows compiler tools from cross-platform tooling, hide the platform difference in the tool wrapper and allow environment-variable override for local setups.",
+    "Generated m2ctx inputs and outputs should be placed in the build directory, not the source root, to keep decomp working trees clean.",
+    "A context-generation wrapper can safely improve readability by piping through `clang-format`, but should keep formatting optional so tooling remains usable on minimal environments.",
+    "Temporary declarations added only to make context compile should still be placed in semantically correct headers; review noted FILE-related definitions belong in `stdio.h`, not a broad common structs header.",
+    "Enum sentinel names should distinguish maximum valid value from count where possible; review questioned `ASID_MAX` because it could imply the max valid action rather than a count sentinel."
+  ],
+  "naming_conventions": [
+    "Review discussion suggested `ASID_COUNT` may be more accurate than `ASID_MAX` when the enumerator represents a count/sentinel after the last valid `ftCommonAction`.",
+    "Author noted `FTKIND_MAX` was existing precedent for the `*_MAX` style, but also mentioned an intent to eventually change these names to Pascal case and use `count` instead of `max`.",
+    "For context-only compatibility symbols, prefer names that communicate whether a value is a valid enum member, an exclusive upper bound, or a count."
+  ],
+  "assembly_or_matching_tactics": [
+    "No direct assembly matching was changed in this PR.",
+    "The relevant matching-support tactic was to generate a complete preprocessed C context with MWCC flags close to the target compiler setup: `-proc gekko`, hard floating point, `-fp_contract on`, `-O4,p`, `-enum int`, `-nodefaults`, `-inline auto`, `-I-`, `-DM2CTX`, and the newly added `-DGEKKO`.",
+    "Using MWCC's preprocessor through `m2ctx.py` helps keep generated context compatible with the compiler behavior expected by decompilation tooling."
+  ],
+  "review_feedback": [
+    {
+      "author": "r-burns",
+      "path": "src/common_structs.h",
+      "feedback": "FILE-related definitions should be in `stdio.h`."
+    },
+    {
+      "author": "r-burns",
+      "path": "src/melee/ft/types.h",
+      "feedback": "`ASID_COUNT` or similar may be more accurate than `ASID_MAX`, because `ASID_MAX` can read as the max valid `ftCommonAction` value."
+    },
+    {
+      "author": "ribbanya",
+      "path": "src/melee/ft/types.h",
+      "feedback": "The `ASID_MAX` spelling followed existing `FTKIND_MAX` precedent and was intended only to make the context compile; author planned broader cleanup toward Pascal case and `count` terminology."
+    },
+    {
+      "author": "r-burns",
+      "path": "src/melee/ft/types.h",
+      "feedback": "Accepted the precedent explanation: 'sounds good.'"
+    },
+    {
+      "author": "ribbanya",
+      "path": null,
+      "feedback": "The shell script fix was acceptable for now, but the author wanted to replace `generate_context.sh` with a pure Python solution later."
+    }
+  ],
+  "searchable_terms": [
+    "generate_context.sh",
+    "m2ctx.py",
+    "m2ctx",
+    "ctx_includes.h",
+    "build/ctx_includes.h",
+    "build/ctx.c",
+    "clang-format",
+    "MWCC",
+    "mwcceppc.exe",
+    "mwcc_compiler/1.2.5e",
+    "wine",
+    "WINE",
+    "GEKKO",
+    "DM2CTX",
+    "src/MSL",
+    "stdio.h",
+    "FILE",
+    "__file_modes",
+    "ftCommonAction",
+    "ASID_MAX",
+    "ASID_COUNT",
+    "FTKIND_MAX",
+    "context generation",
+    "preprocessor context"
+  ],
+  "follow_up_queries": [
+    "Find the later PR that replaces `generate_context.sh` with a pure Python context generator.",
+    "Search for follow-up cleanup changing enum sentinels from `*_MAX` to `*_COUNT` or Pascal-case names.",
+    "Check where `FILE` and `__file_modes` definitions ultimately landed, especially whether they moved to `src/MSL/stdio.h`.",
+    "Audit current context-generation tooling for whether it still requires Wine and MWCC path `tools/mwcc_compiler/1.2.5e/mwcceppc.exe`."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

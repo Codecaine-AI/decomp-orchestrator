@@ -1,0 +1,174 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-316",
+  "pr": {
+    "number": 316,
+    "title": "Match `HSD_LObj`, ongoing",
+    "url": "https://github.com/doldecomp/melee/pull/316",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2022-02-26T00:15:19Z",
+    "merged_at": "2022-08-24T04:23:35Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched several HSD_LObj/light-object functions and converted a large portion of sysdolphin baselib lobj assembly into C, while leaving HSD_LObjSetup and HSD_LObjGetLightVector as NON_MATCHING asm-backed bridges. The PR also formalized LObj names across existing asm and stage/ground code, moved/expanded lobj declarations, adjusted GX light constants and GXInitLightColor's signature, and relocated vector prototypes into dolphin/mtx.h. Review evidence is sparse but confirms the PR was accepted as up-to-date/OK, with NON_MATCHING wrappers intentionally tolerated for the remaining gaps.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "symbol-renaming",
+      "headers",
+      "non-matching-bridge",
+      "gx-lighting-api-cleanup"
+    ],
+    "systems": [
+      "sysdolphin/baselib/lobj",
+      "sysdolphin/baselib/wobj",
+      "dolphin/gx",
+      "dolphin/mtx",
+      "melee/ground",
+      "melee/stage-asm",
+      "melee/lbshadow"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/lobj.c",
+    "asm/sysdolphin/baselib/lobj.s",
+    "src/sysdolphin/baselib/lobj.h",
+    "include/sysdolphin/baselib/lobj.h",
+    "src/melee/gr/ground.c",
+    "src/dolphin/gx/GXEnum.h",
+    "src/dolphin/gx/GXLight.c",
+    "src/dolphin/gx/GXLight.h",
+    "include/dolphin/mtx.h",
+    "include/functions.h",
+    "src/sysdolphin/baselib/initialize.c",
+    "asm/melee/gr/grpushon.s",
+    "asm/melee/gr/grshrineroute.s",
+    "asm/melee/gr/grzebesroute.s",
+    "asm/melee/lb/lbshadow.s",
+    "asm/melee/text_2.s",
+    "asm/melee/text_3.s",
+    "asm/melee/text_4.s",
+    "asm/melee/ft/ft_unknown_006.s"
+  ],
+  "what_changed": [
+    "Implemented a large new C body for HSD_LObj in src/sysdolphin/baselib/lobj.c, including HSD_LObjGetActiveByID, HSD_LObjGetActiveByIndex, LObjUpdateFunc, HSD_LObjAnim, HSD_LObjAnimAll, HSD_LObjReqAnim, and HSD_LObjReqAnimAll.",
+    "Reduced asm/sysdolphin/baselib/lobj.s substantially, removing hundreds of lines for functions now expressed in C and renaming remaining asm symbols/call targets to HSD_LObj names.",
+    "Added or exposed HSD_LObjGetPosition, HSD_LObjGetInterest, HSD_LObjGetPositionWObj, and HSD_LObjGetInterestWObj names at call sites, replacing prior func_80366D70, func_80366E38, func_80366E78, and func_80366E90 references where shown.",
+    "Renamed animation call sites from func_80365678 and func_803656F8 to HSD_LObjAnimAll and HSD_LObjReqAnimAll across melee asm files and ground.c.",
+    "Added src/sysdolphin/baselib/lobj.h with HSD_LObj structs, light descriptors, animation constants, LOBJ flag definitions, method macros, and prototypes; deleted the older include/sysdolphin/baselib/lobj.h copy.",
+    "Introduced active_lights as HSD_LObj *active_lights[GX_MAX_LIGHT] and used HSD_LightID2Index plus GX_MAX_LIGHT bounds in the active-light lookup helpers.",
+    "Added HSD_LObjGetLightVector and HSD_LObjSetup C attempts guarded by NON_MATCHING, with matching inline asm versions retained when NON_MATCHING is not enabled.",
+    "Changed GX_MAX_LIGHT in src/dolphin/gx/GXEnum.h from 0x100 to 9, matching use as a light-count bound in LObj code rather than as a light bitmask.",
+    "Changed GXInitLightColor to take GXColor by value instead of GXColor *, updated GXLight.c/GXLight.h, and simplified initialize.c to pass lbl_804D5E1C directly.",
+    "Moved PSVECSubtract and PSVECNormalize declarations into include/dolphin/mtx.h and removed stale duplicate vector declarations from include/functions.h."
+  ],
+  "smart_moves": [
+    "Kept partially understood but not-yet-matching functions behind NON_MATCHING instead of blocking the whole LObj progress, preserving known-good assembly for HSD_LObjSetup and HSD_LObjGetLightVector.",
+    "Renamed call targets in unrelated asm files as soon as the LObj functions were identified, improving global searchability and helping future decompilers recognize lighting behavior in stage and shadow code.",
+    "Pulled WObj accessor names into functions.h and ground.c, connecting LObj position/interest behavior to the WObj animation system instead of leaving anonymous func_80366xxx calls.",
+    "Used the HSD_A_L_* animation channel constants in LObjUpdateFunc, making the switch table readable and documenting how animation data maps to visibility, attenuation, cutoff, reference distance/brightness, and light color.",
+    "Changed GXInitLightColor to pass GXColor by value where the generated code and call sites wanted a direct color object, reducing temporary pointer boilerplate in initialize.c.",
+    "Added proper mtx prototypes for PSVECSubtract and PSVECNormalize near other vector APIs, which supports HSD_LObjGetLightVector and avoids relying on broad catch-all declarations."
+  ],
+  "decomp_lessons": [
+    "When matching baselib systems, propagate newly identified function names through asm call sites immediately; this PR shows HSD_LObjAnimAll, HSD_LObjReqAnimAll, HSD_LObjGetPosition, and HSD_LObjGetInterest becoming recognizable across fighters, stages, shadows, and text asm.",
+    "For object systems with nested animation objects, model both the primary AObj and dependent WObj animations in the C implementation: HSD_LObjAnim and HSD_LObjReqAnim call AObj helpers and then position/interest WObj helpers.",
+    "Dirty-flag behavior is central to lighting setup: HSD_LObjSetup only reloads GX light objects after color/specular state changes set LOBJ_DIFF_DIRTY or LOBJ_SPEC_DIRTY.",
+    "Be careful when a GX enum value is being used as a count rather than a bitmask; this PR's GX_MAX_LIGHT change to 9 supports array sizing and range checks for active_lights.",
+    "For visibility animation matching, the LObj code uses a float threshold around 0.5 and flips LOBJ_HIDDEN based on HSD_A_L_VIS.",
+    "When source C is close but not matching due to stack layout/register allocation, keep the readable C attempt under NON_MATCHING and the original asm under the normal build path as a bridge for later work.",
+    "Header placement matters in this codebase: moving lobj.h from include/sysdolphin/baselib to src/sysdolphin/baselib accompanied the deeper baselib decomp work, but future changes should verify include-path conventions before duplicating headers."
+  ],
+  "naming_conventions": [
+    "Use HSD_LObj* prefixes for light-object APIs rather than func_80366xxx labels.",
+    "Use HSD_LObjAnimAll and HSD_LObjReqAnimAll for list-wide operations that iterate through lobj->next.",
+    "Use HSD_LObjGetPosition and HSD_LObjGetInterest for retrieving light vectors into Vec storage.",
+    "Use HSD_LObjGetPositionWObj and HSD_LObjGetInterestWObj for accessors returning the underlying HSD_WObj pointers.",
+    "Use LOBJ_* flag names for HSD_LObj flags, including LOBJ_HIDDEN, LOBJ_RAW_PARAM, LOBJ_DIFF_DIRTY, and LOBJ_SPEC_DIRTY.",
+    "Use HSD_A_L_* constants for light animation channel IDs such as HSD_A_L_VIS, HSD_A_L_A0, HSD_A_L_CUTOFF, HSD_A_L_LITC_R, and HSD_A_L_LITC_A.",
+    "Use GX_MAX_LIGHT as the active light array bound in LObj code."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted matched chunks from asm/sysdolphin/baselib/lobj.s into src/sysdolphin/baselib/lobj.c while keeping remaining nonmatched functions in assembly.",
+    "Annotated remaining asm call sites with resolved HSD_LObj symbol names without changing instruction bytes, e.g. bl func_80365678 became bl HSD_LObjAnimAll.",
+    "Used NON_MATCHING sections for HSD_LObjGetLightVector and HSD_LObjSetup: readable C is present for documentation and future work, while inline asm preserves the matching build.",
+    "HSD_LObjGetLightVector's matching asm initializes local default Vec constants, calls HSD_LObjGetPosition and HSD_LObjGetInterest, then uses PSVECSubtract and PSVECNormalize.",
+    "HSD_LObjSetup's asm preserves exact register/stack behavior around GXInitLightColor, GXLoadLightObjImm, GXInitLightAttn, dirty flag clears, and shininess/specular handling.",
+    "Ground/stage asm renames were applied broadly to keep relocation targets stable while improving symbol knowledge."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "ribbanya",
+      "state": "APPROVED",
+      "body": "Up-to-date and `OK`. I had to wrap `HSD_LObjSetup` and  `HSD_LObjGetLightVector` in `NON_MATCHING` for now but it should be quite easy to bridge the gap.",
+      "lesson": "Partial LObj decomp was acceptable because the remaining mismatches were isolated behind NON_MATCHING and expected to be bridgeable."
+    },
+    {
+      "reviewer": "ribbanya",
+      "state": "CHANGES_REQUESTED",
+      "body": "Found some extra files created by the merge. Fixing.",
+      "lesson": "Watch for accidental merge-created files in long-running decomp branches."
+    },
+    {
+      "reviewer": "ribbanya",
+      "state": "APPROVED",
+      "body": "",
+      "lesson": "Final approval had no additional technical notes in the available dump."
+    }
+  ],
+  "searchable_terms": [
+    "HSD_LObj",
+    "HSD_LObjAnim",
+    "HSD_LObjAnimAll",
+    "HSD_LObjReqAnim",
+    "HSD_LObjReqAnimAll",
+    "HSD_LObjGetPosition",
+    "HSD_LObjGetInterest",
+    "HSD_LObjGetPositionWObj",
+    "HSD_LObjGetInterestWObj",
+    "HSD_LObjGetLightVector",
+    "HSD_LObjSetup",
+    "HSD_LObjGetActiveByID",
+    "HSD_LObjGetActiveByIndex",
+    "LObjUpdateFunc",
+    "active_lights",
+    "GX_MAX_LIGHT",
+    "GXInitLightColor",
+    "GXLoadLightObjImm",
+    "GXInitLightAttn",
+    "PSVECSubtract",
+    "PSVECNormalize",
+    "LOBJ_HIDDEN",
+    "LOBJ_RAW_PARAM",
+    "LOBJ_DIFF_DIRTY",
+    "LOBJ_SPEC_DIRTY",
+    "HSD_A_L_VIS",
+    "HSD_A_L_CUTOFF",
+    "HSD_A_L_REFDIST",
+    "HSD_A_L_REFBRIGHT",
+    "sysdolphin baselib lobj",
+    "NON_MATCHING",
+    "func_80365678",
+    "func_803656F8",
+    "func_80366D70",
+    "func_80366E38"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that removed NON_MATCHING from HSD_LObjSetup or HSD_LObjGetLightVector.",
+    "Search for subsequent corrections to GX_MAX_LIGHT or GXLightID semantics after this PR.",
+    "Audit later lobj.h moves or include-path cleanups involving src/sysdolphin/baselib/lobj.h versus include/sysdolphin/baselib/lobj.h.",
+    "Look for PRs that match HSD_LObjGetPosition, HSD_LObjGetInterest, HSD_LObjGetPositionWObj, and HSD_LObjGetInterestWObj fully in C.",
+    "Search for additional stage/ground PRs that reuse HSD_LObjAnimAll and HSD_LObjReqAnimAll naming."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

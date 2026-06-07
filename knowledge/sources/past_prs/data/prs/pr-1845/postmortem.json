@@ -1,0 +1,151 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1845",
+  "pr": {
+    "number": 1845,
+    "title": "Bump objdiff to v3.0.0 and wibo to 0.7.0",
+    "url": "https://github.com/doldecomp/melee/pull/1845",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2025-08-16T13:48:22Z",
+    "merged_at": "2025-08-19T00:39:13Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Updated repository tooling around decomp comparison and Windows-exe execution: objdiff was bumped from v2.7.1 to v3.0.0, wibo from 0.6.16 to 0.7.0, nixpkgs was advanced, and supporting Nix packaging fixes were added. The PR mattered because objdiff 3 changed reported fuzzy/matched/linked percentages and how hard-coded labels are handled, initially making the diff bot appear to show broken matches. Review discussion concluded the apparent linked-code regression was expected/benign after updating the branch, with remaining reported issues being global jump table labels in GXPerf rather than real function breakage.",
+  "change_classification": {
+    "primary_type": "tooling_dependency_bump",
+    "categories": [
+      "decomp-matching",
+      "nix-packaging",
+      "toolchain-maintenance",
+      "diff-infrastructure"
+    ],
+    "systems": [
+      ".nix",
+      "repo-root",
+      "configure.py",
+      "objdiff",
+      "wibo",
+      "devkitppc",
+      "m2c"
+    ]
+  },
+  "key_files": [
+    ".nix/objdiff.nix",
+    ".nix/duplicate-similar-dep.patch",
+    ".nix/wibo.nix",
+    ".nix/sources.json",
+    ".nix/devkitppc.nix",
+    ".nix/m2c.nix",
+    "configure.py"
+  ],
+  "what_changed": [
+    "Bumped objdiff in both Nix packaging and configure.py from v2.7.1 to v3.0.0.",
+    "Bumped wibo in both Nix packaging and configure.py from 0.6.16 to 0.7.0.",
+    "Updated .nix/sources.json to a newer nixpkgs revision and hash.",
+    "Changed .nix/objdiff.nix to fetch objdiff through srcOnly with a local patch, build the Rust workspace while excluding objdiff-wasm, and share those flags with tests.",
+    "Added .nix/duplicate-similar-dep.patch to patch Cargo.lock so duplicate similar 2.7.0 dependencies collapse to a single dependency entry.",
+    "Added cargoLock.outputHashes for git-sourced Rust dependencies gimli-0.32.0 and similar-2.7.0.",
+    "Updated .nix/wibo.nix for wibo 0.7.0, adding mimalloc as a build input and setting CMake flag -DFETCHCONTENT_TRY_FIND_PACKAGE_MODE=ALWAYS.",
+    "Adjusted .nix/devkitppc.nix to fetch the binutils patch from devkitPPC_r47 explicitly and changed wrapper generation to iterate only over bintools' bin directory rather than both gcc and bintools.",
+    "Patched .nix/m2c.nix to remove the graphviz dependency line from pyproject.toml during postPatch.",
+    "Review excerpt references a .nix/melee.nix nativeBuildInputs discussion about adding devkitppc, but that file is not listed in the final changed_files slice, so it may have been removed or superseded before merge."
+  ],
+  "smart_moves": [
+    "Kept configure.py tool tags synchronized with the Nix package versions so local configuration and reproducible Nix builds point at the same objdiff and wibo releases.",
+    "Used a local Cargo.lock patch for objdiff instead of accepting duplicate similar dependencies, making the Rust package easier for Nix to vendor/hash deterministically.",
+    "Built objdiff with explicit workspace flags and excluded objdiff-wasm, avoiding unnecessary or incompatible wasm build work for the native objdiff package.",
+    "Added explicit cargoLock.outputHashes for non-registry/git Rust sources, which is required for reproducible Nix Rust builds.",
+    "For wibo 0.7.0, provided mimalloc and forced CMake FetchContent to prefer find_package mode, reducing vendoring/build surprises under Nix.",
+    "Investigated scary diff-bot metric changes before merge instead of assuming a tool bump was harmless; the discussion separated objdiff reporting/label behavior from actual decomp regressions."
+  ],
+  "decomp_lessons": [
+    "Tool upgrades can change match reports without changing codegen; objdiff 3.0.0 changed fuzzy percentages and handling/reporting around hard-coded labels.",
+    "A drop in reported linked-code percentage should normally be suspicious, but in this PR the evidence points to objdiff behavior around hard-coded labels and stale branch state rather than real broken matches.",
+    "Before merging comparison-tool bumps, inspect whether reported broken matches are real functions or labels/jump-table artifacts.",
+    "Keep PR branches current when interpreting diff-bot output; stale branches can make real functions appear broken and confuse tool-upgrade validation.",
+    "Global jump table labels, specifically mentioned in GXPerf, can surface as apparent breakage under objdiff reporting changes.",
+    "Nix packaging for Rust decomp tools may require lockfile surgery and output hashes when upstream Cargo.lock mixes registry and git versions of the same crate."
+  ],
+  "naming_conventions": [
+    "Tool version fields in configure.py use *_tag names such as objdiff_tag and wibo_tag.",
+    "Nix package definitions use pname/version with upstream release tags, e.g. pname = \"objdiff\" version = \"3.0.0\" and pname = \"wibo\" version = \"0.7.0\".",
+    "Local Nix patch files are named for the issue they address, e.g. duplicate-similar-dep.patch.",
+    "The devkitPPC release string is referenced explicitly as devkitPPC_r47 for the binutils patch URL."
+  ],
+  "assembly_or_matching_tactics": [
+    "Treat objdiff metric deltas after an objdiff upgrade as potentially algorithm/reporting-related, especially fuzzy percentages.",
+    "When linked-code percentage changes unexpectedly, verify with current branch state and inspect individual reported symbols before concluding there is a code match regression.",
+    "Differentiate real function match failures from hard-coded labels and global jump table labels in reports.",
+    "Use diff-bot output as a signal requiring triage, not as definitive proof of decomp breakage after comparison-tool upgrades."
+  ],
+  "review_feedback": [
+    {
+      "author": "r-burns",
+      "feedback": "Noted that the diff algorithm seemed to change because fuzzy percentages differed, but questioned why many matches appeared broken."
+    },
+    {
+      "author": "r-burns",
+      "feedback": "Flagged that linked-code percentage going down should normally be unaffected and suggested investigating the diff bot before merge."
+    },
+    {
+      "author": "ribbanya",
+      "feedback": "Explained that the linked-code/report change was likely due to objdiff handling of hard-coded labels, recalling similar behavior from a prior beta."
+    },
+    {
+      "author": "r-burns",
+      "feedback": "After updating the branch, concluded apparent real-function breakage was stale-branch noise and remaining reports were global jump table labels in GXPerf; considered the PR good to merge unless more testing was desired."
+    },
+    {
+      "author": "ribbanya",
+      "path": ".nix/melee.nix",
+      "feedback": "Asked whether adding devkitppc to nativeBuildInputs was still needed because they had been trying to factor it out."
+    },
+    {
+      "author": "r-burns",
+      "path": ".nix/melee.nix",
+      "feedback": "Answered that devkitppc was not needed but was nice for development."
+    }
+  ],
+  "searchable_terms": [
+    "PR1845",
+    "objdiff 3.0.0",
+    "objdiff v3.0.0",
+    "wibo 0.7.0",
+    "wibo v0.7.0",
+    "duplicate-similar-dep.patch",
+    "similar 2.7.0",
+    "Cargo.lock",
+    "cargoLock.outputHashes",
+    "gimli-0.32.0",
+    "objdiff-wasm",
+    "srcOnly",
+    "nixpkgs fbcf476f790d8a217c3eab4e12033dc4a0f6d23c",
+    "devkitPPC_r47",
+    "mimalloc",
+    "FETCHCONTENT_TRY_FIND_PACKAGE_MODE=ALWAYS",
+    "m2c graphviz pyproject",
+    "hard-coded labels",
+    "global jump table labels",
+    "GXPerf",
+    "diff bot linked code percent",
+    "fuzzy percents",
+    "configure.py objdiff_tag",
+    "configure.py wibo_tag"
+  ],
+  "follow_up_queries": [
+    "Find future PRs mentioning objdiff hard-coded labels or global jump table labels to see whether reporting behavior changed again.",
+    "Check whether .nix/melee.nix ultimately kept devkitppc in nativeBuildInputs or whether it was factored out after this review discussion.",
+    "Search for later objdiff bumps to compare required Cargo.lock patching and cargoLock.outputHashes patterns.",
+    "Look for GXPerf jump table label issues in diff-bot reports after objdiff v3.0.0."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

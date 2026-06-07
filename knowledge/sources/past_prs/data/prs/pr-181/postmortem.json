@@ -1,0 +1,140 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-181",
+  "pr": {
+    "number": 181,
+    "title": "Decompiled HSD/list",
+    "url": "https://github.com/doldecomp/melee/pull/181",
+    "state": "MERGED",
+    "author": "kiwi515",
+    "created_at": "2021-12-13T18:17:56Z",
+    "merged_at": "2021-12-13T18:30:42Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Decompiled the SysDolphin baselib list module by adding src/sysdolphin/baselib/list.c implementations and expanding list.h with HSD_SList/HSD_DList allocation/list APIs. The PR moved list.o from asm to src in obj_files.mk, added list.o to e_files.mk, and renamed the previously labeled HSD_SListPrepend symbol to HSD_SListAllocAndPrepend across assembly callers because the routine allocates a node before prepending, analogous to HSD_SListAllocAndAppend. The author also introduced a duplicate static inline HSD_SListAlloc_inline to match callers where HSD_SListAlloc behavior was inlined.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "naming",
+      "build-system"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "list",
+      "objalloc",
+      "asm",
+      "include",
+      "src"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/list.c",
+    "src/sysdolphin/baselib/list.h",
+    "asm/sysdolphin/baselib/list.s",
+    "asm/sysdolphin/baselib/bytecode.s",
+    "asm/sysdolphin/baselib/code_80391580.s",
+    "asm/sysdolphin/baselib/lobj.s",
+    "asm/sysdolphin/baselib/shadow.s",
+    "include/functions.h",
+    "obj_files.mk",
+    "e_files.mk"
+  ],
+  "what_changed": [
+    "Added src/sysdolphin/baselib/list.c with HSD list allocation data, single-list allocation helpers, append/prepend list helpers, and remove logic.",
+    "Added global HSD_ObjAllocData instances slist_alloc_data and dlist_alloc_data and initialization via HSD_ListInitAllocData using HSD_ObjAllocInit with HSD_SList and HSD_DList sizes and alignment/count argument 4.",
+    "Added HSD_SListGetAllocData and HSD_DListGetAllocData accessors returning the corresponding allocation-data globals.",
+    "Implemented HSD_SListAlloc using HSD_ObjAlloc, NULL assertion against existing string labels for \"list.c\" and \"list\", memset to zero, and return of the allocated HSD_SList.",
+    "Added static inline HSD_SListAlloc_inline duplicating HSD_SListAlloc behavior so functions whose original code inlined allocation could still match.",
+    "Implemented HSD_SListAllocAndAppend and HSD_SListAllocAndPrepend as allocate-then-set-data wrappers around HSD_SListAppendList and HSD_SListPrependList.",
+    "Implemented HSD_SListAppendList with an assert on NULL next, insertion after an existing list node when list is non-NULL, and direct return of next when list is NULL.",
+    "Implemented HSD_SListPrependList with an assert on NULL prev, setting prev->next to list, and returning prev.",
+    "Implemented HSD_SListRemove to free a non-NULL node through HSD_ObjFree and return its next pointer, or return NULL for NULL input.",
+    "Expanded src/sysdolphin/baselib/list.h to include objalloc.h, define HSD_DList, and declare the list APIs.",
+    "Moved list.o in obj_files.mk from asm/sysdolphin/baselib/list.o to src/sysdolphin/baselib/list.o and added list.o to EPILOGUE_UNSCHEDULED in e_files.mk.",
+    "Renamed HSD_SListPrepend to HSD_SListAllocAndPrepend in asm/sysdolphin/baselib/list.s and updated callsites in bytecode.s, code_80391580.s, lobj.s, shadow.s, and include/functions.h comments."
+  ],
+  "smart_moves": [
+    "Renaming HSD_SListPrepend to HSD_SListAllocAndPrepend captured the function's actual semantics: it calls the SList allocator before prepending, matching the naming pattern of HSD_SListAllocAndAppend.",
+    "Keeping a separate static inline HSD_SListAlloc_inline avoided forcing all allocation sites through a callable function when the original code inlined the allocation sequence, a practical matching tactic for small allocator helpers.",
+    "The header update introduced HSD_DList alongside HSD_SList even though most visible implementation work was SList-focused, preserving the module-level allocation data split between slist_alloc_data and dlist_alloc_data.",
+    "The build-system change was minimal and targeted: list.o was switched from asm to src while assembly references that only needed symbol-name updates were preserved."
+  ],
+  "decomp_lessons": [
+    "For decompilation naming, prefer behavior-rich names over literal guessed names: a function that allocates and prepends should be named HSD_SListAllocAndPrepend rather than HSD_SListPrepend.",
+    "Small allocator routines may need both an exported function and an inline duplicate to match callsites where the compiler emitted the helper body inline.",
+    "When replacing an asm object with a C object, update obj_files.mk and, if relevant for scheduling, e_files.mk at the same time so the build selects the new source object.",
+    "Preserve existing rodata/string label references such as lbl_804D5F48, lbl_804D5F50, lbl_804D5F58, and lbl_804D5F60 when they are required for matching asserts and source-line numbers.",
+    "When a renamed function remains called from undecompiled assembly files, all assembly call labels and include/functions.h comments should be updated consistently to avoid stale symbol names."
+  ],
+  "naming_conventions": [
+    "HSD_SListAllocAndPrepend was chosen over HSD_SListPrepend because the routine allocates a new HSD_SList node before prepending it.",
+    "HSD_SListAllocAndAppend and HSD_SListAllocAndPrepend form a paired naming convention for allocate-plus-link wrappers.",
+    "HSD_SListAppendList and HSD_SListPrependList describe operations on already allocated list nodes, contrasting with the AllocAnd* wrappers.",
+    "Allocator data globals use lowercase module/object names: slist_alloc_data and dlist_alloc_data.",
+    "Header guard remained lowercase style _list_h_.",
+    "The inline matching helper was named HSD_SListAlloc_inline, explicitly marking it as a duplicate inline version rather than a public API."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used static inline HSD_SListAlloc_inline to reproduce inlined allocation sequences in HSD_SListAllocAndAppend and HSD_SListAllocAndPrepend.",
+    "Kept extern declarations for existing string labels used by __assert rather than replacing them with new string literals, helping preserve rodata layout and assert-line matching.",
+    "Updated assembly call targets from HSD_SListPrepend to HSD_SListAllocAndPrepend without changing branch offsets or code bytes, reflecting a symbol rename rather than behavioral assembly edits.",
+    "Moved only list.o from asm to src in obj_files.mk, leaving other baselib objects as asm or src according to their current decomp status.",
+    "Added list.o to EPILOGUE_UNSCHEDULED, indicating this source file required epilogue scheduling handling for matching in this build setup."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr181",
+    "Decompiled HSD/list",
+    "kiwi515",
+    "HSD_ListInitAllocData",
+    "HSD_SListGetAllocData",
+    "HSD_DListGetAllocData",
+    "HSD_SListAlloc",
+    "HSD_SListAlloc_inline",
+    "HSD_SListAllocAndAppend",
+    "HSD_SListAllocAndPrepend",
+    "HSD_SListAppendList",
+    "HSD_SListPrependList",
+    "HSD_SListRemove",
+    "HSD_SListPrepend rename",
+    "slist_alloc_data",
+    "dlist_alloc_data",
+    "HSD_ObjAllocData",
+    "HSD_ObjAllocInit",
+    "HSD_ObjAlloc",
+    "HSD_ObjFree",
+    "HSD_SList",
+    "HSD_DList",
+    "list.c",
+    "list.h",
+    "sysdolphin baselib list",
+    "obj_files.mk",
+    "e_files.mk",
+    "EPILOGUE_UNSCHEDULED",
+    "lbl_804D5F48",
+    "lbl_804D5F50",
+    "lbl_804D5F58",
+    "lbl_804D5F60",
+    "__assert",
+    "memset"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify HSD_SListAlloc_inline or remove the duplicate inline allocator.",
+    "Search for subsequent corrections to HSD_SListAppendList/HSD_SListPrependList parameter names or behavior.",
+    "Look for later decompilation of HSD_DList functions using dlist_alloc_data.",
+    "Search for other PRs that rename functions from action-only names to AllocAnd* names after discovering allocation side effects.",
+    "Check whether list.c later gained explicit prototypes or void parameter lists for functions declared with empty parentheses."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

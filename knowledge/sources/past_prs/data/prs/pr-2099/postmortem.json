@@ -1,0 +1,133 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2099",
+  "pr": {
+    "number": 2099,
+    "title": "Get un_8031D288_OnEnter matched up to regswaps and load",
+    "url": "https://github.com/doldecomp/melee/pull/2099",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2026-01-16T23:56:11Z",
+    "merged_at": "2026-01-17T00:03:41Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the vi0401 scene enter routine un_8031D288_OnEnter close enough to be limited to register swaps and a load difference. The placeholder was replaced with a full C implementation that initializes audio/effects, loads Vi0401/IfAll scene symbols and character animation data, creates fog/light/camera/model GObjs, wires GX callbacks/procs, starts scene animations, spawns the character display, and plays three audio cues. The header signature was tightened from UNK_T to void*. No review comments were included in the provided slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "scene-initialization",
+      "asset-loading"
+    ],
+    "systems": [
+      "melee-core",
+      "vi",
+      "baselib",
+      "audio",
+      "effects",
+      "archive"
+    ]
+  },
+  "key_files": [
+    "src/melee/vi/vi0401.c",
+    "src/melee/vi/vi0401.h"
+  ],
+  "what_changed": [
+    "Replaced the non-decompiled marker `/// #un_8031D288_OnEnter` in `src/melee/vi/vi0401.c` with a concrete implementation.",
+    "Added includes needed by the new implementation: `ef/efasync.h`, `ef/eflib.h`, `lb/lbarchive.h`, `sc/types.h`, and baselib fog/gxlink/object/proc/lobj headers.",
+    "Changed `un_804D6F48`, `un_804D6F4C`, and `un_804D6F50` into static `SceneDesc*` globals used for `visual0401Scene`, `visual0401InfoScene`, and `ScInfDmg_scene_data`.",
+    "Changed prior external declarations for `un_804D6F54` and `un_804D6F58` into static globals in `vi0401.c`.",
+    "Implemented setup for audio/effect state with `lbAudioAx_800236DC`, `efLib_8005B4B8`, and `efAsync_8006737C(0)`.",
+    "Loaded scene and info assets with `lbArchive_LoadSymbols`, including `Vi0401.dat`, `IfAll.dat`, and a character animation archive from `viGetCharAnimByIndex(char_index)`.",
+    "Created fog, light, camera, and model GObjs using HSD/baselib creation, object binding, GX link setup, animation request, animation evaluation, and process registration calls.",
+    "Called `un_8031D030` using the first two bytes of the incoming `data` pointer as character index and costume.",
+    "Called `vi_8031C9B4(1, 0)` and played three sounds with `lbAudioAx_800237A8` IDs `0x61a88`, `0x61a89`, and `0x61a8a`.",
+    "Updated `src/melee/vi/vi0401.h` so `un_8031D288_OnEnter` takes `void*` instead of `UNK_T`."
+  ],
+  "smart_moves": [
+    "The implementation preserves the likely binary-sensitive ordering of setup calls: audio/effects first, archive loads next, then fog/light/camera/model construction, then character setup and sound playback.",
+    "Using `SceneDesc*` for the loaded scene symbols exposes the structure behind `visual0401Scene`, `visual0401InfoScene`, and `ScInfDmg_scene_data`, enabling direct typed access to cameras, fogs, lights, and models.",
+    "The header update from `UNK_T` to `void*` is minimal but useful: the function still treats the argument as raw scene-enter data while documenting pointer semantics more accurately.",
+    "The code uses existing HSD helper APIs (`HSD_FogLoadDesc`, `lb_80013B14`, `HSD_JObjLoadJoint`, `gm_8016895C`, animation helpers, and GX callbacks) rather than open-coding scene setup.",
+    "The PR title explicitly states the remaining mismatch quality: matched up to register swaps and a load, which is valuable context for future cleanup."
+  ],
+  "decomp_lessons": [
+    "For scene-enter routines, matching often requires reconstructing a strict asset-loading and GObj-creation sequence rather than only identifying the high-level scene behavior.",
+    "Archive-loaded scene symbols should be typed to existing scene descriptor structures when the diff evidence supports it; this can reduce `UNK_T` usage and make loops over cameras/fogs/lights/models straightforward.",
+    "When an entrypoint consumes opaque menu or scene data, a `void*` parameter plus explicit byte extraction can be preferable to leaving the public declaration as `UNK_T`.",
+    "PR titles that mention residual mismatch causes such as register swaps or load differences are useful matching evidence and should be preserved in future notes.",
+    "Static file-scope globals can replace extern declarations when the evidence shows the data is owned and used locally within the translation unit."
+  ],
+  "naming_conventions": [
+    "`un_8031D288_OnEnter` follows the project convention of address-based unknown scene lifecycle names with an `_OnEnter` suffix.",
+    "`un_8031D698_OnFrame` in the same header uses the matching `_OnFrame` lifecycle suffix.",
+    "Unknown file-scope globals retain address-derived names such as `un_804D6F48`, `un_804D6F4C`, `un_804D6F50`, `un_804D6F54`, and `un_804D6F58` until better semantic names are justified.",
+    "Internal helper names such as `fn_8031D168` remain address-derived when no semantic name is evidenced.",
+    "Scene asset symbol names remain literal and case-sensitive: `visual0401Scene`, `visual0401InfoScene`, and `ScInfDmg_scene_data`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use typed locals for HSD objects (`HSD_CObj*`, `HSD_GObj*`, `HSD_Fog*`, `HSD_LObj*`, `HSD_JObj*`) to guide codegen for object creation and callback setup.",
+    "Preserve loop structure over null-terminated `SceneDesc->models` arrays for model GObj creation.",
+    "Extract `char_index` as `u8 char_index = ((u8*) data)[0]` before archive loading, then reuse `((u8*) data)[0]` and `[1]` for the later character/costume setup call.",
+    "Cast camera descriptors to `HSD_CameraDescPerspective*` when calling `lb_80013B14`.",
+    "The stated remaining issues are register swaps and one load difference; no exact asm hunk or reviewer explanation was provided in the slice.",
+    "A suspicious-looking assignment in the excerpt, `gobj->gxlink_prios = 0x801` after creating the second camera object, should be treated as evidence from the diff rather than corrected without further matching data."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "The provided context reports one issue comment/text record, but its body was not included, so no reviewer intent or feedback can be extracted."
+  ],
+  "searchable_terms": [
+    "pr-2099",
+    "PsiLupan",
+    "un_8031D288_OnEnter",
+    "vi0401",
+    "src/melee/vi/vi0401.c",
+    "src/melee/vi/vi0401.h",
+    "regswaps",
+    "load difference",
+    "SceneDesc",
+    "visual0401Scene",
+    "visual0401InfoScene",
+    "ScInfDmg_scene_data",
+    "Vi0401.dat",
+    "IfAll.dat",
+    "lbArchive_LoadSymbols",
+    "viGetCharAnimByIndex",
+    "HSD_FogLoadDesc",
+    "HSD_GObjObject_80390A70",
+    "GObj_SetupGXLink",
+    "GObj_SetupGXLinkMax",
+    "HSD_GObj_FogCallback",
+    "HSD_GObj_LObjCallback",
+    "HSD_GObj_JObjCallback",
+    "HSD_CObjAddAnim",
+    "HSD_CObjReqAnim",
+    "HSD_CObjAnim",
+    "HSD_JObjLoadJoint",
+    "HSD_JObjReqAnimAll",
+    "HSD_JObjAnimAll",
+    "gm_8016895C",
+    "lbAudioAx_800236DC",
+    "lbAudioAx_800237A8",
+    "efLib_8005B4B8",
+    "efAsync_8006737C",
+    "UNK_T to void pointer"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match `un_8031D288_OnEnter` beyond register swaps and the load difference.",
+    "Search for uses or renames of `un_804D6F48`, `un_804D6F4C`, `un_804D6F50`, `un_804D6F54`, and `un_804D6F58` to see whether better semantic names were introduced.",
+    "Compare other `vi` scene enter routines for reusable patterns in fog/light/camera/model GObj setup.",
+    "Check whether the `gobj->gxlink_prios = 0x801` assignment after second camera creation was later changed to `cam_gobj->gxlink_prios` or intentionally preserved for matching."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

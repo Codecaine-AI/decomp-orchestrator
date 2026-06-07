@@ -20,6 +20,7 @@ src/state/
 +-- index.ts
 +-- leases.ts
 +-- pi-sessions.ts
++-- queue-stats.ts
 +-- reports.ts
 +-- runs.ts
 +-- schema.ts
@@ -48,10 +49,13 @@ src/state/
 
 - `schema.ts` configures SQLite pragmas and creates tables.
 - `runs.ts`, `targets.ts`, and `director-cycles.ts` create core board rows.
+- `targets.ts` also owns deterministic queue refill from board candidates.
 - `leases.ts` leases queued targets, writes file locks, releases work, and
   handles recovery paths.
 - `events.ts` creates, reads, and handles wake events.
 - `pi-sessions.ts` records dry-run or live Pi invocation metadata.
+- `queue-stats.ts` computes queued, schedulable, blocked, and unhandled-event
+  counts shared by status, tick, and trigger logic.
 - `reports.ts` records worker reports and related artifact paths.
 - `status.ts` builds the operator-facing status summary.
 
@@ -62,6 +66,12 @@ src/state/
 - A run goal is a checkpoint threshold for pausing and handoff. It is not the
   global project completion target.
 - File-lock rows are transient active-lease guards.
+- Refill prefers fresh candidates that are not already represented in the run
+  and skips source paths with active locks.
+- Director-selected target packets can add a fresh queued row for a previously
+  attempted target when it is not already queued or leased.
+- Schedulable queue depth is counted by distinct unlocked source path, not raw
+  queued row count.
 - Events are handled only after the follow-up state transition is persisted.
 - SQLite is configured with WAL mode, foreign keys, and a busy timeout so CLI
   steps can safely coordinate through the same state directory.

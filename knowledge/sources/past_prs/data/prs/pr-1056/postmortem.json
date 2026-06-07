@@ -1,0 +1,123 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1056",
+  "pr": {
+    "number": 1056,
+    "title": "Fix incorrect jpegdec split",
+    "url": "https://github.com/doldecomp/melee/pull/1056",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-01-12T22:25:38Z",
+    "merged_at": "2024-01-12T22:37:44Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Corrected an erroneous module split that had treated the THP JPEG decoder code as a separate dolphin/jpeg/jpegdec object and a separate melee/lb/lbjpeg object. The PR deleted asm/dolphin/jpeg/jpegdec.s, moved its 7107 lines into asm/dolphin/thp/THPDec.s with THPDec-prefixed symbols, deleted asm/melee/lb/lbjpeg.s, merged its contents into asm/melee/lb/lbmthp.s, and updated callers and obj_files.mk so the build reflects that these routines belong to THP/MTTHP rather than standalone JPEG modules.",
+  "change_classification": {
+    "primary_type": "split_correction",
+    "categories": [
+      "fix",
+      "asm_reorganization",
+      "symbol_rename",
+      "object_file_cleanup"
+    ],
+    "systems": [
+      "dolphin/thp",
+      "dolphin/jpeg",
+      "melee/lb",
+      "build/obj_files.mk",
+      "asm"
+    ]
+  },
+  "key_files": [
+    "asm/dolphin/jpeg/jpegdec.s",
+    "asm/dolphin/thp/THPDec.s",
+    "asm/melee/lb/lbjpeg.s",
+    "asm/melee/lb/lbmthp.s",
+    "asm/melee/gm_1A36.s",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Removed asm/dolphin/jpeg/jpegdec.s entirely; the deleted file contained the former JPEGGetFileInfo, JPEG_8032FD40, JPEG_8032FDB8, JPEG_80331340, JPEG_803313D0, JPEG_80335C58, huffman decode routines, natural order data, and JPEGDEC_* data labels.",
+    "Appended the deleted jpegdec assembly to asm/dolphin/thp/THPDec.s after __THPPrepBitStream, preserving addresses but renaming the code/data into the THPDec namespace, for example JPEGGetFileInfo became THPDec_8032F8D4 and JPEGDEC_804DE1D0 became THPDec_804DE1D0.",
+    "Renamed the initialization symbol at 80335C58 from JPEG_80335C58 to THPInit, strengthening the evidence that the code is THP decoder initialization rather than a standalone JPEG library entry point.",
+    "Deleted asm/melee/lb/lbjpeg.s and moved its 249 lines into asm/melee/lb/lbmthp.s, adding lbMthp8001F890, lbMthp8001F928, and lbMthp8001FAA0 in place of lbJpeg_8001F890, lbJpeg_8001F928, and lbJpeg_8001FAA0.",
+    "Updated lbmthp THP decode calls from JPEG_* names to THP names: JPEG_80335C58 to THPInit, JPEG_8032FD40 to THPDec_8032FD40, JPEG_8032FDB8 to THPDec_8032FDB8, JPEG_80331340 to THPDec_80331340, and JPEG_803313D0 to THPDec_803313D0.",
+    "Updated gm_1A36.s callsites that previously referenced lbJpeg symbols to call the merged lbMthp symbols instead: lbJpeg_8001F928 to lbMthp8001F928, lbJpeg_8001FAA0 to lbMthp8001FAA0, and lbJpeg_8001F890 to lbMthp8001F890.",
+    "Removed the obsolete asm/melee/lb/lbjpeg.s.o and asm/dolphin/jpeg/jpegdec.s.o entries from obj_files.mk, leaving asm/melee/lb/lbmthp.s.o and asm/dolphin/thp/THPDec.s.o as the relevant objects."
+  ],
+  "smart_moves": [
+    "The fix treated the problem as a split/layout error rather than a local symbol typo: it moved whole contiguous assembly ranges back into their actual owning objects, which is safer for decomp ordering and linker layout.",
+    "Callsite labels were updated at the same time as object-file membership, avoiding stale references to deleted lbJpeg/JPEG symbols.",
+    "The object list was cleaned up after the assembly move, preventing phantom objects from continuing to encode a false module boundary.",
+    "The rename to THPInit used a meaningful public THP symbol for the initializer instead of keeping the misleading address-style JPEG_80335C58 name.",
+    "The author explicitly recorded the rationale: evidence in the file indicated the code should be thpdec, and if lbjpeg does not exist then its code belongs back in lbmthp."
+  ],
+  "decomp_lessons": [
+    "Do not infer a separate library/object solely from JPEG-related functionality; in Melee this JPEG decode code can be part of the THP video decoder object.",
+    "When correcting a split, update all three layers together: assembly file ownership, symbol namespace, and obj_files.mk entries.",
+    "If an apparently standalone lb module only wraps or drives THP/JPEG video decode behavior, verify whether it is actually a tail region of lbmthp before creating a separate lbjpeg object.",
+    "File-local evidence and neighboring symbols can outweigh semantic guesses from generic technology names like JPEG.",
+    "Large assembly moves can still be low-risk when the code bytes/addresses are preserved and the main change is object ownership plus symbol namespace."
+  ],
+  "naming_conventions": [
+    "Use THPDec_* for address-named routines and data that live in asm/dolphin/thp/THPDec.s, replacing misleading JPEG_* or JPEGDEC_* prefixes.",
+    "Use THPInit for the THP decoder initialization routine at 80335C58 rather than JPEG_80335C58.",
+    "Do not keep an lbJpeg_* namespace when the evidence says the module does not exist; merged labels became lbMthp8001F890, lbMthp8001F928, and lbMthp8001FAA0 in this PR.",
+    "Callsites should reflect the owning module namespace after a split correction, even when the branch targets and addresses are unchanged."
+  ],
+  "assembly_or_matching_tactics": [
+    "Moved a large contiguous assembly block from asm/dolphin/jpeg/jpegdec.s into asm/dolphin/thp/THPDec.s without changing instruction addresses, preserving match stability while correcting file boundaries.",
+    "Renamed internal branch/call targets consistently after the move so calls inside THPDec.s target THPDec_* labels rather than deleted JPEG_* labels.",
+    "Merged the small lbjpeg assembly into lbmthp.s at the matching address range, then redirected external gm_1A36.s references to the new lbMthp labels.",
+    "Removed obsolete object entries from obj_files.mk after moving assembly so link order/object membership matches the corrected split.",
+    "Kept raw address-derived names for unknown THPDec routines where better semantic names were not evidenced, except for the clearly identified THPInit."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The only explicit rationale came from the PR body: evidence in the file indicated the code should be thpdec, and lbjpeg therefore does not exist and was merged back into lbmthp."
+  ],
+  "searchable_terms": [
+    "incorrect jpegdec split",
+    "THPDec.s",
+    "jpegdec.s",
+    "lbjpeg.s",
+    "lbmthp.s",
+    "obj_files.mk",
+    "THPInit",
+    "THPDec_8032F8D4",
+    "THPDec_8032FD40",
+    "THPDec_8032FDB8",
+    "THPDec_80331340",
+    "THPDec_803313D0",
+    "JPEGGetFileInfo",
+    "JPEG_80335C58",
+    "JPEGDEC_804DE1D0",
+    "lbJpeg_8001F890",
+    "lbJpeg_8001F928",
+    "lbJpeg_8001FAA0",
+    "lbMthp8001F890",
+    "lbMthp8001F928",
+    "lbMthp8001FAA0",
+    "__THPHuffDecodeDCTCompY",
+    "__THPHuffDecodeDCTCompU",
+    "__THPHuffDecodeDCTCompV",
+    "__THPJpegNaturalOrder",
+    "dolphin thp jpeg decoder",
+    "asm split correction"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that decompile or rename THPDec_8032F8D4, THPDec_8032FD40, THPDec_8032FDB8, THPDec_80331340, or THPDec_803313D0.",
+    "Search for references to lbMthp8001F890, lbMthp8001F928, and lbMthp8001FAA0 to see whether they later received semantic names.",
+    "Check whether any remaining JPEG_* or JPEGDEC_* labels in the project are legitimate standalone JPEG code or should also be THPDec-owned.",
+    "Review later obj_files.mk split changes around dolphin/thp and melee/lb to ensure this corrected module boundary was preserved."
+  ],
+  "confidence": 0.95,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

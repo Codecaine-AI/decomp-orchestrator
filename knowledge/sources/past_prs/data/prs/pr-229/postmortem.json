@@ -1,0 +1,127 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-229",
+  "pr": {
+    "number": 229,
+    "title": "Match GObj_SetupGXLink",
+    "url": "https://github.com/doldecomp/melee/pull/229",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-27T19:45:11Z",
+    "merged_at": "2021-12-27T19:45:15Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the sysdolphin baselib GX-link setup routine at func_8039069C as GObj_SetupGXLink, moved its implementation into C, exposed it through gobjgxlink.h, and renamed many existing assembly callsites to the new symbol. The C implementation wires an HSD_GObj render callback, gx_link, and render_priority, validates gx_link against HSD_GObjLibInitData.gx_link_max, walks the GX list by priority, and delegates insertion/reordering to GObj_GXReorder.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-rename",
+      "baselib"
+    ],
+    "systems": [
+      "sysdolphin/baselib",
+      "asm",
+      "include",
+      "stage",
+      "fighter",
+      "gm",
+      "menu",
+      "item",
+      "interface",
+      "effects"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/gobjgxlink.c",
+    "src/sysdolphin/baselib/gobjgxlink.h",
+    "src/sysdolphin/baselib/gobj.h",
+    "asm/sysdolphin/baselib/gobjgxlink.s",
+    "asm/melee/ef/eflib.s",
+    "asm/melee/ft/fighter.s",
+    "asm/melee/ft/code_800804EC.s",
+    "asm/melee/gm/code_801601C4.s",
+    "asm/melee/text_2.s",
+    "asm/melee/text_3.s",
+    "asm/melee/text_4.s",
+    "asm/melee/gr/*.s",
+    "src/melee/gr/*.h"
+  ],
+  "what_changed": [
+    "Deleted the old assembly body for asm/sysdolphin/baselib/gobjgxlink.s and added a C implementation of GObj_SetupGXLink in src/sysdolphin/baselib/gobjgxlink.c.",
+    "Renamed many assembly callsites from func_8039069C to GObj_SetupGXLink across effects, fighter, game mode, menu, item, interface, text, and stage assembly files.",
+    "Added the public prototype void GObj_SetupGXLink(HSD_GObj* gobj, void (*render_cb)(HSD_GObj*, s32), u8 gx_link, u32 priority) to src/sysdolphin/baselib/gobjgxlink.h.",
+    "Extended src/sysdolphin/baselib/gobj.h with HSD_GObjLibInitData and included objalloc.h so the embedded HSD_ObjAllocData fields are typed.",
+    "Adjusted HSD_GObj.render_cb's second parameter from int to s32, matching the new GObj_SetupGXLink callback signature.",
+    "Added gobjgxlink.h includes to stage-related headers such as grtmars.h and grtness.h so code using GX-link setup has the correct declaration.",
+    "The new implementation references lbl_804CE380 as HSD_GObjLibInitData, assert strings for gobjgxlink.c and the gx_link_max assertion, and the GX object list globals lbl_804D7820/lbl_804D7824."
+  ],
+  "smart_moves": [
+    "Kept the existing GObj_GXReorder helper and made GObj_SetupGXLink responsible only for validation, field assignment, list-position search, and final reorder insertion.",
+    "Modeled the render callback as void (*)(HSD_GObj*, s32), then propagated that exact type into HSD_GObj and the public prototype to avoid mismatched function pointer types.",
+    "Introduced HSD_GObjLibInitData rather than leaving lbl_804CE380 as an untyped/global blob, which made the gx_link_max check readable and reusable.",
+    "Renamed assembly callsites to the decompiled symbol without changing instruction bytes, preserving matching while improving cross-file symbol searchability.",
+    "Used the original assert evidence, including the file string gobjgxlink.c and condition string gx_link <= HSD_GObjLibInitData.gx_link_max, to anchor the C control flow and line-number-sensitive behavior."
+  ],
+  "decomp_lessons": [
+    "For baselib functions with many unknown callsites, matching one central function can unlock a high-value symbol rename across a large slice of assembly without needing to decompile every caller.",
+    "When a matched function depends on a global library-init struct, define only the fields evidenced by accesses and existing embedded types; here gx_link_max and HSD_ObjAllocData fields justified adding HSD_GObjLibInitData.",
+    "Callback parameter widths matter for matching and header hygiene; s32 was used instead of plain int in both HSD_GObj.render_cb and GObj_SetupGXLink.",
+    "List insertion routines can often be reconstructed by identifying the traversal condition and delegating actual relink operations to an already matched helper such as GObj_GXReorder.",
+    "Adding the correct header include at consumers is preferable to relying on implicit declarations, especially when symbol renames propagate into many stage or menu files."
+  ],
+  "naming_conventions": [
+    "func_8039069C was named GObj_SetupGXLink.",
+    "The nearby existing routine name GObj_GXReorder established the GObj_ prefix and GX-link naming style for this baselib subsystem.",
+    "The global library-init struct type was named HSD_GObjLibInitData, consistent with HSD_GObj and HSD_GObjProc type naming.",
+    "Fields use lower_snake_case names such as gx_link_max, render_cb, gx_link, render_priority, next_gx, and prev_gx.",
+    "Unresolved globals and strings remained address-label based, such as lbl_804CE380, lbl_804084F0, and lbl_80408500."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced assembly branch labels at callsites from bl func_8039069C to bl GObj_SetupGXLink while preserving the same branch encodings shown in the diff.",
+    "Removed the standalone assembly implementation after adding the matching C function, indicating the new C emitted compatible code for that routine.",
+    "Matched the priority traversal as for (i = lbl_804D7820[gobj->gx_link]; i != NULL && i->render_priority > gobj->render_priority; i = prev) with prev = i->prev_gx inside the loop.",
+    "Used the original assert path with __assert(lbl_804084F0, 167, lbl_80408500) to reproduce the debug/assert behavior.",
+    "Kept callsite argument order evidenced by assembly: r3 gobj, r4 render callback, r5 gx_link, r6 priority."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "GObj_SetupGXLink",
+    "func_8039069C",
+    "GObj_GXReorder",
+    "gobjgxlink.c",
+    "gobjgxlink.h",
+    "HSD_GObj",
+    "HSD_GObjLibInitData",
+    "HSD_ObjAllocData",
+    "gx_link_max",
+    "render_cb",
+    "render_priority",
+    "next_gx",
+    "prev_gx",
+    "lbl_804CE380",
+    "lbl_804D7820",
+    "lbl_804D7824",
+    "lbl_804084F0",
+    "lbl_80408500",
+    "gx_link <= HSD_GObjLibInitData.gx_link_max",
+    "sysdolphin baselib gobj",
+    "GX link setup"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or type lbl_804CE380 and complete HSD_GObjLibInitData.",
+    "Search for remaining func_8039069C references after PR 229 to confirm all callsites were renamed.",
+    "Inspect later gobjgxlink.c work for additional GX-link routines that share lbl_804D7820/lbl_804D7824 traversal patterns.",
+    "Check whether the HSD_GObj.render_cb s32 signature is reused consistently in later decompiled render callbacks."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

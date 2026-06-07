@@ -1,0 +1,125 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-715",
+  "pr": {
+    "number": 715,
+    "title": "Match some `ftIceClimber` functions, pass 2",
+    "url": "https://github.com/doldecomp/melee/pull/715",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-01-20T20:42:32Z",
+    "merged_at": "2023-01-26T05:23:13Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Moved a small Ice Climbers assembly slice out of asm/melee/ft/chara/fticeclimber.s into fticeclimber1.c, with real C matches for lbl_8011F3D8 and func_8011F6FC plus MWERKS_GEKKO inline-asm carryovers for still-unmatched nearby routines. The C work clarified Nana-related fighter state at sa.nana.x222C, callback cleanup for x21E4_callback_OnDeath2 and x21DC_callback_OnTakeDamage, and ftcmd var access at x2204_ftcmd_var1. The PR also added missing prototypes/includes needed by the moved code and resolved issue #601, depending on #713.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "inline-asm-migration",
+      "fighter-state"
+    ],
+    "systems": [
+      "fighter",
+      "ftIceClimber",
+      "item",
+      "asm"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftIceClimber/fticeclimber1.c",
+    "src/melee/ft/chara/ftIceClimber/fticeclimber1.h",
+    "src/melee/it/code_8027CF30.h",
+    "asm/melee/ft/chara/fticeclimber.s"
+  ],
+  "what_changed": [
+    "Deleted 236 lines of raw assembly covering lbl_8011F3D8 through func_8011F6FC from asm/melee/ft/chara/fticeclimber.s.",
+    "Added C implementation of lbl_8011F3D8(HSD_GObj* fighter_gobj), using func_80082708, GET_FIGHTER, func_802C17DC, func_800CC730, and Nana-specific fighter state fields.",
+    "Added C implementation of func_8011F6FC(HSD_GObj* fighter_gobj), returning fp->x2204_ftcmd_var1 when a fighter object and Fighter exist, otherwise returning true.",
+    "Kept lbl_8011F454, lbl_8011F500, and func_8011F68C as MWERKS_GEKKO inline asm inside fticeclimber1.c rather than leaving them in the separate asm file.",
+    "Added fticeclimber1.h declarations for lbl_8011F3D8, lbl_8011F454, and func_8011F6FC.",
+    "Added item header declarations for func_802C16F8(HSD_GObj*) and func_802C1590(HSD_GObj*), while func_802C17DC(uint) was already declared.",
+    "Included melee/lb/lbunknown_001.h in fticeclimber1.c, apparently to support references from the moved code/inline asm."
+  ],
+  "smart_moves": [
+    "Used GET_FIGHTER(fighter_gobj) rather than manual gobj->user_data offset access, consistent with the PR dependency on #713 and making fighter object retrieval clearer.",
+    "Matched lbl_8011F3D8 by preserving the original control flow: only run cleanup when func_80082708 returns false, call func_802C17DC on a non-null Nana object pointer, then clear Nana object and damage/death callbacks only if the object pointer is still the same.",
+    "Used a second GET_FIGHTER call after func_802C17DC in lbl_8011F3D8, matching the assembly pattern that reloads the Fighter from the GObj after the item/object cleanup call.",
+    "Staged unmatched neighboring routines as inline asm in the C file under MWERKS_GEKKO, allowing the standalone asm block to shrink while preserving exact codegen for functions not yet converted to C.",
+    "Added headers/prototypes alongside the C migration so future callers can reference the newly migrated symbols without ad hoc externs."
+  ],
+  "decomp_lessons": [
+    "For fighter code, reloading GET_FIGHTER after a call can be necessary for matching when the original assembly reloads gobj->user_data instead of reusing a previous local.",
+    "When a decomp slice contains both matchable and stubborn functions, moving the whole contiguous region into the C file with inline asm placeholders can reduce asm file fragmentation without forcing all functions to be solved at once.",
+    "Callback cleanup patterns should preserve alias checks: this PR only clears x222C, x21E4_callback_OnDeath2, and x21DC_callback_OnTakeDamage when the stored object pointer still matches after func_802C17DC.",
+    "Null-handling behavior is part of the match and semantics: func_8011F6FC returns true if the HSD_GObj is NULL or if GET_FIGHTER yields NULL.",
+    "Header hygiene matters in incremental decomp PRs: newly referenced item helper functions and fighter-local functions were declared as part of the same change."
+  ],
+  "naming_conventions": [
+    "Kept unmatched or unnamed Ice Climber functions under address-derived labels such as lbl_8011F3D8, lbl_8011F454, lbl_8011F500, func_8011F68C, and func_8011F6FC.",
+    "Used the existing character file naming convention fticeclimber1.c and fticeclimber1.h under src/melee/ft/chara/ftIceClimber/.",
+    "Used Fighter* locals named fp1 and fp2 in lbl_8011F3D8 to distinguish pre-call and post-call fighter reloads.",
+    "Used fighter_gobj as the HSD_GObj* parameter name in the newly decompiled functions.",
+    "Referenced Nana-specific state through fp->sa.nana.x222C rather than raw offset 0x222C.",
+    "Referenced callbacks through fp->cb.x21E4_callback_OnDeath2 and fp->cb.x21DC_callback_OnTakeDamage."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted lbl_8011F3D8 from assembly to C while preserving reloads and comparisons visible in the original assembly.",
+    "Used explicit unsigned zero constants such as 0U for pointer/state clearing in lbl_8011F3D8.",
+    "Used an explicit `(u32)` cast on both sides of the x222C comparison, likely to force the same comparison/codegen shape as the original `cmplw` pointer/integer comparison.",
+    "Used MWERKS_GEKKO `asm void ...`, `#pragma push`, `#pragma pop`, `nofralloc`, and `clang-format off` to embed exact assembly for functions not yet matched in C.",
+    "Replaced small-data references inside inline asm as direct symbol loads such as `lfs f0, lbl_804D9838` and declared `extern f32 const lbl_804D9848;` for another float constant.",
+    "Preserved original branch labels inside inline asm blocks for lbl_8011F454, lbl_8011F500, and func_8011F68C."
+  ],
+  "review_feedback": [
+    "No line review comments were present in the slice.",
+    "r-burns approved the PR with an empty review body on 2023-01-26.",
+    "The PR body states it depends on #713 and resolves #601.",
+    "An issue comment only pinged @r-burns; no technical feedback was included."
+  ],
+  "searchable_terms": [
+    "PR715",
+    "ftIceClimber",
+    "fticeclimber1.c",
+    "fticeclimber1.h",
+    "fticeclimber.s",
+    "lbl_8011F3D8",
+    "lbl_8011F454",
+    "lbl_8011F500",
+    "func_8011F68C",
+    "func_8011F6FC",
+    "GET_FIGHTER",
+    "sa.nana.x222C",
+    "x2204_ftcmd_var1",
+    "x21E4_callback_OnDeath2",
+    "x21DC_callback_OnTakeDamage",
+    "func_802C17DC",
+    "func_802C16F8",
+    "func_802C1590",
+    "func_80082708",
+    "func_800CC730",
+    "MWERKS_GEKKO",
+    "inline asm",
+    "Nana",
+    "Ice Climbers",
+    "resolves #601",
+    "depends #713"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully decompile lbl_8011F454, lbl_8011F500, or func_8011F68C from the inline asm added here.",
+    "Search for other uses of sa.nana.x222C to confirm its meaning and whether it should receive a stronger field name.",
+    "Search for x2204_ftcmd_var1 in other fighter files to compare null fallback behavior and bool return conventions.",
+    "Review PR #713 for the GET_FIGHTER changes this PR depended on.",
+    "Search issue #601 to understand the exact matching target or progress tracking resolved by this PR."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,142 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1645",
+  "pr": {
+    "number": 1645,
+    "title": "Match OSRtc",
+    "url": "https://github.com/doldecomp/melee/pull/1645",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-27T05:57:25Z",
+    "merged_at": "2025-06-27T06:03:05Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Dolphin OS RTC SRAM unit by implementing missing OSRtc routines and adjusting UnlockSram behavior, then flipped dolphin/os/OSRtc.c from NonMatching to Matching in configure.py. The patch added OSSetProgressiveMode and OSGetWirelessID declarations, included OSRtc.h from OSRtc.c, implemented OSGetProgressiveMode, OSSetProgressiveMode, and OSGetWirelessID, and added SRAM byte sanitization before checksum recomputation. The decomp.dev report credited OSRtc with new 100% matches for OSSetProgressiveMode, OSGetWirelessID, OSGetProgressiveMode, and UnlockSram, with matched code increasing by 3352 bytes overall.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "sdk-function-implementation",
+      "headers",
+      "build-config"
+    ],
+    "systems": [
+      "external-sdk",
+      "dolphin-os",
+      "osrtc",
+      "sram",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "extern/dolphin/src/dolphin/os/OSRtc.c",
+      "reason": "Implemented the OSRtc matching logic: added OSRtc.h include, SRAM byte sanitization in UnlockSram, and implementations for OSGetProgressiveMode, OSSetProgressiveMode, and OSGetWirelessID."
+    },
+    {
+      "path": "extern/dolphin/include/dolphin/os/OSRtc.h",
+      "reason": "Added public prototypes for OSSetProgressiveMode(u32 mode) and OSGetWirelessID(s32)."
+    },
+    {
+      "path": "configure.py",
+      "reason": "Changed dolphin/os/OSRtc.c from Object(NonMatching, ...) to Object(Matching, ...)."
+    }
+  ],
+  "what_changed": [
+    "Changed configure.py so dolphin/os/OSRtc.c is built as Matching instead of NonMatching.",
+    "Added #include <dolphin/os/OSRtc.h> to OSRtc.c, tying the source to its public RTC declarations.",
+    "In UnlockSram, before recomputing the OSSram checksum for offset 0 commits, the code now treats Scb.sram as raw bytes and clears the low two bits of sram[0x13] if their value is greater than 2.",
+    "Reworked the checksum block in UnlockSram into a nested scope that casts Scb.sram back to struct OSSram, zeroes checkSum and checkSumInv, and accumulates checksum values from counterBias through sizeof(struct OSSram).",
+    "Implemented OSGetProgressiveMode by locking SRAM at offset 0, reading bit 7 of byte 0x13, unlocking without commit, and returning the one-bit mode.",
+    "Implemented OSSetProgressiveMode by converting mode to bit 7, comparing it with the current sram[0x13] bit, unlocking without commit if unchanged, or clearing/setting bit 7 and unlocking with commit if changed.",
+    "Implemented OSGetWirelessID by locking SRAM at offset 0x14, reading a u16 indexed as var_r3[arg0 + 0xE], unlocking without commit at offset 0x14, and returning the ID.",
+    "Updated OSRtc.h with prototypes for OSSetProgressiveMode and OSGetWirelessID."
+  ],
+  "smart_moves": [
+    "Used raw u8 indexing for SRAM byte 0x13 where bit-level layout mattered, rather than forcing all accesses through struct OSSram fields.",
+    "Preserved SDK-like locking semantics: read-only getters call UnlockSram with commit 0, while OSSetProgressiveMode commits only when the progressive-mode bit actually changes.",
+    "Added the low-bit sanitization in UnlockSram before checksum recomputation, which both models RTC SRAM validity behavior and helped finish matching UnlockSram.",
+    "Kept the checksum recomputation through struct OSSram after the raw-byte fix, limiting the raw indexing to the byte that needed bit manipulation.",
+    "Used exact bit masks from the matched code path, including `(mode << 7) & 0x80`, `&= 0xFFFFFF7F`, and `&= 0xFFFFFFFC`, instead of simplifying them into potentially different codegen.",
+    "Included an unused local padding array `u8 _[4];` in OSGetWirelessID, a common matching tactic when stack layout or compiler artifacts require it."
+  ],
+  "decomp_lessons": [
+    "For Dolphin SDK SRAM routines, mixing struct access and raw byte access can be necessary: use struct fields for semantic regions such as checksum and raw offsets for packed bitfields.",
+    "Do not assume getters and setters share commit behavior; SRAM setters should avoid committing when the stored bit is already correct if the assembly branches that way.",
+    "When a unit becomes fully matching, remember to update configure.py from NonMatching to Matching in the MatchingFor object list.",
+    "Header completeness matters for SDK decomp work: once functions are implemented in a Dolphin OS source file, add the corresponding declarations to the public include where the surrounding API lives.",
+    "Retain odd-looking masks, temporary variables, and scoped casts when they align better with the compiler output; cleanup may break matching.",
+    "LockSram/UnlockSram offset arguments are part of the behavior and codegen, not just synchronization noise; OSGetWirelessID uses 0x14 while progressive-mode access uses 0."
+  ],
+  "naming_conventions": [
+    "Public Dolphin OS RTC functions use SDK-style OS-prefixed PascalCase names: OSGetProgressiveMode, OSSetProgressiveMode, OSGetWirelessID.",
+    "Internal SRAM helpers keep existing project naming: LockSram, UnlockSram, __OSLockSram, __OSUnlockSram.",
+    "The matched C kept decompiler-style temporary names such as var_r31, temp_r30, temp_r3_2, and var_r3 where exact cleanup was not attempted in this PR.",
+    "Types follow Dolphin/project typedef style for ABI-sized values: u8, u16, u32, and s32."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used byte offset `sram[0x13]` to manipulate packed SRAM flags directly.",
+    "Extracted progressive mode with `(var_r31[0x13] >> 7) & 1`.",
+    "Set progressive mode using `(mode << 7) & 0x80`, then either early-unlocked without commit or cleared bit 7 with `0xFFFFFF7F` before ORing the new bit.",
+    "Cleared invalid low two bits of byte 0x13 with `sram[0x13] &= 0xFFFFFFFC` only when `(sram[0x13] & 3) > 2U`.",
+    "Introduced a nested block in UnlockSram so a raw `u8* sram` and a scoped `struct OSSram* sram` can coexist, likely preserving desired register/lifetime behavior.",
+    "Retained an unused `u8 _[4];` local in OSGetWirelessID, indicating stack-layout-sensitive matching.",
+    "Accessed wireless IDs through a u16 pointer returned from `LockSram(0x14)` and an index expression `arg0 + 0xE`, matching the observed pointer arithmetic.",
+    "The decomp.dev bot reported OSRtc functions reached 100%: OSSetProgressiveMode (+164 bytes), OSGetWirelessID (+132 bytes), OSGetProgressiveMode (+112 bytes), and UnlockSram improved from 96.91% to 100%."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided PR slice.",
+    "The only comment was the decomp.dev bot report showing matched code +0.09% (+3352 bytes), linked code +0.07% (+2604 bytes), and OSRtc functions newly matched."
+  ],
+  "searchable_terms": [
+    "Match OSRtc",
+    "OSRtc",
+    "dolphin/os/OSRtc.c",
+    "extern/dolphin/include/dolphin/os/OSRtc.h",
+    "configure.py",
+    "Object(Matching)",
+    "Object(NonMatching)",
+    "OSGetProgressiveMode",
+    "OSSetProgressiveMode",
+    "OSGetWirelessID",
+    "UnlockSram",
+    "LockSram",
+    "__OSLockSram",
+    "__OSUnlockSram",
+    "OSSram",
+    "Scb.sram",
+    "sram[0x13]",
+    "offset 0x14",
+    "progressive mode",
+    "wireless id",
+    "checkSum",
+    "checkSumInv",
+    "counterBias",
+    "0xFFFFFF7F",
+    "0xFFFFFFFC",
+    "0x80",
+    "u8 _[4]",
+    "var_r31",
+    "temp_r30",
+    "temp_r3_2",
+    "var_r3",
+    "GALE01",
+    "r-burns"
+  ],
+  "follow_up_queries": [
+    "Find other Dolphin OS SRAM routines that access packed flags through Scb.sram raw byte offsets.",
+    "Search for OSGetWirelessID callers to confirm argument range and whether the s32 parameter should be named.",
+    "Compare OSRtc.h return types against source definitions, especially OSGetProgressiveMode declared as unsigned long but implemented as u32 in this PR.",
+    "Look for other NonMatching Dolphin OS objects adjacent to OSRtc in configure.py, such as OSReboot, OSResetSW, and OSSerial.",
+    "Investigate why the decomp.dev report also listed plbonus matches even though the changed files in this slice only touched OSRtc and configure/header files."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

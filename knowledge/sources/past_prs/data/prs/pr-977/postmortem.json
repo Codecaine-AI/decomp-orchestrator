@@ -1,0 +1,118 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-977",
+  "pr": {
+    "number": 977,
+    "title": "Match AXDriverUnlink, add HSD_SM struct",
+    "url": "https://github.com/doldecomp/melee/pull/977",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2023-09-27T15:21:22Z",
+    "merged_at": "2023-09-27T15:31:09Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched AXDriverUnlink in C by introducing an HSD_SM sound-manager/list-node struct and moving the previous assembly implementation out of asm/sysdolphin/baselib/AXDriver.s. The PR also renamed two previously-address-only AXDriver symbols to HSD_AudioSFXKeyOffAll and HSD_AudioSFXKeyOffTrack and propagated those names through lbaudio_ax.s callsites. The HSD_SM layout was inferred loosely from a K7 version, with the author noting a deliberate difference around the 0x18 field: samID was omitted because the Melee code appears to use that byte as track, supported by an lbz access and surrounding K7-like function ordering.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "symbol-renaming",
+      "audio"
+    ],
+    "systems": [
+      "sysdolphin/baselib",
+      "melee/lb",
+      "asm",
+      "src"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/axdriver.c",
+    "src/sysdolphin/baselib/axdriver.h",
+    "src/sysdolphin/baselib/forward.h",
+    "asm/sysdolphin/baselib/AXDriver.s",
+    "asm/melee/lb/lbaudio_ax.s"
+  ],
+  "what_changed": [
+    "Implemented AXDriverUnlink in src/sysdolphin/baselib/axdriver.c, replacing the assembly body that had lived in asm/sysdolphin/baselib/AXDriver.s.",
+    "Added struct HSD_SM to axdriver.h with prev/next links, flags, IDs, track/priority fields, volume/pan/pitch/mix-related fields, curScore, and clock.",
+    "Added SMSTATE_MASK, SMSTATE_ACTIVE, and SMSTATE_SLEEP constants in axdriver.h.",
+    "Added a forward declaration typedef for HSD_SM in src/sysdolphin/baselib/forward.h.",
+    "Added declarations for AXDriverUnlink, AXDriverKeyOff, HSD_AudioSFXKeyOffAll, and HSD_AudioSFXKeyOffTrack to axdriver.h.",
+    "Renamed AXDriver_8038BD6C to HSD_AudioSFXKeyOffAll and AXDriver_8038BE64 to HSD_AudioSFXKeyOffTrack in AXDriver.s.",
+    "Updated multiple lbaudio_ax.s branch-and-link callsites to use HSD_AudioSFXKeyOffAll and HSD_AudioSFXKeyOffTrack instead of raw AXDriver address-style symbol names.",
+    "Added extern AXDriver_80408168 in axdriver.c for the assert message '*head != v'."
+  ],
+  "smart_moves": [
+    "Used the linked-list behavior in the existing assembly to identify the first HSD_SM fields as prev and next, then expressed AXDriverUnlink as straightforward C list unlink logic.",
+    "Preserved the double check against *head == v and the __assert call, including the source line number 113 and the existing axdriver.c string symbol, rather than simplifying it away.",
+    "Renamed raw address symbols only where the diff had strong behavioral evidence: all-track key-off and track-specific key-off routines were reflected by lbaudio_ax.s call contexts and the author's K7 comparison.",
+    "Introduced HSD_SM in a header and forward.h at the same time as matching AXDriverUnlink, avoiding local-only typing that would block later audio decompilation work.",
+    "Captured uncertainty in the PR body: the HSD_SM layout is based loosely on K7, but the author explicitly documented why samID at 0x18 was not copied into the Melee layout."
+  ],
+  "decomp_lessons": [
+    "When matching an unlink function, resist over-abstracting: assign prev and next locals, clear the node links, patch neighboring nodes, update the head pointer, and retain original assert checks in source order.",
+    "Struct layouts borrowed from related versions should be treated as evidence, not gospel; confirm fields against Melee loads/stores and nearby function behavior.",
+    "A single byte load at a suspected cross-version field can justify renaming or relayout when surrounding call ordering also matches the reference version.",
+    "Renaming address-style assembly symbols can improve downstream readability even before the functions themselves are fully decompiled, especially when many callsites share a clear semantic role.",
+    "Forward declarations in baselib/forward.h are useful when a new struct type needs to appear in public function prototypes without forcing unnecessary full definitions elsewhere."
+  ],
+  "naming_conventions": [
+    "Struct type added as HSD_SM, with typedef declared in forward.h as typedef struct HSD_SM HSD_SM.",
+    "State mask constants use uppercase SMSTATE_* names: SMSTATE_MASK, SMSTATE_ACTIVE, SMSTATE_SLEEP.",
+    "Audio key-off functions were named with the HSD_AudioSFX prefix: HSD_AudioSFXKeyOffAll and HSD_AudioSFXKeyOffTrack.",
+    "AXDriverUnlink and AXDriverKeyOff retain AXDriver-prefixed names because they operate on HSD_SM nodes inside the AX driver subsystem.",
+    "Fields use mixed existing-style names visible in the diff, including volumeType, itdflag, curScore, loopcount, and fadetime."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed the AXDriverUnlink assembly block after matching it in C.",
+    "Matched the assembly's null guard on v before performing list manipulation.",
+    "Matched the assembly order: load prev/next, zero v->next and v->prev, update prev->next, update next->prev, update *head if needed, then assert if *head still equals v.",
+    "Kept the assert condition as a second independent if (*head == v), mirroring the assembly rather than folding it into an else or unreachable assumption.",
+    "Used assembly callsite renames in lbaudio_ax.s to document already-known branch targets without changing code generation."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "AXDriverUnlink",
+    "HSD_SM",
+    "AXDriver.s",
+    "axdriver.c",
+    "axdriver.h",
+    "forward.h",
+    "lbaudio_ax.s",
+    "HSD_AudioSFXKeyOffAll",
+    "HSD_AudioSFXKeyOffTrack",
+    "AXDriverKeyOff",
+    "SMSTATE_MASK",
+    "SMSTATE_ACTIVE",
+    "SMSTATE_SLEEP",
+    "samID",
+    "track",
+    "curScore",
+    "itdflag",
+    "volumeType",
+    "linked list unlink",
+    "__assert",
+    "AXDriver_80408168",
+    "*head != v",
+    "K7"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that refine HSD_SM field names or layout, especially around the omitted samID / track field.",
+    "Search for decompiled implementations of HSD_AudioSFXKeyOffAll and HSD_AudioSFXKeyOffTrack.",
+    "Look for remaining AXDriver_8038xxxx raw symbols in audio code that may be identifiable through K7 ordering.",
+    "Check whether SMSTATE_* constants are reused by later baselib audio matching work.",
+    "Search for AXDriverUnlink callsites to confirm HSD_SM list ownership and head pointer semantics."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

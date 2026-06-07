@@ -1,0 +1,187 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1912",
+  "pr": {
+    "number": 1912,
+    "title": "some ifstock matches",
+    "url": "https://github.com/doldecomp/melee/pull/1912",
+    "state": "MERGED",
+    "author": "BR-",
+    "created_at": "2025-09-16T04:47:58Z",
+    "merged_at": "2025-09-16T04:51:38Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Implemented a large first pass of `src/melee/if/ifstock.c` for stock/coin HUD interface logic, added internal static state structs in `ifstock.static.h`, tightened `ifstock.h` prototypes from `UNK_RET/UNK_PARAMS` to typed HSD/GX signatures, and corrected two game-mode prototypes needed by the work. The decomp.dev report showed 18 newly matched `ifstock` functions and 10 partially improved functions, increasing matched code by 4312 bytes (+0.11%).",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "prototype-correction",
+      "hud-interface"
+    ],
+    "systems": [
+      "interface",
+      "ifstock",
+      "game-mode",
+      "melee-core"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/if/ifstock.c",
+      "reason": "Main implementation changed from effectively empty to 927 lines of `ifStock` HUD logic, callbacks, object creation/destruction, animation requests, stock/coin display handling, and setup/teardown routines."
+    },
+    {
+      "path": "src/melee/if/ifstock.static.h",
+      "reason": "New internal header defining `IfStockUserData`, `GET_IFSTOCK`, global/static BSS structs such as `ifStock_804A1378`, `ifStock_804A1774`, `ifStock_804A1A8C`, and `ifStock_804A1ACC`."
+    },
+    {
+      "path": "src/melee/if/ifstock.h",
+      "reason": "Converted many `ifStock` declarations from unknown placeholders to typed prototypes using `HSD_GObj*`, `GXColor*`, `float`, `int`, and `void`."
+    },
+    {
+      "path": "src/melee/gm/gm_1601.h",
+      "reason": "Corrected external prototypes used by `ifstock`: `gm_80168BF8` now returns `float`, and `gm_8016A944` now returns `bool`."
+    },
+    {
+      "path": "src/melee/gm/gm_1601.c",
+      "reason": "Updated the definition of `gm_80168BF8` from `void` to `float`, aligning the implementation with texture animation frame usage in `ifstock`."
+    }
+  ],
+  "what_changed": [
+    "Added concrete C for many `ifStock` routines covering stock display updates, coin display updates, HUD render callbacks, GObj/JObj creation, cleanup, color application, and initialization.",
+    "Introduced typed HUD user data via `struct IfStockUserData` with `player` and `mode` fields plus a `GET_IFSTOCK(gobj)` helper macro.",
+    "Mode-dispatched `fn_802F9410` now routes per-frame updates to stock, simple animation, or coin handlers based on `IfStockUserData::mode`.",
+    "Added internal state layouts for per-player stock HUD data, 130-entry character/stage icon arrays, and 16-entry ground-related HUD objects.",
+    "Replaced many `UNK_RET`/`UNK_PARAMS` declarations in `ifstock.h` with typed signatures, including render callbacks of the form `void fn(...)(HSD_GObj*, int)` and factory functions returning `HSD_GObj*`.",
+    "Corrected `gm_80168BF8` to return `float`, which is passed into `HSD_TObjReqAnimAll` for player/costume-dependent texture animation selection.",
+    "Corrected `gm_8016A944` to return `bool` in the header.",
+    "The bot report recorded 18 fully matched new `ifstock` functions including `ifStock_802FA2D0`, `fn_802F916C`, `ifStock_802F96D0`, `ifStock_802FA118`, `ifStock_802FB4EC`, `fn_802F9410`, and several small render/cleanup callbacks.",
+    "The bot report recorded 10 additional `ifstock` functions improved but not fully matched, including `ifStock_802F98E8`, `ifStock_802F8298`, `ifStock_802FAEC4`, `fn_802FA8C0`, `fn_802F8E08`, and `ifStock_802F7EFC`."
+  ],
+  "smart_moves": [
+    "Typed prototypes in `ifstock.h` reduced unknown-call ambiguity and made callsites reveal expected argument/return behavior, especially for HSD callback signatures.",
+    "Adding `ifstock.static.h` kept uncertain internal layout work local to the module while still giving enough structure to compile and match many routines.",
+    "Changing `gm_80168BF8` to `float` was important because `ifstock` uses it directly as an animation frame argument to `HSD_TObjReqAnimAll`; leaving it as `void` would obscure a real data dependency.",
+    "The `GET_IFSTOCK` macro encoded the repeated cast from GObj user data to `IfStockUserData`, making callback decomp cleaner and more consistent.",
+    "The implementation preserved address-based names and offset-style field names where semantics were still uncertain, avoiding overnaming unsupported by evidence.",
+    "Using small inline helpers such as `fn_802F9410_inline` and `copyColor` localized repeated animation/color patterns without forcing premature public symbols.",
+    "The PR used matching-control constructs visible in the diff, including `PAD_STACK`, `#pragma dont_inline`, and explicit static inline helpers, to coax code generation while keeping readable C."
+  ],
+  "decomp_lessons": [
+    "For HUD/interface modules, first recovering object/user-data lifetimes and callback signatures can unlock many small matches even when full struct field names remain unknown.",
+    "When a function is used as an animation selector, validate its return type from callsite behavior; `void` placeholders can hide required float return values.",
+    "Static module headers are a useful staging area for inferred BSS layouts and private structs before names and field meanings are mature enough for wider headers.",
+    "Do not block progress waiting for perfect struct names: address-based global names and offset-style fields can still produce substantial matching gains while preserving uncertainty.",
+    "Render callbacks commonly take `(HSD_GObj*, int renderpass)` and gate `HSD_GObj_JObjCallback` on HUD visibility flags; this pattern is reusable in other `if` HUD files.",
+    "Stock/coin HUD code frequently combines `HSD_JObjReqAnimAll`, `HSD_TObjReqAnimAll`, `HSD_AObjSetRate(..., 0.0f)`, and `HSD_JObjAnimAll`; preserving this ordering appears important for matching.",
+    "Object teardown routines in this area use null checks followed by `HSD_GObjPLink_80390228` or `HSD_GObj_80390CAC`, then clear stored pointers or memory with `memzero`."
+  ],
+  "naming_conventions": [
+    "Kept public module functions in address form such as `ifStock_802F8298`, `ifStock_802FAEC4`, and `ifStock_802FB650` when no semantic name was established.",
+    "Used `fn_` prefix for unnamed local/internal functions such as `fn_802F9410`, `fn_802FAC34`, and render callbacks.",
+    "Named private globals by module plus address, e.g. `ifStock_804A1378`, `ifStock_804A1774`, `ifStock_804A1A8C`, and `ifStock_804A1ACC`.",
+    "Used offset-style struct fields (`x0`, `x4`, `x204`, `x10C`, `x108`, etc.) where field semantics were not confidently known.",
+    "Introduced semantic minimal names only where directly supported, such as `IfStockUserData`, `player`, `mode`, `stocks`, `coins`, and `GET_IFSTOCK`.",
+    "Temporary vector locals followed simple `vecA`, `vecB`, `vecC` naming rather than inventing positional semantics."
+  ],
+  "assembly_or_matching_tactics": [
+    "`PAD_STACK(8)` and `PAD_STACK(0x10)` were used in functions where stack shape mattered.",
+    "`#pragma push`, `#pragma dont_inline on`, and `#pragma pop` were used around `ifStock_802FAEC4`, suggesting deliberate control of inlining/codegen.",
+    "A `static inline` helper, `fn_802F9410_inline`, was used for a repeated animation sequence inside the mode dispatcher.",
+    "Another `static inline` helper, `copyColor`, wrote `GXColor` components into `HSD_MObj` material diffuse fields for a compact matched color-copy routine.",
+    "Explicit float constants such as `0.0f`, `10.0f`, `2.45f`, `-21.0f`, `11.0f`, and `10000.0f` were preserved in HUD positioning and visibility logic.",
+    "The code uses direct JObj/DObj/MObj/TObj access chains such as `jobj2->u.dobj->mobj->tobj` to match texture animation and material operations.",
+    "The implementation keeps suspicious or partially understood expressions in offset form, including comments like `// .x10[i]` and `// not inlined`, rather than disguising them with speculative abstraction."
+  ],
+  "review_feedback": [
+    {
+      "source": "decomp.dev bot",
+      "feedback": "Reported matched code for GALE01 increased to 42.93%, +0.11%, +4312 bytes."
+    },
+    {
+      "source": "decomp.dev bot",
+      "feedback": "Reported 18 new fully matched `main/melee/if/ifstock` functions."
+    },
+    {
+      "source": "decomp.dev bot",
+      "feedback": "Reported 10 `ifstock` functions improved but still unmatched, with percentages ranging from 18.30% for `ifStock_802F7EFC` to 95.28% for `ifStock_802F9F48`."
+    },
+    {
+      "source": "human review",
+      "feedback": "No human review comments were present in the provided PR slice."
+    }
+  ],
+  "searchable_terms": [
+    "ifstock",
+    "ifStock_802F7EFC",
+    "ifStock_802F8298",
+    "ifStock_802F89F8",
+    "fn_802F8DB0",
+    "fn_802F8E08",
+    "fn_802F916C",
+    "fn_802F9410",
+    "fn_802F94E0",
+    "fn_802F9548",
+    "fn_802F9598",
+    "fn_802F95E8",
+    "fn_802F9680",
+    "ifStock_802F96D0",
+    "ifStock_802F98E8",
+    "ifStock_802F9F48",
+    "ifStock_802FA118",
+    "ifStock_802FA2D0",
+    "ifStock_802FA5BC",
+    "fn_802FA6C4",
+    "fn_802FA8C0",
+    "fn_802FAC34",
+    "ifStock_802FAEC4",
+    "ifStock_802FB390",
+    "ifStock_802FB41C",
+    "ifStock_802FB484",
+    "ifStock_802FB4EC",
+    "ifStock_802FB650",
+    "ifStock_802FB6AC",
+    "ifStock_804A1378",
+    "ifStock_804A1774",
+    "ifStock_804A1A8C",
+    "ifStock_804A1ACC",
+    "IfStockUserData",
+    "GET_IFSTOCK",
+    "Player_GetStocks",
+    "Player_GetCoins",
+    "gm_80168BF8",
+    "gm_80168B34",
+    "gm_8016A944",
+    "HSD_JObjReqAnimAll",
+    "HSD_TObjReqAnimAll",
+    "HSD_AObjSetRate",
+    "HSD_GObj_JObjCallback",
+    "JOBJ_HIDDEN",
+    "efSync_Spawn",
+    "lbArchive_LoadSections",
+    "lb_80011E24",
+    "PAD_STACK",
+    "dont_inline",
+    "HUD digits",
+    "stock icons",
+    "coin display"
+  ],
+  "follow_up_queries": [
+    "Search later PRs for replacements of `ifStock_804A1378` offset fields with semantic names.",
+    "Search for subsequent work that fully matches `ifStock_802F98E8`, `ifStock_802F8298`, `ifStock_802FAEC4`, `fn_802FA8C0`, and `fn_802F8E08`.",
+    "Check whether `IfStockUserData` and `ifStock_804A1378_x204` were eventually merged as the TODO suggests.",
+    "Look for future PRs that rename `fn_802F9410` or identify the semantics of modes 0, 1, and 2.",
+    "Search for additional `gm_1601` prototype corrections around animation frame/color selection helpers."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

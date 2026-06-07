@@ -1,0 +1,166 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1042",
+  "pr": {
+    "number": 1042,
+    "title": "Abolish `any_t`",
+    "url": "https://github.com/doldecomp/melee/pull/1042",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-12-22T02:43:00Z",
+    "merged_at": "2023-12-22T03:04:24Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Removed the project-wide `any_t` typedef from `src/Runtime/platform.h` and replaced its uses with plain `void*` across Dolphin OS/AXFX, sysdolphin baselib, and item code. The change made generic pointer APIs explicit without altering behavior: allocation hooks, heap APIs, stack pointer access, user-data callbacks, object update callbacks, and memory-forget callbacks now use `void*` directly. `NULL` in `src/MSL/stddef.h` was also changed from `((any_t) 0)` to `((void*) 0)`.",
+  "change_classification": {
+    "primary_type": "type_cleanup",
+    "categories": [
+      "headers",
+      "typedef_removal",
+      "API_signature_cleanup",
+      "pointer_type_consistency"
+    ],
+    "systems": [
+      "MSL",
+      "Runtime",
+      "dolphin/axfx",
+      "dolphin/os",
+      "melee/item",
+      "sysdolphin/baselib"
+    ]
+  },
+  "key_files": [
+    "src/Runtime/platform.h",
+    "src/MSL/stddef.h",
+    "src/dolphin/axfx/axfx.c",
+    "src/dolphin/axfx/axfx.h",
+    "src/dolphin/os/OSAlloc.c",
+    "src/dolphin/os/OSAlloc.h",
+    "src/dolphin/os/OSCache.h",
+    "src/dolphin/os/OSContext.c",
+    "src/dolphin/os/OSContext.h",
+    "src/melee/it/item.c",
+    "src/melee/it/item.h",
+    "src/sysdolphin/baselib/forward.h",
+    "src/sysdolphin/baselib/gobj.h",
+    "src/sysdolphin/baselib/gobjuserdata.c",
+    "src/sysdolphin/baselib/gobjuserdata.h",
+    "src/sysdolphin/baselib/memory.c",
+    "src/sysdolphin/baselib/memory.h",
+    "src/sysdolphin/baselib/random.c",
+    "src/sysdolphin/baselib/random.h"
+  ],
+  "what_changed": [
+    "Deleted `typedef void* any_t;` from `src/Runtime/platform.h`, leaving `unk_t` as the remaining unknown pointer typedef shown in the excerpt.",
+    "Changed `NULL` in `src/MSL/stddef.h` from `((any_t) 0)` to `((void*) 0)` so it no longer depends on the removed typedef.",
+    "Updated AXFX allocator hook declarations, globals, definitions, and `AXFXSetHooks` signatures from `any_t` to `void*`.",
+    "Updated Dolphin OS allocation APIs and internals in `OSAlloc.c`/`OSAlloc.h`: `ArenaStart`, `ArenaEnd`, `DLAddFront`, `OSAllocFromHeap`, `OSFreeToHeap`, `OSInitAlloc`, `OSCreateHeap`, and pointer casts now use `void*`.",
+    "Changed `LCStoreBlocks` in `OSCache.h` to take `void* dst` and `void* src`.",
+    "Changed `OSGetStackPointer` return type and local register variable in `OSContext.c`/`OSContext.h` from `any_t` to `void*`.",
+    "Changed item user-data removal callback `Item_OnUserDataRemove` from `any_t user_data` to `void* user_data`.",
+    "Changed baselib callback typedefs in `forward.h`: `HSD_ObjUpdateFunc` and `HSD_UserDataEvent` now use `void*` parameters.",
+    "Changed `HSD_GObjGetUserData` and `HSD_GObjGetHSDObj` inline return types from `any_t` to `void*`.",
+    "Changed baselib object/user-data APIs and memory callbacks including `_HSD_AObjForgetMemory`, `_HSD_DispForgetMemory`, `FogUpdateFunc`, `HSD_GObjObjet_80390A70`, `GObj_InitUserData`, `_HSD_IDForgetMemory`, `_HSD_ObjAllocForgetMemory`, `_HSD_RandForgetMemory`, and `_HSD_RObjForgetMemory` to use `void*`.",
+    "Changed `HSD_Free` and local allocation variables in `memory.c` from `any_t` to `void*`; `HSD_MemAlloc` already appears as `void*` in the header excerpt."
+  ],
+  "smart_moves": [
+    "Removed the alias at its source rather than only replacing call sites, preventing new code from continuing to use `any_t`.",
+    "Kept the replacement mechanically equivalent by using `void*`, preserving the original generic pointer semantics while reducing project-specific typedef noise.",
+    "Updated both declarations and definitions together across headers and C files, avoiding ABI/prototype mismatches for allocation, callback, and user-data APIs.",
+    "Handled casts that formerly used `any_t`, such as heap-cell pointer arithmetic and random-memory range comparisons, so the code still compiles after the typedef removal.",
+    "Replaced `NULL` with a direct `void*` cast, eliminating a hidden dependency from the MSL header on a project-local platform typedef."
+  ],
+  "decomp_lessons": [
+    "Prefer direct `void*` for generic opaque pointers when the typedef adds no semantic information; aliases like `any_t` can obscure whether a pointer is truly unknown, user data, heap memory, or a typed object.",
+    "When removing a common typedef, search both public headers and implementation-local casts/register variables; compiler-visible uses often include callback typedefs, inline helpers, and macro definitions such as `NULL`.",
+    "For decomp cleanup PRs, synchronize every function declaration with its definition in the same change to avoid churn and type conflicts across translation units.",
+    "Keep semantically meaningful typedefs distinct from generic aliases: this PR removed `any_t` while leaving `unk_t` in `platform.h`, suggesting `unk_t` still serves a different decomp-documentation role.",
+    "Callback tables should use explicit function pointer signatures with `void*` parameters when they dispatch generic memory ranges or user data, as shown in `HSD_CreateMainHeap`'s forget-memory callback table."
+  ],
+  "naming_conventions": [
+    {
+      "pattern": "Use `void*` directly for opaque/generic data pointers",
+      "examples": [
+        "HSD_UserDataEvent(void* user_data)",
+        "HSD_ObjUpdateFunc(void* obj, enum_t type, HSD_ObjData* fval)",
+        "AXFXSetHooks(void* (*alloc_hook)(size_t), void (*free_hook)(void*))"
+      ]
+    },
+    {
+      "pattern": "Use descriptive parameter names with `void*` instead of type aliases where the role is known",
+      "examples": [
+        "void* dst",
+        "void* src",
+        "void* user_data",
+        "void* low",
+        "void* high"
+      ]
+    },
+    {
+      "pattern": "Retain `unk_t` only where the excerpt still shows an unknown pointer typedef is desired",
+      "examples": [
+        "typedef void* unk_t;",
+        "unk_t HSD_GObjObjet_80390ADC(HSD_GObj* gobj)"
+      ]
+    }
+  ],
+  "assembly_or_matching_tactics": [
+    "The PR appears to be a source-level type cleanup with no direct assembly matching discussion in the provided context.",
+    "For inline assembly in `OSGetStackPointer`, the register variable type was changed from `any_t` to `void*` while preserving the same `asm { mr result, r1 }` body, indicating a non-behavioral type substitution.",
+    "Pointer arithmetic casts in `OSAlloc.c` were kept structurally identical, replacing `(any_t)` casts with `(void*)` after byte-pointer arithmetic such as `(u8*) cell + sizeAligned` and `(u8*) ptr - ALIGNMENT`."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR 1042",
+    "Abolish any_t",
+    "ribbanya",
+    "any_t",
+    "void*",
+    "typedef removal",
+    "platform.h",
+    "MSL stddef NULL",
+    "NULL ((void*) 0)",
+    "AXFXAllocFunction",
+    "AXFXFreeFunction",
+    "AXFXSetHooks",
+    "__AXFXAlloc",
+    "__AXFXFree",
+    "OSAllocFromHeap",
+    "OSFreeToHeap",
+    "OSInitAlloc",
+    "OSCreateHeap",
+    "OSGetStackPointer",
+    "LCStoreBlocks",
+    "HSD_UserDataEvent",
+    "HSD_ObjUpdateFunc",
+    "HSD_GObjGetUserData",
+    "HSD_GObjGetHSDObj",
+    "GObj_InitUserData",
+    "Item_OnUserDataRemove",
+    "HSD_Free",
+    "HSD_MemAlloc",
+    "_HSD_AObjForgetMemory",
+    "_HSD_DispForgetMemory",
+    "_HSD_IDForgetMemory",
+    "_HSD_ObjAllocForgetMemory",
+    "_HSD_RandForgetMemory",
+    "_HSD_RObjForgetMemory",
+    "generic pointer cleanup",
+    "opaque pointer API"
+  ],
+  "follow_up_queries": [
+    "Search for remaining `any_t` references after PR 1042 to confirm the typedef was fully abolished.",
+    "Audit uses of `unk_t` to determine which are true unknown decomp types versus generic `void*` candidates.",
+    "Check whether later PRs further refined `void*` APIs into concrete pointer types for HSD objects, item user data, or allocator internals.",
+    "Look for compiler warnings or matching regressions around `void*` relational comparisons in memory-range checks such as `_HSD_RandForgetMemory`."
+  ],
+  "confidence": 0.93,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

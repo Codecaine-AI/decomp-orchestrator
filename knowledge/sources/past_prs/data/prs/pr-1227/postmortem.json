@@ -1,0 +1,180 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1227",
+  "pr": {
+    "number": 1227,
+    "title": "Match 49.92% of `lbmemory` (2.73 KB)",
+    "url": "https://github.com/doldecomp/melee/pull/1227",
+    "state": "MERGED",
+    "author": "rjeli",
+    "created_at": "2024-02-15T01:27:20Z",
+    "merged_at": "2024-02-15T02:38:50Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched about half of `src/melee/lb/lbmemory.c` by replacing a placeholder allocator struct with a more detailed `Allocator`/`Handle` model, implementing multiple lbMemory handle/list/allocation routines, and adding a `STATIC_ASSERT` helper in `platform.h` for struct-size checking. The PR notes that remaining work was mostly register allocation for the submitted functions, with two more functions left for a future PR. Review focused on whether the new static assert macro was clang-compatible and whether it was necessary given checksum-based matching.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "allocator-reconstruction",
+      "types-structs",
+      "headers",
+      "naming",
+      "matching-cleanup"
+    ],
+    "systems": [
+      "melee/lb",
+      "Runtime/platform.h",
+      "library"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/lbmemory.c",
+    "src/Runtime/platform.h"
+  ],
+  "what_changed": [
+    "Expanded `lbmemory.c` from a small placeholder using `lbMemory_UnkStruct1` into a partial decompilation of the lb memory allocator around a static global `struct Allocator g_alloc` corresponding to `lbMemory_804318B0`.",
+    "Introduced a `Handle` type with linked-list fields `x0_next`, `x4_lo`, `x8_hi`, and `xC_prev`, plus an `Allocator` type with arena bounds, free-list pointers, allocation counters, and unknown padded regions.",
+    "Added a static forward declaration for `lbMemory_80015320` and implemented or substantially filled in functions including `lbMemory_80014E24`, `lbMemory_80014EEC`, `lbMemory_80014F7C`, `lbMemory_80014FC8`, `lbMemory_800150F0`, `lbMemory_8001529C`, `lbMemory_800154BC`, `lbMemory_800154D4`, and `lbMemory_800155A4`.",
+    "Added helper macros `PUSH_HANDLE` and `POP_HANDLE` to model allocator freelist/list manipulation in a compact way while preserving codegen-sensitive pointer operations.",
+    "Added an inline `new_handle` helper that pops from `g_alloc.x698_free_heap`, checks arena bounds, initializes a `Handle`, and is reused by both `lbMemory_80014E24` and `lbMemory_800154D4`.",
+    "Added `STATIC_ASSERT(sizeof(g_alloc) == 0x6F0)` to guard the reconstructed allocator layout during local build-diff iteration.",
+    "Added `STATIC_ASSERT` support to `src/Runtime/platform.h`, including C++ handling around `_Static_assert`/`static_assert`, after review discussion about clang compatibility."
+  ],
+  "smart_moves": [
+    "Modeled the allocator as a concrete struct with padding ranges instead of leaving it as raw uintptr fields, making later decompilation more searchable and easier to refine.",
+    "Reused `new_handle` for functions that were behaviorally the same except for storing the resulting handle in `g_alloc.x69C`, reducing duplicated allocator initialization logic.",
+    "Used named list macros for repeated push/pop linked-list patterns, which documents intent and may help keep delicate codegen stable across multiple functions.",
+    "Kept comments on uncertain fields and control-flow issues, such as whether `x8_hi` is a high pointer or size and why iteration starts at `handle->xC_prev`, rather than overclaiming certainty.",
+    "Used a size assertion on the reconstructed global allocator to catch padding mistakes early in the build-diff loop.",
+    "Deferred remaining functions to a later PR after reviewer suggestion, keeping the merged slice focused on the functions already partially matched."
+  ],
+  "decomp_lessons": [
+    "For allocator-like systems, reconstructing the global state object and handle/node structs can unlock many functions at once, even when some field semantics are still unknown.",
+    "Padding checks are useful during local struct reconstruction, but project-wide helper macros must remain compatible with clang because clang is used for static analysis and editor language servers.",
+    "Checksum matching already catches many struct-size/layout mistakes, so permanent compile-time assertions should justify their maintenance and tooling cost.",
+    "Do not assume `__FILE__` literal behavior is trivial: this PR explicitly left `lbMemory_800150F0` as '100% except for literal relocations' and used an external `filename` with comments about relocation differences.",
+    "When a decompilation has only register allocation issues left, document that status, but split unrelated remaining functions into future PRs if reviewers recommend it.",
+    "Preserve evidence of uncertain semantics with comments and provisional names rather than prematurely renaming fields to misleading domain names."
+  ],
+  "naming_conventions": [
+    "Global static allocator was named `g_alloc`, with a comment tying it to symbol `lbMemory_804318B0`.",
+    "The reconstructed node type was named `Handle`; review later emphasized that `handle` is also the name of a local variable asserted as truthy in the original/decompiled code context.",
+    "Unknown struct fields retained offset-based names such as `x62C_free_mem`, `x630_num_allocs`, `x634_max_num_allocs`, `x698_free_heap`, `x69C`, `x6E0`, `x6E4`, and `x6E8`.",
+    "Partially understood pointer bounds used `arenaLo`/`arenaHi` and `x4_lo`/`x8_hi`; the author explicitly questioned whether `x8_hi` was actually a high pointer or size.",
+    "Macros used all-caps action names `PUSH_HANDLE` and `POP_HANDLE`, while the helper function used lowercase `new_handle`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used explicit `goto` labels in `lbMemory_800150F0` to preserve a control-flow shape with a null check at the bottom of the loop.",
+    "Used pointer casts such as `(Handle*) &h->xC_prev` and `(Handle*) &arg0->xC_prev` to reproduce list traversal/codegen where the previous-pointer field acts like a list sentinel.",
+    "Aligned allocation size with `((size + 0x1F) & 0xFFFFFFE0)`, documenting 32-byte alignment.",
+    "Tracked best-fit allocation state with `least_leftover`, `available_space`, `leftover`, and `memp_candidate`, matching the apparent allocator search behavior.",
+    "Kept assertion strings and line numbers such as `\"_p(free_heap)\"`, `\"_p(free_mem)\"`, `\"memp_kouho\"`, and `HSD_ASSERT(149, handle)` because these affect matching and evidence about local names.",
+    "Used a compile-time size assertion for `sizeof(g_alloc) == 0x6F0` as a build-diff guard against padding/layout drift.",
+    "Noted literal relocation mismatch around `OSReport(filename)`/`__assert(filename, 283, \"handle\")`, signaling that string/file macro lowering can be a matching blocker separate from ordinary logic."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "file": "src/Runtime/platform.h",
+      "feedback": "`clang` did not like the initial `STATIC_ASSERT` macro and reported `declaration does not declare anything`; reviewer asked how the macro worked."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/Runtime/platform.h",
+      "feedback": "Reviewer questioned whether `STATIC_ASSERT` was needed at all because the match checksum already enforces layout-sensitive mistakes."
+    },
+    {
+      "author": "rjeli",
+      "file": "src/Runtime/platform.h",
+      "feedback": "Author explained the old-style negative-array static assertion trick and noted it was useful locally for immediately catching padding miscalculations."
+    },
+    {
+      "author": "rjeli",
+      "file": "src/Runtime/platform.h",
+      "feedback": "Author suggested removing the helper if unnecessary or using a clang-specific `_Static_assert` alternative if kept."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/Runtime/platform.h",
+      "feedback": "Reviewer clarified that clang is used for static analysis, the Issues CI check, and editor language servers."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/Runtime/platform.h",
+      "feedback": "Reviewer found an alternate approach that seemed to work after researching clang-compatible static assert patterns."
+    },
+    {
+      "author": "ribbanya",
+      "file": "PR discussion",
+      "feedback": "Recommended opening a new PR for the remaining two functions rather than expanding this one."
+    },
+    {
+      "author": "ribbanya",
+      "file": "PR discussion",
+      "feedback": "Asked future changes to refer to commit `5d3bb4bb3cb34960d0aab32de05bfd77f1fcd903`, noting that `handle` is the name of a local variable being asserted as truthy."
+    }
+  ],
+  "searchable_terms": [
+    "pr-1227",
+    "lbmemory",
+    "lbMemory_804318B0",
+    "g_alloc",
+    "Allocator",
+    "Handle",
+    "x0_next",
+    "x4_lo",
+    "x8_hi",
+    "xC_prev",
+    "x62C_free_mem",
+    "x630_num_allocs",
+    "x634_max_num_allocs",
+    "x698_free_heap",
+    "x69C",
+    "new_handle",
+    "PUSH_HANDLE",
+    "POP_HANDLE",
+    "STATIC_ASSERT",
+    "_Static_assert",
+    "clang",
+    "ARRAY_SIZE",
+    "lbMemory_80014E24",
+    "lbMemory_80014EEC",
+    "lbMemory_80014F7C",
+    "lbMemory_80014FC8",
+    "lbMemory_800150F0",
+    "lbMemory_8001529C",
+    "lbMemory_80015320",
+    "lbMemory_800154BC",
+    "lbMemory_800154D4",
+    "lbMemory_800155A4",
+    "lbMemory_8001564C",
+    "free_heap",
+    "free_mem",
+    "memp_kouho",
+    "arenaLo",
+    "arenaHi",
+    "getArenaBounds",
+    "OSReport",
+    "HSD_ASSERT",
+    "__assert",
+    "literal relocations",
+    "regalloc"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that complete the remaining `lbmemory` functions `lbMemory_8001564C`, `lbMemory_80015320`, or `fn_80015184`.",
+    "Check commit `5d3bb4bb3cb34960d0aab32de05bfd77f1fcd903` for the final naming/layout cleanup referenced by reviewer.",
+    "Search for subsequent changes to `STATIC_ASSERT` in `src/Runtime/platform.h` to see the final clang-compatible macro form.",
+    "Look for later renames or semantic clarification of `Handle.x8_hi`, `x62C_free_mem`, `x698_free_heap`, and `x69C`.",
+    "Search for fixes to `lbMemory_800150F0` literal relocation issues around `filename`, `OSReport`, and `__assert`."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

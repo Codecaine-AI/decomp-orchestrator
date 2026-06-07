@@ -1,0 +1,181 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1445",
+  "pr": {
+    "number": 1445,
+    "title": "Match itkinoko",
+    "url": "https://github.com/doldecomp/melee/pull/1445",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-09-07T01:19:50Z",
+    "merged_at": "2024-09-07T01:24:43Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Kinoko item module by replacing asm/melee/it/items/itkinoko.s with C, switching build config from the asm object to src/melee/it/items/itkinoko.c, and adding the headers/types needed for collision, item variable, callback, and special-attribute access. The PR also renamed the local symbol fn_80293884 to it_80293884 in symbols.txt and added MPCOLL_UNK for a collision env_flags mask used by Kinoko ground collision handling.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "build-config",
+      "symbol-cleanup",
+      "item-state-machine"
+    ],
+    "systems": [
+      "item",
+      "itkinoko",
+      "collision",
+      "config",
+      "headers"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "asm/melee/it/items/itkinoko.s",
+      "role": "Deleted 313-line assembly implementation after matching it in C."
+    },
+    {
+      "path": "src/melee/it/items/itkinoko.c",
+      "role": "Added 153-line matched C implementation for Kinoko item behavior and ItemStateTable it_803F6110."
+    },
+    {
+      "path": "src/melee/it/items/itkinoko.h",
+      "role": "Expanded prototypes and added KinokoAnim and KinokoAttrs structs."
+    },
+    {
+      "path": "src/melee/it/itCommonItems.h",
+      "role": "Added KinokoVars for the Item xDD4_itemVar union."
+    },
+    {
+      "path": "src/melee/it/types.h",
+      "role": "Added kinoko member to Item.xDD4_itemVar union."
+    },
+    {
+      "path": "src/common_structs.h",
+      "role": "Added MPCOLL_UNK collision flag mask 0x18000."
+    },
+    {
+      "path": "src/melee/it/it_266F.h",
+      "role": "Declared it_8026E7E0(Item_GObj*, ItCallback)."
+    },
+    {
+      "path": "src/melee/it/it_2725.h",
+      "role": "Included lb/types.h and declared it_80276408(Item_GObj*, CollData*, f32*)."
+    },
+    {
+      "path": "config/GALE01/symbols.txt",
+      "role": "Renamed fn_80293884 to it_80293884."
+    },
+    {
+      "path": "configure.py",
+      "role": "Changed itkinoko.c from NonMatching to Matching."
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "Swapped TEXT_O_FILES from asm/melee/it/items/itkinoko.s.o to src/melee/it/items/itkinoko.c.o."
+    }
+  ],
+  "what_changed": [
+    "Reimplemented it_80293660, it_8029367C, it_802936E4, it_80293754, it_8029375C, it_80293798, it_8029385C, it_80293884, it_802938AC, it_802938B4, it_80293964, it_802939E0, and it_802939E8 in C.",
+    "Recreated ItemStateTable it_803F6110 as two item states: {0, it_80293754, it_8029375C, it_80293798} and {0, it_802938AC, it_802938B4, it_80293964}.",
+    "Matched the animation-attribute accessor it_80293660 using it_804D6D24[It_Kind_Kinoko]->x4_specialAttributes and returning attrs[idx + 2].joint.",
+    "Implemented Kinoko initialization: sets facing_dir based on pos.x, clears xD5C, initializes kinoko item vars x0/x4/x8/xC to 0/0/1/0, then calls it_8029385C.",
+    "Implemented ground movement update using KinokoAttrs x0 multiplied by facing_dir and scaled by kinoko.x8 into x40_vel.x.",
+    "Implemented collision response using CollData env_flags: calls it_80276408 when MPCOLL_UNK is set, resets kinoko.x4 otherwise, and flips facing direction and horizontal velocity on left/right wall collision.",
+    "Implemented air physics/deceleration in it_802938B4 using it_80272860 with item fall speeds and KinokoAttrs x4 as horizontal deceleration threshold/step.",
+    "Implemented ground/air transition behavior through it_8026D78C with callback it_80293884 and it_8026E7E0 with callback it_802936E4.",
+    "Added typed KinokoAttrs, KinokoAnim, and KinokoVars to replace raw special-attribute and item-var offsets.",
+    "Updated build metadata so the matching C object is compiled instead of the assembly object."
+  ],
+  "smart_moves": [
+    "Kept behavior-preserving numeric names for still-unknown Kinoko fields (x0, x4, x8, xC) while still introducing structs, which improves type safety without overclaiming semantics.",
+    "Moved the anonymous local callback symbol from fn_80293884 to it_80293884, aligning it with neighboring item function naming and allowing it to be referenced cleanly from C.",
+    "Added the shared MPCOLL_UNK mask in common_structs.h instead of open-coding 0x18000 inside itkinoko.c, making the bitmask reusable for later collision matches.",
+    "Declared only the needed external item/collision helpers in headers, including it_8026E7E0 and it_80276408, rather than relying on undeclared calls.",
+    "Used the existing item idioms GET_ITEM, ItemStateTable, Item_80268E5C flags, Item_8026AE84, it_8026D78C, and it_8026E7E0 to express the matched state machine in project style.",
+    "Used PAD_STACK in functions where the C needed stack padding to match the original assembly."
+  ],
+  "decomp_lessons": [
+    "For item modules, matching often requires updating all three layers together: delete the asm file, switch obj_files.mk to the C object, and mark the object Matching in configure.py.",
+    "When xDD4_itemVar storage is item-specific, add a named per-item vars struct to itCommonItems.h and insert it into the Item union in types.h before writing the module C.",
+    "If a decompiled function needs a callback address that was previously a local asm label, promote/rename the symbol in symbols.txt and declare it in the item header.",
+    "Collision env_flags masks from rlwinm/clrlwi assembly should be centralized as MPCOLL_* constants when they are likely reusable or already fit the common collision flag pattern.",
+    "Do not over-name special-attribute fields until semantics are known; KinokoAttrs keeps x0/x4/x8 while still documenting layout and types.",
+    "Small item callbacks that simply call Item_80268E5C can be matched as named C functions and used in transition helpers such as it_8026D78C."
+  ],
+  "naming_conventions": [
+    "Item module functions retained address-based names: it_80293660 through it_802939E8.",
+    "The anonymous-looking symbol fn_80293884 was renamed to the module-prefixed it_80293884.",
+    "New item-specific structs use item-name prefixes: KinokoAnim, KinokoAttrs, and KinokoVars.",
+    "Unknown fields in newly introduced structs remain offset-style names such as x0, x4, x8, and xC.",
+    "The item-var union member is lowercase item name: xDD4_itemVar.kinoko.",
+    "Collision constants use the shared MPCOLL_* macro namespace; this PR added MPCOLL_UNK."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used PAD_STACK(8) in it_802936E4 and PAD_STACK(16) in it_80293798 to reproduce original stack shape.",
+    "Matched 0.0f, -1.0f, and 1.0f sdata2 constants directly as floating literals in C.",
+    "Recovered the state table from .data as ItemStateTable it_803F6110[] with two entries.",
+    "Converted the assembly callback label at 0x80293884 into a real C function used by it_8026D78C.",
+    "Matched branch behavior around horizontal deceleration by using an early return when abs(x40_vel.x) is below KinokoAttrs x4, then subtracting or adding x4 based on velocity sign.",
+    "Translated collision bit tests into readable env_flags checks for MPCOLL_UNK, MPCOLL_RIGHTWALL, and MPCOLL_LEFTWALL.",
+    "Used the expression attrs[idx + 2].joint for the animation joint accessor, matching the assembly load sequence that indexed special attributes with an offset."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review bodies were present in the provided PR slice."
+  ],
+  "searchable_terms": [
+    "pr-1445",
+    "Match itkinoko",
+    "PsiLupan",
+    "itkinoko",
+    "Kinoko",
+    "KinokoVars",
+    "KinokoAttrs",
+    "KinokoAnim",
+    "it_803F6110",
+    "it_80293660",
+    "it_8029367C",
+    "it_802936E4",
+    "it_80293754",
+    "it_8029375C",
+    "it_80293798",
+    "it_8029385C",
+    "it_80293884",
+    "fn_80293884",
+    "it_802938AC",
+    "it_802938B4",
+    "it_80293964",
+    "it_802939E0",
+    "it_802939E8",
+    "it_8026D78C",
+    "it_8026E7E0",
+    "it_80276408",
+    "it_80272860",
+    "Item_80268E5C",
+    "Item_8026AE84",
+    "MPCOLL_UNK",
+    "MPCOLL_RIGHTWALL",
+    "MPCOLL_LEFTWALL",
+    "xDD4_itemVar.kinoko",
+    "PAD_STACK",
+    "ItemStateTable",
+    "Object(Matching, \"melee/it/items/itkinoko.c\")"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename KinokoAttrs fields x0 x4 x8 with semantic names.",
+    "Search for MPCOLL_UNK usage after PR 1445 to see whether 0x18000 was refined or renamed.",
+    "Search for other item modules that use it_80276408 with CollData and an xDD4 item-var float.",
+    "Compare itdkinoko matching work with itkinoko for shared mushroom item patterns.",
+    "Find PRs that replaced fn_* symbols with module-prefixed it_* callbacks for item state tables."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

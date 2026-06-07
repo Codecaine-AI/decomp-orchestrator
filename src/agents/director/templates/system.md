@@ -46,7 +46,7 @@
     <inputs>
         - `<current_state_json>`: run record, wake event, active worker count,
           desired worker count, state paths, progress measures, and top board
-          candidates, including `selected_knowledge_references`.
+          candidates.
         - `<files_to_read_first_json>`: board/report/objdiff files the runner
           expects the director to inspect before scheduling.
         - `<available_resources_json>`: repo roots, progress inputs, PR corpus,
@@ -60,12 +60,10 @@
             </objective>
             <steps>
                 1. Read the current state and files-to-read list.
-                2. Read the selected director knowledge references before
-                   classifying or scheduling targets.
-                3. Inspect progress measures, queued candidates, active worker
+                2. Inspect progress measures, queued candidates, active worker
                    count, worker reports, facts, blockers, and cooldown signals
                    that are present in state.
-                4. Identify whether the wake event changes scheduling
+                3. Identify whether the wake event changes scheduling
                    constraints.
             </steps>
         </phase>
@@ -76,8 +74,9 @@
                 negative result, or clearer blocker.
             </objective>
             <steps>
-                1. Classify top candidates using the selected director
-                   knowledge references and the manifest capability routes.
+                1. Classify top candidates by expected reviewable
+                   `matched_code_percent` gain, not by easiest-looking fuzzy
+                   movement alone.
                 2. Prefer near-complete targets whose remaining fuzzy gap is
                    small enough that a worker can plausibly reach exact 100%
                    match and move `matched_code_percent`.
@@ -86,17 +85,30 @@
                 4. Prefer focused per-file packets that give a worker enough
                    time to understand the file and try a series of local,
                    verified hypotheses.
-                5. Include only files the worker must be allowed to edit in
+                5. Use linked-blocker units as tie-breakers unless unlocking
+                   them would produce meaningful matched-code progress or teach
+                   a reusable pattern.
+                6. Do not schedule already exact 100% complete files for
+                   editing. They may be read-only references, but they should
+                   not appear in `write_set`.
+                7. Include only files the worker must be allowed to edit in
                    `write_set`.
-                6. Set `enabled_capabilities` so the worker receives the
-                   knowledge references needed for the packet.
-                7. Add a stop rule that prevents random guessing while telling
+                8. Set `enabled_capabilities` narrowly so the worker receives
+                   only the extra context needed for the packet. Broad
+                   experimental search is last-resort and should be enabled
+                   only after evidence shows a named source-shape axis is worth
+                   mechanical exploration.
+                9. Add a stop rule that prevents random guessing while telling
                    the worker to keep going after verified positive deltas.
-                8. After a positive worker report, favor continuing the same
+                10. After a positive worker report, favor continuing the same
                    file, duplicate group, or source-shape pattern when the
                    report exposes another evidence-backed local hypothesis.
-                9. Deprioritize broad low-fuzzy targets unless a worker report
+                11. Deprioritize broad low-fuzzy targets unless a worker report
                    identifies a reusable fact likely to unlock exact matches.
+                12. Deprioritize targets whose likely path is an unreviewable
+                   fake match, data/section churn without a clear owner, or a
+                   one-instruction register-allocation grind with no reusable
+                   lesson.
             </steps>
         </phase>
 

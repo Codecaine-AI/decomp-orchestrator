@@ -1,0 +1,173 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1374",
+  "pr": {
+    "number": 1374,
+    "title": "Implement initial ninja asm support",
+    "url": "https://github.com/doldecomp/melee/pull/1374",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-03-05T05:45:05Z",
+    "merged_at": "2024-03-05T06:32:33Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Initial infrastructure for assembling hand-written/remaining asm through the Ninja build was added, alongside a large reformat/conversion of asm/melee/ft/ft_0D14.s to the assembler syntax expected by the new pipeline. The PR explicitly noted that the project did not yet build successfully and that more asm and split fixes would be needed. It also introduced tools/decompctx.py as a first step toward replacing m2ctx after adding proper pcpp support.",
+  "change_classification": {
+    "primary_type": "tooling",
+    "categories": [
+      "build-system",
+      "asm-support",
+      "decomp-matching",
+      "tool-version-update",
+      "configuration-fix"
+    ],
+    "systems": [
+      "ninja",
+      "asm",
+      "tooling",
+      "configure",
+      "nix",
+      "config/GALE01",
+      "fighter"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "tools/project.py",
+      "reason": "Core Ninja generation changes: added asm_dir, binutils, asflags, GNU as rule, asm override handling, decompctx rule, path serialization adjustments, and objdiff/decomp.me scratch metadata."
+    },
+    {
+      "path": "configure.py",
+      "reason": "Exposed new configuration flags and tool versions, renamed --build-dtk to --dtk, added binutils and asflags defaults, and added a --no-asm option."
+    },
+    {
+      "path": "tools/decompctx.py",
+      "reason": "New context-generation helper that recursively inlines includes, emits depfiles, and was identified by the PR body as needing future pcpp support so m2ctx can be removed."
+    },
+    {
+      "path": "tools/download_tool.py",
+      "reason": "Added gc-wii-binutils download support and made extracted zip contents executable."
+    },
+    {
+      "path": "tools/ninja_syntax.py",
+      "reason": "Changed path serialization behavior to respect platform separators for pathlib.Path while preserving string inputs."
+    },
+    {
+      "path": "asm/melee/ft/ft_0D14.s",
+      "reason": "Large asm syntax migration for a fighter common assembly file: .fn/.endfn function declarations, .text/.balign, named local functions, renamed constants/objects, hex immediates, and GNU assembler-compatible spellings."
+    },
+    {
+      "path": ".nix/decomp-toolkit.nix",
+      "reason": "Bumped decomp-toolkit from 0.7.4 to 0.7.5 and added objdiff-core cargo hash."
+    },
+    {
+      "path": ".nix/melee.nix",
+      "reason": "Updated Nix configure invocation from --build-dtk to --dtk."
+    },
+    {
+      "path": "config/GALE01/splits.txt",
+      "reason": "Added an .sbss split range, likely to satisfy new split/object generation needs."
+    },
+    {
+      "path": "config/GALE01/symbols.txt",
+      "reason": "Adjusted un_804D7050 .sbss symbol size from 0x8 to 0x4."
+    }
+  ],
+  "what_changed": [
+    "Added initial Ninja support for assembling .s files by introducing ProjectConfig.asm_dir, ProjectConfig.asflags, ProjectConfig.binutils_tag/binutils_path, a GNU as Ninja rule, and logic to build .s sources or asm overrides.",
+    "Implemented asm override behavior: when config.asm_dir is enabled and a corresponding .s file exists, the build links the assembled asm object instead of the extracted object or C-built object.",
+    "Added gc-wii-binutils as a downloadable tool and configured default assembler flags such as -mgekko, --strip-local-absolute, include paths, and a version defsym.",
+    "Renamed dtk configuration plumbing from build_dtk/build-dtk to dtk/--dtk, while allowing either a dtk binary or source directory.",
+    "Bumped decomp-toolkit to v0.7.5 in both configure defaults and the Nix derivation.",
+    "Added tools/decompctx.py for generating decomp.me context files and depfiles by recursively expanding C/header includes while skipping .s includes.",
+    "Added a Ninja decompctx rule and generated .ctx files for C/C++ build units.",
+    "Expanded objdiff.json generation for objdiff 1.0.0 and added decomp.me scratch config with compiler mapping, filtered include flags, language flags, ctx_path, and build_ctx.",
+    "Reworked source build option merging so object options are overlaid on library options, including shift_jis, cflags, asflags, and host settings.",
+    "Converted asm/melee/ft/ft_0D14.s from older label/global style toward the syntax consumed by the new assembler flow, including .fn/.endfn blocks, .obj/.endobj style objects, .text/.balign, fn_ address labels, and ftCo_ prefixed data labels.",
+    "Adjusted GALE01 splits and symbol metadata, including adding an .sbss range and correcting un_804D7050 size.",
+    "The PR body explicitly stated the result did not yet build successfully and that more asm and split fixes were expected."
+  ],
+  "smart_moves": [
+    "The build-system work separated source C/C++ compilation into c_build and asm assembly into asm_build, making future source-type handling clearer and reusable.",
+    "Using asm_dir as an optional override path lets incomplete objects be replaced by assembled .s files without requiring every unit to be decompiled or every original object to disappear at once.",
+    "Running dtk elf fixup immediately after GNU as assembly encodes an important post-processing step directly into the Ninja rule instead of relying on manual cleanup.",
+    "Adding depfiles for both assembler output and decompctx output helps keep incremental Ninja builds correct as includes change.",
+    "Adding binutils to download_tool and Nix/tool configuration made the new asm path reproducible instead of assuming a system assembler.",
+    "The objdiff/decomp.me scratch metadata work anticipates the reviewer/decompiler workflow: generated ctx files, compiler mapping, and filtered flags reduce manual setup for future matching attempts.",
+    "The asm file conversion preserved address/opcode comments while changing syntax, which helps audit whether the textual conversion altered bytes or only assembler compatibility."
+  ],
+  "decomp_lessons": [
+    "Introduce asm support as a build-pipeline feature, not just as file-level syntax churn: assembler toolchain, flags, path handling, object selection, and split metadata all interact.",
+    "When using .s files as overrides for incomplete objects, keep the original object fallback path so the project can progress even when not all asm files assemble yet.",
+    "Large asm syntax migrations should keep original address and machine-code comments visible; they are crucial for verifying that a syntax-only conversion preserves intended code bytes.",
+    "Context generation should be integrated into Ninja with depfiles so decomp.me/objdiff workflows stay synchronized with local headers.",
+    "Tool version bumps should be mirrored across configure defaults, Nix package definitions, and any CLI flag changes; this PR updated dtk in configure.py and .nix/decomp-toolkit.nix and adjusted .nix/melee.nix for --dtk.",
+    "Split and symbol metadata may need small corrections when switching from extracted-object workflows to assembled asm workflows; here .sbss and a symbol size were adjusted.",
+    "Evidence from the PR body says this was intentionally incomplete: future agents should not assume this PR made the Ninja asm build fully successful."
+  ],
+  "naming_conventions": [
+    "Temporary or unidentified functions in asm were renamed from raw local labels like .L_800D2BF8 to global-style fn_800D2BF8 names.",
+    "Known fighter common functions retained ftCo_ prefixes, such as ftCo_800D14E4, ftCo_800D15D0, and ftCo_KinokoGiantStart_Anim.",
+    "Local data labels in ft_0D14.s were converted from .L_804D8F68-style names to file/system-prefixed names such as ftCo_804D8F68, ftCo_804D8F70, and ftCo_804D8F74.",
+    "The project configuration naming shifted from build_dtk/build-dtk to the more general dtk/--dtk because the path can be either a binary or a source directory.",
+    "The build option spelling changed from shiftjis to shift_jis, aligning with Python snake_case and the config-level ProjectConfig.shift_jis setting."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use GNU powerpc-eabi-as from gc-wii-binutils with -mgekko and --strip-local-absolute, followed by dtk elf fixup on the produced object.",
+    "Use .fn name, global and .endfn name around functions instead of separate .global plus bare label declarations.",
+    "Use .text and .balign 4 rather than the prior .section .text style in the converted asm excerpt.",
+    "Represent zero and small immediates consistently as hex, e.g. li r3, 0x0 and cmpwi r3, 0x0, matching the converted asm style.",
+    "Assembler-preferred aliases appear in the converted file, such as extrwi. replacing some rlwinm. forms and cror eq, gt, eq replacing numeric condition-register operands.",
+    "Use fn_800xxxxx labels for branch targets that are treated as callable functions rather than anonymous .L_ labels.",
+    "Preserve address and raw instruction bytes in comments during asm syntax conversion to make matching audits possible.",
+    "Generate decomp.me ctx outputs for C/C++ units and include them in objdiff scratch metadata to streamline matching comparisons."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the supplied PR slice.",
+    "The PR body self-identified a limitation: the branch did not build successfully yet and required future asm and split fixes.",
+    "The PR body also identified a follow-up requirement: tools/decompctx.py needed proper pcpp support before m2ctx could be removed, referencing #1373."
+  ],
+  "searchable_terms": [
+    "ninja asm support",
+    "GNU as",
+    "powerpc-eabi-as",
+    "gc-wii-binutils",
+    "dtk elf fixup",
+    "decomp-toolkit v0.7.5",
+    "--dtk",
+    "--build-dtk",
+    "--no-asm",
+    "asm_dir",
+    "asflags",
+    "decompctx.py",
+    "m2ctx",
+    "pcpp",
+    "objdiff 1.0.0",
+    "decomp.me scratch",
+    "ft_0D14.s",
+    "ftCo_800D14E4",
+    "ftCo_KinokoGiantStart_Anim",
+    "fn_800D2BF8",
+    "ftCo_804D8F68",
+    "GALE01 splits",
+    ".sbss",
+    "un_804D7050"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that make the Ninja asm build succeed after PR #1374.",
+    "Find PRs referencing #1373, pcpp, m2ctx removal, or further decompctx.py changes.",
+    "Search for subsequent changes to asm_dir, asflags, powerpc-eabi-as, or dtk elf fixup in tools/project.py.",
+    "Find later PRs that convert additional asm files to .fn/.endfn and fn_800xxxxx naming.",
+    "Check whether --no-asm default=True was later changed or fixed, since in this PR it appears to disable asm incorporation by default despite adding asm support.",
+    "Search for later fixes to GALE01 .sbss splits and un_804D7050 symbol sizing."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

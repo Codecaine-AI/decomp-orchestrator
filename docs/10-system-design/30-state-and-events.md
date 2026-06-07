@@ -39,8 +39,9 @@ Wake events include:
 - `score_candidate`
 - `pool_below_target`
 
-`pool_below_target` is produced by the trigger actor when process-level queue
-shape shows that the run should ask the director for more work. It covers low
+The trigger actor first performs deterministic queue refill from the latest
+board snapshot. `pool_below_target` is produced when process-level queue shape
+still shows that the run should ask the director for more work. It covers low
 queued work, low schedulable distinct-file work, blocked queued work behind
 active file locks, long-tail worker drain, and optional periodic replans. The
 state reader prioritizes unhandled `pool_below_target` events ahead of ordinary

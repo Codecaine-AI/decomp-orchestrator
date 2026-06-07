@@ -1,0 +1,141 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1638",
+  "pr": {
+    "number": 1638,
+    "title": "Match gobjproc",
+    "url": "https://github.com/doldecomp/melee/pull/1638",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-26T03:24:15Z",
+    "merged_at": "2025-06-26T03:49:13Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched sysdolphin/baselib/gobjproc.c by implementing HSD_GObjProc_8038FAA8, the GObjProc insertion routine, and marking the object Matching in configure.py. The implementation replaces NOT_IMPLEMENTED and removed dont_inline pragmas with C control flow that scans GObj/proc lists by p_link and s_link, updates global proc-list anchors, links the new proc into next/prev/child chains, and preserves current-proc globals. The author noted the control flow is ugly but matches; decomp.dev reported one new function match, HSD_GObjProc_8038FAA8, +365 bytes, taking main/sysdolphin/baselib/gobjproc from 1.09% to 100.00%.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "function-implementation",
+      "configure-matching-status",
+      "baselib-gobj"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "gobjproc",
+      "configure.py"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/sysdolphin/baselib/gobjproc.c",
+      "role": "Implemented HSD_GObjProc_8038FAA8 and cleaned variable names in HSD_GObjProc_8038FC18 to support matching."
+    },
+    {
+      "path": "configure.py",
+      "role": "Changed sysdolphin/baselib/gobjproc.c from Object(NonMatching, ...) to Object(Matching, ...)."
+    }
+  ],
+  "what_changed": [
+    "Replaced NOT_IMPLEMENTED in HSD_GObjProc_8038FAA8 with a full C implementation for inserting a new HSD_GObjProc.",
+    "Removed the local #pragma push / #pragma dont_inline on / #pragma pop wrapper around HSD_GObjProc_8038FAA8.",
+    "HSD_GObjProc_8038FAA8 now derives proc_gobj from gproc->gobj, s_link from gproc->s_link, and p_link from proc_gobj->p_link.",
+    "The insertion logic first checks HSD_GObj_804D7844 indexed by p_link + s_link * (HSD_GObjLibInitData.p_link_max + 1).",
+    "When an anchor exists, the function scans backward from the current GObj through cur_gobj->prev and through each GObj's proc child chain until it finds a destination proc with the same s_link.",
+    "If the found destination is the current HSD_GObj_804D7844 anchor for that p_link/s_link bucket, the anchor is updated to the new gproc.",
+    "If no destination is found in previous GObjs, the function scans lower p_link buckets in HSD_GObj_804D7844 for the same s_link.",
+    "If no valid destination exists, the new gproc is inserted at the front of the global HSD_GObj_804D7840[s_link] list.",
+    "If a destination exists, the new gproc is inserted after dst_proc using next and prev links at the insert_at_dst label.",
+    "After either insertion path, the function updates gproc->next->prev when needed, links gproc into proc_gobj->proc via gproc->child, and handles the HSD_GObj_804CE3E4.b0 / HSD_GObj_804D7830 current-proc update condition.",
+    "Renamed temporaries in HSD_GObjProc_8038FC18 from temp_r7/temp_r8 to p_link/s_link and updated uses, without changing the apparent deletion/unlink behavior.",
+    "configure.py now treats sysdolphin/baselib/gobjproc.c as Matching."
+  ],
+  "smart_moves": [
+    "Used descriptive locals p_link, s_link, proc_gobj, cur_gobj, and dst_proc to expose the data-structure intent while still preserving matching-sensitive control flow.",
+    "Kept an explicit goto label insert_at_dst and an if (true) / else structure, reflecting that the matching shape required non-idiomatic control flow.",
+    "Documented each scan and insertion phase in comments, making ugly but matching control flow easier for future readers to audit.",
+    "Preserved repeated HSD_GObj_804D7844 index expressions instead of over-abstracting them, likely helping maintain the compiler output needed for the match.",
+    "Only flipped configure.py to Matching after the decomp.dev report confirmed the unit/function match."
+  ],
+  "decomp_lessons": [
+    "For matching linked-list insertion code, readability may need to yield to source structure that matches compiler control flow; explicit goto and artificial if/else shapes can be acceptable when evidence shows they match.",
+    "When reverse-engineering baselib GObjProc behavior, track both dimensions of the global proc anchor table: p_link and s_link, indexed as p_link + s_link * (p_link_max + 1).",
+    "Insertion into HSD_GObjProc lists is coupled to multiple structures: the global per-s_link list HSD_GObj_804D7840, the p_link/s_link anchor table HSD_GObj_804D7844, each GObj's proc child chain, and current-execution globals like HSD_GObj_804D7830.",
+    "For already mostly-understood functions, simple register-derived temp names should be upgraded to semantic names once the field meaning is known, as shown by temp_r7/temp_r8 becoming p_link/s_link in HSD_GObjProc_8038FC18.",
+    "Marking an object Matching in configure.py is part of the completion step and should be backed by the decomp.dev match report."
+  ],
+  "naming_conventions": [
+    "Use p_link for gproc->gobj->p_link.",
+    "Use s_link for gproc->s_link.",
+    "Use proc_gobj for the HSD_GObj that owns the proc being inserted.",
+    "Use cur_gobj for the backward scan through GObj prev links.",
+    "Use dst_proc for the existing HSD_GObjProc selected as the insertion destination.",
+    "Use labels with action-oriented names such as insert_at_dst when a goto is required to match control flow."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced a NOT_IMPLEMENTED stub with structured C but retained matching-oriented ugly control flow.",
+    "Used goto insert_at_dst to converge multiple search-success paths into the same linked-list insertion code.",
+    "Used if (true) { front insertion } else { insert_at_dst: ... } to preserve an otherwise unnatural branch/label layout.",
+    "Removed dont_inline pragmas once HSD_GObjProc_8038FAA8 had a matching implementation.",
+    "Changed the object status from NonMatching to Matching after HSD_GObjProc_8038FAA8 reached 100.00% in decomp.dev."
+  ],
+  "review_feedback": [
+    {
+      "source": "PR body",
+      "feedback": "Author noted: \"The control flow for this function is pretty ugly, but hey it matches.\""
+    },
+    {
+      "source": "decomp.dev bot",
+      "feedback": "Reported 1 new match: main/sysdolphin/baselib/gobjproc HSD_GObjProc_8038FAA8, +365 bytes, 1.09% before to 100.00% after; matched code +368 bytes and linked code +1204 bytes."
+    },
+    {
+      "source": "review comments",
+      "feedback": "No human review comments were present in the provided PR slice."
+    }
+  ],
+  "searchable_terms": [
+    "Match gobjproc",
+    "HSD_GObjProc_8038FAA8",
+    "HSD_GObjProc_8038FC18",
+    "sysdolphin/baselib/gobjproc.c",
+    "gobjproc.c Matching",
+    "Object(Matching, \"sysdolphin/baselib/gobjproc.c\")",
+    "GObjProc insertion",
+    "HSD_GObjProc",
+    "HSD_GObj",
+    "gproc",
+    "proc_gobj",
+    "dst_proc",
+    "cur_gobj",
+    "p_link",
+    "s_link",
+    "HSD_GObj_804D7844",
+    "HSD_GObj_804D7840",
+    "HSD_GObjLibInitData.p_link_max",
+    "HSD_GObj_804CE3E4.b0",
+    "HSD_GObj_804D7830",
+    "HSD_GObj_804D7838",
+    "HSD_GObj_804D7834",
+    "insert_at_dst",
+    "NOT_IMPLEMENTED",
+    "dont_inline",
+    "ugly control flow but matches",
+    "decomp.dev GALE01"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename HSD_GObj_804D7844 or HSD_GObj_804D7840 to semantic global names.",
+    "Search for additional HSD_GObjProc functions in sysdolphin/baselib/gobjproc.c that still use raw HSD_GObj_804D78xx globals.",
+    "Compare GObjProc insertion/deletion behavior against gobjplink, gobjgxlink, and gobjobject matching patterns.",
+    "Search for other PRs using if (true) / else label tricks to preserve matching control flow."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

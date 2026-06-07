@@ -1,0 +1,141 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1788",
+  "pr": {
+    "number": 1788,
+    "title": "match most of iftime",
+    "url": "https://github.com/doldecomp/melee/pull/1788",
+    "state": "MERGED",
+    "author": "BR-",
+    "created_at": "2025-08-04T21:26:37Z",
+    "merged_at": "2025-08-04T21:32:46Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched and named most of the interface timer unit, adding a new C implementation for src/melee/if/iftime.c and replacing address-style ifTime/fn symbols with semantic names for timer creation, update, visibility, countdown, reset, and teardown. The PR also propagated those names into headers and game-mode call sites, adjusted GALE01 split/symbol sizes for iftime data/BSS, and renamed a StartMeleeRules bitfield to timer_shows_hours to support the timer formatting logic. The decomp.dev bot reported 8 new fully matched iftime functions and partial matches for SetTime, CreateTimers, and UpdateTimers.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "symbol-renaming",
+      "headers",
+      "struct-bitfield-naming",
+      "config-splits-symbols",
+      "interface-hud"
+    ],
+    "systems": [
+      "melee/if/iftime",
+      "melee/if/ifall",
+      "melee/gm",
+      "config/GALE01",
+      "melee/mn/types"
+    ]
+  },
+  "key_files": [
+    "src/melee/if/iftime.c",
+    "src/melee/if/iftime.h",
+    "config/GALE01/symbols.txt",
+    "config/GALE01/splits.txt",
+    "src/melee/gm/gm_1B03.c",
+    "src/melee/gm/gm_1601.c",
+    "src/melee/gm/gm_16AE.c",
+    "src/melee/gm/gm_unsplit.h",
+    "src/melee/if/ifall.c",
+    "src/melee/mn/types.h"
+  ],
+  "what_changed": [
+    "Added the iftime implementation from an effectively empty src/melee/if/iftime.c, including model loading, digit animation frame selection, match timer setup/update, countdown setup/update, visibility helpers, reset, and freeing helpers.",
+    "Renamed iftime symbols in config/GALE01/symbols.txt from address-based names such as ifTime_802F3AE8, ifTime_802F405C, fn_802F4194, and fn_802F428C to semantic names such as ifTime_SetTime, ifTime_HideTimers, ifTime_UpdateCountdown, and ifTime_UpdateTimers.",
+    "Updated src/melee/if/iftime.h prototypes from UNK_RET/UNK_PARAMS placeholders to typed declarations using HSD_JObj*, HSD_GObj*, int, void, and bool.",
+    "Split the old ifTime_804A1078 BSS symbol into ifTime_data at 0x804A1078 size 0x3C and ifTime_match_timer_models at 0x804A10B4 size 0x10, and adjusted the iftime data/BSS/sdata split endpoints.",
+    "Changed game-mode callers to use the new timer names: ifTime_FreeCountdown, ifTime_ShowTimers, ifTime_IsTimerHidden, ifTime_CreateTimers, ifTime_HideTimers, ifTime_Reset, and ifTime_FreeTimers.",
+    "Renamed StartMeleeRules.x1_6 to timer_shows_hours with the comment 'false=65:00.00, true=1:05:00.00', and updated gm_80167A64 to initialize timer_shows_hours.",
+    "Performed formatting/include cleanup in nearby gm and mn type files while preserving existing logic."
+  ],
+  "smart_moves": [
+    "Used descriptive public API names that reflect lifecycle and HUD behavior rather than preserving address-style placeholders, making downstream gm_1B03 and gm_16AE call sites self-documenting.",
+    "Modeled iftime BSS as a static struct containing match_timer, countdown_timer, digit JObj pointers, countdown_seconds, padding, and countdown_timer_models, which made reset/free/visibility functions simple and consistent.",
+    "Separated the match timer model descriptor into its own BSS symbol, matching the symbol map change from one 0x50 object to a 0x3C data struct plus 0x10 DynamicModelDesc.",
+    "Introduced digit index macros such as IFTIME_HOUR_SEP, IFTIME_MINUTE_TEN, IFTIME_SECOND_ONE, plus ONES/TENS digit macros, making the timer-formatting function easier to audit.",
+    "Kept matching-specific details where needed, including PAD_STACK(0x18) in small visibility helpers and explicit panic/report strings for failed GObj/JObj creation.",
+    "Tied the previously anonymous StartMeleeRules bit to observed timer display behavior, which supports both matching and future semantic cleanup."
+  ],
+  "decomp_lessons": [
+    "When a unit is mostly a lifecycle manager, naming the functions around create/update/show/hide/free/reset can quickly clarify call sites and reveal state ownership.",
+    "BSS discoveries should be reflected both in C layout and config symbols; here, recognizing that the old ifTime_804A1078 region contained two logical objects improved symbol accuracy.",
+    "Bitfield naming can unlock readable logic in a larger function: timer_shows_hours directly explains why ifTime_SetTime switches between minute-only and hour-inclusive formatting.",
+    "For HUD digit displays, preserving animation-frame based digit setting through a tiny helper can reduce repeated HSD_AObjReqAnim/HSD_AObjSetRate boilerplate while retaining match-friendly code shape.",
+    "Public headers should be upgraded from UNK_RET/UNK_PARAMS as soon as call signatures are known, because typed prototypes help propagate correct usage across gm and if files.",
+    "Bot match reports are useful evidence for what actually improved: this PR fully matched smaller lifecycle helpers while leaving larger SetTime/CreateTimers/UpdateTimers only partially matched."
+  ],
+  "naming_conventions": [
+    "Module prefix uses camel-case subsystem style: ifTime_* for interface timer functions.",
+    "Lifecycle verbs chosen in PascalCase after the prefix: SetTime, HideTimers, ShowTimers, UpdateCountdown, FreeCountdown, UpdateTimers, CreateTimers, Reset, FreeTimers, IsTimerHidden.",
+    "Static/internal data names remain module-prefixed and descriptive: ifTime_data and ifTime_match_timer_models.",
+    "Boolean bitfield name uses a readable predicate-like field, timer_shows_hours, with a comment documenting the display format controlled by false/true.",
+    "Digit constants use all-caps module-prefixed macros such as IFTIME_HOUR_TEN and IFTIME_CENTISECOND_ONE."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used PAD_STACK(0x18) in ifTime_HideTimers and ifTime_IsTimerHidden, indicating stack-shape padding was required for matching small helper functions.",
+    "Kept exact HSD/Baselib object setup flow for UI objects: GObj_Create, HSD_GObjObject_80390A70, GObj_SetupGXLink, HSD_GObjProc_8038FD54, and HSD_GObjPLink_80390228.",
+    "Loaded archive sections with lbArchive_LoadSections using the observed section names ScInfTim_scene_models and tdsce, then copied joint/anims/matanims/shapeanims into a DynamicModelDesc.",
+    "Implemented countdown changes by comparing the computed countdown_seconds, removing/adding animation only when the digit changes, then requesting and animating frame 0.",
+    "Preserved panic/report strings and source line numbers in iftime.c failure paths, which can be important for data/string and control-flow matching.",
+    "Adjusted GALE01 split endpoints for .data, .bss, and .sdata after the C implementation and symbol-size refinements changed section accounting."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided slice.",
+    "decomp.dev bot reported matched code increased to 37.51% (+0.02%, +820 bytes).",
+    "Bot reported 8 new fully matched functions in main/melee/if/iftime: ifTime_UpdateCountdown (+180), ifTime_ShowTimers (+140), ifTime_IsTimerHidden (+120), ifTime_HideTimers (+92), ifTime_FreeTimers (+92), ifTime_GetCountdownSeconds (+80), ifTime_FreeCountdown (+68), and ifTime_Reset (+48).",
+    "Bot reported partial improvements for unmatched functions: ifTime_SetTime reached 98.86% (+1380), ifTime_CreateTimers reached 76.72% (+711), and ifTime_UpdateTimers reached 65.38% (+313)."
+  ],
+  "searchable_terms": [
+    "pr-1788",
+    "match most of iftime",
+    "BR-",
+    "ifTime_SetTime",
+    "ifTime_HideTimers",
+    "ifTime_ShowTimers",
+    "ifTime_GetCountdownSeconds",
+    "ifTime_UpdateCountdown",
+    "ifTime_FreeCountdown",
+    "ifTime_UpdateTimers",
+    "ifTime_CreateTimers",
+    "ifTime_Reset",
+    "ifTime_FreeTimers",
+    "ifTime_IsTimerHidden",
+    "ifTime_data",
+    "ifTime_match_timer_models",
+    "timer_shows_hours",
+    "ScInfTim_scene_models",
+    "tdsce",
+    "IFTIME_HOUR_SEP",
+    "IFTIME_MINUTE_TEN",
+    "IFTIME_SECOND_ONE",
+    "IFTIME_CENTISECOND_ONE",
+    "PAD_STACK",
+    "HSD_JObjSetFlagsAll",
+    "HSD_JObjClearFlagsAll",
+    "HSD_GObjPLink_80390228",
+    "lbArchive_LoadSections",
+    "lb_8000C0E8",
+    "config/GALE01/symbols.txt",
+    "config/GALE01/splits.txt",
+    "src/melee/if/iftime.c",
+    "src/melee/if/iftime.h"
+  ],
+  "follow_up_queries": [
+    "Inspect later PRs touching ifTime_SetTime, ifTime_CreateTimers, or ifTime_UpdateTimers to see how the remaining unmatched percentages were resolved.",
+    "Search for additional StartMeleeRules bitfield renames near timer_shows_hours to improve rules struct documentation.",
+    "Look for PRs that remove placeholder.h from iftime.h or further type DynamicModelDesc/countdown timer model data.",
+    "Compare iftime countdown model loading against other interface HUD model loaders for reusable archive-section patterns."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

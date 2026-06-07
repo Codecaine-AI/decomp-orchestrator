@@ -1,0 +1,183 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-616",
+  "pr": {
+    "number": 616,
+    "title": "Match dolphin ai",
+    "url": "https://github.com/doldecomp/melee/pull/616",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-12-20T02:16:42Z",
+    "merged_at": "2022-12-20T07:29:58Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Replaced the 680-line assembly implementation of Dolphin AI with a matched C implementation based on prime decomp, added a public AI header, and moved shared OS time/tick clock macros into OSTime.h so AI, CARD, and DVD can share them instead of duplicating local definitions.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "library-decompilation",
+      "hardware-registers",
+      "cleanup"
+    ],
+    "systems": [
+      "dolphin/ai",
+      "dolphin/os",
+      "dolphin/card",
+      "dolphin/dvd",
+      "build-system",
+      "asm"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "asm/dolphin/ai/ai.s",
+      "role": "Deleted old hand/disassembled AI assembly source."
+    },
+    {
+      "path": "src/dolphin/ai/ai.c",
+      "role": "New matched C implementation for Dolphin AI routines and interrupt handlers."
+    },
+    {
+      "path": "include/dolphin/ai/ai.h",
+      "role": "New AI API header with callback typedefs, register declaration, and public function prototypes."
+    },
+    {
+      "path": "include/dolphin/os/OSTime.h",
+      "role": "Centralized __OSBusClock and OS time-to-tick conversion macros used by AI and other subsystems."
+    },
+    {
+      "path": "src/dolphin/card/CARDBios.c",
+      "role": "Removed duplicated OS bus/timer clock macros now provided by OSTime.h."
+    },
+    {
+      "path": "src/dolphin/dvd/dvd.c",
+      "role": "Removed duplicated OS bus/timer clock macros now provided by OSTime.h."
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "Switched AI object from asm/dolphin/ai/ai.s.o to src/dolphin/ai/ai.c.o."
+    }
+  ],
+  "what_changed": [
+    "Added src/dolphin/ai/ai.c with C versions of AIRegisterDMACallback, AIInitDMA, AIStartDMA, stream play-state/sample-rate/volume accessors, AIInit, AIS/AID interrupt handlers, callback stack switching, and __AI_SRC_INIT.",
+    "Removed asm/dolphin/ai/ai.s, which previously contained the AI implementation from 0x803503E4 through 0x80350C88.",
+    "Added include/dolphin/ai/ai.h with AISCallback and AIDCallback typedefs, an absolute-address volatile AI register array declaration `extern vu32 __AIRegs[8] : 0xCC006C00;`, and public AI function declarations.",
+    "Added OS bus/timer clock declarations and conversion macros to include/dolphin/os/OSTime.h, including OSSecondsToTicks, OSMillisecondsToTicks, and OSNanosecondsToTicks.",
+    "Removed duplicate __OSBusClock and tick macro definitions from CARDBios.c and dvd.c.",
+    "Updated obj_files.mk so the build links `src/dolphin/ai/ai.c.o` instead of `asm/dolphin/ai/ai.s.o`.",
+    "PR body states the implementation was based on prime decomp."
+  ],
+  "smart_moves": [
+    "Moved common timer conversion macros into OSTime.h rather than keeping per-file definitions in CARD and DVD; this made AI's OSNanosecondsToTicks usage reusable and reduced local duplication.",
+    "Modeled hardware registers as volatile absolute-address arrays (`__AIRegs` in the AI header, and existing `__DSPRegs` via dolphin/dsp/dsp.h), which keeps MMIO access explicit and close to the original register-manipulating assembly.",
+    "Preserved interrupt safety around callback registration, DMA initialization, sample-rate switching, and SRC initialization with OSDisableInterrupts/OSRestoreInterrupts.",
+    "Preserved hardware state during stream/DSP sample-rate changes by saving play state, volumes, and sample-rate bits, muting during reconfiguration, then restoring state afterward.",
+    "Used a small static asm function for `__AICallbackStackSwitch`, keeping the difficult stack-swap sequence exact instead of forcing an all-C rewrite where matching would be fragile.",
+    "Kept unused locals and state variables in `__AI_SRC_INIT` where needed for matching evidence, rather than over-cleaning the decompiled control flow."
+  ],
+  "decomp_lessons": [
+    "For low-level Dolphin libraries, first promote repeated hardware clock/tick macros into the canonical OS header; later matched modules can then include the shared declarations instead of redefining them.",
+    "When matching MMIO-heavy code, volatile absolute-address extern arrays can make bit operations compile close to original load/store sequences while still producing readable C.",
+    "Callback and interrupt code often needs exact OS context transitions; AI handlers use OSClearContext and OSSetCurrentContext around callback invocation, mirroring the runtime behavior from assembly.",
+    "Hardware reconfiguration routines may intentionally mute audio and preserve/restore register state around SRC initialization; do not simplify these sequences unless the resulting assembly and behavior are verified.",
+    "A mixed C plus static asm approach is acceptable when a tiny stack or ABI-sensitive fragment blocks a clean C match.",
+    "External decomp sources such as prime decomp can be useful references, but the PR evidence only states it was based on prime decomp and does not document detailed adaptation choices."
+  ],
+  "naming_conventions": [
+    "`AISCallback` and `AIDCallback` are used as callback typedef names for stream and DMA interrupts.",
+    "Public AI APIs use the Dolphin-style `AI...` prefix, for example `AIInitDMA`, `AISetStreamPlayState`, `AIGetStreamSampleRate`, and `AIInit`.",
+    "Internal globals and static helpers preserve SDK-like double-underscore names such as `__AIS_Callback`, `__AID_Callback`, `__CallbackStack`, `__AI_init_flag`, and `__AI_SRC_INIT`.",
+    "The static helper for stream sample-rate setting uses lower-case-with-underscores after the prefix: `__AI_set_stream_sample_rate`.",
+    "The new AI header guard is `DOLPHIN_AI_AI`, matching the submitted file rather than a conventional `_H` suffix.",
+    "Timer constants/globals use descriptive names matching the algorithm: `bound_32KHz`, `bound_48KHz`, `min_wait`, `max_wait`, and `buffer`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted a single assembly file into one C translation unit and changed obj_files.mk from the asm object to the C object, a clear full-function replacement tactic.",
+    "Used explicit masks such as `~0x20`, `~1`, `~2`, `~0x40`, `0xFF`, and `0xFF00` against `__AIRegs` to reproduce the original rlwinm/ori/rlwimi-style bit manipulation.",
+    "Used `OSNanosecondsToTicks(31524)`, `OSNanosecondsToTicks(42024)`, `OSNanosecondsToTicks(42000)`, `OSNanosecondsToTicks(63000)`, and `OSNanosecondsToTicks(3000)` in `AIInit` to express the magic timing constants seen in assembly.",
+    "Preserved busy-wait loops in `__AI_SRC_INIT` that poll `__AIRegs[2]` and OSGetTime, rather than abstracting them away.",
+    "Used `register AIDCallback` and static asm with `fralloc`/`frfree`, manual r1 save/restore, and `mtlr cb; blrl` for the callback stack switch.",
+    "Added an `#ifndef M2CTX` guard around the absolute-address annotation for `__OSBusClock`, avoiding that syntax in m2ctx contexts while retaining it for normal builds."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "ribbanya",
+      "state": "APPROVED",
+      "submitted_at": "2022-12-20T03:21:44Z",
+      "body": ""
+    },
+    {
+      "reviewer": "ribbanya",
+      "state": "APPROVED",
+      "submitted_at": "2022-12-20T06:36:03Z",
+      "body": ""
+    },
+    "No issue comments or line review comments were present in the provided slice, so there is no specific human feedback beyond approvals."
+  ],
+  "searchable_terms": [
+    "Match dolphin ai",
+    "prime decomp",
+    "AIRegisterDMACallback",
+    "AIInitDMA",
+    "AIStartDMA",
+    "AIResetStreamSampleCount",
+    "AISetStreamTrigger",
+    "AISetStreamPlayState",
+    "AIGetStreamPlayState",
+    "AISetDSPSampleRate",
+    "AIGetDSPSampleRate",
+    "AISetStreamSampleRate",
+    "AIGetStreamSampleRate",
+    "AISetStreamVolLeft",
+    "AIGetStreamVolLeft",
+    "AISetStreamVolRight",
+    "AIGetStreamVolRight",
+    "AIInit",
+    "__AIRegs",
+    "__DSPRegs",
+    "__AIS_Callback",
+    "__AID_Callback",
+    "__CallbackStack",
+    "__OldStack",
+    "__AI_init_flag",
+    "__AISHandler",
+    "__AIDHandler",
+    "__AICallbackStackSwitch",
+    "__AI_SRC_INIT",
+    "OSNanosecondsToTicks",
+    "OSMillisecondsToTicks",
+    "OSSecondsToTicks",
+    "__OSBusClock",
+    "OS_TIMER_CLOCK",
+    "OSTime.h",
+    "CARDBios.c",
+    "dvd.c",
+    "obj_files.mk",
+    "bound_32KHz",
+    "bound_48KHz",
+    "min_wait",
+    "max_wait",
+    "buffer",
+    "0xCC006C00",
+    "0x800000F8",
+    "M2CTX"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or refine Dolphin AI symbols such as __AI_SRC_INIT, __AIS_Callback, or __AID_Callback.",
+    "Search for subsequent changes adding missing AI header prototypes for AIResetStreamSampleCount or AISetStreamTrigger, which are implemented in ai.c but not shown in the new ai.h.",
+    "Check later OSTime.h changes for type corrections to __OSBusClock, since this PR declares it as u32 while removed local definitions used vu32.",
+    "Look for later PRs that replace static asm callback stack-switch code with cleaner C or shared stack-switch helpers.",
+    "Search other Dolphin library matches that reuse OSNanosecondsToTicks and the OS_BUS_CLOCK/OS_TIMER_CLOCK macros introduced here."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

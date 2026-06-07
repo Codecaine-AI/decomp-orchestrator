@@ -1,0 +1,139 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-354",
+  "pr": {
+    "number": 354,
+    "title": "FObj Cleanup",
+    "url": "https://github.com/doldecomp/melee/pull/354",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2022-04-10T22:39:06Z",
+    "merged_at": "2022-04-10T22:39:11Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Cleaned up SysDolphin baselib FObj animation code by fixing FObjUpdateAnim callback argument typing, renaming several previously anonymous functions, and replacing raw animation opcode/fraction constants with existing HSD_A_* defines. The PR also propagated the new names into assembly callsites, include/functions.h comments, and fobj.h prototypes.",
+  "change_classification": {
+    "primary_type": "cleanup",
+    "categories": [
+      "cleanup",
+      "fix",
+      "headers",
+      "naming",
+      "callback-signature-correction"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "fobj",
+      "animation",
+      "asm",
+      "include",
+      "src"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/fobj.c",
+    "src/sysdolphin/baselib/fobj.h",
+    "asm/sysdolphin/baselib/fobj.s",
+    "include/functions.h"
+  ],
+  "what_changed": [
+    "Renamed func_8036ADDC to parsePackInfo in fobj.c, include/functions.h, and fobj.s callsites.",
+    "Renamed func_8036AE38 to FObjLaunchKeyData in fobj.c, include/functions.h, and fobj.s callsites.",
+    "Renamed func_8036AE70 to FObjUpdateAnim in fobj.c, include/functions.h, fobj.h, and fobj.s callsites.",
+    "Changed FObjUpdateAnim signature from loosely typed/incorrect callback usage to `void FObjUpdateAnim(HSD_FObj* fobj, void* obj, void (*obj_update)(void*, s32, FObjData*))`.",
+    "Updated fobj.h callback parameter names from generic `callback` or `update_func` to `obj_update` for FObj stop/interpret/update APIs.",
+    "Changed FObjUpdateAnim local storage from a raw `f32 sp14` passed as `f32*` to an `FObjData fobjdata` whose `.fv` member is filled and passed as `FObjData*`.",
+    "Replaced raw opcode switch cases in FObjUpdateAnim, such as 1, 2, 3, 4, 5, and 6, with existing defines `HSD_A_OP_CON`, `HSD_A_OP_LIN`, `HSD_A_OP_SPL0`, `HSD_A_OP_SPL`, `HSD_A_OP_SLP`, and `HSD_A_OP_KEY`.",
+    "Changed parseFloat parameter name from `arg1` to `frac` and replaced raw fraction encodings such as `0x60`, `0x80`, `0x20`, and `0x40` with `HSD_A_FRAC_S8`, `HSD_A_FRAC_U8`, `HSD_A_FRAC_S16`, and `HSD_A_FRAC_U16`.",
+    "In parseFloat, replaced type-punning through `*(f32*) &ret` with a local union containing `f32 f` and `u32 d` for reconstructing float data from bytes.",
+    "Marked parseFloat, parsePackInfo, and FObjLaunchKeyData with commented `/*static*/` annotations in the source, suggesting they are intended as internal helpers but possibly constrained by current matching/header state."
+  ],
+  "smart_moves": [
+    "The callback fix modeled the payload as `FObjData*` instead of a bare `f32*`, aligning the implementation with the FObj data abstraction and the header prototype.",
+    "Using existing HSD_A_* constants made animation opcode and packed-fraction parsing self-documenting without changing the control flow structure materially.",
+    "Renaming the assembly call labels alongside the C symbols kept non-decompiled callsites searchable and semantically meaningful while preserving branch targets/instruction bytes.",
+    "The parseFloat union avoids a direct pointer cast from integer storage to float storage, making the intent clearer and less aliasing-sensitive while still reconstructing the same byte sequence.",
+    "Renaming callback parameters to `obj_update` documents that the function pointer updates an object with an object type and FObj data, which is more useful than generic `callback`/`arg2` names."
+  ],
+  "decomp_lessons": [
+    "When a callback actually receives a union/struct payload, reflect that in both the implementation and header instead of matching via an incidental scalar pointer type.",
+    "Replace magic animation opcodes and packed-data encodings with named HSD_A_* constants once the constants exist; this improves reviewability and reduces future misinterpretation of switch cases.",
+    "For functions still referenced by assembly, renaming the symbol in the asm comments/calls is part of the cleanup and helps cross-reference decompiled and undecompiled regions.",
+    "Use semantic names for FObj helper routines once behavior is clear: parsing packed info, launching key data, and updating animation are all better anchors than address-derived names.",
+    "Parameter-name cleanup in headers is useful decomp documentation: `obj`, `obj_update`, and `frac` convey call contracts even when some prototypes remain partially generic.",
+    "Commented `/*static*/` can record likely internal linkage intent while avoiding a disruptive linkage change before all references/prototypes are settled."
+  ],
+  "naming_conventions": [
+    "Address-derived `func_8036ADDC` was replaced by behavior name `parsePackInfo`.",
+    "Address-derived `func_8036AE38` was replaced by FObj-scoped action name `FObjLaunchKeyData`.",
+    "Address-derived `func_8036AE70` was replaced by FObj-scoped action name `FObjUpdateAnim`.",
+    "Animation opcode constants use the `HSD_A_OP_*` naming family, e.g. `HSD_A_OP_KEY`, `HSD_A_OP_CON`, `HSD_A_OP_LIN`, `HSD_A_OP_SPL0`, `HSD_A_OP_SPL`, and `HSD_A_OP_SLP`.",
+    "Packed animation fraction constants use the `HSD_A_FRAC_*` naming family, e.g. `HSD_A_FRAC_FLOAT`, `HSD_A_FRAC_S8`, `HSD_A_FRAC_U8`, `HSD_A_FRAC_S16`, and `HSD_A_FRAC_U16`.",
+    "Object update callbacks are named `obj_update` rather than generic `callback`, `update_func`, or numbered arguments.",
+    "The FObj callback payload variable is named `fobjdata`, with the float member assigned through `fobjdata.fv`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Kept assembly instruction bytes unchanged while replacing symbolic branch targets in `asm/sysdolphin/baselib/fobj.s` from unnamed `func_8036AE70`, `func_8036ADDC`, and `func_8036AE38` to `FObjUpdateAnim`, `parsePackInfo`, and `FObjLaunchKeyData`.",
+    "Maintained the same FObjUpdateAnim switch structure and computation paths while substituting named constants for raw case values, a low-risk readability improvement for matching code.",
+    "Used a union in parseFloat to reconstruct a float from four incrementally read bytes without changing the visible parsing order in the excerpt.",
+    "Changed FObjUpdateAnim local variable from scalar `sp14` to `FObjData fobjdata`, but still writes the float field and passes the address to the callback, preserving the call pattern while correcting type intent."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr354",
+    "FObj Cleanup",
+    "PsiLupan",
+    "sysdolphin",
+    "baselib",
+    "fobj",
+    "FObjUpdateAnim",
+    "parsePackInfo",
+    "FObjLaunchKeyData",
+    "parseFloat",
+    "FObjData",
+    "obj_update",
+    "HSD_FObj",
+    "HSD_FObjStopAnim",
+    "HSD_FObjStopAnimAll",
+    "HSD_FObjInterpretAnim",
+    "HSD_FObjInterpretAnimAll",
+    "HSD_A_FRAC_FLOAT",
+    "HSD_A_FRAC_S8",
+    "HSD_A_FRAC_U8",
+    "HSD_A_FRAC_S16",
+    "HSD_A_FRAC_U16",
+    "HSD_A_OP_KEY",
+    "HSD_A_OP_CON",
+    "HSD_A_OP_LIN",
+    "HSD_A_OP_SPL0",
+    "HSD_A_OP_SPL",
+    "HSD_A_OP_SLP",
+    "splGetHelmite",
+    "func_8036ADDC",
+    "func_8036AE38",
+    "func_8036AE70",
+    "asm/sysdolphin/baselib/fobj.s",
+    "src/sysdolphin/baselib/fobj.c",
+    "src/sysdolphin/baselib/fobj.h",
+    "include/functions.h",
+    "callback signature",
+    "packed fraction",
+    "animation opcode"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that remove the `/*static*/` comments or make parseFloat, parsePackInfo, and FObjLaunchKeyData truly static.",
+    "Audit other FObj or AObj callbacks for places still typed as generic `void (*)()` or scalar payload pointers instead of `FObjData*`.",
+    "Search for remaining raw HSD animation opcode or fraction constants in baselib animation code that could be replaced with `HSD_A_OP_*` or `HSD_A_FRAC_*` defines.",
+    "Check whether `include/functions.h` later gains full prototypes for parsePackInfo, FObjLaunchKeyData, FObjUpdateAnim, or related HSD_FObj helpers."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

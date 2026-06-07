@@ -1,0 +1,153 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-937",
+  "pr": {
+    "number": 937,
+    "title": "Start splitting out character-specific items, match spacies' laser and phantasm/illusion items",
+    "url": "https://github.com/doldecomp/melee/pull/937",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-06-24T07:32:35Z",
+    "merged_at": "2023-06-24T07:53:37Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "PR 937 began separating character-specific item code out of the large item assembly unit and matched the spacies' laser and illusion/phantasm item logic in C. It added src/melee/it/items/itfoxlaser.c and itfoxillusion.c plus headers, moved many remaining character item assembly blocks into asm/melee/it/items/*, wired the new objects into obj_files.mk, and added item-variable structs for FoxLaserVars and FoxIllusionVars. The change also tightened related declarations, including making Item_80268B18 return the spawned HSD_GObj and changing ftFx_SpecialS_GetCmdVar2 from u32 to s32.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-splitting",
+      "headers",
+      "struct-typing",
+      "build-system"
+    ],
+    "systems": [
+      "item",
+      "fighter",
+      "fox",
+      "falco",
+      "asm",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "asm/melee/it/it_27CF.s",
+    "asm/melee/it/items/itmariofireball.s",
+    "asm/melee/it/items/itkirbycutterbeam.s",
+    "asm/melee/it/items/itlinkbomb.s",
+    "asm/melee/it/items/itlinkboomerang.s",
+    "asm/melee/it/items/itlinkhookshot.s",
+    "asm/melee/it/items/itlinkarrow.s",
+    "asm/melee/it/items/itnesspkfire.s",
+    "asm/melee/it/items/itnesspkfirepillar.s",
+    "asm/melee/it/items/itnesspkflush.s",
+    "asm/melee/it/items/itnesspkthunderball.s",
+    "src/melee/it/items/itfoxlaser.c",
+    "src/melee/it/items/itfoxlaser.h",
+    "src/melee/it/items/itfoxillusion.c",
+    "src/melee/it/items/itfoxillusion.h",
+    "src/melee/it/itCharItems.h",
+    "src/melee/it/types.h",
+    "src/melee/it/it_803F3100.c",
+    "src/melee/it/item.c",
+    "src/melee/it/item.h",
+    "src/melee/ft/chara/ftFox/ftFx_SpecialN.c",
+    "src/melee/ft/chara/ftFox/ftFx_SpecialS.c",
+    "src/melee/ft/chara/ftFox/ftFx_SpecialS.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Removed roughly 19k lines from the monolithic asm/melee/it/it_27CF.s and reintroduced many character-item assembly ranges as separate asm/melee/it/items/*.s objects for Mario fireball, Kirby cutter beam, Link items, and Ness PK items.",
+    "Added matched C implementations for spacies' laser item behavior in src/melee/it/items/itfoxlaser.c, including ItemStateTable it_803F67D0, spawn helpers it_8029C504/it_8029C6A4/it_8029C6CC, angle normalization, velocity/rotation/scale handling, collision reflection/bounce callbacks, and destroy callback it_8029CCF8.",
+    "Added matched C implementations for Fox illusion/Falco phantasm item behavior in src/melee/it/items/itfoxillusion.c, including ItemStateTable it_803F6818, ghost JObj creation/removal, owner-linked ghost position updates via ftFx_SpecialS helpers, lifetime transitions, and destroy callback it_8029D948.",
+    "Created item-specific headers itfoxlaser.h and itfoxillusion.h and moved related declarations out of the broad it_27CF.h surface.",
+    "Created src/melee/it/itCharItems.h with FoxLaserVars and FoxIllusionVars, then included it from src/melee/it/types.h and added foxlaser/foxillusion members to Item.xDD4_itemVar.",
+    "Changed Item.xC58/xC5C/xC60 from separate scalar fields into Vec3 xC58, which is used by the laser mirror path through lbVector_Mirror.",
+    "Changed Item_80268B18 from void to HSD_GObj* so newly matched spawn helpers can directly receive the spawned item object after Item_8026862C.",
+    "Updated src/melee/it/it_803F3100.c to include the new item headers, remove duplicate local prototypes/externs, give the item logic table an explicit size of 118, and annotate many entries with character-item comments such as Fox laser, Falco laser, Fox illusion, Falco phantasm, Link bomb, and Ness PK fire.",
+    "Updated ftFox special-N and special-S source files to include the new item headers, and changed ftFx_SpecialS_GetCmdVar2's return type from u32 to s32 in both source and header.",
+    "Updated obj_files.mk to insert the newly split asm objects and the two new matched C objects in the item object list."
+  ],
+  "smart_moves": [
+    "Used a hybrid split: only the targeted spacies items were matched in C, while other character-item ranges were moved to separate asm files. This reduced monolithic asm debt without requiring every adjacent character item to be matched at once.",
+    "Kept address-style function and state-table names for the newly matched code, which preserved compatibility with existing item logic table references while still isolating code in item-specific files.",
+    "Introduced FoxLaserVars and FoxIllusionVars before adding them to Item.xDD4_itemVar, making item-local variable offsets explicit and reusable instead of scattering raw xDD4/xDD8/xDDC field interpretations.",
+    "Made Item_80268B18 return the spawned GObj rather than forcing matched spawn helpers to duplicate lower-level spawn logic or rely on side effects.",
+    "Moved laser and illusion prototypes into item-specific headers and included those headers from fighter code, reducing dependence on the catch-all it_27CF.h declarations.",
+    "For matching, retained small helper inlines such as normalizeAngle and local fabsf, plus explicit unused stack slots where needed, rather than over-abstracting the decompiled code away from the original codegen."
+  ],
+  "decomp_lessons": [
+    "When a large asm file contains many independent character item articles, splitting unmatched neighbors into per-item asm files can create room to match one article family without destabilizing the entire translation unit.",
+    "Article/item state tables are natural anchors for splitting item code: matching it_803F67D0 and it_803F6818 made the Fox/Falco laser and illusion/phantasm logic table entries easier to type and include.",
+    "If decompiled spawn code needs the created object, check whether a wrapper such as Item_80268B18 should return an existing lower-level result instead of inventing alternate control flow.",
+    "Typed item variable structs inside Item.xDD4_itemVar are useful for matching article-specific code, especially where offsets otherwise look like unrelated raw fields.",
+    "Fighter/item boundaries should be represented with specific headers when possible; spacies' item code depended on ftFx_SpecialS ghost/cmd-var helpers and the fighter code depended on laser/illusion spawn declarations.",
+    "Changing a field grouping to Vec3 can unlock natural calls such as lbVector_Mirror, but downstream initialization and all offset users should be audited carefully."
+  ],
+  "naming_conventions": [
+    "Character-item source files follow lower-case item names under src/melee/it/items/, e.g. itfoxlaser.c and itfoxillusion.c, with matching headers itfoxlaser.h and itfoxillusion.h.",
+    "Character-item variable structs use descriptive PascalCase names with Vars suffix: FoxLaserVars and FoxIllusionVars.",
+    "Matched symbols retained address-derived names such as it_8029C504, it_8029D094, it_803F67D0, and it_803F6818 where semantic names were not yet established.",
+    "The new shared character-item variable header is named itCharItems.h and is included from it/types.h alongside other item variable headers.",
+    "Item logic table comments use semantic article names in braces, such as Fox laser, Falco laser, Fox illusion, Falco phantasm, Link hookshot, Young Link arrow, and Ness PK thunder."
+  ],
+  "assembly_or_matching_tactics": [
+    "Preserved object order in obj_files.mk by inserting the new per-item asm objects and matched C objects before the remaining asm/melee/it/it_803F5468.s.o and asm/melee/it/it_27CF.s.o entries.",
+    "Reduced asm/melee/it/it_27CF.s by moving large address ranges into named item asm files before matching only the spacies ranges in C.",
+    "Used ItemStateTable arrays as exact data structures for item callbacks, keeping state IDs and callback order explicit.",
+    "Used inline angle normalization around 0..2*M_PI and manual f32 math constants/calls such as cosf, sinf, atan2f, and M_PI-derived rotations for Fox laser matching.",
+    "Used explicit local unused arrays in several functions to preserve stack layout/codegen in matched C.",
+    "Modeled laser reflection by storing a previous position Vec3 and calling lbVector_Mirror on item velocity and item->xC58."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review bodies were present in the provided PR slice, so no human reviewer feedback could be extracted."
+  ],
+  "searchable_terms": [
+    "PR937",
+    "r-burns",
+    "character-specific items",
+    "spacies",
+    "Fox laser",
+    "Falco laser",
+    "Fox illusion",
+    "Falco phantasm",
+    "itfoxlaser",
+    "itfoxillusion",
+    "itCharItems",
+    "FoxLaserVars",
+    "FoxIllusionVars",
+    "it_803F67D0",
+    "it_803F6818",
+    "it_8029C504",
+    "it_8029C6A4",
+    "it_8029C6CC",
+    "it_8029CEB4",
+    "it_8029D948",
+    "Item_80268B18",
+    "ItemStateTable",
+    "ItemLogicTable",
+    "it_803F3100",
+    "it_27CF.s",
+    "obj_files.mk",
+    "lbVector_Mirror",
+    "ftFx_SpecialS_GetCmdVar2",
+    "ftFx_SpecialS_CheckGhostRemove",
+    "ftFx_SpecialS_CopyGhostPosIndexed"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or further type FoxLaserVars and FoxIllusionVars fields.",
+    "Find later fixes around Item.xC58 initialization after it became a Vec3.",
+    "Find subsequent PRs that match Link bomb, Link boomerang, Link hookshot, Link arrow, Ness PK fire, PK flush, or PK thunderball after this asm split.",
+    "Find later reviews or commits touching Item_80268B18's return type and callers.",
+    "Find PRs that replace address-derived names in itfoxlaser.c or itfoxillusion.c with semantic names."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

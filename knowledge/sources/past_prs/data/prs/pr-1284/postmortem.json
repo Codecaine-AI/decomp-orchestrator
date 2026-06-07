@@ -1,0 +1,129 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1284",
+  "pr": {
+    "number": 1284,
+    "title": "Match grtpikachu",
+    "url": "https://github.com/doldecomp/melee/pull/1284",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-02-21T03:02:31Z",
+    "merged_at": "2024-02-21T03:04:41Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Target Test Pikachu ground/stage module by replacing asm/melee/gr/grtpikachu.s with C in src/melee/gr/grtpikachu.c and adding a corresponding header. The build configuration was switched from the assembly object to the C object, and configure.py now marks melee/gr/grtpikachu.c as Matching. The C reconstruction covers stage data, callback tables, stage initialization, ground object setup, simple no-op/boolean callbacks, animation setup, and cleanup/update callbacks.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "asm-to-c"
+    ],
+    "systems": [
+      "stage",
+      "ground",
+      "build-system"
+    ]
+  },
+  "key_files": [
+    "asm/melee/gr/grtpikachu.s",
+    "src/melee/gr/grtpikachu.c",
+    "src/melee/gr/grtpikachu.h",
+    "configure.py",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Deleted the 282-line assembly implementation asm/melee/gr/grtpikachu.s.",
+    "Added a full C implementation in src/melee/gr/grtpikachu.c for grTPikachu_80222E7C through grTPikachu_80223158.",
+    "Defined the StageCallbacks table grTPk_803E9270 in C, preserving three callback entries plus a NULL terminator entry.",
+    "Defined StageData grTPk_803E92CC in C with stage id 57, data path \"/GrTPk.dat\", module lifecycle callbacks, item/anim callbacks, and flags value (1 << 0).",
+    "Implemented grTPikachu_80222E80 to set stage_info.unk8C.b4 false and b5 true, spawn/setup ground ids 0, 1, and 2, then call the standard Ground_801C39C0, Ground_801C3BB4, Ground_801C4210, and Ground_801C42AC initialization helpers.",
+    "Implemented grTPikachu_80222F20 as the shared ground-object creation/setup helper using Ground_801C14D0, HSD_GObjGetUserData, GObj_SetupGXLink, optional StageCallbacks dispatch, optional HSD_GObjProc_8038FD54 installation, and OSReport on missing gobj.",
+    "Implemented animation/setup callbacks that call grAnime_801C8138, Ground_801C2ED0, lb_800115F4, and Ground_801C2FE0 where indicated by the original assembly.",
+    "Added src/melee/gr/grtpikachu.h with prototypes and forward includes for platform, lb, dolphin mtx, and baselib types.",
+    "Changed configure.py from Object(NonMatching, \"melee/gr/grtpikachu.c\") to Object(Matching, \"melee/gr/grtpikachu.c\").",
+    "Changed obj_files.mk to build $(BUILD_DIR)/src/melee/gr/grtpikachu.c.o instead of $(BUILD_DIR)/asm/melee/gr/grtpikachu.s.o."
+  ],
+  "smart_moves": [
+    "Used existing shared stage abstractions, especially StageCallbacks and StageData, instead of leaving raw data arrays or opaque .4byte data.",
+    "Reconstructed bitfield writes to stage_info.unk8C as named bit assignments, stage_info.unk8C.b4 = false and stage_info.unk8C.b5 = true, which makes the original rlwimi byte manipulation readable.",
+    "Factored gobj user data through HSD_GObjGetUserData and Ground* fields, matching the assembly's offsets while improving type clarity.",
+    "Preserved callback-table behavior directly: callback3 becomes gp->x1C_callback, callback0 is invoked immediately when non-NULL, and callback2 is installed as a process with priority 4.",
+    "Used GET_GROUND(gobj) and PAD_STACK(8) in the callbacks involving Ground_801C2ED0 and grAnime_801C8138, likely to satisfy matching stack/codegen constraints while following project idioms.",
+    "Kept the original OSReport string and source line value used by the assembly error path, including \"grtpikachu.c\" and line 195.",
+    "Moved the object in both configure.py and obj_files.mk, ensuring the matched C file actually replaces the asm object in all relevant build paths."
+  ],
+  "decomp_lessons": [
+    "For small target-test stage modules, the assembly often maps cleanly onto a StageData definition, a StageCallbacks array, and repeated boilerplate callback functions.",
+    "Stage callback tables with five-word records can be represented as StageCallbacks entries, including a final sentinel entry of all NULL/0 values.",
+    "Initialization code that mutates stage_info.unk8C bits should be checked against known bitfield names rather than left as byte masks when the struct supports it.",
+    "A shared object-spawn helper can be reconstructed by following the Ground_801C14D0 result path: get Ground user data, clear callbacks, set GX link, copy optional callback fields, invoke init callback, and install proc callback.",
+    "Empty functions and boolean stubs should still be typed according to their callback-table roles; this PR uses void no-ops, bool false returns, a NULL lb_UnkAnimStruct* return, and a final bool true return.",
+    "When replacing an asm file with matched C, update both the object list and the matching/nonmatching classification; deleting the asm alone is not sufficient."
+  ],
+  "naming_conventions": [
+    "Preserved address-based function names with the module prefix grTPikachu_8022xxxx.",
+    "Preserved data symbol names with the short stage prefix grTPk, such as grTPk_803E9270 and grTPk_803E92CC.",
+    "Header guard used lowercase module style: _grtpikachu_h_.",
+    "The stage data file path remains the original short asset path string: \"/GrTPk.dat\".",
+    "Local variable names are conventional and type-oriented: gobj for HSD_GObj*, gp for Ground*, cb for StageCallbacks*, joint for HSD_JObj*."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced raw assembly data for grTPk_803E9270 with a typed StageCallbacks array whose layout matches the original .4byte sequence.",
+    "Replaced raw assembly data for grTPk_803E92CC with a typed StageData initializer.",
+    "Used bool parameters and returns for stubs that compile to li r3, 0 / blr or li r3, 1 / blr where appropriate.",
+    "Used explicit NULL checks before callback invocation and process creation to mirror the original branch structure.",
+    "Used PAD_STACK(8) in grTPikachu_80223044 and grTPikachu_802230D4, indicating stack-shape padding was needed for matching around the Ground_801C2ED0 and grAnime_801C8138 calls.",
+    "Preserved the OSReport failure path in grTPikachu_80222F20, including format string, source filename string, and line constant.",
+    "Used false as the third argument to grAnime_801C8138 in places where the assembly passed 0."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1284",
+    "Match grtpikachu",
+    "PsiLupan",
+    "grtpikachu",
+    "grTPikachu",
+    "grTPk",
+    "GrTPk.dat",
+    "src/melee/gr/grtpikachu.c",
+    "src/melee/gr/grtpikachu.h",
+    "asm/melee/gr/grtpikachu.s",
+    "StageCallbacks",
+    "StageData",
+    "stage_info.unk8C.b4",
+    "stage_info.unk8C.b5",
+    "Ground_801C14D0",
+    "Ground_801C39C0",
+    "Ground_801C3BB4",
+    "Ground_801C4210",
+    "Ground_801C42AC",
+    "Ground_801C2ED0",
+    "Ground_801C2FE0",
+    "grAnime_801C8138",
+    "grDisplay_801C5DB0",
+    "grZakoGenerator_801CAE04",
+    "GObj_SetupGXLink",
+    "HSD_GObjProc_8038FD54",
+    "HSD_GObjGetUserData",
+    "GET_GROUND",
+    "PAD_STACK",
+    "OSReport",
+    "Object(Matching, \"melee/gr/grtpikachu.c\")"
+  ],
+  "follow_up_queries": [
+    "Find other target-test stage modules adjacent to grtpikachu, such as grtpichu or grtpurin, for reusable StageCallbacks/StageData patterns.",
+    "Search for PAD_STACK(8) in stage callback functions to identify similar matching requirements around Ground_801C2ED0 and grAnime_801C8138.",
+    "Search for OSReport strings of the form \"%s:%d: couldn t get gobj(id=%d)\\n\" to compare shared ground object setup helpers.",
+    "Compare grTPikachu_80222F20 against equivalent setup helpers in other grt* modules for opportunities to infer better names or common abstractions."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

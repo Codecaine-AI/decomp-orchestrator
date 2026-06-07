@@ -1,0 +1,119 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1301",
+  "pr": {
+    "number": 1301,
+    "title": "Match part of ittomato",
+    "url": "https://github.com/doldecomp/melee/pull/1301",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-02-22T10:08:00Z",
+    "merged_at": "2024-02-22T10:10:32Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Partially matched Maxim Tomato item code by replacing stack-variable/M2C-style code with typed SpawnItem construction, adding Maxim Tomato-specific item variable and special-attribute structs, and renaming the tomato heal field used by common healing item logic.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "item-vars",
+      "cleanup"
+    ],
+    "systems": [
+      "item",
+      "common-items",
+      "ittomato"
+    ]
+  },
+  "key_files": [
+    "src/melee/it/items/ittomato.c",
+    "src/melee/it/itCommonItems.h",
+    "src/melee/it/it_26B1.c"
+  ],
+  "what_changed": [
+    "In `itCommonItems.h`, `MaximTomatoVars.xDD4_heal` was renamed to `heal_amount` and expanded with a union containing bitfields `b0` through `b7` plus a raw `flags` view at offset `x4`, and an `x8` integer field.",
+    "Added `MaximTomatoSpecialAttr` with integer fields `x0`, `x4`, `x8`, `xC`, `x10` and float field `x14` for typed access to tomato item special attributes.",
+    "Added a small `itTomatoVars` struct with `x0` and `x4`, though the excerpt does not show how it is used.",
+    "Updated `it_8026B47C` healing-item dispatch so `It_Kind_Tomato` returns `temp_item->xDD4_itemVar.MaximTomato.heal_amount` instead of the old `xDD4_heal` name.",
+    "Changed `it_802841B4` from an M2C-like function taking `s32 arg0` and manually building many stack slots into a typed function taking `Item_GObj* gobj`, `Vec3* pos`, and `s32 arg2`, returning `Item_GObj*`.",
+    "Rewrote tomato spawn setup in `it_802841B4` to use a `SpawnItem spawn` struct with named fields such as `kind`, `prev_pos`, `pos`, `facing_dir`, velocity, parent gobj fields, and `x44_flag.bits.b0` before calling `Item_80268B18(&spawn)`.",
+    "After spawning, `it_802841B4` now uses `GET_ITEM(item_gobj)` and stores tomato-specific state in `MaximTomato.x4.bits.b0` and `MaximTomato.x8` rather than writing through unrelated union aliases and `M2C_BITWISE`.",
+    "Updated `it_802842A4` to type special attributes as `MaximTomatoSpecialAttr*`, zero X/Z velocity as floats, set Y velocity from `sa->x14`, initialize `MaximTomato.heal_amount` from `sa->x0`, clear `MaximTomato.x4.bits.b0`, and reset `MaximTomato.x8`.",
+    "Renamed generic parameters and locals in the touched tomato functions from `arg0`, `temp_r30`, and similar names to `gobj`, `item`, `sa`, `item_gobj`, and `spawn` where evidence is shown."
+  ],
+  "smart_moves": [
+    "Converted raw stack-slot initialization into a named `SpawnItem` aggregate, making the spawn call readable and closer to the engine API.",
+    "Introduced a tomato-specific special-attributes struct so field accesses use typed offsets instead of repeated `M2C_FIELD` casts.",
+    "Preserved access to both bit-level and word-level flag representations by using a union of bitfields and `u32 flags` in `MaximTomatoVars`.",
+    "Separated the spawned-item return value from the source gobj by naming it `item_gobj`, reducing ambiguity in item spawning code.",
+    "Used `GET_ITEM` consistently for item data access instead of direct `user_data` loads in the rewritten excerpt.",
+    "Renamed the heal field to `heal_amount`, improving semantic clarity for common healing-item code."
+  ],
+  "decomp_lessons": [
+    "When M2C output shows many local stack temporaries around an item spawn, check whether the function is constructing a known engine struct such as `SpawnItem`; replacing anonymous stack slots with named fields can unlock matching and readability.",
+    "For item-specific variables inside `xDD4_itemVar`, avoid using unrelated union aliases such as capsule, star, or egg when the item kind is known; define the correct per-item struct and access it directly.",
+    "Special-attribute blobs should be promoted to typed structs once offsets are understood, even if many fields remain named by offset.",
+    "Healing items should expose a semantic heal field name, because common code such as `it_8026B47C` dispatches across Heart Container, Maxim Tomato, food, and other item kinds.",
+    "Bitfield unions are useful when an item variable needs named flag access while retaining a raw integer representation for matching or future unknown flag operations.",
+    "Use float literals like `0.0F` and direct typed float fields when replacing M2C integer/bitwise float artifacts."
+  ],
+  "naming_conventions": [
+    "`MaximTomatoVars.heal_amount` replaces the offset-style `xDD4_heal` for a known semantic value.",
+    "`MaximTomatoSpecialAttr` names an item special-attributes struct after the concrete item and purpose while retaining unknown field offsets like `x0` and `x14`.",
+    "`MaximTomato.x4.bits.b0` is used for a known flag location whose meaning is not yet named; bit names remain generic until semantics are proven.",
+    "Function-local names in the matched code favor engine/domain names: `gobj`, `pos`, `spawn`, `item_gobj`, `item`, and `sa`.",
+    "`Item_GObj*` is preferred over generic `HSD_GObj*` when the function is item-specific and the excerpt supports that typing."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replace manual stack temporaries with `SpawnItem spawn` and assign fields in the order needed by `Item_80268B18`.",
+    "Use `spawn.prev_pos = *pos` followed by targeted field edits such as `spawn.prev_pos.z = 0.0F` and `spawn.pos = spawn.prev_pos` to express vector copies compactly.",
+    "Set chained zero velocities with `spawn.vel.x = spawn.vel.y = spawn.vel.z = 0.0F` where this matches codegen.",
+    "Replace `M2C_FIELD(..., s32*, offset)` with a typed `MaximTomatoSpecialAttr*` when field offsets are understood.",
+    "Replace `M2C_BITWISE(f32, arg2)` and unrelated union member writes with correctly typed integer storage in `MaximTomato.x8`.",
+    "Use bitfield assignment `x44_flag.bits.b0 = true` and `MaximTomato.x4.bits.b0 = false/true` instead of opaque byte masking when the struct layout permits."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1301",
+    "PsiLupan",
+    "ittomato",
+    "Maxim Tomato",
+    "MaximTomatoVars",
+    "MaximTomatoSpecialAttr",
+    "itTomatoVars",
+    "heal_amount",
+    "xDD4_heal",
+    "it_802841B4",
+    "it_802842A4",
+    "it_80284324",
+    "it_8026B47C",
+    "Item_80268B18",
+    "SpawnItem",
+    "GET_ITEM",
+    "Item_GObj",
+    "It_Kind_Tomato",
+    "x44_flag.bits.b0",
+    "x4.bits.b0",
+    "xC4_article_data",
+    "x4_specialAttributes",
+    "itCommonItems.h",
+    "it_26B1.c",
+    "src/melee/it/items/ittomato.c"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching `MaximTomatoVars.x4.bits.b0` or `MaximTomato.x8` to determine the semantic names of these fields.",
+    "Search for later refinements of `MaximTomatoSpecialAttr` fields `x0`, `x4`, `x8`, `xC`, `x10`, and `x14`.",
+    "Check whether `itTomatoVars` gained uses or was renamed in subsequent item-header cleanup.",
+    "Compare other item spawn functions that still manually initialize stack locals before `Item_80268B18` and convert them to `SpawnItem`."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

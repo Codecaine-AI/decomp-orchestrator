@@ -1,0 +1,159 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1657",
+  "pr": {
+    "number": 1657,
+    "title": "lbcardgame matches, split out lbcardnew",
+    "url": "https://github.com/doldecomp/melee/pull/1657",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-30T22:57:03Z",
+    "merged_at": "2025-06-30T23:03:24Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Split the early memory-card support code out of lbcardgame into a new lbcardnew unit and matched a substantial set of lbcardgame/lbcardnew functions. The split moved the 0x80019880-0x8001C600 text range and associated data/bss/sdata/sdata2 ranges to lbcardnew, leaving lbcardgame at 0x8001C600-0x8001D2BC. The PR added lbcardnew.c/.h/.static.h, updated splits/configure/symbols, cleaned lbcardgame headers/static data, and adjusted include users across gm/db/lb/un/sysdolphin. The decomp.dev bot reported +1984 matched bytes and 26 new matches; the listed broken matches were primarily functions changing units from lbcardgame to lbcardnew rather than true code loss.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "object-split",
+      "headers",
+      "static-struct-layout",
+      "build-config"
+    ],
+    "systems": [
+      "lb",
+      "memory-card",
+      "lbcardgame",
+      "lbcardnew",
+      "game-mode",
+      "db",
+      "config"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/lbcardgame.c",
+    "src/melee/lb/lbcardnew.c",
+    "src/melee/lb/lbcardgame.h",
+    "src/melee/lb/lbcardnew.h",
+    "src/melee/lb/lbcardgame.static.h",
+    "src/melee/lb/lbcardnew.static.h",
+    "config/GALE01/splits.txt",
+    "config/GALE01/symbols.txt",
+    "configure.py",
+    "src/melee/gm/gmmain_lib.c",
+    "src/melee/gm/gmmain_lib.h",
+    "src/melee/gm/types.h"
+  ],
+  "what_changed": [
+    "Added new source unit src/melee/lb/lbcardnew.c containing the former early lbcardgame address range starting at 0x80019880, including matched functions lb_80019880, lb_80019894, lb_800198E0, lb_80019900, lb_80019A30, lb_80019A48, lb_80019AAC, lb_8001B6E0, lb_8001C404, lb_8001C5A4, and lb_8001C5BC plus placeholders for still-unmatched intervening functions.",
+    "Added lbcardnew.h and lbcardnew.static.h, moving declarations and static structs lb_804329F0_t and lb_80432A68_t out of lbcardgame headers.",
+    "Reduced lbcardgame.h and lbcardgame.static.h to the post-split lbcardgame range, with a focused lb_80433318_t layout and more precise prototypes for functions such as lb_8001C658, lb_8001C820, lb_8001CAF4, lb_8001CBBC, fn_8001CC30, fn_8001CEC0, and fn_8001CEE4.",
+    "Implemented many lbcardgame functions in the 0x8001C600-0x8001D2BC range, including CARDProbe state handling, save-data timestamp string construction, save/load wrappers using the internal filename string SuperSmashBros0110290334, state transitions, archive loading for LbMcGame./NtMemAc, and GObj/JObj/CObj setup in lb_8001CF18.",
+    "Updated config/GALE01/splits.txt to create a separate lbcardnew.c split with text 0x80019880-0x8001C600, data 0x803BAAE0-0x803BAB60, bss 0x804329F0-0x80433318, sdata 0x804D3800-0x804D3808, and sdata2 0x804D7C80-0x804D7CB0; lbcardgame now begins at 0x8001C600 with later data/bss ranges.",
+    "Added lbcardnew.c as an Object(NonMatching, \"melee/lb/lbcardnew.c\") in configure.py.",
+    "Updated symbols.txt around lb_803BAB9C by shrinking its size from 0x80 to 0x50 and adding lb_803BABEC as an SJIS data symbol.",
+    "Updated include dependencies so files that use old 0x80019880-range card functions include lbcardnew.h; some files include both lbcardgame.h and lbcardnew.h because they use symbols from both sides of the split.",
+    "Changed gmMainLib_8015CD98 from returning void* to int*, and changed gmm_x1868.x1A54 from s32 to int, matching the use in lb_8001CE00 where *gmMainLib_8015CD98() is incremented."
+  ],
+  "smart_moves": [
+    "Separated the source unit at a real object-boundary-like address split rather than keeping unrelated memory-card setup/new-card routines inside lbcardgame, which made both headers and static storage ownership clearer.",
+    "Moved static data structures together with their owning code: lb_804329F0 and lb_80432A68 went to lbcardnew.static.h while lb_80433318 stayed with lbcardgame.",
+    "Kept old function address comments in headers, preserving address-searchability across the split.",
+    "Updated all build/split artifacts alongside the C split, avoiding a common decomp pitfall where a new file exists but the linker/config still treats the old object as one contiguous unit.",
+    "Used more accurate prototypes in headers instead of broad UNK_RET/UNK_PARAMS where evidence from implementations was available, improving downstream matching and type propagation.",
+    "Used #pragma dont_inline around lb_8001CAF4 and a separate static dont_inline_helper to preserve call structure for matching-sensitive code.",
+    "Modeled fixed-size struct layouts with STATIC_ASSERTs and explicit pads, keeping bss/data addresses stable during the split.",
+    "Preserved Japanese save-data text as SJIS-aware data, reflected by the new lb_803BABEC symbol entry."
+  ],
+  "decomp_lessons": [
+    "When a large object contains two logical systems, splitting by contiguous text/data/bss ranges can convert apparent match regressions into relocated matches in the correct unit.",
+    "A source split must update splits.txt, configure.py, headers, static headers, and include users in one patch; otherwise matching and compilation evidence becomes ambiguous.",
+    "After splitting, revisit all public prototypes. Several lbcardgame declarations became concrete return/argument types once implementation context was available.",
+    "Static headers should track the owning translation unit's local bss/data. Moving lb_804329F0_t and lb_80432A68_t to lbcardnew.static.h prevented lbcardgame.static.h from describing storage it no longer owned.",
+    "decomp.dev match reports after object splits need interpretation: the bot listed 9 broken lbcardgame matches, but the same functions appeared as new matches in lbcardnew, indicating relocation rather than lost decompilation.",
+    "Precise pointer return types can matter for clean implementation expression: gmMainLib_8015CD98 returning int* better matched lb_8001CE00's increment operation.",
+    "Small symbol size corrections in symbols.txt can be necessary when a data range is split and a previously oversized local object actually contains separate data such as SJIS strings."
+  ],
+  "naming_conventions": [
+    "New unit name follows the existing lb subsystem file style: lbcardnew.c, lbcardnew.h, and lbcardnew.static.h.",
+    "Address-based function names were retained, e.g. lb_80019880 for lbcardnew and lb_8001C600 for lbcardgame.",
+    "Local callback/helper functions keep fn_ address names when address-derived, e.g. fn_8001CC30, fn_8001CEC0, and fn_8001CEE4.",
+    "Static object symbols retain address-style names such as lb_803BAB60, lb_803BAB74, lb_804329F0, lb_80432A68, and lb_80433318.",
+    "Unknown struct fields continue the x-offset style, e.g. x0, x4, x8, x5C, x60, x64, with comments/STATIC_ASSERTs carrying layout evidence."
+  ],
+  "assembly_or_matching_tactics": [
+    "Object split at exact boundaries: lbcardnew text 0x80019880-0x8001C600 and lbcardgame text 0x8001C600-0x8001D2BC, with corresponding data/bss/sdata/sdata2 ranges adjusted.",
+    "Used #pragma push / #pragma dont_inline on / #pragma pop around lb_8001CAF4 to control inlining and preserve the expected function body/call shape.",
+    "Introduced static dont_inline_helper in lbcardgame.c to keep lb_8001CC84's control flow closer to the target assembly.",
+    "Used explicit casts for ABI-sensitive calls, such as (void**) &lb_803BAB74 and (void**) &lb_80433318.x5C in save/archive wrappers.",
+    "Used fixed constants and literals from target behavior, including SuperSmashBros0110290334, LbMcGame., MemCardIconData, NtMemAc, ScNtcCommon_scene_data, 0xD, 0xB, 0x29, and 0x2D.",
+    "Kept partly matching functions as implemented but not fully matched: decomp.dev reported lb_8001C8BC at 99.30%, lb_8001C658 at 99.12%, lb_8001CC84 at 71.05%, and lbcardnew lb_8001C404 at 90.24%."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided slice.",
+    "decomp.dev bot reported matched code rising to 33.05%, a +0.05% / +1984 byte improvement.",
+    "decomp.dev bot reported 26 new 100% matches, including lbcardgame lb_8001CF18, lb_8001CAF4, lb_8001D21C, lb_8001D164, lb_8001CE00, lb_8001CBBC, lb_8001C820, lb_8001C600, lb_8001CDB4, lb_8001CE78, lb_8001C87C, lb_8001CC4C, fn_8001CEE4, lb_8001D1F4, fn_8001CEC0, fn_8001CC30 and lbcardnew lb_80019900, lb_80019AAC, lb_80019A48, lb_80019894, lb_800198E0, lb_80019A30, lb_8001B6E0, lb_8001C5A4, lb_80019880, lb_8001C5BC.",
+    "decomp.dev bot listed 9 broken lbcardgame matches, but those names correspond to functions moved into the new lbcardnew unit."
+  ],
+  "searchable_terms": [
+    "pr-1657",
+    "lbcardgame",
+    "lbcardnew",
+    "memory card",
+    "CARDProbe",
+    "CARDProbeEx",
+    "SuperSmashBros0110290334",
+    "LbMcGame.",
+    "MemCardIconData",
+    "NtMemAc",
+    "ScNtcCommon_scene_data",
+    "lb_80019880",
+    "lb_80019894",
+    "lb_800198E0",
+    "lb_80019900",
+    "lb_80019A30",
+    "lb_80019A48",
+    "lb_80019AAC",
+    "lb_8001B6E0",
+    "lb_8001C404",
+    "lb_8001C5A4",
+    "lb_8001C5BC",
+    "lb_8001C600",
+    "lb_8001C658",
+    "lb_8001C820",
+    "lb_8001C87C",
+    "lb_8001C8BC",
+    "lb_8001CAF4",
+    "lb_8001CBBC",
+    "lb_8001CC84",
+    "lb_8001CF18",
+    "lb_8001D164",
+    "lb_8001D21C",
+    "lb_804329F0",
+    "lb_80432A68",
+    "lb_80433318",
+    "gmMainLib_8015CD98",
+    "gmm_x1868.x1A54",
+    "dont_inline_helper",
+    "pragma dont_inline",
+    "symbols sjis",
+    "object split"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that finish matching lbcardnew functions between lb_80019BB8 and lb_8001C550.",
+    "Find later PRs that improve lbcardgame lb_8001C8BC, lb_8001C658, or lb_8001CC84 from partial to full match.",
+    "Search for refinements to lb_80432A68_t field names and layout after lbcardnew split.",
+    "Search for additional memory-card file name or icon-data cleanups involving SuperSmashBros0110290334 and MemCardIconData.",
+    "Check whether duplicate includes in gm_1A45.c and gm_1B03.c were cleaned up in a later style-only PR."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

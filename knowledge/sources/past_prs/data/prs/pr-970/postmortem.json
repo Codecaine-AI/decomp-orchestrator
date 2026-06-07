@@ -1,0 +1,136 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-970",
+  "pr": {
+    "number": 970,
+    "title": "ftCaptain match, ftPopo proper splits & matches",
+    "url": "https://github.com/doldecomp/melee/pull/970",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2023-09-20T22:51:16Z",
+    "merged_at": "2023-09-20T23:03:54Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched Captain Falcon ftCa_SpecialLwEndAir_Coll by replacing an inline asm block with a simple C wrapper to ftCa_SpecialLwEnd_Coll, and reorganized Popo/Ice Climbers code into more accurate SpecialN and SpecialS splits. The PR moved SpecialN code out of ftPp_Init.c into a new ftPp_SpecialN.c/.h, added a new ftPp_SpecialS.c with matched helper routines, fixed obvious misnamed SpecialN references that actually belonged to SpecialS, and updated build/includes/data references accordingly.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "code-split",
+      "headers",
+      "naming",
+      "asm-reduction",
+      "build-system"
+    ],
+    "systems": [
+      "fighter",
+      "ftCaptain",
+      "ftPopo",
+      "ftNana",
+      "asm",
+      "obj_files"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c",
+    "src/melee/ft/chara/ftPopo/ftPp_Init.c",
+    "src/melee/ft/chara/ftPopo/ftPp_Init.h",
+    "src/melee/ft/chara/ftPopo/ftPp_SpecialN.c",
+    "src/melee/ft/chara/ftPopo/ftPp_SpecialN.h",
+    "src/melee/ft/chara/ftPopo/ftPp_SpecialS.c",
+    "src/melee/ft/chara/ftPopo/ftPp_SpecialS.h",
+    "src/melee/ft/chara/ftNana/ftNn_Init.c",
+    "asm/melee/ft/chara/ftNn_Init.s",
+    "asm/melee/ft/chara/ftPp_SpecialS.s",
+    "src/melee/ft/ftdata.c",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Replaced the MUST_MATCH inline asm implementation of ftCa_SpecialLwEndAir_Coll with C; the matched C body is just ftCa_SpecialLwEnd_Coll(gobj), with the parameter typed as Fighter_GObj*.",
+    "Created src/melee/ft/chara/ftPopo/ftPp_SpecialN.c and moved Popo neutral special routines out of ftPp_Init.c, including ftPp_SpecialN_Enter, ftPp_SpecialAirN_Enter, Anim/IASA/Phys/Coll functions, and ftPp_SpecialN_8011F500.",
+    "Created ftPp_SpecialN.h and removed the SpecialN declarations from ftPp_Init.h, making the header split match the source split.",
+    "Created src/melee/ft/chara/ftPopo/ftPp_SpecialS.c and added SpecialS helpers including ftPp_SpecialS_8011F68C and ftPp_SpecialS_8011F6FC.",
+    "Updated ftPp_Init_8011F060 to call ftPp_SpecialS_8011F68C instead of the prior ftPp_SpecialN_8011F68C name, reflecting the corrected split/function ownership.",
+    "Updated asm/melee/ft/chara/ftNn_Init.s call labels in SpecialS collision code from ftPp_SpecialN_8011F6FC to ftPp_SpecialS_8011F6FC.",
+    "Removed several sdata2 float/double symbols from asm/melee/ft/chara/ftPp_SpecialS.s after the split/matches made them owned elsewhere or expressible from C.",
+    "Added ftPp_SpecialN.c.o and ftPp_SpecialS.c.o to obj_files.mk so the new C split files participate in the build.",
+    "Updated ftNana init and ftdata includes to pull in ftPp_SpecialN.h alongside the existing Popo headers."
+  ],
+  "smart_moves": [
+    "Recognized that ftCa_SpecialLwEndAir_Coll was behaviorally identical to the existing ground/end collision helper and matched it by delegating instead of duplicating a fragile branch tree.",
+    "Separated Popo SpecialN code from Init rather than continuing to grow ftPp_Init.c, improving split fidelity and making future neutral-special work easier to localize.",
+    "Corrected function ownership by renaming/calling SpecialS-prefixed helpers where the surrounding split and callsites showed they were not SpecialN routines.",
+    "Used header movement as part of the split, not just source movement, so declarations now advertise the same module boundaries as the object split.",
+    "Kept partially unmatched work isolated: ftPp_SpecialN_8011F500 remained inline asm under MWERKS_GEKKO while nearby simpler routines were converted to C."
+  ],
+  "decomp_lessons": [
+    "When two action-state collision callbacks compile to the same behavior, a direct wrapper call can be the cleanest matching solution and avoids preserving duplicated decompiled control flow.",
+    "Bad early names often come from temporary split placement; re-check function names against neighboring callsites and action groups before cementing them in headers.",
+    "Object-file splits should be reflected in obj_files.mk, source layout, and headers together; moving only the C code leaves future matches harder to reason about.",
+    "If a helper is called by SpecialS collision code and reset/init code in a SpecialS context, prefer correcting the prefix to SpecialS rather than keeping a misleading SpecialN address name.",
+    "Small constants such as 0.0f, 1.0f, and -10.0 can sometimes be expressed directly in C after a split, reducing dependence on ad hoc extern sdata labels."
+  ],
+  "naming_conventions": [
+    "Popo neutral-special functions use the ftPp_SpecialN_* prefix and live in ftPp_SpecialN.c/.h.",
+    "Popo side-special functions and helpers use the ftPp_SpecialS_* prefix and live in ftPp_SpecialS.c/.h.",
+    "Address-suffixed names remain acceptable for unknown helpers, but the action prefix should still match the owning split, e.g. ftPp_SpecialS_8011F6FC rather than ftPp_SpecialN_8011F6FC.",
+    "Header guards in the new ftPp_SpecialN.h use _FTPP_SPECIALN_, while existing ftPp_SpecialS.h retained its older GALE01-style guard.",
+    "The PR provides evidence that obvious function-name corrections based on splits were accepted without review discussion."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed an inline asm Captain Falcon collision callback by proving the air-end variant can call the existing ftCa_SpecialLwEnd_Coll implementation.",
+    "Converted several Popo SpecialN routines to C while leaving the larger ftPp_SpecialN_8011F500 function as MWERKS_GEKKO inline asm, allowing incremental progress.",
+    "Used explicit unused-stack padding under MUST_MATCH in ftPp_SpecialAirN_Enter and ftPp_SpecialAirN_Coll to preserve stack layout where needed.",
+    "Adjusted asm labels/calls in ftNn_Init.s to match corrected symbol names without changing instruction encodings.",
+    "Reduced asm-owned sdata symbols in ftPp_SpecialS.s after C code began using literals or relocated constants."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review records were present in the provided PR slice.",
+    "The PR body states the intent directly: match ftCa_SpecialLwEndAir_Coll, fix Popo splits and obviously incorrect function names, and match several Popo functions/data."
+  ],
+  "searchable_terms": [
+    "pr-970",
+    "PsiLupan",
+    "ftCaptain",
+    "ftCa_SpecialLwEndAir_Coll",
+    "ftCa_SpecialLwEnd_Coll",
+    "ftPopo",
+    "ftPp_Init",
+    "ftPp_SpecialN",
+    "ftPp_SpecialS",
+    "ftPp_SpecialN_8011F500",
+    "ftPp_SpecialS_8011F68C",
+    "ftPp_SpecialS_8011F6FC",
+    "ftPp_SpecialN_8011F6FC",
+    "ftNana",
+    "ftNn_Init",
+    "Ice Climbers",
+    "obj_files.mk",
+    "MUST_MATCH",
+    "MWERKS_GEKKO",
+    "Fighter_GObj",
+    "HSD_GObj",
+    "cmd_vars",
+    "x222C",
+    "x224C",
+    "x2250",
+    "sdata2",
+    "split fix",
+    "asm reduction"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully decompile ftPp_SpecialN_8011F500 after this split.",
+    "Check whether ftPp_SpecialS_8011F720 and ftPp_SpecialS_8011F964 were subsequently matched or renamed.",
+    "Look for other Falcon collision callbacks that can be matched by delegating to an existing ground/air shared helper.",
+    "Audit Popo/Nana shared asm labels for remaining SpecialN vs SpecialS prefix mistakes."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

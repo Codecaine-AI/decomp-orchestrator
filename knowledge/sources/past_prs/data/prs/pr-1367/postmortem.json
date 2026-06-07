@@ -1,0 +1,135 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1367",
+  "pr": {
+    "number": 1367,
+    "title": "Fully match hash",
+    "url": "https://github.com/doldecomp/melee/pull/1367",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-03-01T08:50:39Z",
+    "merged_at": "2024-03-01T08:55:24Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched sysdolphin/baselib/hash.c fully enough to remove the old hash.s assembly object from the build. The PR adds a C implementation of HashSearchEntry, adjusts HSD_HashSearch signatures and hash class-info typing, updates class.c with an explicit cast at the callsite, switches configure.py and obj_files.mk from asm/hash.s to src/hash.c, and updates symbols for newly emitted local strings and neighboring data labels.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "build-config",
+      "symbols"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "hash",
+      "class",
+      "config",
+      "build"
+    ]
+  },
+  "key_files": [
+    "asm/sysdolphin/baselib/hash.s",
+    "src/sysdolphin/baselib/hash.c",
+    "src/sysdolphin/baselib/hash.h",
+    "src/sysdolphin/baselib/class.c",
+    "configure.py",
+    "obj_files.mk",
+    "config/GALE01/symbols.txt"
+  ],
+  "what_changed": [
+    "Deleted asm/sysdolphin/baselib/hash.s, removing the handwritten assembly for HashSearchEntry and HSD_HashSearch.",
+    "Added a C implementation of HashSearchEntry in src/sysdolphin/baselib/hash.c that searches a hash table bucket and optionally writes back a pointer-related result through the ptr parameter.",
+    "Changed HSD_HashSearch to use parameter name hash instead of hashp, compute idx through hash->parent.class_info->getidx(hash), assert idx < hash->table_size at line 113, call HashSearchEntry, set *success to !!entry, and return entry->value when found.",
+    "Changed HSD_HashSearch return type from HSD_ClassInfo* to HSD_HashClassInfo* in hash.c and hash.h.",
+    "Updated hash.h so HSD_HashClass::class_info points to struct _HSD_HashClassInfo instead of struct _HSD_HashInfo, renamed the struct tag to _HSD_HashClassInfo, and added a keycheck callback member with signature bool (*keycheck)(HSD_Hash* hash, void* table_key, void* key).",
+    "Updated hsdSearchClassInfo in class.c to cast HSD_HashSearch(current_hash, (void*) class_name, 0) back to HSD_ClassInfo*.",
+    "Marked sysdolphin/baselib/hash.c as Matching in configure.py.",
+    "Changed obj_files.mk to build src/sysdolphin/baselib/hash.c.o instead of asm/sysdolphin/baselib/hash.s.o.",
+    "Updated config/GALE01/symbols.txt for hash.c local assert strings at 0x80407720 and 0x804D5FC0, and also corrected nearby displayfunc data/sdata labels into zOne, yOne, zTwo, and local string labels."
+  ],
+  "smart_moves": [
+    "The PR did the full decomp handoff cleanly: delete the asm file, switch obj_files.mk to the C object, and mark the source as Matching in configure.py in the same change.",
+    "HashSearchEntry was reconstructed with two loop forms matching the assembly behavior: a pointer-to-pointer traversal when ptr is non-NULL, and a direct HSD_HashEntry* traversal when ptr is NULL.",
+    "The implementation preserves the assembly-observed virtual callback access pattern through hash->parent.class_info->getidx and hash->parent.class_info->keycheck, which required adding keycheck to HSD_HashClassInfo in the header.",
+    "The HSD_ASSERT source strings were allowed to become normal local compiler-emitted symbols rather than keeping artificial global HSD_Hash_80407720 and HSD_Hash_804D5FC0 names.",
+    "The callsite in class.c was adjusted with an explicit cast instead of forcing HSD_HashSearch to keep the previous HSD_ClassInfo* return type, suggesting the local hash API typing was corrected for matching even though callers may still expect class-info-like values."
+  ],
+  "decomp_lessons": [
+    "When matching a baselib object, update the build graph and matching status together: obj_files.mk must stop referencing the asm object, and configure.py must classify the C source as Matching.",
+    "Header accuracy can be the key to matching source: this PR needed the HSD_HashClassInfo struct tag/name, class_info pointer type, and keycheck function pointer to match how the assembly called through offsets 0x3c and 0x40.",
+    "Pointer-to-pointer list traversal can be necessary for matching functions that optionally return a link location rather than just a found node; HashSearchEntry’s ptr path mirrors this pattern.",
+    "Symbol table cleanup is part of finishing a match: once data comes from C, artificial global labels for assert strings may need to become local @NN labels with correct sizes and scopes.",
+    "If an API’s decompiled return type is refined, existing callers may need explicit casts to preserve source intent and compile cleanly."
+  ],
+  "naming_conventions": [
+    "Kept exported baselib function names in HSD style: HashSearchEntry and HSD_HashSearch.",
+    "Used HSD_HashClassInfo as the canonical typedef and struct tag base instead of the older _HSD_HashInfo tag.",
+    "Used lower-case local variable names hash, key, success, entry, and idx in hash.c.",
+    "Symbols for compiler-generated strings were represented as local @NN entries in config/GALE01/symbols.txt rather than global HSD_Hash_8040xxxx names.",
+    "Nearby display function constants were renamed to semantic names zOne, yOne, and zTwo where the symbol update indicated known data."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced the 151-line assembly implementation of hash.s with C and verified it was suitable to build as src/sysdolphin/baselib/hash.c.o.",
+    "Used `if (hash->table[idx] == NULL) return NULL;` before the loop, matching the early null-bucket return visible in the deleted assembly.",
+    "Used `!!entry` to generate the boolean success value from the found entry, corresponding to the assembly’s nonzero-to-1 conversion before storing through success.",
+    "Preserved assertion line number 113 for `idx < hash->table_size`, matching the deleted assembly’s `li r4, 0x71` before `__assert`.",
+    "Split ptr and non-ptr paths in HashSearchEntry rather than trying to share one loop, likely because the generated code shape needed to match the original control flow.",
+    "Updated symbols for assert strings `idx < hash->table_size` and `hash.c` to local labels, aligning emitted C data with the final binary layout."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR context, so there is no direct reviewer feedback to extract."
+  ],
+  "searchable_terms": [
+    "pr-1367",
+    "Fully match hash",
+    "PsiLupan",
+    "HashSearchEntry",
+    "HSD_HashSearch",
+    "HSD_Hash",
+    "HSD_HashEntry",
+    "HSD_HashClassInfo",
+    "HSD_HashClass",
+    "HSD_ClassInfo",
+    "keycheck",
+    "getidx",
+    "table_size",
+    "hash->table",
+    "current_hash",
+    "hsdSearchClassInfo",
+    "hsdForgetClassLibrary",
+    "HSD_ASSERT",
+    "idx < hash->table_size",
+    "hash.c",
+    "asm/sysdolphin/baselib/hash.s",
+    "src/sysdolphin/baselib/hash.c",
+    "src/sysdolphin/baselib/hash.h",
+    "configure.py",
+    "obj_files.mk",
+    "config/GALE01/symbols.txt",
+    "Matching",
+    "NonMatching",
+    "zOne",
+    "yOne",
+    "zTwo",
+    "HSD_Hash_80407720",
+    "HSD_Hash_804D5FC0"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify HSD_HashSearch return type or HSD_HashClassInfo to see whether the HSD_HashClassInfo* return was retained.",
+    "Search for other HashSearchEntry callers with a non-NULL ptr argument to understand the intended pointer-to-pointer writeback semantics.",
+    "Audit neighboring displayfunc symbol changes around zOne, yOne, and zTwo to see if they were incidental symbol cleanup or required by hash.c data layout.",
+    "Look for additional sysdolphin/baselib objects converted from asm to C using the same configure.py and obj_files.mk handoff pattern."
+  ],
+  "confidence": 0.87,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

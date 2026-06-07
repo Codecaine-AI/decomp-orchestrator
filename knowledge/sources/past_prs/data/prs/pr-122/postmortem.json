@@ -1,0 +1,148 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-122",
+  "pr": {
+    "number": 122,
+    "title": "Match Melee's version of __start.c to fix splitting issue",
+    "url": "https://github.com/doldecomp/melee/pull/122",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-11-22T19:26:17Z",
+    "merged_at": "2021-11-22T21:09:03Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Added a matched C/inline-asm implementation of Melee's startup code under src/dolphin/os/init, removed the old __start body from asm/init.s, adjusted init object ordering, renamed several early runtime symbols to SDK-like names, and simplified/fixed elf2dol section/BSS handling. The PR title says this was to fix a splitting issue; the diff shows the fix centered on making __start compile as its own object and making DOL section sizes/BSS calculation derive from program headers instead of Makefile-supplied sdata/sbss indices.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "fix",
+      "decomp-matching",
+      "runtime-startup",
+      "headers",
+      "tooling",
+      "symbol-naming",
+      "build-system"
+    ],
+    "systems": [
+      "dolphin/os/init",
+      "asm/init",
+      "tools/elf2dol",
+      "Makefile",
+      "obj_files",
+      "MSL",
+      "MetroTRK",
+      "Dolphin SDK",
+      "SysDolphin",
+      "melee asm labels"
+    ]
+  },
+  "key_files": [
+    "src/dolphin/os/init/__start.c",
+    "src/dolphin/os/init/__start.h",
+    "asm/init.s",
+    "tools/elf2dol.c",
+    "Makefile",
+    "obj_files.mk",
+    "include/functions.h",
+    "asm/bss.s",
+    "asm/extab.s",
+    "asm/extabindex.s"
+  ],
+  "what_changed": [
+    "Created src/dolphin/os/init/__start.c with __check_pad3, weak inline-asm __start, __init_registers, __init_data, __init_hardware, and __flush_cache in the .init section.",
+    "Created src/dolphin/os/init/__start.h with startup constants, fixed-address Pad3Button declaration, externs for OS/DB/runtime routines, and __rom_copy_info/__bss_init_info structs.",
+    "Removed the __start and related startup routines from asm/init.s while keeping early .init routines such as memcpy and TRK_memset there.",
+    "Added $(BUILD_DIR)/src/dolphin/os/init/__start.o to INIT_O_FILES in obj_files.mk after asm/init.o.",
+    "Extended Makefile includes with src/dolphin/os/init/ and changed the elf2dol invocation from passing sdata/sbss program-header indices and target platform to only passing input ELF and output DOL.",
+    "Renamed func_800031F4 to memcpy and func_80003268 to TRK_memset in asm/init.s and propagated callsite names across many asm files.",
+    "Renamed func_8034844C to OSResetSystem and updated callsites.",
+    "Adjusted asm data padding/layout fallout, including deleted extra NULL/.4byte entries in abort_exit.s, __ppc_eabi_init.s, extab.s, extabindex.s, and changed a bss skip size.",
+    "Reworked tools/elf2dol.c: removed special sdata/sbss size tracking and platform argument, fixed swaf16 typo to swap16, made add_bss compute BSS as first-BSS-start through last-BSS-end, and wrote DOL headers with aligned text/data section sizes plus zero padding."
+  ],
+  "smart_moves": [
+    "Moved __start into C with targeted inline assembly instead of leaving the entire startup sequence in raw asm, which makes the startup flow more readable while preserving exact register/bootstrap behavior.",
+    "Kept critical low-level routines explicitly in the .init section via pragmas and __declspec(section \".init\"), reducing the risk that the compiler/linker place startup helpers into normal text.",
+    "Matched SDK/runtime symbol names such as memcpy, TRK_memset, and OSResetSystem, which immediately made dozens of anonymous branch targets searchable and semantically useful.",
+    "Removed Makefile-level knowledge of sdata/sbss program-header indices from elf2dol; deriving BSS range from program headers is less brittle when object splitting changes section layout.",
+    "Aligned DOL header text/data sizes and explicitly zero-padded segment output, a practical tooling fix for section-size drift caused by splitting/matching changes.",
+    "Added __start.o to the init object list rather than replacing asm/init.o wholesale, preserving existing init routines while isolating the newly matched startup source."
+  ],
+  "decomp_lessons": [
+    "For startup code, a C file can still match when the irreducible parts are written as inline asm and forced into the correct section.",
+    "When splitting new objects changes program-header ordering or section boundaries, build tools should calculate layout from ELF metadata instead of relying on hard-coded indices supplied by the Makefile.",
+    "Renaming known SDK/runtime functions early pays off across the entire asm tree because branch comments and future decompilation targets become much clearer.",
+    "Startup object ordering matters: adding a new .init object may require preserving existing asm/init.o and appending the compiled startup object in the init object list.",
+    "Matched startup work can expose padding inaccuracies in extab/extabindex/init arrays/BSS; be ready to remove or resize placeholder padding after a source object starts producing real bytes.",
+    "Fixed-address hardware/boot values can be represented in headers with named address constants, but evidence here is limited to this PR's style rather than a reviewed convention."
+  ],
+  "naming_conventions": [
+    "Use SDK/runtime names for identified low-level functions: func_800031F4 -> memcpy, func_80003268 -> TRK_memset, func_8034844C -> OSResetSystem.",
+    "Use double-underscore names for runtime startup helpers: __start, __check_pad3, __init_registers, __init_data, __init_hardware, __flush_cache.",
+    "Use uppercase address macros for fixed boot/runtime addresses, e.g. PAD3_BUTTON_ADDR, EXCEPTIONMASK_ADDR, BOOTINFO2_ADDR, ARENAHI_ADDR, DVD_DEVICECODE_ADDR.",
+    "Use struct names matching CodeWarrior/runtime startup metadata: __rom_copy_info and __bss_init_info.",
+    "Keep known OS routine names as externs rather than anonymous func_* labels when the SDK identity is clear, e.g. DBInit, OSInit, OSResetSystem, __OSCacheInit, __OSPSInit."
+  ],
+  "assembly_or_matching_tactics": [
+    "Declared __start as __declspec(weak) asm void with nofralloc and explicit branches/register setup to reproduce the boot sequence exactly.",
+    "Used inline asm labels inside __start for argument parsing and flow control such as _goto_main, _no_args, _end_of_parseargs, _check_pad3, and _goto_end.",
+    "Implemented __init_registers in asm to set r1, r2, and r13 from _stack_addr, _SDA2_BASE_, and _SDA_BASE_.",
+    "Kept __flush_cache in asm with dcbst/sync/icbi/isync loop behavior, avoiding compiler-generated cache-management differences.",
+    "Used small C helpers __copy_rom_section and __init_bss_section around memcpy, memset, and __flush_cache while iterating _rom_copy_info and _bss_init_info sentinel arrays.",
+    "Used __declspec(section \".init\") extern declarations and #pragma section code_type \".init\" to keep startup code and metadata in the intended section.",
+    "Adjusted elf2dol to align text/data sizes with DOL_ALIGN in the written header and zero-fill any padding after copying segment bytes."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR context, so no human review feedback can be extracted."
+  ],
+  "searchable_terms": [
+    "pr-122",
+    "__start.c",
+    "__start.h",
+    "__start",
+    "__check_pad3",
+    "__init_registers",
+    "__init_data",
+    "__init_hardware",
+    "__flush_cache",
+    "Pad3Button",
+    "PAD3_BUTTON_ADDR",
+    "BOOTINFO2_ADDR",
+    "ARENAHI_ADDR",
+    "DVD_DEVICECODE_ADDR",
+    "DBInit",
+    "OSInit",
+    "OSResetSystem",
+    "InitMetroTRK",
+    "memcpy",
+    "TRK_memset",
+    "__rom_copy_info",
+    "__bss_init_info",
+    "elf2dol",
+    "add_bss",
+    "DOL_ALIGN",
+    "fpad",
+    "swap16",
+    "sdata_pdhr",
+    "sbss_pdhr",
+    "splitting issue",
+    ".init section",
+    "INIT_O_FILES",
+    "asm/init.s"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that modify src/dolphin/os/init/__start.c for improved matching or naming cleanup.",
+    "Search for later elf2dol changes around BSS calculation, DOL_ALIGN, fpad, or program-header parsing to see whether this fix was revised.",
+    "Check whether Pad3Button fixed-address syntax and __declspec(section \".init\") usage became a recurring convention in Dolphin OS startup decompilation.",
+    "Look for PRs that further decompile memcpy, TRK_memset, OSResetSystem, DBInit, or OSInit from asm into C.",
+    "Investigate build history around object splitting and .init section ordering after __start.o was introduced."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

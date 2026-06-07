@@ -1,0 +1,100 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-177",
+  "pr": {
+    "number": 177,
+    "title": "Match HSD_IDRemoveByIDFromTable",
+    "url": "https://github.com/doldecomp/melee/pull/177",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-11T18:31:39Z",
+    "merged_at": "2021-12-11T18:31:45Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Replaced the handwritten assembly implementation of HSD_IDRemoveByIDFromTable in src/sysdolphin/baselib/id.c with matching C. The function removes an IDEntry from an HSD_IDTable bucket chain, falls back to default_table when the table argument is NULL, unlinks either the head or an interior node, frees the removed entry through HSD_ObjFree using hsd_iddata, and returns after the first match.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "baselib"
+    ],
+    "systems": [
+      "src/sysdolphin/baselib",
+      "HSD ID table"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/id.c"
+  ],
+  "what_changed": [
+    "Removed the asm body for HSD_IDRemoveByIDFromTable.",
+    "Added a C implementation of HSD_IDRemoveByIDFromTable.",
+    "Added an inline helper IDEntryFree(IDEntry* entry) that calls HSD_ObjFree(&hsd_iddata, entry).",
+    "Preserved the NULL table fallback behavior by assigning table = &default_table.",
+    "Preserved hash-bucket traversal using table->table[hash(id)].",
+    "Handled both linked-list unlink cases: updating prev->next for non-head entries and updating table->table[hash(id)] for head entries.",
+    "Stops after freeing the first matching entry."
+  ],
+  "smart_moves": [
+    "Factored the free call into an inline IDEntryFree helper, matching the original HSD_ObjFree(&hsd_iddata, entry) call while keeping the removal logic readable.",
+    "Used explicit prev and entry pointers to mirror the original linked-list traversal and make head-vs-non-head unlink behavior clear.",
+    "Kept the hash(id) expression in the bucket access, preserving the compiler's modulo/hash codegen behavior seen in the removed assembly.",
+    "Placed the matched C under the existing #pragma peephole on region, which likely mattered for reproducing the original instruction selection."
+  ],
+  "decomp_lessons": [
+    "For hash-table removal functions, model the assembly as ordinary chained-bucket traversal with a prev pointer rather than trying to preserve label structure.",
+    "When an asm function repeatedly computes or uses a bucket derived from an ID, a named hash(id) helper can express the operation cleanly and still match.",
+    "Small inline wrappers around allocator/free APIs can help produce the desired call shape while documenting the object pool being used.",
+    "Default global table fallback is part of HSD ID table API behavior and should be preserved in matched C implementations."
+  ],
+  "naming_conventions": [
+    "Uses HSD_ prefix for public baselib API function HSD_IDRemoveByIDFromTable.",
+    "Uses IDEntry as the internal linked-list node type.",
+    "Uses IDEntryFree as an internal helper name for freeing an IDEntry through hsd_iddata.",
+    "Uses default_table and hsd_iddata globals already present in the file.",
+    "Local variables are simple role names: entry and prev."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted a nofralloc asm function into structured C while preserving the same control flow semantics.",
+    "The original assembly's magic multiply sequence corresponds to hash(id), used as table->table[hash(id)].",
+    "The branch that checked whether the previous pointer was NULL maps to the two unlink cases: update the bucket head or update prev->next.",
+    "The original HSD_ObjFree call with hsd_iddata is represented by IDEntryFree(entry).",
+    "Use of #pragma peephole on is retained immediately before this matched C region."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-177",
+    "PsiLupan",
+    "HSD_IDRemoveByIDFromTable",
+    "HSD_IDInsertToTable",
+    "HSD_IDGetDataFromTable",
+    "IDEntryFree",
+    "IDEntry",
+    "HSD_IDTable",
+    "hash(id)",
+    "default_table",
+    "hsd_iddata",
+    "HSD_ObjFree",
+    "src/sysdolphin/baselib/id.c",
+    "baselib id.c",
+    "asm-to-c",
+    "linked list removal",
+    "hash table bucket",
+    "peephole"
+  ],
+  "follow_up_queries": [
+    "Find other HSD ID table functions in src/sysdolphin/baselib/id.c that can reuse the hash(id) and default_table patterns.",
+    "Search for IDEntryFree or similar HSD_ObjFree(&hsd_iddata, entry) wrappers in later PRs.",
+    "Compare HSD_IDRemoveByIDFromTable with HSD_IDGetDataFromTable and HSD_IDInsertToTable for shared table traversal conventions."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

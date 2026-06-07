@@ -1,0 +1,121 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-33",
+  "pr": {
+    "number": 33,
+    "title": "Preprocess lcf and start purging lcf pointers",
+    "url": "https://github.com/doldecomp/melee/pull/33",
+    "state": "MERGED",
+    "author": "RevoSucks",
+    "created_at": "2020-08-03T01:11:04Z",
+    "merged_at": "2020-08-03T01:11:18Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Made the linker command file preprocessable and began replacing hard-coded LCF section addresses with derived segment symbols/macros. The Makefile now generates build/ldscript.lcf via cpp, uses that generated script for linking, adds a default/all target, enables gcc-style MWCC diagnostics, runs elf2dol more verbosely, and simplifies clean to remove the build directory. The linker script now defines BEGIN_SEG/END_SEG macros, chains most section starts from prior segment ends, adds temporary hacks for sdata/sdata2 positioning, and computes _SDA_BASE_/_SDA2_BASE_ from linker-derived positions instead of fixed literal addresses. A matching-support symbol _SDA_BASE_START was added in asm/sdata2.s, and newline-only cleanup occurred in include/global.h and asm/bss.s.",
+  "change_classification": {
+    "primary_type": "build_linker_script_preprocessing",
+    "categories": [
+      "headers",
+      "build_system",
+      "linker_script",
+      "section_layout",
+      "address_cleanup"
+    ],
+    "systems": [
+      "Makefile",
+      "ldscript.lcf",
+      "asm",
+      "include"
+    ]
+  },
+  "key_files": [
+    "Makefile",
+    "ldscript.lcf",
+    "asm/sdata2.s",
+    "asm/bss.s",
+    "include/global.h"
+  ],
+  "what_changed": [
+    "Changed LDSCRIPT from the source ldscript.lcf to $(BUILD_DIR)/ldscript.lcf so linking consumes a generated/preprocessed linker script.",
+    "Added CPP := cpp -P and a Makefile rule that preprocesses ldscript.lcf into the build directory with dependency output via -MMD -MP -MT and -MF.",
+    "Added default: all and all: $(DOL) targets, making the DOL build the explicit default path.",
+    "Added -msgstyle gcc to CFLAGS, likely to produce GCC-style diagnostics from MWCC.",
+    "Changed elf2dol invocation from $(ELF2DOL) $< $@ to $(ELF2DOL) -v -v $< $@ for more verbose conversion output.",
+    "Changed clean from deleting individual outputs to recursively removing build, then cleaning tools.",
+    "Reworked ldscript.lcf to use preprocessor macros BEGIN_SEG(name, addr) and END_SEG(name) for defining _<segment>SegmentStart and _<segment>SegmentEnd symbols around sections.",
+    "Replaced many fixed BIND addresses in ldscript.lcf with chained segment positioning, e.g. text begins at _extabindex_SegmentEnd, ctors at _textSegmentEnd, dtors at _ctorsSegmentEnd, rodata at _dtorsSegmentEnd, data at _rodataSegmentEnd, and bss at _dataSegmentEnd.",
+    "Kept the init section special-cased with ADDR_START 0x80003100 because both the start symbol and BIND address need that value.",
+    "Moved extab_ and extabindex_ earlier in the script and generated their positions from preceding segment ends, while preserving TODO comments that their section names should become extab and extabindex.",
+    "Added explicit comments documenting temporary hacks for sdata and sdata2 placement because sbss is not recognized by elf2dol and alignment was not working as desired.",
+    "Changed _SDA_BASE_ and _SDA2_BASE_ from fixed literals to expressions based on _sdata2SegmentStartHack and _sdata2SegmentEnd.",
+    "Added global label _SDA_BASE_START at lbl_804DB6A0 in asm/sdata2.s.",
+    "Removed or fixed missing trailing-newline issues in asm/bss.s and include/global.h."
+  ],
+  "smart_moves": [
+    "Preprocessing ldscript.lcf lets the project introduce macros and symbolic layout formulas without manually duplicating section-boundary boilerplate.",
+    "Generating the linker script under $(BUILD_DIR) keeps the source LCF as the canonical template while making derived output disposable via clean.",
+    "Using BEGIN_SEG/END_SEG creates consistent start/end symbols for sections, which reduces reliance on brittle hard-coded addresses and supports future linker-script maintenance.",
+    "Chaining section placement from prior segment ends is a concrete step toward purging raw LCF pointers while preserving deterministic section order.",
+    "The PR documents known ugly hacks directly in ldscript.lcf, especially around sbss, sdata, sdata2, elf2dol, and alignment, which helps future contributors avoid mistaking these formulas for final clean solutions.",
+    "Adding _SDA_BASE_START as an assembly-global label at the existing lbl_804DB6A0 location provides a named anchor that can be reused by linker expressions or future cleanup."
+  ],
+  "decomp_lessons": [
+    "For linker-script cleanup, prefer deriving segment addresses from previous segment end symbols where possible instead of pinning every section to a magic address.",
+    "When an LCF needs macros, preprocess it in the build directory rather than requiring the linker to understand preprocessor syntax directly.",
+    "If matching requires temporary layout hacks, name them conspicuously, keep them near the affected sections, and explain the tool limitation or unresolved alignment issue.",
+    "Small-data base symbols are especially sensitive: changing _SDA_BASE_ and _SDA2_BASE_ should be tied to concrete section anchors and verified by the final DOL SHA1.",
+    "Verbose conversion/linking tools can be useful during layout refactors because failures may come from DOL conversion, section binding, or linker script preprocessing rather than C/ASM compilation."
+  ],
+  "naming_conventions": [
+    "Segment-boundary linker symbols use the pattern _<name>SegmentStart and _<name>SegmentEnd, such as _initSegmentStart, _textSegmentEnd, _dataSegmentEnd, and _sdata2SegmentEnd.",
+    "The LCF macro names are uppercase with underscores: BEGIN_SEG, END_SEG, and ADDR_START.",
+    "Temporary linker-script workaround symbols are explicitly marked with Hack suffixes, e.g. _sdataSegmentStartHack and _sdata2SegmentStartHack.",
+    "The small-data anchor added in assembly uses the conventional global name _SDA_BASE_START and is colocated with existing lbl_804DB6A0."
+  ],
+  "assembly_or_matching_tactics": [
+    "Added _SDA_BASE_START as an alternate global label at the existing sdata2 location lbl_804DB6A0, allowing symbolic references without moving bytes.",
+    "Computed _SDA_BASE_ as _sdata2SegmentStartHack + 0x3CC0 and _SDA2_BASE_ as _sdata2SegmentEnd + 0xDE0, reducing direct dependence on absolute addresses while maintaining expected small-data base values.",
+    "Used linker-script section chaining to preserve layout while making address relationships explicit.",
+    "Retained a manual ADDR_START 0x80003100 for init because the diff notes both bind and start need to use it.",
+    "Preserved matching verification through the existing SHA1 check after elf2dol."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "preprocess lcf",
+    "purge lcf pointers",
+    "ldscript.lcf",
+    "Makefile LDSCRIPT build ldscript",
+    "cpp -P linker script",
+    "BEGIN_SEG",
+    "END_SEG",
+    "ADDR_START",
+    "_SDA_BASE_",
+    "_SDA2_BASE_",
+    "_SDA_BASE_START",
+    "sdata2",
+    "sbss",
+    "sdataSegmentStartHack",
+    "sdata2SegmentStartHack",
+    "elf2dol",
+    "BIND",
+    "SegmentStart",
+    "SegmentEnd",
+    "MWCC msgstyle gcc",
+    "RevoSucks"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that remove _sdataSegmentStartHack or _sdata2SegmentStartHack from ldscript.lcf.",
+    "Find later PRs that rename extab_ and extabindex_ to extab and extabindex as noted by TODO comments.",
+    "Search for subsequent changes to _SDA_BASE_, _SDA2_BASE_, and _SDA_BASE_START to see how small-data base handling stabilized.",
+    "Search for build-system changes around preprocessing ldscript.lcf and dependency includes for generated .d files."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

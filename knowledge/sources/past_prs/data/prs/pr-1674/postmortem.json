@@ -1,0 +1,142 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1674",
+  "pr": {
+    "number": 1674,
+    "title": "Most of ftSk_SpecialLw matching",
+    "url": "https://github.com/doldecomp/melee/pull/1674",
+    "state": "MERGED",
+    "author": "Gelatart",
+    "created_at": "2025-07-10T05:51:48Z",
+    "merged_at": "2025-07-11T01:16:02Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched most of Sheik's ftSk_SpecialLw transformation-related code by replacing several asm stubs/placeholders with C implementations, adding a missing Sheik attribute field, and tightening Fighter_ChangeMotionState float parameter types from float to f32. The PR also resolved callback prototype review feedback: fn_801140B0 is assigned to Fighter.accessory4_cb, so it must take an HSD_GObj* argument even when unused.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "fighter-action-state",
+      "headers",
+      "struct-layout",
+      "prototype-fix"
+    ],
+    "systems": [
+      "fighter",
+      "ftSeak",
+      "Sheik",
+      "SpecialLw",
+      "motion-state"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c",
+    "src/melee/ft/chara/ftSeak/ftSk_SpecialLw.h",
+    "src/melee/ft/chara/ftSeak/types.h",
+    "src/melee/ft/fighter.c",
+    "src/melee/ft/fighter.h"
+  ],
+  "what_changed": [
+    "Added C definitions for fn_80114034 and fn_801140B0 in ftSk_SpecialLw.c, both taking HSD_GObj*.",
+    "Implemented ftSk_SpecialLw_8011444C and ftSk_SpecialLw_801144B8 as ground/air transition helpers that call ftCommon_8007D5D4 or ftCommon_8007D7FC, then Fighter_ChangeMotionState with motion IDs 0x16B or 0x169 and assign fp->accessory4_cb = fn_80114034.",
+    "Implemented ftSk_SpecialLw_80114680 and ftSk_SpecialLw_801146EC similarly, using motion IDs 0x16C and 0x16A and assigning fp->accessory4_cb = fn_801140B0.",
+    "Implemented ftSk_SpecialLw_80114758, labelled by the nearby comment as AS_SheikFinishTransformation, choosing motion state 0x16A or 0x16C based on fp->ground_or_air and starting animation from attributes->x70.",
+    "Changed ftSk_Init_804D96A4 and ftSk_Init_804D96A8 constants from float/double spellings to f32 constants, including making 0.0078125 a float constant.",
+    "Added a prototype for fn_801140B0(HSD_GObj* gobj) to ftSk_SpecialLw.h.",
+    "Replaced a 4-byte filler in ftSeakAttributes with f32 x70, used by ftSk_SpecialLw_80114758 as the anim_start argument.",
+    "Changed Fighter_ChangeMotionState parameter types for anim_start, anim_speed, and anim_blend from float to f32 in both fighter.c and fighter.h."
+  ],
+  "smart_moves": [
+    "Used the existing ftCommon ground/air conversion helpers before changing motion state, preserving the expected transition pattern for grounded versus airborne Sheik states.",
+    "Recovered a real ftSeakAttributes field, x70, from a former filler slot only when a matched function needed to read it as a float animation-start value.",
+    "Kept callback assignments explicit through fp->accessory4_cb, which helped identify the correct prototype for fn_801140B0.",
+    "Standardized float-like API types to f32 in Fighter_ChangeMotionState, matching the surrounding decomp style and making callsites with f32 constants less ambiguous.",
+    "Used empty C function bodies for no-op callbacks rather than leaving asm marker comments, increasing matched C coverage while preserving behavior."
+  ],
+  "decomp_lessons": [
+    "When a function is assigned into a callback field such as accessory4_cb, infer its signature from the callback field usage, not from whether the function body uses the parameter.",
+    "Do not remove an HSD_GObj* argument merely because a callback body is empty; unused callback arguments may still be required for ABI and function pointer compatibility.",
+    "Small float constants can affect matching: using f32 and an f-suffixed literal can avoid unintended double constants.",
+    "Former struct filler should be promoted to a typed field when a matched function demonstrates a concrete access pattern, as with ftSeakAttributes.x70.",
+    "Motion-state helper matches often depend on exact argument ordering: gobj, motion ID, flags, current or attribute animation frame, animation speed, blend, and trailing object pointer.",
+    "Ground/air branch logic can expose paired motion IDs; in this PR, ftSk_SpecialLw_80114758 chooses between 0x16A and 0x16C based on fp->ground_or_air."
+  ],
+  "naming_conventions": [
+    "Unidentified functions remain address-style names such as fn_80114034, fn_801140B0, ftSk_SpecialLw_8011444C, ftSk_SpecialLw_80114680, and ftSk_SpecialLw_80114758.",
+    "Sheik-specific files and types use the project spelling ftSeak / ftSk, for example ftSeakAttributes and ftSk_SpecialLw.c.",
+    "Recovered data fields in character attribute structs may use offset-style names such as x70 until a semantic name is known.",
+    "The existing comment AS_SheikFinishTransformation was retained near ftSk_SpecialLw_80114758, but the function itself was not renamed in this PR.",
+    "Project typedefs f32 and Fighter_GObj are preferred over plain float and generic HSD_GObj when the surrounding API or matched signature supports them."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted asm placeholders for several ftSk_SpecialLw routines into C implementations using known fighter helpers and exact motion-state constants.",
+    "Matched no-op callback functions with empty C bodies.",
+    "Changed a double constant to an f32 constant for ftSk_Init_804D96A8, likely to match the expected single-precision argument flow to Fighter_ChangeMotionState.",
+    "Inserted a temporary unused stack object, `u8 _[4];`, inside ftSk_SpecialLw_80114758, indicating stack-shaping was needed for matching.",
+    "Used explicit casts where needed, including casting HSD_GObj* to Fighter_GObj* for Fighter_ChangeMotionState in ftSk_SpecialLw_80114758.",
+    "Set fp->accessory4_cb to either fn_80114034 or fn_801140B0 after motion-state changes, matching the callback side effects expected by the action state."
+  ],
+  "review_feedback": [
+    {
+      "author": "r-burns",
+      "topic": "fn_801140B0 prototype",
+      "feedback": "Initially suggested defining and declaring fn_801140B0 as void fn_801140B0(void), then corrected the advice after noticing it is assigned to accessory4_cb.",
+      "resolution": "The final diff uses void fn_801140B0(HSD_GObj* gobj) in both the C file and header."
+    },
+    {
+      "author": "r-burns",
+      "topic": "callback signature inference",
+      "feedback": "Because fn_801140B0 is assigned to accessory4_cb, it needs an HSD_GObj* parameter even though the argument is unused.",
+      "resolution": "Author replied with Done/Fixing and the final diff reflects the HSD_GObj* callback signature."
+    }
+  ],
+  "searchable_terms": [
+    "PR1674",
+    "ftSk_SpecialLw",
+    "ftSeak",
+    "Sheik",
+    "SpecialLw",
+    "AS_SheikFinishTransformation",
+    "fn_80114034",
+    "fn_801140B0",
+    "ftSk_SpecialLw_8011444C",
+    "ftSk_SpecialLw_801144B8",
+    "ftSk_SpecialLw_80114680",
+    "ftSk_SpecialLw_801146EC",
+    "ftSk_SpecialLw_80114758",
+    "ftSeakAttributes",
+    "x70",
+    "accessory4_cb",
+    "Fighter_ChangeMotionState",
+    "ftCommon_8007D5D4",
+    "ftCommon_8007D7FC",
+    "GET_FIGHTER",
+    "ground_or_air",
+    "MotionFlags",
+    "f32",
+    "callback prototype",
+    "HSD_GObj",
+    "Fighter_GObj",
+    "0x16A",
+    "0x16B",
+    "0x16C",
+    "0x169",
+    "0x0C4C508E"
+  ],
+  "follow_up_queries": [
+    "Find other functions assigned to accessory4_cb that still have void(void) or missing HSD_GObj* prototypes.",
+    "Search for remaining filler fields in ftSeakAttributes that can be typed from matched SpecialLw or transformation functions.",
+    "Audit Fighter_ChangeMotionState callsites for float versus f32 literal issues and motion-state argument consistency.",
+    "Look for remaining asm placeholders in src/melee/ft/chara/ftSeak/ftSk_SpecialLw.c after PR 1674.",
+    "Compare Zelda/Sheik transformation action-state helpers for mirrored motion IDs and callback patterns."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

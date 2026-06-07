@@ -1,0 +1,173 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1717",
+  "pr": {
+    "number": 1717,
+    "title": "gmtou matches",
+    "url": "https://github.com/doldecomp/melee/pull/1717",
+    "state": "MERGED",
+    "author": "sadkellz",
+    "created_at": "2025-07-22T02:17:45Z",
+    "merged_at": "2025-07-22T02:59:17Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched several Tournament mode gmtou functions and tightened related game-mode declarations. The PR replaced multiple gmtou stubs with C implementations for on-enter/on-leave archive setup and cleanup, animation timer callbacks, and JObj animation-frame selection logic. It also introduced Tournament-specific data structures such as TmData, TmBoxArrays, and TmAnimTimers, converted gm_804771C4 from an untyped array placeholder to TmData, and improved prototypes in gmtou.h and gm_17C0.h from UNK_RET/UNK_PARAMS/UNK_T to concrete HSD_GObj, HSD_JObj, void, char*, and TmData* types. Review feedback highlighted an important header hygiene issue: .static.h headers containing static/data definitions should only be included from .c files, not public headers, because including them elsewhere can perturb data/bss sections.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "type-recovery",
+      "game-mode-logic",
+      "archive-resource-lifecycle"
+    ],
+    "systems": [
+      "game-mode",
+      "tournament-mode",
+      "gmtou",
+      "gm_17C0",
+      "baselib",
+      "lbarchive",
+      "lbaudio"
+    ]
+  },
+  "key_files": [
+    "src/melee/gm/gmtou.c",
+    "src/melee/gm/gmtou.h",
+    "src/melee/gm/gmtou.static.h",
+    "src/melee/gm/types.h",
+    "src/melee/gm/gm_17C0.c",
+    "src/melee/gm/gm_17C0.h",
+    "src/melee/gm/forward.h"
+  ],
+  "what_changed": [
+    "Implemented gm_8019B8C4_OnEnter in gmtou.c, including Tournament archive loads for GmTou1p, TmBox.dat, GmTou3p, and GmTou4p, SIS_TournamentData setup through HSD_SisLib_803A62A0, and random selection of audio IDs 0x5D or 0x5E.",
+    "Implemented gm_8019B9C8_OnLeave and gm_8019EE54_OnLeave to release HSD_Archive pointers through lbArchive_80016EFC.",
+    "Implemented several gmtou animation/update callbacks using HSD_GObj and HSD_JObj, including fn_8019BF18, fn_8019BF8C, fn_8019C6AC, fn_8019CBFC, and fn_8019CFA4.",
+    "Added a new gmtou.static.h containing Tournament-local structs TmBoxArrays and TmAnimTimers, plus an extern for gm_804771C4.",
+    "Added struct TmData to src/melee/gm/types.h with early fields x0 and x4, padding to 0x4E0, and HSD_Text pointer arrays at later offsets.",
+    "Added a TmData forward declaration to src/melee/gm/forward.h.",
+    "Changed gm_804771C4 in gm_17C0.c from static UNK_T gm_804771C4[349] to static TmData gm_804771C4.",
+    "Changed gm_8018F634 from returning UNK_T to returning TmData*, and used it as the Tournament data accessor.",
+    "Improved gm_17C0.h prototypes for functions near 8018F5F0-8019044C, including fn_8018F5F0 as char*, fn_8018F62C as s32 fn_8018F62C(HSD_GObj*), fn_8018FDC4 as void fn_8018FDC4(HSD_JObj*, f32, f32, f32), and fn_8019044C as void fn_8019044C(HSD_JObj*, f32).",
+    "Improved gmtou.h prototypes from broad UNK_RET/UNK_PARAMS forms to concrete void returns and HSD_GObj*, void*, s32, u32, or UNK_T parameters where evidence allowed."
+  ],
+  "smart_moves": [
+    "Used a small inline GetTmData wrapper around gm_8018F634, making repeated Tournament data accesses readable while preserving the recovered gm_8018F634 linkage.",
+    "Recovered gm_804771C4 as a TmData object instead of leaving it as an untyped UNK_T array, enabling field-based matches such as selection reads from x0 and bracket/animation offsets from x4 or pad_x8.",
+    "Separated Tournament-only static/local declarations into gmtou.static.h rather than placing all recovered structs in the public gmtou.h API.",
+    "Kept uncertain structure recovery honest with a TODO on TmAnimTimers noting that the layout is not exactly right.",
+    "Tightened many function prototypes at the same time as matching callsites, reducing reliance on UNK_RET, UNK_PARAMS, and UNK_T and making later decompilation easier.",
+    "Matched archive lifecycle pairs: on-enter loads multiple archives, and on-leave releases the corresponding HSD_Archive globals.",
+    "Used recovered baselib helpers such as GET_JOBJ, HSD_JObjGetChild, and HSD_JObjGetNext to express the JObj traversal directly instead of opaque pointer arithmetic."
+  ],
+  "decomp_lessons": [
+    "When replacing a global untyped byte/word array with a real struct, update both the definition and the accessor return type so downstream code can use field accesses naturally.",
+    "For mode-specific globals that are shared with another C file, place the struct type in a shared types header or forward header, but avoid leaking static/data-definition headers into public headers.",
+    "Archive-heavy on-enter/on-leave functions can often be matched by identifying resource names and pairing lbArchive_80016DBC loads with lbArchive_80016EFC frees.",
+    "Animation callbacks often become simple once the GObj-to-JObj relationship is typed; GET_JOBJ plus small timer structs can replace broad UNK_PARAMS prototypes.",
+    "It is acceptable to add approximate structs with padding and a TODO when the offsets are necessary for a match but the semantic field names/layout are not fully known.",
+    "Converting prototypes away from UNK_RET/UNK_PARAMS is valuable even for functions not fully implemented in the same PR, because it improves type propagation for nearby matches.",
+    "Public headers should be self-contained, but .c files should include their own public .h first to prove that self-containment; private static headers should remain included only from .c files."
+  ],
+  "naming_conventions": [
+    "Tournament mode data was named with the Tm prefix: TmData, TmBoxArrays, and TmAnimTimers.",
+    "Scene lifecycle functions retained the project convention of gm_<address>_OnEnter and gm_<address>_OnLeave.",
+    "Unidentified functions retained address-based fn_<address> names until stronger semantic names are known.",
+    "Partially understood struct fields used offset-style names such as x0, x4, xE, xF, x1C, pad_x8, x4E0, x4E4, x4E8, x500, and x518.",
+    "The helper accessor was named GetTmData, clearly exposing the intent of gm_8018F634 without renaming the external symbol.",
+    "The static/private header followed the module naming pattern gmtou.static.h."
+  ],
+  "assembly_or_matching_tactics": [
+    "Typed HSD_GObj* parameters enabled direct GET_JOBJ use in callbacks such as fn_8019BF18, fn_8019BF8C, fn_8019C6AC, fn_8019CBFC, and fn_8019CFA4.",
+    "Used explicit timer reset thresholds and increments to match animation-frame behavior, including limits such as >800, >0x77, >0x9F, >0x3C, and <0xA.",
+    "Preserved likely compiler behavior by keeping apparently unused TmData* locals from GetTmData in functions such as fn_8019C6AC and fn_8019CBFC.",
+    "Matched archive-loading calls by using string literals visible in the binary, including GmTou1p, TmBox.dat, tournament_box2_array, tournament_box3_array, tournament_box4_array, GmTou3p, GmTou4p, ScGamTour_scene_data, and SIS_TournamentData.",
+    "Used padding in TmData to place known HSD_Text pointer fields at observed offsets rather than over-specifying unknown middle data.",
+    "Changed fn_8018F62C to take HSD_GObj* while still using M2C_FIELD(arg0, s32*, 0x2C), showing a transitional match where the containing type is known but the field access is not yet fully modeled."
+  ],
+  "review_feedback": [
+    {
+      "author": "r-burns",
+      "file": "src/melee/gm/gm_17C0.c",
+      "comment": "Each .c file should include its own .h file at the top before any other includes, as a guarantee that the .h file works standalone without needing prior declarations."
+    },
+    {
+      "author": "r-burns",
+      "file": "src/melee/gm/gm_17C0.h",
+      "comment": ".static.h headers should only be included from .c files because they contain static definitions; including them from headers causes every includer to gain those definitions and can break data/bss sections."
+    }
+  ],
+  "searchable_terms": [
+    "pr-1717",
+    "gmtou matches",
+    "sadkellz",
+    "gmtou.c",
+    "gmtou.h",
+    "gmtou.static.h",
+    "gm_17C0.c",
+    "gm_17C0.h",
+    "forward.h",
+    "types.h",
+    "Tournament",
+    "Tournament mode",
+    "TmData",
+    "TmBoxArrays",
+    "TmAnimTimers",
+    "gm_804771C4",
+    "gm_8018F634",
+    "GetTmData",
+    "gm_8019B8C4_OnEnter",
+    "gm_8019B9C8_OnLeave",
+    "gm_8019EE54_OnLeave",
+    "fn_8019BF18",
+    "fn_8019BF8C",
+    "fn_8019C6AC",
+    "fn_8019CBFC",
+    "fn_8019CFA4",
+    "fn_8018F5F0",
+    "fn_8018F62C",
+    "fn_8018FDC4",
+    "fn_8019044C",
+    "HSD_GObj",
+    "HSD_JObj",
+    "HSD_Text",
+    "HSD_Archive",
+    "GET_JOBJ",
+    "HSD_JObjGetChild",
+    "HSD_JObjGetNext",
+    "HSD_Randi",
+    "HSD_SisLib_803A62A0",
+    "lbArchive_80016DBC",
+    "lbArchive_80016EFC",
+    "lbAudioAx_80023F28",
+    "GmTou1p",
+    "GmTou3p",
+    "GmTou4p",
+    "TmBox.dat",
+    "ScGamTour_scene_data",
+    "SIS_TournamentData",
+    "tournament_box2_array",
+    "tournament_box3_array",
+    "tournament_box4_array",
+    ".static.h include rule",
+    "data bss sections",
+    "header self-contained"
+  ],
+  "follow_up_queries": [
+    "Find later PRs modifying src/melee/gm/gmtou.static.h to see whether TmAnimTimers layout was corrected.",
+    "Search for later renames or field recovery for struct TmData fields x0, x4, pad_x8, x4E0, x4E4, x4E8, x500, and x518.",
+    "Check subsequent PRs touching gm_804771C4 or gm_8018F634 for whether static linkage/header placement was adjusted after review.",
+    "Look for later matches of remaining gmtou stubs such as fn_8019BA08, fn_8019C048, fn_8019C3EC, fn_8019C570, fn_8019C744, fn_8019CA38, fn_8019CC74, fn_8019CDBC, fn_8019D074, fn_8019D1BC, fn_8019DD60, gm_8019E634, fn_8019EE80, and fn_8019EF08.",
+    "Search repository review history for additional .static.h guidance and include-order conventions."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

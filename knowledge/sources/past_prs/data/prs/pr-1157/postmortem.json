@@ -1,0 +1,138 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1157",
+  "pr": {
+    "number": 1157,
+    "title": "Re-link `Runtime`",
+    "url": "https://github.com/doldecomp/melee/pull/1157",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-01-31T02:09:38Z",
+    "merged_at": "2024-01-31T02:29:43Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Re-linked Runtime/MSL-related objects by moving exact assembly for Gecko_setjmp and MSL trigf out of C inline-asm MUST_MATCH blocks into standalone asm files, updating object lists and configure status, and making a small split-boundary/config correction. Gecko_ExceptionPPC was made matching with an explicit peephole-off pragma rather than a dummy asm function. The PR had no body or review discussion, so intent is inferred from title and diff.",
+  "change_classification": {
+    "primary_type": "relink-and-build-configuration",
+    "categories": [
+      "code-change",
+      "asm-extraction",
+      "nonmatching-stub-cleanup",
+      "build-config",
+      "splits-update"
+    ],
+    "systems": [
+      "Runtime",
+      "MSL",
+      "Gecko_setjmp",
+      "Gecko_ExceptionPPC",
+      "trigf",
+      "configure.py",
+      "obj_files.mk",
+      "GALE01 splits"
+    ]
+  },
+  "key_files": [
+    "asm/MSL/trigf.s",
+    "src/MSL/trigf.c",
+    "asm/Runtime/Gecko_setjmp.s",
+    "src/Runtime/Gecko_setjmp.c",
+    "src/Runtime/Gecko_ExceptionPPC.c",
+    "configure.py",
+    "obj_files.mk",
+    "config/GALE01/splits.txt"
+  ],
+  "what_changed": [
+    "Added asm/MSL/trigf.s containing the assembly for tanf, cos__Ff, sin__Ff, cosf, sinf, __sinit_trigf_c, and associated rodata/data/sdata2 objects such as tmp_float, __four_over_pi_m1, __two_over_pi, __SQRT_FLT_EPSILON__, and MSL_TrigF_* labels.",
+    "Removed large MUST_MATCH inline-asm blocks for cosf, sinf, and __sinit_trigf_c from src/MSL/trigf.c, leaving the C implementation/stubs and changing exposed float prototypes from f32 to float.",
+    "Added asm/Runtime/Gecko_setjmp.s with exact assembly for __setjmp and longjmp, including saving/restoring LR, CR, stack pointer, r2, r13-r31, f14-f31, and FPSCR.",
+    "Removed the MUST_MATCH inline assembly implementations of __setjmp and longjmp from src/Runtime/Gecko_setjmp.c, leaving NOT_IMPLEMENTED C bodies while the build links the asm object.",
+    "Updated obj_files.mk to link Gecko_setjmp from asm/Runtime/Gecko_setjmp.s.o and trigf from asm/MSL/trigf.s.o instead of their src C objects.",
+    "Updated configure.py object statuses: Runtime/Gecko_ExceptionPPC.c became Matching, Runtime/Gecko_setjmp.c became NonMatching, MSL/trigf.c became NonMatching, MSL/buffer_io.c/strtoul.c/console_io.c became Matching, and some Unknown entries were reclassified NonMatching.",
+    "configure.py now passes fix_epilogue=False for RuntimeLib.",
+    "src/Runtime/Gecko_ExceptionPPC.c replaced an unused static asm function used to trigger a peephole-off bug with an explicit #pragma peephole off.",
+    "config/GALE01/splits.txt adjusted MSL/buffer_io.c text end from 0x80323560 to 0x8032355C."
+  ],
+  "smart_moves": [
+    "Separated exact assembly from C source by using standalone asm files for objects that are not yet matched from C, keeping the build linkable while simplifying the C files.",
+    "Preserved the decompiled C versions of trigf and Gecko_setjmp as NonMatching source rather than deleting them entirely, leaving future matching work visible and localized.",
+    "Replaced a dummy unused asm function whose only purpose was affecting compiler peephole behavior with the clearer and more direct #pragma peephole off.",
+    "Updated both configure.py object classification and obj_files.mk object paths together, avoiding a mismatch between status metadata and the actual linked object.",
+    "Carried over data-section layout details into asm/MSL/trigf.s, including .rodata, .data, .sdata2, .balign 8, SDA labels, and a hidden gap symbol, which helps preserve link/layout behavior."
+  ],
+  "decomp_lessons": [
+    "When inline asm under MUST_MATCH dominates a C file, moving it to asm/<module>/<file>.s can make the source file cleaner while preserving exact codegen and enabling a clear NonMatching status for the C implementation.",
+    "Object re-link PRs must update every layer that selects objects: configure.py status, obj_files.mk paths, and splits.txt if boundaries shift.",
+    "Prefer explicit compiler pragmas over placeholder/dummy asm tricks when the diff shows the only purpose is to affect compiler behavior.",
+    "For MSL/runtime work, data placement can matter as much as text: constants and globals may need exact .rodata/.data/.sdata2 layout and alignment in the asm file.",
+    "Runtime context-switch functions like setjmp/longjmp are especially sensitive to register/FPSCR save order and offsets; standalone asm is a reasonable holding tactic until exact C/asm constraints are understood.",
+    "Small split-boundary corrections can accompany relinks; check adjacent objects like buffer_io.c after changing Runtime/MSL object selection."
+  ],
+  "naming_conventions": [
+    "C++-mangled wrapper names appear in C/asm as cos__Ff and sin__Ff for float overload wrappers around cosf/sinf.",
+    "MSL anonymous or linker-generated data labels use project address-style names such as MSL_TrigF_80400770, MSL_TrigF_804DE19C, and MSL_TrigF_804DE1A8.",
+    "Runtime assembly functions use global .fn/.endfn blocks matching exported names such as __setjmp and longjmp.",
+    "Gap symbols may be named with address and section context, e.g. gap_11_804DE1A4_sdata2, and marked .hidden when they only preserve layout."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use standalone asm files with .include \"macros.inc\", .file, .text, .fn/.endfn, and explicit section declarations for objects that are exact in asm but not matched in C.",
+    "Use asm object paths in obj_files.mk for NonMatching C files that should not be linked from their source implementation.",
+    "For small-data constants, use .section .sdata2, \"a\" with .balign 8 and sda21 relocations in the assembly.",
+    "The trigf assembly preserves floating-point polynomial/range-reduction behavior with fmadds/fnmadds/fnmsubs sequences and exact constants such as __two_over_pi and __SQRT_FLT_EPSILON__.",
+    "The setjmp assembly directly saves/restores machine state with mflr/mfcr/mtlr/mtcrf, stmw/lmw, mffs/mtfsf, and paired stfd/lfd for f14-f31.",
+    "Setting fix_epilogue=False for RuntimeLib is part of the relink configuration in this PR; future Runtime relinks should check whether epilogue fixing changes matching/layout."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the PR slice; no reviewer feedback can be extracted."
+  ],
+  "searchable_terms": [
+    "pr-1157",
+    "Re-link Runtime",
+    "RuntimeLib",
+    "fix_epilogue=False",
+    "Gecko_setjmp",
+    "__setjmp",
+    "longjmp",
+    "Gecko_ExceptionPPC",
+    "peephole off",
+    "MSL trigf",
+    "trigf.c",
+    "trigf.s",
+    "tanf",
+    "cos__Ff",
+    "sin__Ff",
+    "cosf",
+    "sinf",
+    "__sinit_trigf_c",
+    "__four_over_pi_m1",
+    "__two_over_pi",
+    "__SQRT_FLT_EPSILON__",
+    "__sincos_poly",
+    "__sincos_on_quadrant",
+    "MSL_TrigF_804DE19C",
+    "MSL_TrigF_804DE1A8",
+    "gap_11_804DE1A4_sdata2",
+    "obj_files.mk",
+    "splits.txt",
+    "buffer_io.c",
+    "Matching",
+    "NonMatching",
+    "Unknown"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that match src/MSL/trigf.c from C after this asm extraction.",
+    "Look for later PRs that replace asm/Runtime/Gecko_setjmp.s with matching C or improved declarations for jmp_buf layout.",
+    "Search for other uses of #pragma peephole off replacing dummy asm peephole triggers.",
+    "Audit RuntimeLib fix_epilogue=False interactions with other Runtime and MetroTRK relink changes.",
+    "Check whether the buffer_io.c split end correction affected adjacent MSL/ctype.c boundaries."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,157 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1668",
+  "pr": {
+    "number": 1668,
+    "title": "Misc matches",
+    "url": "https://github.com/doldecomp/melee/pull/1668",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-07-07T03:33:14Z",
+    "merged_at": "2025-07-07T04:09:36Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched a set of miscellaneous core/game initialization and library helper functions, cherry-picked from src-only nonmatching build work inspired by FRAY. The PR replaced several placeholder stubs with typed C implementations across gm, gr, lb, mn, mp, and baselib code, tightened related headers, and added a missing 32-byte BSS alignment annotation for lbl_804333E0.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-metadata",
+      "prototype-correction",
+      "initialization-functions",
+      "baselib-helpers"
+    ],
+    "systems": [
+      "config",
+      "game-mode",
+      "ground-material",
+      "library",
+      "menu",
+      "stage-collision",
+      "sysdolphin",
+      "baselib"
+    ]
+  },
+  "key_files": [
+    "config/GALE01/symbols.txt",
+    "src/melee/gm/gm_1601.c",
+    "src/melee/gm/gm_1601.h",
+    "src/melee/gm/gm_1B03.c",
+    "src/melee/gr/grmaterial.c",
+    "src/melee/gr/grmaterial.h",
+    "src/melee/lb/lb_00F9.c",
+    "src/melee/mn/mn_2295.c",
+    "src/melee/mp/mplib.c",
+    "src/melee/mp/mplib.h",
+    "src/sysdolphin/baselib/cobj.c",
+    "src/sysdolphin/baselib/cobj.h",
+    "src/sysdolphin/baselib/texpdag.c",
+    "src/sysdolphin/baselib/texpdag.h"
+  ],
+  "what_changed": [
+    "Added align:32 metadata for lbl_804333E0 in config/GALE01/symbols.txt, preserving the existing BSS address and size.",
+    "Implemented gm_8016B558 as a slot-counting helper that loops over six player slots and counts slots whose Player_GetPlayerSlotType result is not 3; gm_1601.h was updated from UNK_RET/UNK_PARAMS to int gm_8016B558(void).",
+    "Implemented gm_801B34B8_OnInit to initialize a six-byte game-mode/main-lib state buffer returned by gmMainLib_8015CDC8 with fixed values 0x21, 0, 3, 0, 0x78, 0.",
+    "Added grMaterial_801C94D8, walking an HSD_JObj tree, checking JObj flags, iterating DObjs, and changing MObj classes to grMaterial_803E0A20 via hsdChangeClass before recursing over child JObjs through grMaterial_801C92C0.",
+    "Declared grMaterial_801C92C0(HSD_JObj*) in grmaterial.h, giving the new grmaterial implementation a typed dependency rather than an unknown prototype.",
+    "Implemented lb_80013B14 as a camera object load wrapper: it loads an HSD_CObj from a perspective desc, adjusts aspect from 1.18F to 1.2173333F for projection type 1, clamps scissor right/bottom to 0x280/0x1E0, and returns the CObj.",
+    "Implemented menu animation helpers mn_8022ED6C and mn_8022F298. mn_8022ED6C advances or requests JObj animation frames based on a Vec3 range/sentinel, while mn_8022F298 recursively finds the current animation frame from a JObj AObj, DObj/MObj AObj, MObj TObj AObj, or child JObjs, returning -1.0f when none is found.",
+    "Implemented mpLib_80058820 to create a GObj, assert on allocation failure, attach fn_800587FC as a process, and initialize two static bounds records to +/-10000.0F. The fn_800587FC prototype was tightened to void fn_800587FC(HSD_GObj*).",
+    "Changed HSD_CObjGetProjectionType return type from u32 to int in both cobj.c and cobj.h, matching its use in lb_80013B14 and likely helping codegen/signature consistency.",
+    "Implemented HSD_TExpSimplify in texpdag.c by checking for HSD_TE_TEV and then OR-ing the effects of SimplifySrc, SimplifyThis, and SimplifyByMerge. texpdag.h now gives those simplification helpers typed int HSD_TExp* signatures.",
+    "Added missing includes needed to type newly matched code, including player.h, baselib/cobj.h, baselib JObj/DObj/MObj headers, GObj/GObjProc headers, and texpdag.h."
+  ],
+  "smart_moves": [
+    "Cherry-picked small, self-contained matches from broader nonmatching src-only work, allowing incremental progress without needing to land a large uncertain conversion.",
+    "Paired each implementation with the minimal header/prototype corrections needed to remove UNK_RET/UNK_PARAMS where evidence was strong.",
+    "Used existing engine APIs such as Player_GetPlayerSlotType, HSD_CObjLoadDesc, HSD_CObjGetScissor/HSD_CObjSetScissor, GObj_Create, HSD_GObjProc_8038FD54, HSD_JObjReqAnimAll, and hsdChangeClass instead of open-coding behavior.",
+    "Matched traversal-heavy code by preserving explicit null checks and temporary variables in grMaterial_801C94D8 and mn_8022F298, which is often necessary for decomp codegen even when logically redundant.",
+    "Captured static storage shape for mpLib_80458868 locally in mplib.c as a two-element struct array with four floats, enough to express the initializer pattern without overclaiming semantic field names.",
+    "Fixed symbol alignment metadata alongside code changes, recognizing that BSS alignment can be a matching prerequisite rather than just a configuration detail."
+  ],
+  "decomp_lessons": [
+    "When converting placeholders to matches, update both the C implementation and the public header prototype in the same PR so callers and future matches get correct types.",
+    "Small initialization functions are good targets for incremental matching: fixed byte stores, simple loops, and constant bounds initialization often reveal useful signatures with low semantic risk.",
+    "Do not remove apparently redundant null checks or temporary assignments too aggressively; they may be intentional codegen scaffolding required for matching the original binary.",
+    "Baselib helper return signedness can affect matching. HSD_CObjGetProjectionType matched better as int than u32 in this slice.",
+    "Recursive animation/frame helpers may need to inspect multiple object layers in order: JObj AObj, DObj/MObj AObj, TObj AObj, then children unless blocked by flags.",
+    "Symbol file alignment annotations should be considered part of decomp evidence. A single align:32 on a BSS object can be necessary for correct layout or matching.",
+    "Src-only nonmatching work can be mined for isolated functions that are ready to match once their includes, prototypes, and local struct shapes are made precise."
+  ],
+  "naming_conventions": [
+    "Kept project-standard address-based names for unidentified functions and data, such as gm_8016B558, gm_801B34B8_OnInit, grMaterial_801C94D8, mn_8022F298, mpLib_80058820, fn_800587FC, and lbl_804333E0.",
+    "Used subsystem prefixes consistently: gm_ for game-mode code, grMaterial_ for ground material code, lb_ for library helpers, mn_ for menu code, mpLib_ for map/collision library code, and HSD_ for sysdolphin/baselib APIs.",
+    "Retained temporary-variable style names visible in the diff, such as temp_r3, var_r30, var_r30_2, var_r3, and var_r0, where semantic names were not established.",
+    "Introduced typed declarations only where known from implementation context, for example int gm_8016B558(void), void fn_800587FC(HSD_GObj*), int SimplifySrc(HSD_TExp*), and int HSD_CObjGetProjectionType(HSD_CObj*)."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used explicit loop bounds and count accumulation in gm_8016B558: for i from 0 to 5, count all slots whose slot type is not 3.",
+    "Used byte-index writes into a u8* buffer in gm_801B34B8_OnInit rather than inventing a struct, preserving the observed layout uncertainty.",
+    "In grMaterial_801C94D8, preserved flag masking with 0x4020 and an explicit var_r0 boolean-style variable before DObj traversal, likely to satisfy branch/codegen shape.",
+    "Inserted an unused stack padding array u8 _[0x18] in grMaterial_801C94D8, indicating stack-frame shaping was needed for the match.",
+    "In lb_80013B14, matched floating constants exactly as 1.18F and 1.2173333F and clamped scissor dimensions to 640x480 using 0x280 and 0x1E0.",
+    "In mn_8022ED6C, preserved the -0.1f sentinel path and repeated mn_8022F298 calls instead of simplifying state into one local value.",
+    "In mpLib_80058820, initialized float bounds with explicit signed constants +10000.0F and -10000.0F and copied element 0 into element 1 to mirror the original store pattern.",
+    "In HSD_TExpSimplify, accumulated a boolean/int result by checking each simplification helper separately rather than collapsing into a single logical expression."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR context.",
+    "The PR body states the matches were cherry-picked from src-only nonmatching build work inspired by FRAY; no further reviewer rationale is available in the slice."
+  ],
+  "searchable_terms": [
+    "PR1668",
+    "Misc matches",
+    "r-burns",
+    "FRAY",
+    "src-only nonmatching build",
+    "gm_8016B558",
+    "Player_GetPlayerSlotType",
+    "gm_801B34B8_OnInit",
+    "gmMainLib_8015CDC8",
+    "grMaterial_801C94D8",
+    "grMaterial_801C92C0",
+    "grMaterial_803E0A20",
+    "hsdChangeClass",
+    "HSD_JObjGetDObj",
+    "lb_80013B14",
+    "HSD_CObjLoadDesc",
+    "HSD_CObjGetProjectionType",
+    "HSD_CObjSetAspect",
+    "HSD_CObjGetScissor",
+    "HSD_CObjSetScissor",
+    "mn_8022ED6C",
+    "mn_8022F298",
+    "HSD_JObjReqAnimAll",
+    "HSD_JObjAnimAll",
+    "mpLib_80058820",
+    "fn_800587FC",
+    "GObj_Create",
+    "HSD_GObjProc_8038FD54",
+    "mpLib_80458868",
+    "HSD_TExpSimplify",
+    "SimplifySrc",
+    "SimplifyThis",
+    "SimplifyByMerge",
+    "texpdag",
+    "lbl_804333E0 align:32",
+    "HSD_CObjGetProjectionType int"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or type the state buffer returned by gmMainLib_8015CDC8.",
+    "Search for later work on grMaterial_801C92C0, grMaterial_801C95C4, grMaterial_801C9604, fn_801C9664, and grMaterial_801C9698.",
+    "Search for later struct typing or naming of mpLib_80458868 fields initialized by mpLib_80058820.",
+    "Look for follow-up matches around mn_8022EC18, mn_8022EE84, mn_8022F268, and mn_8022F360 to clarify the Vec3 animation range semantics.",
+    "Check whether HSD_CObjGetProjectionType signed int return type was reused in later camera-related matches.",
+    "Search for other BSS symbol alignment fixes near lb_804329F0, lb_80432A68, lbSnap_80433380, and lbl_804333E0."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

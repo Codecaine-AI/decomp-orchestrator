@@ -1,0 +1,118 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-952",
+  "pr": {
+    "number": 952,
+    "title": "Use GET_ITEM/GET_JOBJ throughout item callbacks",
+    "url": "https://github.com/doldecomp/melee/pull/952",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-07-02T03:32:58Z",
+    "merged_at": "2023-07-02T03:47:30Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Standardized item callback code to use GET_ITEM and GET_JOBJ access macros instead of direct user_data/hsd_obj field access or HSD_GObjGetUserData/HSD_GObjGetHSDObj calls. The PR touched capsule, Fox Illusion, Fox Laser, and Sheik vanish item code, with several small stack-shape adjustments needed to preserve matching. It also replaced a raw Sheik vanish item kind constant with the named It_Kind_Seak_Vanish enum value.",
+  "change_classification": {
+    "primary_type": "cleanup",
+    "categories": [
+      "code-change",
+      "macro-standardization",
+      "matching-preservation",
+      "naming-cleanup"
+    ],
+    "systems": [
+      "item",
+      "item callbacks",
+      "capsule item",
+      "Fox Illusion item",
+      "Fox Laser item",
+      "Sheik vanish item"
+    ]
+  },
+  "key_files": [
+    "src/melee/it/items/itcapsule.c",
+    "src/melee/it/items/itfoxillusion.c",
+    "src/melee/it/items/itfoxlaser.c",
+    "src/melee/it/items/itseakvanish.c"
+  ],
+  "what_changed": [
+    "Replaced many direct item-data loads such as `item_gobj->user_data`, `gobj->user_data`, and casts from `HSD_GObjGetUserData(...)` with `GET_ITEM(...)` in item callback functions.",
+    "Replaced direct JObj loads such as `item_gobj->hsd_obj` and casts from `HSD_GObjGetHSDObj(...)` with `GET_JOBJ(...)` where item callbacks needed the model JObj.",
+    "Adjusted local variables and unused stack padding in multiple functions while applying the macro cleanup, for example changing `unused` array sizes in `itcapsule.c`, `itfoxlaser.c`, and rewriting a temporary boolean in `it_8029D7EC`.",
+    "Simplified some item-attribute access patterns, such as using `it->xCC_item_attr->x10_fall_speed` inline in `it_8027D178` instead of introducing a separate `ItemAttr* attr` local.",
+    "Added a small inline helper `getFoxLaser(Item* item)` returning `&item->xDD4_itemVar` in `itfoxlaser.c`; the diff excerpt does not show its use, so its purpose is weakly evidenced.",
+    "Changed `spawn.kind = 0x55` to `spawn.kind = It_Kind_Seak_Vanish` in `itseakvanish.c`, replacing a magic number with the named item-kind constant.",
+    "Modified `fabsf` in `itfoxlaser.c` from a ternary expression to an explicit if/else returning `-x` or `+x`, likely for codegen/matching shape."
+  ],
+  "smart_moves": [
+    "Used existing access macros consistently across item callbacks, improving readability and reducing repeated raw casts without changing item logic.",
+    "Kept matching sensitivity in mind while doing a cleanup: the diff includes deliberate `unused` padding changes, local ordering changes, and expression-shape edits rather than a purely mechanical search-and-replace.",
+    "Replaced a raw item kind literal with `It_Kind_Seak_Vanish`, making future item-spawn code more searchable and less dependent on numeric constants.",
+    "Preserved semantically equivalent behavior in places like `it_8029D7EC` by storing the ternary result in a `bool tmp`, suggesting a controlled rewrite for stack/codegen rather than broad refactoring."
+  ],
+  "decomp_lessons": [
+    "For item callback code, prefer `GET_ITEM(gobj)` over `gobj->user_data`, `GetItemData(gobj)`, or `(Item*) HSD_GObjGetUserData(gobj)` when the established project macro exists.",
+    "Prefer `GET_JOBJ(gobj)` over direct `gobj->hsd_obj` access or `(HSD_JObj*) HSD_GObjGetHSDObj(gobj)` in callbacks that need the item's JObj.",
+    "Macro standardization can perturb stack layout or codegen; verify matches and be prepared to add/remove dummy `unused` locals or adjust local declaration order.",
+    "Do not assume semantically equivalent C expressions generate the same code. The `fabsf` ternary-to-if/else rewrite and the `bool tmp` in `it_8029D7EC` show expression form can matter.",
+    "When replacing magic constants, use existing enum names such as `It_Kind_Seak_Vanish` to make item spawning clearer and more robust."
+  ],
+  "naming_conventions": [
+    "Use `GET_ITEM(item_gobj)`/`GET_ITEM(gobj)` for retrieving `Item*` from an item GObj.",
+    "Use `GET_JOBJ(item_gobj)`/`GET_JOBJ(gobj)` for retrieving `HSD_JObj*` from an item GObj.",
+    "Use named item-kind constants such as `It_Kind_Seak_Vanish` instead of raw numeric literals like `0x55`.",
+    "Existing item variable field naming remains based on `xDD4_itemVar.<item>` unions, e.g. `xDD4_itemVar.capsule`, `xDD4_itemVar.foxillusion`, and `xDD4_itemVar.foxlaser`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Changed dummy stack locals, including `u32 unused[1]` to `u32 unused[2]`, `Vec3 unused` to `u32 unused[1]`, and removed or reduced other unused arrays to preserve function layout after macro substitutions.",
+    "Used explicit local initialization and assignment forms, such as declaring `Item* item = GET_ITEM(item_gobj)` before `u32 unused[1]` in `it_8029CFF0`, to influence generated code shape.",
+    "Rewrote a ternary `fabsf` implementation into explicit branches returning `-x` or `+x`, a common decomp tactic when expression form affects matching.",
+    "Introduced a named temporary `bool tmp` for a ternary condition in `it_8029D7EC`, likely to match original register/control-flow behavior.",
+    "Maintained comments around known matching issues, including `// Incorrect stack offsets for inlined it_8027CF30` near `it_8027D338`."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "GET_ITEM",
+    "GET_JOBJ",
+    "HSD_GObjGetUserData",
+    "HSD_GObjGetHSDObj",
+    "item_gobj->user_data",
+    "item_gobj->hsd_obj",
+    "GetItemData",
+    "Item_GObj",
+    "Item",
+    "HSD_JObj",
+    "itcapsule",
+    "itfoxillusion",
+    "itfoxlaser",
+    "itseakvanish",
+    "it_8027CF00",
+    "it_8027CF30",
+    "it_8027CFE8",
+    "it_8027D338",
+    "it_8029CD18",
+    "it_8029CD78",
+    "it_8029D7EC",
+    "it_8029C6F4",
+    "it_8029CA80",
+    "It_Kind_Seak_Vanish",
+    "xDD4_itemVar",
+    "matching",
+    "unused stack padding"
+  ],
+  "follow_up_queries": [
+    "Find remaining item callbacks that still use `HSD_GObjGetUserData`, `HSD_GObjGetHSDObj`, direct `user_data`, or direct `hsd_obj` instead of `GET_ITEM`/`GET_JOBJ`.",
+    "Audit item spawn code for raw `spawn.kind` numeric constants that can be replaced with named `It_Kind_*` enum values.",
+    "Check whether `getFoxLaser(Item* item)` in `itfoxlaser.c` is used after this PR or became dead cleanup scaffolding.",
+    "Review functions with dummy `unused` locals after macro substitutions to ensure stack padding is still necessary and documented where helpful."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

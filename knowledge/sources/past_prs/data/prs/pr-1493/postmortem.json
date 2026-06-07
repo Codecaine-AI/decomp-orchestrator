@@ -1,0 +1,180 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1493",
+  "pr": {
+    "number": 1493,
+    "title": "vi.c match",
+    "url": "https://github.com/doldecomp/melee/pull/1493",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2025-03-24T02:39:57Z",
+    "merged_at": "2025-03-24T15:40:32Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched src/melee/vi/vi.c, replacing the 350-line asm/melee/vi/vi.s stub with C for four vi functions and the 26-entry character file-name table. The PR also switched vi.c from NonMatching to Matching in configure.py and from asm object to C object in obj_files.mk, added vi.h prototypes, and tightened several dependent prototypes in camera, game-mode, audio, and lb headers. The author credited Cortex's matching work plus their own typing fixes and character table setup. There was no recorded review discussion.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "prototype-fix",
+      "data-table-reconstruction",
+      "build-config"
+    ],
+    "systems": [
+      "vi",
+      "visual-cutscenes",
+      "game-mode",
+      "camera",
+      "audio",
+      "lb",
+      "build-system",
+      "symbols"
+    ]
+  },
+  "key_files": [
+    {
+      "file": "asm/melee/vi/vi.s",
+      "why": "Deleted the previous hand-written assembly file containing un_8031C99C, un_8031C9B4, un_8031CA04, un_8031CAAC, and the associated data strings/table."
+    },
+    {
+      "file": "src/melee/vi/vi.c",
+      "why": "Added the matched C implementation, including the 26-element un_803FFFA8 character data-file table and four vi functions."
+    },
+    {
+      "file": "src/melee/vi/vi.h",
+      "why": "Added platform and HSD_GObj includes plus prototypes for the newly decompiled vi functions."
+    },
+    {
+      "file": "configure.py",
+      "why": "Changed Object(NonMatching, \"melee/vi/vi.c\") to Object(Matching, \"melee/vi/vi.c\")."
+    },
+    {
+      "file": "obj_files.mk",
+      "why": "Replaced asm/melee/vi/vi.s.o with src/melee/vi/vi.c.o in TEXT_O_FILES."
+    },
+    {
+      "file": "src/melee/cm/camera.h",
+      "why": "Typed Camera_800313E0 as void Camera_800313E0(HSD_GObj*, u64), enabling the matched call site."
+    },
+    {
+      "file": "src/melee/gm/gm_1601.h",
+      "why": "Typed gm_801678F8 as void gm_801678F8(s32, s32, s32) and gm_8017E440 as u8 gm_8017E440(void)."
+    },
+    {
+      "file": "src/melee/lb/lb_00F9.h",
+      "why": "Typed lb_800145F4 as void lb_800145F4(void)."
+    },
+    {
+      "file": "src/melee/lb/lbaudio_ax.h",
+      "why": "Corrected lbAudioAx_800236DC from taking HSD_GObj* to taking no arguments."
+    },
+    {
+      "file": "src/melee/mn/mnsoundtest.c",
+      "why": "Updated an existing caller to lbAudioAx_800236DC() after the prototype correction."
+    },
+    {
+      "file": "config/GALE01/symbols.txt",
+      "why": "Large symbol update, mostly local symbol renumbering and vi data/function symbol effects caused by compiling vi.c as matching C."
+    }
+  ],
+  "what_changed": [
+    "Reconstructed un_803FFFA8 as a global char* table with 26 entries such as \"PlCaDViWaitAJ.dat\", \"PlDkDViWaitAJ.dat\", and \"PlGnDViWaitAJ.dat\".",
+    "Implemented un_8031C99C(s32 index) as a simple table lookup returning un_803FFFA8[index].",
+    "Implemented un_8031C9B4(s32 arg0, s32 arg1) by calling gm_8017E440(), checking for mode value 4, and otherwise forwarding the mode plus two arguments to gm_801678F8.",
+    "Implemented un_8031CA04(HSD_GObj* arg0) by cycling Camera_800310A0 through 2, 1, and 0, setting arg0->gxlink_prios to 9 then 8, calling HSD_GObj_80390ED0(arg0, 7), and finishing with Camera_800313E0(arg0, 1).",
+    "Implemented un_8031CAAC(void) by calling gm_801A36A0(gm_8017E430()), checking bit 0x1000, then invoking lbAudioAx_800236DC, lbAudioAx_80023694, lb_800145F4, and gm_801A4B60 when set.",
+    "Converted vi.c to a Matching object and routed the build from the assembly object to the C object.",
+    "Adjusted function prototypes in several headers to remove UNK_RET/UNK_PARAMS and reflect no-argument or typed-argument call signatures needed by vi.c.",
+    "Updated mnsoundtest.c to match the corrected no-argument lbAudioAx_800236DC signature."
+  ],
+  "smart_moves": [
+    "Matched both code and data: the PR did not only translate functions, it rebuilt the character data-file pointer table that had previously existed as separate .data string objects plus a pointer table in assembly.",
+    "Used real function signatures instead of forcing casts or leaving UNK_PARAMS, improving type information for future callers of gm_801678F8, gm_8017E440, Camera_800313E0, lb_800145F4, and lbAudioAx_800236DC.",
+    "Propagated the lbAudioAx_800236DC prototype fix to an existing caller in mnsoundtest.c, avoiding a stale argument at another call site.",
+    "Made the build-system transition complete by updating both configure.py and obj_files.mk while deleting the old asm file.",
+    "Preserved exact string spelling in the character table, including the unusual lowercase-j entry \"PlMsDViWaitAj.dat\", which matters for binary/data matching."
+  ],
+  "decomp_lessons": [
+    "When matching a small file, include the associated data objects in the same C translation unit if the asm file contained both .text and .data; pointer tables and string literals can be essential for the object to match.",
+    "Prototype cleanup is often part of a match. Replacing UNK_RET/UNK_PARAMS with precise return and parameter types can remove call-site ambiguity and produce the expected codegen.",
+    "A no-argument function prototype can affect existing callers outside the target file; search for callers and update them in the same PR.",
+    "For HSD_GObj-related code, field names such as gxlink_prios can express raw offset writes from assembly more cleanly than manual struct-offset work.",
+    "Large symbols.txt churn may come from local compiler-generated symbol renumbering after a file is compiled as C; treat these updates as supporting evidence rather than separate feature work unless the diff shows semantic symbol additions.",
+    "Keep magic values visible when the original semantics are still unknown: this match retained values like mode 4, camera IDs 2/1/0, gxlink priority 9/8, link value 7, and bit mask 0x1000."
+  ],
+  "naming_conventions": [
+    "The file retained address-based unknown names for functions and globals: un_8031C99C, un_8031C9B4, un_8031CA04, un_8031CAAC, and un_803FFFA8.",
+    "New prototypes in vi.h use address comments in the project style, e.g. /* 31C99C */ char* un_8031C99C(s32);",
+    "External symbols kept their subsystem prefixes and address suffixes, such as Camera_800313E0, gm_801678F8, gm_8017E440, lbAudioAx_800236DC, and lb_800145F4.",
+    "The character table entries follow the PlXXDViWaitAJ.dat asset-name pattern, with the evidence showing one exact-case exception: PlMsDViWaitAj.dat."
+  ],
+  "assembly_or_matching_tactics": [
+    "Assembly table lookup `slwi index, 2` plus load from un_803FFFA8 was represented directly as `return un_803FFFA8[index];`.",
+    "The original assembly's 26 separate string objects plus pointer table were collapsed into a C `char* un_803FFFA8[26]` initializer, preserving data order.",
+    "The `gm_8017E440` result was stored in a u8 local before comparison to 4, matching the assembly's clrlwi byte behavior.",
+    "The 64-bit result path in un_8031CAAC was represented with a `u64 temp_ret` and `(temp_ret & 0x1000) != 0`, matching the assembly's high/low-word bit-test intent.",
+    "Repeated camera and GObj calls in un_8031CA04 were kept explicit rather than abstracted into a loop, which is often necessary for exact compiler output in small matching functions.",
+    "Build matching required deleting the asm object and switching both build declarations to the C object."
+  ],
+  "review_feedback": [
+    {
+      "type": "no_review_comments",
+      "note": "The PR context reports zero issue comments, review comments, and reviews; no human reviewer feedback was available."
+    },
+    {
+      "type": "author_note",
+      "note": "The body states: \"Cortex's work to get this matched with some fixes from me for typing, plus getting the character table setup.\""
+    }
+  ],
+  "searchable_terms": [
+    "pr-1493",
+    "vi.c match",
+    "PsiLupan",
+    "Cortex",
+    "asm/melee/vi/vi.s",
+    "src/melee/vi/vi.c",
+    "src/melee/vi/vi.h",
+    "un_8031C99C",
+    "un_8031C9B4",
+    "un_8031CA04",
+    "un_8031CAAC",
+    "un_803FFFA8",
+    "PlCaDViWaitAJ.dat",
+    "PlMsDViWaitAj.dat",
+    "PlGnDViWaitAJ.dat",
+    "Camera_800310A0",
+    "Camera_800313E0",
+    "HSD_GObj_80390ED0",
+    "gxlink_prios",
+    "gm_801678F8",
+    "gm_8017E440",
+    "gm_8017E430",
+    "gm_801A36A0",
+    "gm_801A4B60",
+    "lbAudioAx_800236DC",
+    "lbAudioAx_80023694",
+    "lb_800145F4",
+    "Object(Matching)",
+    "obj_files.mk",
+    "symbols.txt local symbol renumbering",
+    "character table setup",
+    "0x1000"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or document un_8031C99C, un_8031C9B4, un_8031CA04, un_8031CAAC, or un_803FFFA8.",
+    "Search for follow-up corrections to Camera_800313E0(HSD_GObj*, u64) or gm_801A36A0 return typing.",
+    "Check whether the extra standalone semicolon after lb_800145F4 in lb_00F9.h was later cleaned up.",
+    "Look for PRs that replace the PlXXDViWaitAJ.dat table with a named character asset table or enum-indexed table."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

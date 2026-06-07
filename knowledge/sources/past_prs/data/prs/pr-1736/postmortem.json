@@ -1,0 +1,121 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1736",
+  "pr": {
+    "number": 1736,
+    "title": "Several ftYs_SpecialN matches",
+    "url": "https://github.com/doldecomp/melee/pull/1736",
+    "state": "MERGED",
+    "author": "Gelatart",
+    "created_at": "2025-07-25T16:20:41Z",
+    "merged_at": "2025-07-26T02:03:54Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched several previously stubbed Yoshi special-move functions in ftYs_SpecialN.c, especially SpecialS/AirSpecialS transition, physics, collision, and cleanup helpers, while correcting Yoshi motion-var struct usage and adding item header prototypes for Yoshi egg throw cleanup. The PR also refined ftYoshiAttributes offsets with named padding and a size static assert, making later matches safer.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-layout",
+      "fighter-action-code"
+    ],
+    "systems": [
+      "fighter",
+      "item",
+      "Yoshi"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftYoshi/ftYs_SpecialN.c",
+    "src/melee/ft/chara/ftYoshi/types.h",
+    "src/melee/it/items/ityoshieggthrow.h"
+  ],
+  "what_changed": [
+    "Implemented multiple formerly stubbed Yoshi functions in ftYs_SpecialN.c, including fn_8012D230, fn_8012D2F8, fn_8012D3C0, fn_8012D488, ftYs_SpecialS_8012E270, ftYs_SpecialAirSStart_0_Phys, ftYs_SpecialAirSEnd_Phys, ftYs_SpecialAirSStart_1_Phys, ftYs_SpecialAirSLanding_Phys, and ftYs_SpecialAirSEnd_Coll.",
+    "Added ityoshieggthrow.h include to ftYs_SpecialN.c so Yoshi special cleanup can call it_802B2890 on fp->fv.ys.x2238.",
+    "ftYs_SpecialS_8012E270 now checks fp->fv.ys.x2238 and fp->mv.ys.specials.x0, calls it_802B2890 when appropriate, clears the held item pointer, and clears take_dmg_cb and death2_cb.",
+    "Corrected motion-var field usage in SpecialHi animation from fp->mv.ys.specialn.x4 to fp->mv.ys.specialhi.x4.",
+    "Corrected SpecialAirS IASA code to clear fp->mv.ys.specials.x30 instead of fp->mv.ys.specialn.x30.",
+    "Expanded union ftYoshi_MotionVars so specialn, specials, and specialhi no longer incorrectly share fields: specials now owns x0 and x30 at fp+2370, while specialhi owns x4 at fp+2344.",
+    "Changed ftYoshi_FighterVars.x2238 from u32 to Item_GObj*, matching its use as an item object pointer.",
+    "Refined ftYoshiAttributes layout by replacing generic filler with offset-based padding, exposing x6C and x70 floats used by SpecialAirS physics, and adding STATIC_ASSERT(sizeof(struct _ftYoshiAttributes) == 0x138).",
+    "Added several ityoshieggthrow.h prototypes around the 802B2890 item functions, with known prototypes for it_802B2890(Item_GObj*) and existing bool-return item callbacks preserved."
+  ],
+  "smart_moves": [
+    "The PR fixed struct/union ownership before relying on fields in matched code, avoiding misleading matches that write through the wrong special-move variant.",
+    "Typing fp->fv.ys.x2238 as Item_GObj* enabled a direct, type-correct call to it_802B2890 rather than leaving the item reference as an integer-like placeholder.",
+    "Using offset-calculated padding such as pad_x50[0x6C - 0x50] and a sizeof static assert made ftYoshiAttributes safer for future field discovery.",
+    "The matched transition helpers preserve current animation frame through Fighter_ChangeMotionState and then call ftYs_SpecialS_8012DF00, reflecting a reusable pattern for related Yoshi SpecialS state transitions.",
+    "The physics matches exposed repeated patterns: zero velocity/acceleration using ftYs_Init_804D9A70 for one start state, ground friction plus ftCommon_8007CB74 for an end state, and ftCommon_8007D494 with character attributes x6C/x70 for airborne/landing physics."
+  ],
+  "decomp_lessons": [
+    "When a move file contains several special variants, verify the motion-var union member before assigning fields; SpecialN, SpecialS, and SpecialHi can share offsets but represent different semantic fields.",
+    "If a fighter var is passed to an item function, promote the field from u32/UNK to Item_GObj* and include the appropriate item forward/header rather than casting everywhere.",
+    "Offset-based padding plus STATIC_ASSERT is preferable to large anonymous filler when newly discovered attributes must match exact offsets.",
+    "Small state-change wrapper functions can often match by preserving fp->cur_anim_frame, using a fixed motion-state ID and flags, and calling the shared per-state setup routine afterward.",
+    "Cleanup functions should clear both object references and callbacks after handling the item/resource, as shown by ftYs_SpecialS_8012E270 clearing x2238, take_dmg_cb, and death2_cb."
+  ],
+  "naming_conventions": [
+    "Yoshi fighter special functions use the ftYs_ prefix, with SpecialS and SpecialAirS names for side-special states despite the PR title mentioning SpecialN.",
+    "Unknown matched helpers in this area retained address-based names such as fn_8012D230 until a stronger semantic name is available.",
+    "Yoshi motion-var union members are lowercase move names: specialn, specials, and specialhi.",
+    "New padding in ftYoshiAttributes uses offset-oriented names like pad_x50 and pad_x124 rather than generic data_filler names.",
+    "Item functions in ityoshieggthrow.h retain address-style names such as it_802B2890 when no descriptive symbol is available."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used exact motion-state constants such as 0x161, 0x15C, 0x163, and 0x15E with flags 0x0C4C5092U to match transition wrappers.",
+    "Preserved fp->cur_anim_frame in Fighter_ChangeMotionState calls, with start frame 0 and anim speed 1.",
+    "Used ftCommon_8007D5D4 for ground-related transitions and ftCommon_8007D7FC for air-related transitions before changing motion state.",
+    "Introduced an extern float ftYs_Init_804D9A70 path for zeroing several velocity/acceleration fields, mirroring an existing note that replacing a data symbol with a literal can prevent 100% matching.",
+    "Used M2C_FIELD only where still needed in existing code, while replacing other ambiguous accesses with structured fields such as fp->mv.ys.specials.x30 and fp->mv.ys.specialhi.x4.",
+    "Matched collision behavior by checking ft_80082708(gobj) == GA_Ground, then converting to ground state and calling ftYs_SpecialS_8012F0DC with current animation frame."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "The PR context reports one issue comment but the human text excerpt is empty, so no actionable reviewer feedback can be extracted."
+  ],
+  "searchable_terms": [
+    "PR1736",
+    "Gelatart",
+    "ftYs_SpecialN",
+    "ftYs_SpecialS_8012E270",
+    "ftYs_SpecialAirSStart_0_Phys",
+    "ftYs_SpecialAirSEnd_Phys",
+    "ftYs_SpecialAirSStart_1_Phys",
+    "ftYs_SpecialAirSLanding_Phys",
+    "ftYs_SpecialAirSEnd_Coll",
+    "fn_8012D230",
+    "fn_8012D2F8",
+    "fn_8012D3C0",
+    "fn_8012D488",
+    "ftYoshiAttributes",
+    "ftYoshi_MotionVars",
+    "ftYoshi_FighterVars",
+    "Item_GObj",
+    "ityoshieggthrow.h",
+    "it_802B2890",
+    "Fighter_ChangeMotionState",
+    "ftCommon_8007D5D4",
+    "ftCommon_8007D7FC",
+    "ftCommon_8007D494",
+    "ftYs_Init_804D9A70",
+    "STATIC_ASSERT sizeof ftYoshiAttributes"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename fn_8012D230, fn_8012D2F8, fn_8012D3C0, or fn_8012D488 to semantic Yoshi SpecialS transition names.",
+    "Search for additional ftYoshiAttributes fields near offsets x6C and x70 to confirm their semantic names.",
+    "Inspect later changes to ityoshieggthrow.h for typed prototypes replacing UNK_RET/UNK_PARAMS around it_802B28C8 through it_802B2D30.",
+    "Compare other fighter special move files for the pattern of clearing item pointers and take_dmg_cb/death2_cb during cleanup.",
+    "Search for remaining M2C_FIELD accesses around fp+2370 in Yoshi code that could now use fp->mv.ys.specials.x30."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

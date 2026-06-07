@@ -1,0 +1,157 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2094",
+  "pr": {
+    "number": 2094,
+    "title": "almost match itkusudama.c",
+    "url": "https://github.com/doldecomp/melee/pull/2094",
+    "state": "MERGED",
+    "author": "lukechampine",
+    "created_at": "2026-01-15T00:24:13Z",
+    "merged_at": "2026-01-15T01:50:40Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large item-system decompilation pass for src/melee/it/items/itkusudama.c, replacing many placeholder stubs with C for Kusudama spawn, motion, collision, damage, drop/throw, effects, and item-spawning behavior. The PR description says everything matched except it_80289BE8, reported at 97%, with the author suspecting further refactoring was needed. Supporting headers gained Kusudama item-vars and special-attribute structs, itkusudama.h prototypes were corrected, and it_8026F3AC was changed from void to returning ItemKind so random item spawning could be represented in C.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "item-behavior",
+      "prototype-correction",
+      "struct-definition"
+    ],
+    "systems": [
+      "item",
+      "kusudama",
+      "common-items"
+    ]
+  },
+  "key_files": [
+    "src/melee/it/items/itkusudama.c",
+    "src/melee/it/items/itkusudama.h",
+    "src/melee/it/itCommonItems.h",
+    "src/melee/it/it_266F.c",
+    "src/melee/it/it_266F.h",
+    "src/melee/it/types.h"
+  ],
+  "what_changed": [
+    "Implemented most of itkusudama.c, adding about 555 lines and replacing placeholder markers for functions including it_802896CC, it_3F14_Logic4_Spawned, it_802897C8, it_80289910, it_80289A00, it_80289B50, it_80289BE8, it_8028A114, it_8028A190, it_8028A3CC, it_8028A544, it_8028AC74, it_8028AD44, and several itKusudama_UnkMotion and Logic4 callbacks.",
+    "Added itKusudama_ItemVars to itCommonItems.h with fields mapped to ip+DD4 and ip+DD8, used through ip->xDD4_itemVar.kusudama.x0 and x4.",
+    "Added itKusudamaAttributes to itCommonItems.h with probability/count/physics-style fields x0, x4, x8, xC, x10, x14, x18, x1C, x20, x28, and x2C; these are read from ip->xC4_article_data->x4_specialAttributes.",
+    "Changed it_8026F3AC in it_266F.c/.h from void to ItemKind and returned it_8026C75C(&it_804A0E50), enabling callers in it_80289BE8 to consume a random item kind.",
+    "Updated itkusudama.h prototypes from unknown or incorrect signatures toward concrete signatures, including it_802897C8(Item_GObj*, f32), it_80289910(Item_GObj*, f32), it_80289A00(Item_GObj*), it_80289B50(Item_GObj*, s32), and it_80289BE8(Item_GObj*, s32, s32, s32).",
+    "Replaced a suspicious old extern f32 it_804DC9E4 call pattern with explicit gobj-plus-angle calls such as it_802897C8(gobj, 1.5707964f).",
+    "Added local static inline helpers in itkusudama.c to model duplicated compiler output patterns, including it_80289BE8_inline, it_80289BE8_spawn, it_8028A190_inline, it_8028A544_inline, itKusudama_UnkMotion3_inline, collision helpers, and damage/clank helpers.",
+    "Implemented Kusudama item spawning logic with SpawnItem initialization for It_Kind_Kusudama and later contents spawning for configured item kind, food, or random items, including HSD_Randi/HSD_Randf velocity randomization and ftLib_800874CC owner notification.",
+    "Implemented motion/collision transitions that reset velocity, set animation states via Item_80268E5C, update rotations with HSD_JObjGet/SetRotationX/Y, call item physics helpers, and set Kusudama state flags/timers.",
+    "Implemented burst/effect behavior in itKusudama_UnkMotion8_Anim, calling it_80289BE8 and spawning effect 0x433 on dynamic bones 3 and 5."
+  ],
+  "smart_moves": [
+    "The PR introduced item-specific vars and attributes before relying on them in code, making the Kusudama behavior expressible through ip->xDD4_itemVar.kusudama and specialAttributes rather than raw offsets.",
+    "Changing it_8026F3AC to return ItemKind was a targeted prototype correction: the implementation already called it_8026C75C, and Kusudama needed the selected kind to fill spawned[] and pass it to it_80289BE8_spawn.",
+    "Factoring repeated position/velocity setup into it_80289BE8_inline and spawn setup into it_80289BE8_spawn reduced repeated code in the difficult contents-spawning function while preserving evidence of the common assembly pattern.",
+    "The implementation kept small static inline transition helpers for repeated animation/rotation state changes, a common matching tactic when the compiler duplicated short sequences across callbacks.",
+    "The PR used concrete math constants for rotations and angle clamps, such as 1.5707964f, 3.1415927f, 6.2831855f, 0.17453292f, and 0.08726646f, instead of abstracting them away, which is often necessary for float-sensitive matching.",
+    "The author explicitly documented that it_80289BE8 was only 97% matched, preserving the known weak point rather than overstating completion."
+  ],
+  "decomp_lessons": [
+    "For item files, matching often depends on first correcting common helper prototypes; if a helper semantically returns an ItemKind, leaving it as void can block accurate caller reconstruction.",
+    "Item-specific xDD4 vars should be modeled in itCommonItems.h when multiple callbacks share state flags/timers; this turns raw offset manipulation into stable field references and improves future matching.",
+    "Special-attribute structs can be introduced with placeholder names and offsets when semantics are not fully known; preserving exact field offsets is more important than forcing speculative names.",
+    "When an item behavior repeatedly transitions animation states, small static inline helpers can mirror the compiler's duplicated code and improve matching without creating exported symbols.",
+    "For hard functions like it_80289BE8, isolate repeated sub-expressions such as position/velocity setup and spawn wrappers, then compare whether call sites are equivalent to those helpers.",
+    "Do not hide unresolved matching work: recording that it_80289BE8 was 97% and likely needed refactoring is useful for future decomp passes.",
+    "Callbacks for damage, clank, shield hit, reflection, dropped, thrown, and collision may share core transition helpers; matching can improve by identifying these behavioral aliases instead of independently writing each callback."
+  ],
+  "naming_conventions": [
+    "New item-specific structs followed the project pattern itKusudama_ItemVars and itKusudamaAttributes.",
+    "Unknown struct fields were kept offset-based, e.g. x0, x4, x8, xC, x10, x14, x18, x1C, x20, x28, x2C, with comments documenting offsets.",
+    "Item-var access used the established union style ip->xDD4_itemVar.kusudama.x0 and ip->xDD4_itemVar.kusudama.x4.",
+    "Local helper names used the target function address plus suffixes like _inline, _spawn, _inline2, and callback-specific names such as itKusudama_UnkMotion5_Coll_inline.",
+    "Existing unresolved function names remained address-based, e.g. it_80289BE8 and it_8028A114, rather than inventing semantic names without evidence.",
+    "Item kind constants were expressed with existing enum-style names such as It_Kind_Kusudama, It_Kind_Foods, and It_Kind_M_Ball."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used PAD_STACK annotations with specific byte counts, including PAD_STACK(4), PAD_STACK(8), and PAD_STACK(12), to preserve stack layout for matching.",
+    "Introduced static inline helpers to coerce compiler inlining and duplicate short transition sequences where the assembly likely expected inlined code.",
+    "Kept local variable shadowing in it_80289BE8, including inner Vec3 pos/vel declarations, which may have been needed for stack/register layout in the difficult 97% function.",
+    "Used goto food_or_random in it_80289BE8 to represent branch structure for the contents-selection logic.",
+    "Preserved explicit float constants and arithmetic order in rotation and velocity calculations to avoid float-codegen drift.",
+    "Used boolean and enum return values, especially ItemKind return values with -1 sentinel, to match control flow in item spawn paths.",
+    "Compared gobj-spawn results against NULL before applying velocity and effect/notification calls, mirroring object creation control flow.",
+    "Reviewer/author comment identified a potential refactor: an explicit zeroed pos/vel block appeared suspiciously equivalent to it_80289BE8_inline(gobj, 0.0f, &pos, &vel)."
+  ],
+  "review_feedback": [
+    {
+      "author": "lukechampine",
+      "path": "src/melee/it/items/itkusudama.c",
+      "comment": "this is suspiciously equivalent to `it_80289BE8_inline(gobj, 0.0f, &pos, &vel)`",
+      "lesson": "In the remaining hard function, try replacing explicit zero-velocity setup with the shared inline helper at vel_scale 0.0f; the equivalence may improve structure or reveal why the match is still off."
+    },
+    {
+      "author": "lukechampine",
+      "path": null,
+      "comment": "Everything except `it_80289BE8` (97%), which presumably just needs some refactoring; I tried a bunch of stuff but this was the closest I could get it :/",
+      "lesson": "The known weak match is it_80289BE8; future work should focus on refactoring, not broad behavior changes."
+    }
+  ],
+  "searchable_terms": [
+    "pr-2094",
+    "almost match itkusudama.c",
+    "lukechampine",
+    "itkusudama.c",
+    "itkusudama.h",
+    "itCommonItems.h",
+    "itKusudama_ItemVars",
+    "itKusudamaAttributes",
+    "kusudama",
+    "It_Kind_Kusudama",
+    "It_Kind_Foods",
+    "It_Kind_M_Ball",
+    "it_802896CC",
+    "it_3F14_Logic4_Spawned",
+    "it_802897C8",
+    "it_80289910",
+    "it_80289A00",
+    "it_80289B50",
+    "it_80289BE8",
+    "it_80289BE8_inline",
+    "it_80289BE8_spawn",
+    "it_8028A114",
+    "it_8028A190",
+    "it_8028A3CC",
+    "it_8028A544",
+    "it_8028AC74",
+    "it_8028AD44",
+    "it_8026F3AC",
+    "ItemKind",
+    "SpawnItem",
+    "Item_80268B5C",
+    "HSD_Randi",
+    "HSD_Randf",
+    "HSD_JObjSetRotationX",
+    "HSD_JObjSetRotationY",
+    "ftLib_800874CC",
+    "efSync_Spawn",
+    "PAD_STACK",
+    "97%",
+    "food_or_random"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that mention it_80289BE8 or itkusudama.c to see whether the remaining 97% function was fully matched.",
+    "Search for later renames or semantic field names for itKusudamaAttributes fields x0, x4, x8, xC, x10, x14, x18, x1C, x20, x28, and x2C.",
+    "Check whether it_8026F3AC returning ItemKind affected other item files or required downstream prototype cleanups.",
+    "Look for future review comments about replacing explicit zero pos/vel setup with it_80289BE8_inline(gobj, 0.0f, &pos, &vel).",
+    "Compare the static inline helper patterns in itkusudama.c with other container item decompilations such as barrels, capsules, party balls, or food spawning."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

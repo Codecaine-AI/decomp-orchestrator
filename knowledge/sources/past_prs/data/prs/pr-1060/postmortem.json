@@ -1,0 +1,153 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1060",
+  "pr": {
+    "number": 1060,
+    "title": "Match `it_2F2B` (412 bytes)",
+    "url": "https://github.com/doldecomp/melee/pull/1060",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2024-01-14T15:28:37Z",
+    "merged_at": "2024-01-14T15:36:17Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the previously-asm item file `it_2F2B` as C, replacing `asm/melee/it/items/it_2F2B.s` with `src/melee/it/items/it_2F2B.c` and updating `obj_files.mk` to build the C object. The matched file covers 412 bytes at 100%, including `it_802F2BFC`, `it_802F2CE0`, three small item-state callbacks, and the `it_803F9480` item state table. The work also tightened related prototypes and types around Yoshi shield/item ownership, including `ftYs_Shield_8012CC6C` returning `Fighter_Part`, `ftLib_80086630` taking a `Fighter_Part`, item/fighter gobj-specific parameters, and `Fighter::x1A60` as `Item_GObj*`. No review comments were present in the slice.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "type-correction",
+      "tooling"
+    ],
+    "systems": [
+      "item",
+      "fighter",
+      "Yoshi",
+      "ftlib",
+      "build-system",
+      "tooling"
+    ]
+  },
+  "key_files": [
+    "asm/melee/it/items/it_2F2B.s",
+    "src/melee/it/items/it_2F2B.c",
+    "src/melee/it/items/it_2F2B.h",
+    "obj_files.mk",
+    "src/melee/ft/chara/ftYoshi/ftYs_Guard.c",
+    "src/melee/ft/chara/ftYoshi/ftYs_Guard.h",
+    "src/melee/ft/ftlib.c",
+    "src/melee/ft/ftlib.h",
+    "src/melee/ft/types.h",
+    "src/melee/it/it_266F.h",
+    "src/melee/it/it_2725.h",
+    "src/melee/it/item.c",
+    "src/melee/it/item.h",
+    "tools/functions.sh"
+  ],
+  "what_changed": [
+    "Deleted the 139-line assembly implementation `asm/melee/it/items/it_2F2B.s` and added a 72-line C implementation in `src/melee/it/items/it_2F2B.c`.",
+    "Switched `obj_files.mk` from building `$(BUILD_DIR)/asm/melee/it/items/it_2F2B.s.o` to `$(BUILD_DIR)/src/melee/it/items/it_2F2B.c.o`.",
+    "Added `src/melee/it/items/it_2F2B.h` declaring `it_802F2BFC`, `it_802F2CE0`, and extern `ItemStateTable it_803F9480[]`.",
+    "Implemented `it_803F9480` as a one-entry `ItemStateTable` with state id `-1` and callbacks `it_802F2CCC`, `it_802F2CD4`, and `it_802F2CD8`.",
+    "Implemented `it_802F2BFC(Item_GObj* gobj, ftYs_GObj* owner_gobj)` to bind an item to Yoshi shield ownership: set `atk_victim` and `grab_victim`, call `it_8026C220`, clear `xDD0_flag.bits.b1`, set the item state table, attach the item to the owner shield part, and run item setup helpers.",
+    "Implemented `it_802F2CE0(Item_GObj* gobj, bool has_destroy_type)` to detach/cleanup the item: call `it_80275070`, compute item position from the owner's shield joint via `ftLib_80086630` and `lb_8000B1CC`, call release/update helpers, optionally clear `destroy_type`, null `atk_victim` and `grab_victim`, then call `it_8027CE44` and `Item_8026A8EC`.",
+    "Changed `ftYs_Shield_8012CC6C` from a void helper to `Fighter_Part ftYs_Shield_8012CC6C(ftYs_GObj* gobj)` and returned the result of `ftParts_8007500C(GET_FIGHTER(gobj), 52)`.",
+    "Changed `ftLib_80086630` from taking a raw `s32 i` to taking `Fighter_Part part`, and used that enum-like part index to access `fp->parts[part].joint`.",
+    "Typed `Fighter::x1A60` as `Item_GObj*` instead of `u32`.",
+    "Updated item APIs to use more specific gobj types: `it_8027B4A4(Fighter_GObj*, Item_GObj*)` and `Item_8026A8EC(Item_GObj*)`.",
+    "Expanded `it_2725.h` with address-commented prototypes needed by the new C file, including `it_80273408`, `it_80274C88`, `it_80274ECC`, `it_80274F48`, `it_80275070`, `it_8027B378`, and `it_8027CE44`.",
+    "Removed automatic inclusion of `ftCommon/forward.h` from `tools/functions.sh` header generation."
+  ],
+  "smart_moves": [
+    "The PR did not merely force a local match; it corrected upstream prototypes and return types so the C reads naturally and preserves meaningful dataflow, especially the returned `Fighter_Part` from `ftYs_Shield_8012CC6C`.",
+    "Using typed aliases such as `Item_GObj*`, `Fighter_GObj*`, `ftYs_GObj*`, and `Fighter_Part` made the item-owner relationship explicit and helped express the assembly calls without generic `HSD_GObj*` or raw integer placeholders.",
+    "The implementation reuses existing item and fighter helpers instead of open-coding behavior: `it_80274F48`, `it_80275070`, `ftLib_80086630`, `lb_8000B1CC`, `it_8027B4A4`, `it_8027B378`, and item destruction helpers.",
+    "The assembly table `it_803F9480` was translated into a typed `ItemStateTable` initializer rather than left as raw data, improving future item-state decomp readability.",
+    "The small callback functions were represented directly as `return false` and an empty function body, matching the trivial assembly while keeping callback signatures consistent.",
+    "The cleanup function keeps the optional `destroy_type` write guarded by the boolean argument, matching the conditional assembly behavior instead of flattening it."
+  ],
+  "decomp_lessons": [
+    "When an assembly routine passes the result of a helper into another function, revisit the helper's return type; here `ftYs_Shield_8012CC6C` needed to return `Fighter_Part` rather than `void`.",
+    "Raw `s32` part indices should become `Fighter_Part` when they index `Fighter::parts`; this improves correctness and makes call chains involving fighter joints easier to reason about.",
+    "Item files that interact with owners often require more precise gobj typing across neighboring headers before the item C will be clean and reusable.",
+    "Translating an item state table to `ItemStateTable` with typed callbacks is preferable to keeping raw `.4byte` table data once callback signatures are known.",
+    "Field names such as `atk_victim`, `grab_victim`, `xBC_itemStateContainer`, `xC4_article_data`, `xDD0_flag.bits.b1`, `destroy_type`, and `pos` can replace offset-heavy assembly patterns when the item struct is sufficiently understood.",
+    "Header cleanup can be part of matching work: add only the forward declarations/includes needed by the matched file and avoid generated headers pulling unrelated forward headers by default.",
+    "The evidence shows this PR partially resolved issue #1059, but the slice does not include that issue context, so the exact broader task is not documented here."
+  ],
+  "naming_conventions": [
+    "Matched functions kept address-based names: `it_802F2BFC`, `it_802F2CCC`, `it_802F2CD4`, `it_802F2CD8`, and `it_802F2CE0`.",
+    "The item state table global kept its address-based symbol name `it_803F9480`.",
+    "The new header uses an address-derived include guard `GALE01_2F2BFC`.",
+    "Header prototypes in `it_2725.h` use address comments such as `/* 274F48 */` and named parameters where known.",
+    "More specific typedef-style object names are preferred over generic `HSD_GObj*` when known: `Item_GObj*`, `Fighter_GObj*`, and `ftYs_GObj*`.",
+    "Boolean state callbacks use `bool` and return `false` instead of raw integer `0` in C.",
+    "The cleanup argument was named semantically as `has_destroy_type`, reflecting the conditional clearing of `item->destroy_type`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed the entire assembly file after achieving a reported 100.00% match for the 412-byte C file.",
+    "Converted the assembly `.data` table with `-1` and three callback pointers into a one-element `ItemStateTable` initializer.",
+    "Matched bit manipulation of byte `0xDD0` as `item->xDD0_flag.bits.b1 = 0`.",
+    "Matched pointer stores at item offsets corresponding to owner/victim links as `item->atk_victim = owner_gobj` and `item->grab_victim = owner_gobj`.",
+    "Matched nested article/model descriptor loads for bone attach id as `item->xC4_article_data->x10_modelDesc->x8_bone_attach_id`.",
+    "Preserved call order from assembly in setup and cleanup functions, which is often critical for exact matching and behavior.",
+    "Represented the `li r3, 0; blr` callbacks as `return false` and the pure `blr` callback as an empty void function.",
+    "Replaced the assembly zero constant `it_804DDA08` used for `it_8027B378` with literal `0` in C.",
+    "Used `NULL` for zero pointer arguments and cleared item owner/victim pointers with `NULL` during cleanup."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1060",
+    "Match it_2F2B",
+    "it_2F2B",
+    "it_802F2BFC",
+    "it_802F2CE0",
+    "it_802F2CCC",
+    "it_802F2CD4",
+    "it_802F2CD8",
+    "it_803F9480",
+    "ItemStateTable",
+    "Yoshi shield",
+    "ftYs_Shield_8012CC6C",
+    "Fighter_Part",
+    "ftLib_80086630",
+    "ftParts_8007500C",
+    "Item_GObj",
+    "Fighter_GObj",
+    "ftYs_GObj",
+    "atk_victim",
+    "grab_victim",
+    "xBC_itemStateContainer",
+    "xDD0_flag.bits.b1",
+    "xC4_article_data",
+    "x8_bone_attach_id",
+    "it_80274F48",
+    "it_80275070",
+    "it_8027B4A4",
+    "it_8027B378",
+    "it_8027CE44",
+    "Item_8026A8EC",
+    "lb_8000B1CC",
+    "obj_files.mk",
+    "tools/functions.sh",
+    "ftCommon/forward.h"
+  ],
+  "follow_up_queries": [
+    "Find other item files that call `ftYs_Shield_8012CC6C` and may benefit from the corrected `Fighter_Part` return type.",
+    "Search for raw `s32` parameters indexing `Fighter::parts` that should be converted to `Fighter_Part`.",
+    "Search for remaining `HSD_GObj*` item APIs that can be narrowed to `Item_GObj*` or `Fighter_GObj*` based on call sites.",
+    "Investigate issue #1059 to determine which remaining files or bytes were part of the same partial resolution.",
+    "Check whether generated headers still include only necessary forward declarations after removing `ftCommon/forward.h` from `tools/functions.sh`."
+  ],
+  "confidence": 0.94,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

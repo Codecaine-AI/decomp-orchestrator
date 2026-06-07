@@ -95,6 +95,22 @@ track the leased target and affected neighbors, run narrow checks, compare
 object or objdiff signal, and undo their own retained hunks when those hunks
 regress local evidence.
 
+The worker return is also mechanically gated. The runner captures the write-set
+diff before the first worker attempt, then evaluates every returned report.
+`progress` and `score_candidate` reports are accepted only when the structured
+report includes a passed `local_regression_check`, no target regression, no
+neighbor regressions, baseline and final validation artifacts that exist on
+disk, and edited paths that remain inside the lease write set. A worker that
+returns `stalled_no_useful_guess` or `needs_fact` must not leave new write-set
+edits behind.
+
+If the post-return gate fails, the runner keeps the lease held and sends a
+`repair_request` back to the worker for a configurable number of repair turns.
+Only after the return passes or the repair budget is exhausted does the runner
+record the worker report, release file locks, and emit the wake event. An
+optional runner-owned post-return command can be configured for additional
+narrow validation before accepting `progress` or `score_candidate`.
+
 Global score integration happens outside the worker's local loop. A worker can
 surface a score candidate, but the run baseline changes only after the
 integration gate validates it.

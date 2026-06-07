@@ -1,0 +1,147 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-61",
+  "pr": {
+    "number": 61,
+    "title": "Sysdolphin Cleanup & RObj matching",
+    "url": "https://github.com/doldecomp/melee/pull/61",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2020-11-20T18:25:35Z",
+    "merged_at": "2020-11-20T18:25:47Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the first four Sysdolphin RObj functions by introducing src/sysdolphin/robj.c and robj.h, moving HSD_RObjInitAllocData, HSD_RObjGetAllocData, HSD_RvalueObjGetAllocData, and func_8037AE90 out of asm/robj.s. The PR also renamed func_8037AE90 references in assembly callsites to HSD_RObjSetFlags, added RObj/Rvalue/IK/Exp-related struct definitions, tightened TEV alloc-data types from void*/u8 arrays to HSD_ObjAllocData*, and removed now-unneeded force_active/peephole pragma scaffolding in AObj, ID, and initialize code.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "cleanup",
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "symbol-renaming",
+      "build-system"
+    ],
+    "systems": [
+      "sysdolphin",
+      "RObj",
+      "TEV",
+      "AObj",
+      "ID",
+      "initialize",
+      "asm",
+      "build"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/robj.c",
+    "src/sysdolphin/robj.h",
+    "asm/robj.s",
+    "obj_files.mk",
+    "asm/code_8000B1CC.s",
+    "src/sysdolphin/tev.c",
+    "src/sysdolphin/tev.h",
+    "src/sysdolphin/aobj.c",
+    "src/sysdolphin/id.c",
+    "src/sysdolphin/initialize.c"
+  ],
+  "what_changed": [
+    "Added src/sysdolphin/robj.c containing C implementations for HSD_RObjInitAllocData, HSD_RObjGetAllocData, HSD_RvalueObjGetAllocData, and HSD_RObjSetFlags.",
+    "Removed the corresponding assembly bodies from asm/robj.s, leaving later RObj functions still in assembly.",
+    "Added src/sysdolphin/robj.h with RObj-related constants, structs, and function prototypes.",
+    "Added src/sysdolphin/robj.o to TEXT_O_FILES in obj_files.mk before asm/robj.o so the newly matched C functions are linked.",
+    "Updated existing assembly callsites in asm/code_8000B1CC.s from func_8037AE90 to the newly named HSD_RObjSetFlags.",
+    "Changed TEV alloc-data externs from raw u8 arrays to HSD_ObjAllocData objects and changed HSD_RenderGetAllocData, HSD_TevRegGetAllocData, and HSD_ChanGetAllocData return types from void* to HSD_ObjAllocData*.",
+    "Included objalloc.h from tev.h so TEV alloc-data accessors can expose HSD_ObjAllocData* in their public prototypes.",
+    "Removed a force_active pragma block around _HSD_AObjForgetMemory.",
+    "Collapsed or removed peephole pragma push/pop scaffolding around _HSD_IDForgetMemory and HSD_GXSetFifoObj."
+  ],
+  "smart_moves": [
+    "Started RObj decompilation with small leaf/simple allocator functions, which reduced asm while minimizing risk.",
+    "Named func_8037AE90 as HSD_RObjSetFlags based on its behavior: NULL check followed by OR-ing the supplied flags into robj->flags.",
+    "Used real allocator storage types for TEV globals instead of byte arrays plus casts, making later code and prototypes safer and clearer.",
+    "Introduced robj.h at the same time as robj.c, capturing the struct layout knowledge needed for the matched functions and for later RObj work.",
+    "Kept existing unknown static/global labels such as lbl_804C2368 and lbl_804C2394 as externs with descriptive comments, avoiding unsupported global renames while documenting intended meaning.",
+    "Updated assembly symbol references to the new C function name, improving cross-file readability even where callers were still in asm.",
+    "Removed decompilation-only pragma scaffolding once it was no longer needed for matching, reducing fragile compiler-control clutter."
+  ],
+  "decomp_lessons": [
+    "Allocator init/getter functions are good early targets: matching can often be achieved by declaring the backing HSD_ObjAllocData globals and calling HSD_ObjAllocInit with sizeof(struct) and alignment parameters.",
+    "When a function's behavior is obvious from assembly, a semantic name like HSD_RObjSetFlags can be introduced and propagated to assembly callsites before all callers are decompiled.",
+    "Replacing raw byte-array externs with the true struct type can eliminate casts and improve function signatures without changing behavior.",
+    "Header work is part of matching: struct definitions, unions, constants, and prototypes may be needed before even small C functions can be expressed cleanly.",
+    "Pragma push/pop or force_active blocks should be revisited after nearby functions match; some were only temporary matching aids.",
+    "Partial module migration is viable: add src/sysdolphin/robj.o before asm/robj.o and delete only the matched assembly ranges, while leaving the rest of asm/robj.s intact."
+  ],
+  "naming_conventions": [
+    "Sysdolphin public functions use HSD_ prefixes, e.g. HSD_RObjInitAllocData, HSD_RObjGetAllocData, HSD_RvalueObjGetAllocData, HSD_RObjSetFlags.",
+    "RObj type names follow HSD_RObj, HSD_RObjDesc, HSD_RObjAnimJoint, with struct tags using underscored forms like struct _HSD_RObj.",
+    "Rvalue names in this PR use HSD_Rvalue and HSD_RvalueList, with the accessor spelled HSD_RvalueObjGetAllocData.",
+    "RObj constants were introduced as uppercase macros: TYPE_MASK, REFTYPE_JOBJ, REFTYPE_IKHINT.",
+    "Unknown data labels remained as lbl_804C2368/lbl_804C2394 with comments documenting likely names such as robj_alloc_data and rvalue_alloc_data.",
+    "TEV allocator getters use HSD_RenderGetAllocData, HSD_TevRegGetAllocData, and HSD_ChanGetAllocData and now return HSD_ObjAllocData*."
+  ],
+  "assembly_or_matching_tactics": [
+    "HSD_RObjSetFlags matches a simple pattern: if the HSD_RObj pointer is non-NULL, OR flags into offset 0x04 and return.",
+    "HSD_RObjInitAllocData matches by calling HSD_ObjAllocInit twice: once for RObj allocation data with sizeof(HSD_RObj) and once for Rvalue allocation data with sizeof(HSD_Rvalue), both with alignment/count argument 4.",
+    "The deleted asm shows HSD_RObjGetAllocData and HSD_RvalueObjGetAllocData were simple address-returning functions, making them straightforward C matches.",
+    "The build was adjusted by inserting src/sysdolphin/robj.o before asm/robj.o, enabling mixed C/asm ownership of the RObj text section.",
+    "The PR used symbol renaming in existing assembly callsites rather than waiting for those callers to be decompiled.",
+    "TEV cleanup removed casts in HSD_ObjAllocInit calls by typing globals as HSD_ObjAllocData."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-61",
+    "PsiLupan",
+    "Sysdolphin Cleanup",
+    "RObj matching",
+    "src/sysdolphin/robj.c",
+    "src/sysdolphin/robj.h",
+    "asm/robj.s",
+    "HSD_RObjInitAllocData",
+    "HSD_RObjGetAllocData",
+    "HSD_RvalueObjGetAllocData",
+    "HSD_RObjSetFlags",
+    "func_8037AE90",
+    "lbl_804C2368",
+    "lbl_804C2394",
+    "robj_alloc_data",
+    "rvalue_alloc_data",
+    "HSD_ObjAllocData",
+    "HSD_ObjAllocInit",
+    "HSD_RObj",
+    "HSD_Rvalue",
+    "HSD_RvalueList",
+    "HSD_IKHint",
+    "HSD_Exp",
+    "HSD_RObjDesc",
+    "HSD_RObjAnimJoint",
+    "TYPE_MASK",
+    "REFTYPE_JOBJ",
+    "REFTYPE_IKHINT",
+    "TEV alloc_data",
+    "HSD_RenderGetAllocData",
+    "HSD_TevRegGetAllocData",
+    "HSD_ChanGetAllocData",
+    "force_active",
+    "peephole pragma",
+    "obj_files.mk",
+    "TEXT_O_FILES"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that continue matching remaining functions in asm/robj.s after func_8037AEA8.",
+    "Search for later renames of lbl_804C2368 and lbl_804C2394 to robj_alloc_data and rvalue_alloc_data.",
+    "Check whether TYPE_MASK, REFTYPE_JOBJ, and REFTYPE_IKHINT were later renamed or expanded with additional RObj flag constants.",
+    "Find follow-up work that replaces raw TEV allocation sizes 0x1C, 0x14, and 0x30 with sizeof concrete structs.",
+    "Search for later removal of NON_MATCHING around HSD_RenderInitAllocData."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

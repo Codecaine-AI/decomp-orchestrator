@@ -1,0 +1,153 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1184",
+  "pr": {
+    "number": 1184,
+    "title": "TObj mostly matched, GXSetTexCoordGen2 match, and various GX type cleanup/additions",
+    "url": "https://github.com/doldecomp/melee/pull/1184",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-02-02T18:19:29Z",
+    "merged_at": "2024-02-02T18:27:22Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched most of sysdolphin baselib TObj and replaced GXSetTexCoordGen2's NOT_IMPLEMENTED body with a typed implementation, while cleaning up GX texture/TLUT/framebuffer prototypes and related baselib naming. The PR body states TObj was matched except for a regswap in HSD_TObjSetupTextureCoordGen. It also renamed symbols such as allocShadowTObj to HSD_TObjAlloc and HSD_TlutFree to HSD_TlutRemove, added GX enum/type coverage for CI texture formats and TLUT objects, and propagated HSD_ImageDesc field naming from img_ptr to image_ptr.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "cleanup",
+      "symbol-renaming",
+      "gx-api-typing"
+    ],
+    "systems": [
+      "sysdolphin-baselib",
+      "dolphin-gx",
+      "config-symbols",
+      "asm-labels",
+      "melee-cm"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/tobj.c",
+    "src/sysdolphin/baselib/tobj.h",
+    "asm/sysdolphin/baselib/tobj.s",
+    "src/dolphin/gx/GXAttr.c",
+    "src/dolphin/gx/GXAttr.h",
+    "src/dolphin/gx/GXEnum.h",
+    "src/dolphin/gx/GXTexture.c",
+    "src/dolphin/gx/GXTexture.h",
+    "src/dolphin/gx/__types.h",
+    "src/dolphin/gx/forward.h",
+    "src/dolphin/gx/GXFrameBuf.c",
+    "src/dolphin/gx/GXFrameBuf.h",
+    "src/sysdolphin/baselib/shadow.c",
+    "src/sysdolphin/baselib/lobj.c",
+    "src/sysdolphin/baselib/lobj.h",
+    "src/melee/cm/cmsnap.c",
+    "config/GALE01/symbols.txt",
+    "compile_flags.txt"
+  ],
+  "what_changed": [
+    "Added a large TObj C implementation in src/sysdolphin/baselib/tobj.c, including texture matrix setup, texture coordinate generation setup, volatile TEV setup, TExp construction helpers, resource assignment, texture/TLUT setup, allocation/free/remove helpers, image-desc EFB copy support, and TObj class init/release/amnesia logic.",
+    "Implemented GXSetTexCoordGen2 in src/dolphin/gx/GXAttr.c with typed parameters, XF register writes through WGPIPE, source/type switch handling for GX_TG_POS/NRM/BINRM/TANGENT/COLOR/TEX sources, bump/SRTG handling, matrix index state updates in __GXContexts, and a final __GXSetMatrixIndex call.",
+    "Changed GXSetTexCoordGen2 declaration from raw u32/s32 parameters to GXTexCoordID, GXTexGenType, GXTexGenSrc, u32, GXBool, u32.",
+    "Added GX enum coverage for GXCITexFmt, GXTlut, and GXTlutFmt in GXEnum.h.",
+    "Added GXTlutObj as a forward-declared GX type and a placeholder struct containing three u32 words in __types.h.",
+    "Retyped GX texture APIs: GXInitTexObj, GXInitTexObjCI, GXInitTexObjLOD, GXLoadTexObjPreLoaded, GXLoadTexObj, GXInitTlutObj, and GXLoadTlut now use GXTexObj/GXTlutObj pointers and GX enums instead of unk_t/s32/u32 placeholders.",
+    "Retyped framebuffer copy APIs GXSetTexCopySrc and GXSetTexCopyDst to use meaningful width/height/source names and GXTexFmt/GXBool for texture-copy destination parameters.",
+    "Renamed allocShadowTObj to HSD_TObjAlloc and HSD_TlutFree to HSD_TlutRemove in asm labels, callsites, and config/GALE01/symbols.txt.",
+    "Updated shadow and cmsnap code to use HSD_ImageDesc.image_ptr instead of img_ptr, including NULL usage and GXCopyTex calls.",
+    "Changed HSD_LObjGetLightMaskDiffuse return type from s32 to GXLightID.",
+    "Added -Wno-tautological-compare to compile_flags.txt; the PR does not explicitly explain why, but the diff includes decomp-style code that can trigger tautological-compare warnings."
+  ],
+  "smart_moves": [
+    "Matched decomp work by first tightening public GX prototypes and enums, letting TObj call GX APIs with domain-specific types instead of broad integer placeholders.",
+    "Kept symbol map, assembly labels, and C callsites synchronized when promoting allocShadowTObj to the clearer global symbol HSD_TObjAlloc and separating HSD_TlutRemove from HSD_TlutFree semantics.",
+    "Used SDK-like GX naming for parameters such as image_ptr, width, height, wrap_s, wrap_t, mipmap, min_lod, max_lod, lod_bias, and max_aniso, which makes later matching and callsite auditing easier.",
+    "Preserved evidence of remaining mismatch in the PR body: nearly all TObj matched except a regswap in HSD_TObjSetupTextureCoordGen, avoiding overclaiming full completion.",
+    "Replaced ad-hoc string globals for asserts/panics with __FILE__ and HSD_ASSERT patterns in TObj, reducing artificial data symbols while keeping assert behavior represented.",
+    "Modeled texture/TLUT setup through GXInitTexObjCI, GXInitTlutObj, and GXLoadTlut rather than open-coding, aligning baselib TObj behavior with typed GX interfaces."
+  ],
+  "decomp_lessons": [
+    "For large baselib matches, unblock source matching by improving low-level SDK headers first; precise GX enum and struct types can reduce casts and clarify switch values in higher-level code.",
+    "When a function's real role is discovered, rename all three layers together: asm labels, symbols.txt, and C references. This PR demonstrates that for HSD_TObjAlloc and HSD_TlutRemove.",
+    "If a matched implementation still has a known regswap, record it explicitly in the PR text so future workers know which function and mismatch remain.",
+    "Texture object decomp benefits from separating ownership helpers: HSD_TlutFree performs raw memory-piece free, while HSD_TlutRemove null-checks then frees; using both names documents intent.",
+    "Field renames such as img_ptr to image_ptr should be propagated immediately through dependent systems like shadow and cmsnap to avoid split vocabulary.",
+    "Typed GX prototypes are reusable scaffolding: later GXTexture.c work can fill NOT_IMPLEMENTED bodies against already-correct signatures.",
+    "TObj setup spans multiple subsystems: texture matrices, camera/light vectors, TEV stages, TExp expressions, resource assignment, TLUT management, and GX texture loading must be matched coherently rather than as isolated functions."
+  ],
+  "naming_conventions": [
+    "Use HSD_TObjAlloc for the global TObj allocator instead of allocShadowTObj.",
+    "Use HSD_TlutRemove for the null-safe TLUT removal wrapper; keep HSD_TlutFree for the raw hsdFreeMemPiece helper.",
+    "Use image_ptr for HSD_ImageDesc image memory, not img_ptr.",
+    "Use GXTexObj* and GXTlutObj* for GX texture/TLUT object APIs instead of unk_t.",
+    "Use GXTexFmt for regular texture formats, GXCITexFmt for CI texture formats, GXTlutFmt for TLUT formats, GXTexWrapMode for wrap_s/wrap_t, GXBool for boolean GX parameters, and GXTexMapID/GXTexCoordID for map/coord identifiers.",
+    "Use descriptive framebuffer copy parameter names left, top, wd, and ht for GXSetTexCopySrc.",
+    "Use sysdolphin_base_library and hsd_tobj class-name strings in HSD_TObj class initialization."
+  ],
+  "assembly_or_matching_tactics": [
+    "Promoted asm functions by renaming .fn/.endfn labels in asm/sysdolphin/baselib/tobj.s and updating branch targets to the new symbol names.",
+    "Updated config/GALE01/symbols.txt at the same addresses for renamed functions, preserving function sizes and scopes while improving names.",
+    "Replaced NOT_IMPLEMENTED in GXSetTexCoordGen2 with a full implementation using WGPIPE writes and INSERT_FIELD bitfield operations to match GX hardware register programming.",
+    "Added TObj C implementations while leaving the PR body to document the one known remaining regswap in HSD_TObjSetupTextureCoordGen.",
+    "Added -Wno-tautological-compare, likely to tolerate decompilation-shaped expressions during matching; the dump does not include an explicit rationale.",
+    "Used exact GX enum constants in switches and callsites, which makes generated code more likely to line up with SDK-style control flow than raw magic numbers."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR1184",
+    "PsiLupan",
+    "TObj mostly matched",
+    "HSD_TObjSetupTextureCoordGen regswap",
+    "GXSetTexCoordGen2",
+    "GXSetMatrixIndex",
+    "WGPIPE",
+    "GX_LOAD_XF_REG",
+    "HSD_TObjAlloc",
+    "allocShadowTObj",
+    "HSD_TlutRemove",
+    "HSD_TlutFree",
+    "HSD_TObjAssignResources",
+    "TObjSetupMtx",
+    "TObjSetupTevModulateShadow",
+    "SetupEmbossBumpTev",
+    "HSD_TObjSetupVolatileTev",
+    "HSD_ImageDesc",
+    "image_ptr",
+    "GXCITexFmt",
+    "GXTlut",
+    "GXTlutFmt",
+    "GXTlutObj",
+    "GXInitTexObjCI",
+    "GXInitTlutObj",
+    "GXLoadTlut",
+    "GXTexture.h",
+    "GXEnum.h",
+    "GXAttr.c",
+    "tobj.c",
+    "shadow.c",
+    "cmsnap.c",
+    "GXLightID",
+    "Wno-tautological-compare"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that resolve the HSD_TObjSetupTextureCoordGen regswap mentioned in PR #1184.",
+    "Search for follow-up implementations of GXInitTexObj, GXInitTexObjCI, GXInitTexObjLOD, GXInitTlutObj, and GXLoadTlut after their prototypes were typed here.",
+    "Audit remaining uses of img_ptr versus image_ptr in HSD_ImageDesc-related code.",
+    "Check whether DifferentTluts or related TLUT comparison logic was corrected in a later PR.",
+    "Find subsequent cleanup around GXTlutObj dummy layout once the real GX TLUT object fields were recovered."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

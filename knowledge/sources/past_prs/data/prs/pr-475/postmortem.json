@@ -1,0 +1,162 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-475",
+  "pr": {
+    "number": 475,
+    "title": "Match HSD class",
+    "url": "https://github.com/doldecomp/melee/pull/475",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-08-23T04:58:05Z",
+    "merged_at": "2022-08-23T10:26:39Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the remaining sysdolphin baselib HSD class implementation by deleting asm/sysdolphin/baselib/class.s, removing its object from obj_files.mk, and adding the missing C implementations to src/sysdolphin/baselib/class.c. The PR also moved class APIs out of the generic include/functions.h bucket into include/sysdolphin/baselib/class.h, tightened HSD_ClassInfo init callback typing, and updated callers in dobj, robj asm, and initialize to use the newly named/typed class functions.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "naming",
+      "asm-removal",
+      "class-system"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "HSD class",
+      "memory allocator",
+      "include",
+      "asm",
+      "src"
+    ]
+  },
+  "key_files": [
+    "asm/sysdolphin/baselib/class.s",
+    "src/sysdolphin/baselib/class.c",
+    "include/sysdolphin/baselib/class.h",
+    "include/functions.h",
+    "obj_files.mk",
+    "src/sysdolphin/baselib/dobj.c",
+    "src/sysdolphin/baselib/initialize.c",
+    "asm/sysdolphin/baselib/robj.s"
+  ],
+  "what_changed": [
+    "Deleted the 850-line assembly file asm/sysdolphin/baselib/class.s and removed asm/sysdolphin/baselib/class.s.o from obj_files.mk, leaving class.c.o as the compiled implementation.",
+    "Added C implementations for HSD class allocation/lifecycle functionality including hsdAllocMemPiece, hsdFreeMemPiece, _hsdClassAlloc, _hsdClassInit, _hsdClassRelease, _hsdClassDestroy, _hsdClassAmnesia, _hsdClassInfoInit, hsdNew, hsdIsDescendantOf, hsdObjIsDescendantOf, hsdForgetClassLibrary, hsdSearchClassInfo, and class reporting helpers visible in the diff.",
+    "Changed hsdClass initialization from an extern func_803822C0 initializer to the named _hsdClassInfoInit function and initialized HSD_ClassInfo hsdClass with that callback.",
+    "Made memory_list, nb_memory_list, and lbl_804D7708 static globals in class.c rather than extern declarations.",
+    "Replaced raw __assert calls in class.c with assert_line macros after adding sysdolphin/baselib/debug.h to class.h.",
+    "Added force_active unused strings and a dont_inline pragma around ClassInfoInit, indicating matching-sensitive handling of strings and inlining.",
+    "Moved class function declarations from include/functions.h into include/sysdolphin/baselib/class.h and made prototypes more specific, including hsdAllocMemPiece(s32), hsdFreeMemPiece(void*, s32), hsdNew(HSD_ClassInfo*), and hsdSearchClassInfo(const char*).",
+    "Changed HSD_ClassInfo.init from void-returning to int-returning so hsdNew can test init failure with if (info->init(cls) < 0).",
+    "Updated HSD_DObjLoadDesc to store hsdSearchClassInfo(desc->class_name) in a local HSD_ClassInfo* and pass it to hsdNew(info) instead of calling hsdNew with no arguments.",
+    "Updated initialize.c to call hsdForgetClassLibrary(\"sysdolphin_base_library\") instead of func_80382718.",
+    "Updated robj.s branch label/comment target from func_803825D8 to hsdObjIsDescendantOf."
+  ],
+  "smart_moves": [
+    "Removed the asm object from the build once the C matched, which prevents duplicate text and records the decompilation boundary clearly in obj_files.mk.",
+    "Localized class-system prototypes in class.h instead of leaving them as untyped/loosely typed declarations in include/functions.h.",
+    "Used assert_line and included debug.h to preserve source-line assertion behavior while reducing raw label/string plumbing.",
+    "Kept matching-sensitive pragmas explicit: dont_inline around ClassInfoInit and force_active around unused diagnostic strings.",
+    "Threaded HSD_ClassInfo* through dobj allocation after hsdSearchClassInfo, making hsdNew's typed interface usable by callers rather than relying on a no-argument placeholder.",
+    "Preserved unknown KAR-derived names with comments rather than inventing Melee symbol names where evidence was weak."
+  ],
+  "decomp_lessons": [
+    "When replacing a large asm file, also audit obj_files.mk and nearby asm references so the new C object is the single implementation and existing assembly callsites point at the new symbol names.",
+    "Header cleanup is part of matching: move recovered functions from generic functions.h into the subsystem header with concrete parameter and return types as soon as the C implementation establishes them.",
+    "Callback return types matter for both correctness and matching; HSD_ClassInfo.init needed to return int because hsdNew checks for negative init failure.",
+    "For SysDolphin class code, class initialization is guarded by head.flags & 1 and often invokes head.info_init lazily before walking parents or allocating objects.",
+    "Free-list class allocation rounds object sizes to 32-byte units using expressions like (size + 0x1F) / 32 - 1; preserving this arithmetic shape can be important for matching.",
+    "Decompilers should not over-name stripped, auto-inlined Melee functions just because equivalent code exists in KAR; leave uncertainty visible or use a prefix that disambiguates source provenance.",
+    "Static globals can replace extern labels once the owning C translation unit is recovered, but keep forced-active strings/globals that affect binary layout."
+  ],
+  "naming_conventions": [
+    "Recovered core class API names use hsd* camel-style names: hsdAllocMemPiece, hsdFreeMemPiece, hsdNew, hsdIsDescendantOf, hsdObjIsDescendantOf, hsdForgetClassLibrary, hsdSearchClassInfo.",
+    "Internal HSD class virtual-method implementations use leading underscore names: _hsdClassAlloc, _hsdClassInit, _hsdClassRelease, _hsdClassDestroy, _hsdClassAmnesia, _hsdClassInfoInit.",
+    "HSD struct types retain HSD_* names such as HSD_Class, HSD_ClassInfo, HSD_MemoryEntry, HSD_FreeList, and HSD_Obj.",
+    "Review feedback suggested that functions named only from Kirby Air Ride addresses should not look like Melee addresses; a suggested temporary convention was kar_804211B4.",
+    "Final diff evidence still shows KAR-address comments and names like func_80420FBC, func_804211B4, and func_804212F4, so the KAR-prefix rename was apparently deferred or not applied in this slice."
+  ],
+  "assembly_or_matching_tactics": [
+    "Full asm deletion: asm/sysdolphin/baselib/class.s was removed after matching its functions in class.c.",
+    "Build-list tactic: remove $(BUILD_DIR)/asm/sysdolphin/baselib/class.s.o from TEXT_O_FILES when src/sysdolphin/baselib/class.c.o covers the text.",
+    "Used #pragma dont_inline on ClassInfoInit to preserve call structure around lazy class initialization.",
+    "Used #pragma force_active for unused diagnostic strings such as \"entry %d <null>\\n\", \"entry %d - %d <null>\\n\", \"entry %d(%d)\", \"  nb_alloc %d nb_free %d\\n\", and \"info_hash\".",
+    "Kept unusual C shapes likely needed for matching, including duplicated assignment var_r31 = var_r31 = info, inline helpers HSD_GetClassInfo/HSD_PushClassInfo, and a seemingly no-op !var_r29 statement.",
+    "Updated an existing assembly callsite in robj.s to reference hsdObjIsDescendantOf without otherwise decompiling robj.s in this PR."
+  ],
+  "review_feedback": [
+    {
+      "author": "r-burns",
+      "file": "src/sysdolphin/baselib/class.c",
+      "feedback": "The author noted comments were left on functions with unknown names that exist in KAR but are stripped in Melee because their only uses are auto-inlined, and suggested Psi might know what to call them."
+    },
+    {
+      "author": "ribbanya",
+      "file": "src/sysdolphin/baselib/class.c",
+      "feedback": "Suggested renaming KAR-address-derived functions to a form like kar_804211B4 so readers would not think the address was a Melee address."
+    },
+    {
+      "author": "r-burns",
+      "file": "src/sysdolphin/baselib/class.c",
+      "feedback": "Said they would make a new issue so the PR could be merged, implying the uncertain KAR-derived naming was accepted as follow-up rather than blocking the match."
+    }
+  ],
+  "searchable_terms": [
+    "PR475",
+    "Match HSD class",
+    "HSD class",
+    "sysdolphin baselib class",
+    "asm/sysdolphin/baselib/class.s",
+    "src/sysdolphin/baselib/class.c",
+    "include/sysdolphin/baselib/class.h",
+    "hsdAllocMemPiece",
+    "hsdFreeMemPiece",
+    "_hsdClassAlloc",
+    "_hsdClassInit",
+    "_hsdClassRelease",
+    "_hsdClassDestroy",
+    "_hsdClassAmnesia",
+    "_hsdClassInfoInit",
+    "hsdNew",
+    "ClassInfoInit",
+    "hsdInitClassInfo",
+    "hsdIsDescendantOf",
+    "hsdObjIsDescendantOf",
+    "hsdForgetClassLibrary",
+    "hsdSearchClassInfo",
+    "ForgetClassLibraryReal",
+    "func_80382400",
+    "func_80420FBC",
+    "func_804211B4",
+    "func_804212F4",
+    "func_80382854",
+    "KAR address",
+    "kar_804211B4",
+    "memory_list",
+    "nb_memory_list",
+    "lbl_804D7708",
+    "force_active",
+    "dont_inline",
+    "assert_line",
+    "obj_files.mk",
+    "HSD_DObjLoadDesc",
+    "HSD_ClassInfo.init"
+  ],
+  "follow_up_queries": [
+    "Was a later issue or PR created to rename KAR-address-derived functions like func_804211B4 to a kar_* convention?",
+    "Did later decomp work recover real names for func_80382400, func_80420FBC, func_804211B4, func_804212F4, or func_80382854?",
+    "Did class.h later gain declarations for hsdIsDescendantOf, hsdObjIsDescendantOf, hsdForgetClassLibrary, and the reporting helpers added in class.c?",
+    "Were the forced-active class diagnostic strings and lbl_804D7708 later renamed with better semantic names?"
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

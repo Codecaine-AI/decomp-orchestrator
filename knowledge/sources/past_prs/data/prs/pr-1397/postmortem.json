@@ -1,0 +1,185 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1397",
+  "pr": {
+    "number": 1397,
+    "title": "Match some `ftCommon` functions",
+    "url": "https://github.com/doldecomp/melee/pull/1397",
+    "state": "MERGED",
+    "author": "thefoxcam",
+    "created_at": "2024-07-15T00:42:30Z",
+    "merged_at": "2024-07-15T02:02:35Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched two ftCommon source files, ftCo_PassiveWall.c and ftCo_0C35.c, removed their corresponding asm objects, and improved ftCo_AirCatch.c matching. The central struct lesson was that CollData was four bytes too large: ecb_lock was moved out of CollData into owning Fighter and Item structs, which made a CollData struct-copy pattern in ftCo_800C3A14 plausible and improved matching.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "types-structs",
+      "matching-cleanup"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "item",
+      "collision",
+      "build"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c",
+      "role": "Converted from NonMatching to Matching with small expression, float literal, and stack padding adjustments."
+    },
+    {
+      "path": "src/melee/ft/chara/ftCommon/ftCo_0C35.c",
+      "role": "Converted from NonMatching to Matching; removed forced literal/data definitions and adjusted inline/decrement ordering."
+    },
+    {
+      "path": "src/melee/ft/chara/ftCommon/ftCo_AirCatch.c",
+      "role": "Improved score by replacing a hand-written copy loop with CollData coll = *getFtColl(fp), adding PAD_STACK, and simplifying control flow."
+    },
+    {
+      "path": "src/melee/lb/types.h",
+      "role": "Removed ecb_lock from struct CollData, reducing its size by four bytes."
+    },
+    {
+      "path": "src/melee/ft/types.h",
+      "role": "Added Fighter::ecb_lock immediately after Fighter::coll_data at fp+88C."
+    },
+    {
+      "path": "src/melee/it/types.h",
+      "role": "Added Item::ecb_lock after Item::x378_itemColl and an unknown field after ItemLink::x30_collData."
+    },
+    {
+      "path": "src/melee/ft/fighter.c",
+      "role": "Updated ecb_lock uses from fp->coll_data.ecb_lock to fp->ecb_lock."
+    },
+    {
+      "path": "src/melee/ft/ftcommon.c",
+      "role": "Updated common fighter collision/ground/air state helpers to use Fighter::ecb_lock."
+    },
+    {
+      "path": "src/melee/it/item.c",
+      "role": "Updated item owner/collision lock bookkeeping to use Item::ecb_lock instead of x378_itemColl.ecb_lock."
+    },
+    {
+      "path": "configure.py",
+      "role": "Changed ftCo_PassiveWall.c and ftCo_0C35.c objects from NonMatching to Matching."
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "Swapped ftCo_PassiveWall and ftCo_0C35 object paths from asm .s.o to src .c.o."
+    },
+    {
+      "path": "asm/melee/ft/chara/ftCommon/ftCo_PassiveWall.s",
+      "role": "Deleted matched assembly fallback."
+    },
+    {
+      "path": "asm/melee/ft/chara/ftCommon/ftCo_0C35.s",
+      "role": "Deleted matched assembly fallback."
+    }
+  ],
+  "what_changed": [
+    "Removed asm/melee/ft/chara/ftCommon/ftCo_PassiveWall.s and asm/melee/ft/chara/ftCommon/ftCo_0C35.s after matching their C sources.",
+    "Marked melee/ft/chara/ftCommon/ftCo_PassiveWall.c and melee/ft/chara/ftCommon/ftCo_0C35.c as Matching in configure.py.",
+    "Changed obj_files.mk to build ftCo_PassiveWall.c.o and ftCo_0C35.c.o from src instead of asm.",
+    "Removed ecb_lock from struct CollData in src/melee/lb/types.h.",
+    "Added ecb_lock as a field after coll_data in Fighter and after x378_itemColl in Item, then updated fighter and item call sites accordingly.",
+    "In ftCo_AirCatch.c, replaced an odd manual loop copying collision data with CollData coll = *getFtColl(fp), matching the PR note that the loop was a CollData struct copy.",
+    "In ftCo_0C35.c, removed #pragma force_active and local literal/data definitions for S32_TO_F32, zero, M_PI, M_PI_2, jobj strings, and the quaternion assert string.",
+    "In ftCo_0C35.c, changed static inline void inlineA0 to static void inlineA0 and moved the x18F4 decrement to occur after computing rot_y.",
+    "In ftCo_PassiveWall.c, used explicit float literals, PAD_STACK, and equivalent decimal constants to improve codegen.",
+    "In ftCo_AirCatch.c, introduced a local drift variable, explicit f64 comparison against 0.0F, PAD_STACK, and removed goto-based exit labels in favor of structured fallthrough."
+  ],
+  "smart_moves": [
+    "Identified a decompiler-looking loop in ftCo_800C3A14 as a direct CollData struct copy instead of preserving the misleading manual IntVec3 loop.",
+    "Used the CollData copy mismatch to infer a struct boundary problem: ecb_lock should not be inside CollData, because CollData was four bytes too large.",
+    "Moved ecb_lock to the owner structs rather than adding padding or forcing the loop, preserving more accurate type layout for both fighters and items.",
+    "Updated all known fp->coll_data.ecb_lock and item collision lock uses consistently after moving the field.",
+    "Removed force_active literal declarations from matched files instead of keeping artificial data in C after the object was converted to Matching.",
+    "Used PAD_STACK where explicit dummy byte arrays were only serving stack-shape/matching needs.",
+    "Kept ftCo_AirCatch.c NonMatching but improved its score, avoiding overclaiming a full match where only an improvement was evidenced."
+  ],
+  "decomp_lessons": [
+    "When a copied subobject emits as a strange loop, test whether the source type size is wrong before hand-matching the loop literally.",
+    "A four-byte overrun or missing tail field can prevent clean struct-copy codegen; moving a field out to the owning struct can be the right fix if offsets support it.",
+    "Do not assume a field belongs to an embedded struct just because its offset immediately follows that struct in one owner; confirm with copy behavior and other owners.",
+    "Removing a member from a shared struct requires updating every owner-specific access path, such as Fighter::ecb_lock and Item::ecb_lock.",
+    "For matching C, small expression-order changes matter: ftCo_0C35 computes rot_y before decrementing fp->dmg.x18F4, then decrements within the same block.",
+    "Use explicit float constants such as 0.0F and 1.0F when integer literals perturb codegen in float-argument calls.",
+    "PAD_STACK is preferable to meaningless initialized local arrays when the variable only exists to force stack layout.",
+    "Reviewer guidance suggests that if only a data section is failing to match, unlinking/reverting that object to NonMatching can be acceptable, but struct breakage should be fixed first."
+  ],
+  "naming_conventions": [
+    "Retained existing unknown ftCommon symbol names such as ftCo_800C1D38, ftCo_800C1E0C, ftCo_800C3598, ftCo_800C36DC, ftCo_800C37A0, and ftCo_800C3A14 where no semantic names were evidenced.",
+    "Used ecb_lock as the field name after moving it out of CollData into Fighter and Item.",
+    "Preserved existing collision naming: Fighter::coll_data, Item::x378_itemColl, ItemLink::x30_collData, and getFtColl(fp).",
+    "The PR did not provide new semantic names for PassiveWall, 0C35 internals, or the ItemLink unknown field; it used UNK_T unk for the added ItemLink slot."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted matched asm files and redirected obj_files.mk entries from asm .s.o to src .c.o.",
+    "Changed configure.py object status from NonMatching to Matching for ftCo_PassiveWall.c and ftCo_0C35.c.",
+    "Replaced manual collision-copy loop with a struct copy: CollData coll = *getFtColl(fp).",
+    "Removed #pragma force_active and forced literal/data declarations from ftCo_0C35.c once no longer needed for the matched object.",
+    "Used PAD_STACK(8), PAD_STACK(4), and PAD_STACK(16) in places where dummy locals had been used to shape the stack.",
+    "Adjusted inline/static behavior by changing inlineA0 in ftCo_0C35.c from static inline to static void.",
+    "Used explicit float/f64 casts and locals to steer codegen, including fp->facing_dir > (f64) 0.0F and a local drift variable before ftCommon_8007D440.",
+    "Simplified goto exit control flow in ftCo_AirCatch_Anim while preserving the final ftAnim_IsFramesRemaining check."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "file": "src/melee/ft/chara/ftCommon/ftCo_0C35.c",
+      "comment": "Asked whether only the data section was not matching; suggested unlinking/reverting to NonMatching if so, but said struct breakage needed to be fixed first.",
+      "lesson": "Separate text-code matching issues from data-section matching issues, and do not paper over a bad struct layout if it affects other code."
+    }
+  ],
+  "searchable_terms": [
+    "pr-1397",
+    "ftCommon",
+    "ftCo_PassiveWall",
+    "ftCo_0C35",
+    "ftCo_AirCatch",
+    "ftCo_800C3A14",
+    "ftCo_800C1D38",
+    "ftCo_800C1E0C",
+    "ftCo_800C3598",
+    "ftCo_800C36DC",
+    "ftCo_800C37A0",
+    "CollData",
+    "ecb_lock",
+    "getFtColl",
+    "PAD_STACK",
+    "force_active",
+    "NonMatching",
+    "Matching",
+    "Fighter::ecb_lock",
+    "Item::ecb_lock",
+    "x378_itemColl",
+    "HSD_JObjSetRotationY",
+    "M_PI",
+    "S32_TO_F32",
+    "asm removal",
+    "struct copy"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching CollData size or fields after ecb_lock was moved out.",
+    "Check whether ItemLink::unk after x30_collData was later named or refined.",
+    "Search for remaining coll_data.ecb_lock references to confirm no stale accesses survived.",
+    "Look for future PRs fully matching ftCo_AirCatch.c after the CollData copy improvement.",
+    "Audit other weird copy loops around embedded structs for similar off-by-one-field layout mistakes."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,136 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-931",
+  "pr": {
+    "number": 931,
+    "title": "Split out item logic tables, match itcapsule",
+    "url": "https://github.com/doldecomp/melee/pull/931",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2023-06-21T03:21:14Z",
+    "merged_at": "2023-06-21T03:32:17Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Split large item logic/data tables out of the monolithic item assembly into a dedicated C translation unit plus a residual asm file, and matched the capsule item logic into src/melee/it/itcapsule.c. The PR moved thousands of bytes of table data out of asm/melee/it/it_266F.s, removed the capsule section from asm/melee/it/it_27CF.s, added itcapsule headers and build objects, and made small item type/header updates needed by capsule state and attributes.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "data-table-split",
+      "headers",
+      "build-system",
+      "item-logic"
+    ],
+    "systems": [
+      "item",
+      "asm",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "asm/melee/it/it_266F.s",
+    "asm/melee/it/it_27CF.s",
+    "asm/melee/it/it_803F1418.s",
+    "src/melee/it/it_803F1418.c",
+    "src/melee/it/itcapsule.c",
+    "src/melee/it/itcapsule.h",
+    "src/melee/it/itCommonItems.h",
+    "src/melee/it/types.h",
+    "src/melee/it/forward.h",
+    "src/melee/it/it_266F.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Removed the item GX/link and logic table region starting at it_803F1418/it_803F14C4 from asm/melee/it/it_266F.s and recreated the exposed tables in src/melee/it/it_803F1418.c.",
+    "Added asm/melee/it/it_803F1418.s as a new residual assembly file for the item table/data region not yet represented in C.",
+    "Added src/melee/it/itcapsule.c and src/melee/it/itcapsule.h, replacing the deleted capsule functions from asm/melee/it/it_27CF.s.",
+    "Added itcapsule.c.o, it_803F1418.c.o, and it_803F1418.s.o to obj_files.mk near the existing item objects.",
+    "Added ItCapsuleAttrs with bool x0 and bool x4 to src/melee/it/itCommonItems.h and added a capsule member to the Item xDD4_itemVar union in src/melee/it/types.h.",
+    "Changed ItemCommonData.x68_float from s32 to f32, matching its use as a floating-point value in itcapsule.c.",
+    "Added a note in src/melee/it/forward.h that development JP item name strings start at data address 0x803EA7A8.",
+    "Removed an extern declaration for it_804D6D28 from src/melee/it/it_266F.h."
+  ],
+  "smart_moves": [
+    "Isolated a large static item logic table block into its own translation unit instead of continuing to grow the monolithic it_266F assembly, making future item table edits and per-item header migration easier to search and review.",
+    "Preserved object ordering in obj_files.mk by inserting the new it_803F1418 and itcapsule objects between the existing it_266F and it_27CF item objects, which is a common decomp tactic when splitting code/data while keeping addresses stable.",
+    "Used C for most capsule behavior but retained inline asm for difficult matching cases: it_8027D338 is guarded by MUST_MATCH because the C version had incorrect stack offsets for an inlined it_8027CF30, and it_8027D530 is also kept as asm.",
+    "Factored the repeated capsule collision/opening logic into it_8027D338_autoinlined and reused it from it_8027D414, it_8027D4B8, and it_8027D4F4, while still preserving exact-matching asm where the compiler did not cooperate.",
+    "Introduced a small named capsule item-var struct instead of leaving the capsule state as anonymous raw offsets in the Item union."
+  ],
+  "decomp_lessons": [
+    "When a data-heavy asm block contains many cross-item function pointers, splitting the tables into a dedicated C file can be a useful intermediate step even before every referenced item has its own complete header.",
+    "Temporary extern declarations for table-only function pointers are acceptable when matching large dispatch tables, but reviewers expect them to become proper per-item header declarations as those items are matched.",
+    "Prefer explicit empty parameter lists with `(void)` for no-argument C prototypes; bare `()` was called out in review.",
+    "If a mostly matched C function differs only because of inlining/stack-offset behavior, keep a readable non-MUST_MATCH C version beside a MUST_MATCH asm implementation to document intent while preserving matching.",
+    "Field type corrections can be driven by use sites: x68_float being passed to a function expecting f32 justified changing ItemCommonData.x68_float from s32 to f32.",
+    "Adding item-specific state to the Item union under a named member, such as `capsule`, improves reuse for later item decomp work without fully resolving every field name."
+  ],
+  "naming_conventions": [
+    "Item module filenames use lowercase item names, e.g. `itcapsule.c` and `itcapsule.h`.",
+    "Unresolved functions kept address-style names such as `it_8027CF30`, `it_8027D338`, and `it_803F1418`.",
+    "Item-specific attribute structs can use CamelCase with an item prefix, as in `ItCapsuleAttrs`.",
+    "Item variable union members can use lowercase item names, as in `it->xDD4_itemVar.capsule.x0` and `.x4`.",
+    "Function prototypes for item logic used `Item_GObj*` in the new capsule header and source where the functions operate on item GObjs."
+  ],
+  "assembly_or_matching_tactics": [
+    "Split static data/tables from `asm/melee/it/it_266F.s` into a C table file (`src/melee/it/it_803F1418.c`) plus a new asm remainder (`asm/melee/it/it_803F1418.s`).",
+    "Matched capsule logic from `asm/melee/it/it_27CF.s` into C while leaving hard cases as inline asm.",
+    "Used `#ifndef MUST_MATCH` / `#else asm` around `it_8027D338` to keep a readable C implementation available when exact matching is not required.",
+    "Documented the specific mismatch reason for `it_8027D338`: incorrect stack offsets for an inlined `it_8027CF30`.",
+    "Used an `it_8027D338_autoinlined` helper to model repeated compiler-inlined behavior in nearby capsule callbacks.",
+    "Preserved function-pointer table structure with `struct sdata_ItemGXLink it_803F1418[43]` and `struct ItemLogicTable it_803F14C4[43]` in C."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "ribbanya",
+      "file": "src/melee/it/it_803F1418.c",
+      "feedback": "Asked whether the many table function declarations were only used in tables or also called/defined elsewhere, and requested `(void)` instead of `()` for no-argument prototypes."
+    },
+    {
+      "reviewer": "r-burns",
+      "file": "src/melee/it/it_803F1418.c",
+      "feedback": "Explained that the functions are defined in each item's translation unit, take `Item_GObj*`, and that these declarations were temporary until the functions can be moved to individual item headers as those items are matched."
+    }
+  ],
+  "searchable_terms": [
+    "PR931",
+    "itcapsule",
+    "it_803F1418",
+    "it_803F14C4",
+    "sdata_ItemGXLink",
+    "ItemLogicTable",
+    "ItCapsuleAttrs",
+    "Item_GObj",
+    "it_8027CF30",
+    "it_8027CFE8",
+    "it_8027D338",
+    "it_8027D338_autoinlined",
+    "it_8027D530",
+    "MUST_MATCH",
+    "incorrect stack offsets",
+    "item logic tables",
+    "obj_files.mk",
+    "it_266F.s",
+    "it_27CF.s",
+    "it_803F1418.s",
+    "xDD4_itemVar.capsule",
+    "ItemCommonData.x68_float",
+    "temporary externs",
+    "per-item headers"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that moved the temporary item function externs from src/melee/it/it_803F1418.c into individual item headers.",
+    "Search for subsequent changes to `it_8027D338` or `it_8027D530` to see whether the inline asm was eventually replaced by matching C.",
+    "Search later item table splits around `it_803F1418`, `it_803F14C4`, and `ItemLogicTable` for reused table-splitting patterns.",
+    "Check later PRs touching `ItCapsuleAttrs` or `xDD4_itemVar.capsule` for field name refinements beyond x0/x4."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

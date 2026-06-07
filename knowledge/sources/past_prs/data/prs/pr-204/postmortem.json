@@ -1,0 +1,131 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-204",
+  "pr": {
+    "number": 204,
+    "title": "Work on FObj matching",
+    "url": "https://github.com/doldecomp/melee/pull/204",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-18T20:28:32Z",
+    "merged_at": "2021-12-18T20:28:40Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Moved several SysDolphin BaseLib FObj routines closer to C/decompiled coverage. The PR replaced assembly for HSD_FObjStopAnim and HSD_FObjStopAnimAll with C implementations, added a C-side NON_MATCHING version of HSD_FObjReqAnimAll while keeping an inline asm fallback for exact behavior, and renamed known assembly symbols such as func_8036AC10 to parseFloat and func_8036B030 to HSD_FObjInterpretAnim. It also updated FObj prototypes to use more descriptive parameter names like startframe, update_func, and rate.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-renaming",
+      "inline-asm-fallback"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "fobj",
+      "asm",
+      "include",
+      "src"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/fobj.c",
+    "asm/sysdolphin/baselib/fobj.s",
+    "src/sysdolphin/baselib/fobj.h",
+    "include/functions.h",
+    "asm/melee/text_3.s"
+  ],
+  "what_changed": [
+    "Removed large assembly bodies for HSD_FObjReqAnimAll, func_8036AB24, and HSD_FObjStopAnimAll from asm/sysdolphin/baselib/fobj.s, leaving later routines and renamed labels in assembly.",
+    "Added a NON_MATCHING C implementation of HSD_FObjReqAnim and HSD_FObjReqAnimAll in src/sysdolphin/baselib/fobj.c, guarded with an inline asm implementation when NON_MATCHING is not enabled.",
+    "Implemented HSD_FObjStopAnim in C, including the HSD_A_OP_KEY check and call to HSD_FObjInterpretAnim before clearing the low state bits in fobj->flags.",
+    "Implemented C inline helpers FObj_FlushKeyData and HSD_FObjStopAnim_inline, then used them in HSD_FObjStopAnimAll to iterate through the FObj linked list.",
+    "Renamed func_8036AB24 references to HSD_FObjStopAnim, including a callsite in asm/melee/text_3.s.",
+    "Renamed func_8036AC10 to parseFloat in assembly labels and callsites.",
+    "Renamed func_8036B030 to HSD_FObjInterpretAnim in assembly labels and callsites.",
+    "Updated function declarations in src/sysdolphin/baselib/fobj.h to use descriptive argument names: startframe, update_func, and rate.",
+    "Updated include/functions.h comment stubs to reflect new known names HSD_FObjStopAnim, parseFloat, and HSD_FObjInterpretAnim."
+  ],
+  "smart_moves": [
+    "Kept HSD_FObjReqAnimAll exact via inline asm while documenting a nearby NON_MATCHING C version, preserving build/matching status while making the inferred logic searchable and reviewable.",
+    "Used #pragma push, #pragma peephole on, and #pragma pop around the C implementations of the stop-animation routines, suggesting compiler-codegen control was important for matching these functions.",
+    "Factored the repeated key-flush behavior into inline helpers so HSD_FObjStopAnim and HSD_FObjStopAnimAll could share logic while still allowing inlining-sensitive codegen.",
+    "Renamed function symbols in assembly at the same time as adding C implementations, improving cross-file callsite readability without needing all surrounding functions to be decompiled.",
+    "Preserved exact low-nibble flag manipulation in C as `(0 & 0xF) | (fobj->flags & 0xF0)` and `(1 & 0xF) | (fobj->flags & 0xF0)`, mirroring the assembly's state-field semantics."
+  ],
+  "decomp_lessons": [
+    "For FObj matching, signed integer to float conversion can be the blocker: the added comment says HSD_FObjReqAnimAll is non-matching because of the conversion to float, and the asm uses the common PowerPC xoris/lis 0x4330/lfd/fsubs pattern.",
+    "When a list-processing routine is hard to match wholesale, it can be useful to write a clear NON_MATCHING C version and retain an asm fallback until the exact conversion or scheduling issue is solved.",
+    "Small state setters on packed flag fields should preserve unrelated bits explicitly; this PR consistently treats the low nibble of fobj->flags as the animation state and preserves the high nibble with `& 0xF0`.",
+    "Inline helper functions can be used to influence whether a list-wide `All` routine matches the original code layout, especially when single-object and list-object variants share behavior.",
+    "Known library names should be propagated into asm callsites and headers as soon as evidence is strong enough; this makes later decompilation work easier even if dependent functions remain in assembly."
+  ],
+  "naming_conventions": [
+    "HSD_FObjReqAnimAll uses parameter name `startframe` rather than generic `frame`.",
+    "HSD_FObjStopAnim and HSD_FObjStopAnimAll use `update_func` or `obj_update` for callback-like update parameters.",
+    "Animation rate parameters are named `rate` rather than `frame` in stop/interpret functions.",
+    "Internal helper names use mixed BaseLib style, including `FObj_FlushKeyData` and `HSD_FObjStopAnim_inline`.",
+    "Resolved anonymous function labels to library-style names: `func_8036AB24` -> `HSD_FObjStopAnim`, `func_8036AC10` -> `parseFloat`, and `func_8036B030` -> `HSD_FObjInterpretAnim`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `#ifdef NON_MATCHING` to keep a readable C version of HSD_FObjReqAnimAll while compiling the exact inline assembly path by default.",
+    "Declared small-data constants `extern const f32 lbl_804DE4D0;` and `extern const f64 lbl_804DE4D8;` for the inline asm float conversion sequence.",
+    "The exact asm for HSD_FObjReqAnimAll uses the PowerPC signed-int-to-double conversion idiom with `xoris`, stack stores, `lis r5, 0x4330`, `lfd`, and subtracting the magic double constant.",
+    "Applied `#pragma peephole on` around newly decompiled stop-animation routines, indicating peephole optimization affected matching.",
+    "Used inline functions for FObj stop-all behavior to reproduce likely original inlining and avoid introducing extra calls.",
+    "Left still-unmatched or not-yet-decompiled routines such as parseFloat and HSD_FObjInterpretAnim in assembly but renamed their labels and branch targets."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "FObj",
+    "HSD_FObj",
+    "HSD_FObjReqAnimAll",
+    "HSD_FObjReqAnim",
+    "HSD_FObjStopAnim",
+    "HSD_FObjStopAnimAll",
+    "HSD_FObjInterpretAnim",
+    "HSD_FObjInterpretAnimAll",
+    "parseFloat",
+    "FObj_FlushKeyData",
+    "HSD_FObjStopAnim_inline",
+    "HSD_A_OP_KEY",
+    "FObjUpdateAnim",
+    "FObjData",
+    "ad_head",
+    "op_intrp",
+    "nb_pack",
+    "fterm",
+    "update_func",
+    "obj_update",
+    "startframe",
+    "rate",
+    "flags & 0xF0",
+    "NON_MATCHING",
+    "peephole",
+    "xoris",
+    "0x4330",
+    "lbl_804DE4D0",
+    "lbl_804DE4D8",
+    "func_8036AB24",
+    "func_8036AC10",
+    "func_8036B030",
+    "sysdolphin baselib fobj"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match HSD_FObjReqAnimAll or remove the inline asm fallback.",
+    "Search for additional callsites updated from func_8036AB24 to HSD_FObjStopAnim.",
+    "Compare later definitions of parseFloat to confirm the name and signature.",
+    "Review FObj flag/state handling in later PRs for confirmed enum names for the low-nibble states.",
+    "Look for follow-up changes to HSD_FObjInterpretAnim signature and callback parameter naming."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

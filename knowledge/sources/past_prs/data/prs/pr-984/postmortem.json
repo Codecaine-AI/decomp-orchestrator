@@ -1,0 +1,136 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-984",
+  "pr": {
+    "number": 984,
+    "title": "Partially match `ftCo_CaptureKirby`",
+    "url": "https://github.com/doldecomp/melee/pull/984",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-10-10T02:45:04Z",
+    "merged_at": "2023-10-10T02:55:27Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Partially decompiled the common fighter CaptureKirby code by adding `src/melee/ft/chara/ftCommon/ftCo_CaptureKirby.c/.h`, moving several routines out of `asm/melee/ft/ft_08A4.s`, wiring the new C object into `obj_files.mk`, and adding motion-variable/header support needed by the new code. The PR report shows the new file at 84.07% overall, with `ftCo_800BD19C` and the empty Anim/IASA/Phys/Coll callbacks fully matching, while larger routines `ftCo_800BD1DC` and `ftCo_800BD39C` remained partial.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "asm-to-c",
+      "build-system",
+      "structs"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "ftKirby",
+      "asm",
+      "baselib",
+      "dolphin-dvd"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_CaptureKirby.c",
+    "src/melee/ft/chara/ftCommon/ftCo_CaptureKirby.h",
+    "asm/melee/ft/ft_08A4.s",
+    "obj_files.mk",
+    "src/melee/ft/chara/ftCommon/types.h",
+    "src/melee/ft/chara/ftCommon/ftCo_Init.c",
+    "src/melee/ft/chara/ftKirby/ftKb_Init.h",
+    "src/melee/ft/fighter.c",
+    "src/sysdolphin/baselib/jobj.h",
+    "src/dolphin/dvd/dvdfs.c"
+  ],
+  "what_changed": [
+    "Added `ftCo_CaptureKirby.c` with C implementations/stubs for `ftCo_800BD19C`, `ftCo_800BD1DC`, `ftCo_CaptureKirby_Anim`, `ftCo_CaptureKirby_IASA`, `ftCo_CaptureKirby_Phys`, `ftCo_CaptureKirby_Coll`, and `ftCo_800BD39C`.",
+    "Removed the corresponding CaptureKirby assembly block from `asm/melee/ft/ft_08A4.s`; only nearby later assembly such as `ftCo_800BD620` remained in that file.",
+    "Added `ftCo_CaptureKirby.h` declaring the new functions and temporary `_m2c_stack_ftCo_800BD1DC` / `_m2c_stack_ftCo_800BD39C` stack-layout structs.",
+    "Added `ftCommon_MotionVars.capturekirby` fields in `types.h`, including `pos_offset`, `x8`, `x10`, and `scale` mapped to offsets around `fp+2340` through `fp+236C`.",
+    "Registered `ftCo_CaptureKirby.c.o` in `obj_files.mk` and updated paths for several existing `ftCo_*` assembly files that were moved under `asm/melee/ft/chara/ftCommon/`.",
+    "Included `ftCo_CaptureKirby.h` from `ftCo_Init.c` so motion-state setup can see the CaptureKirby callback prototypes.",
+    "Updated many `ftKb_Init.h` prototypes from generic `HSD_GObj*` to `Fighter_GObj*`, including Kirby/Yoshi CaptureKirby-related declarations shown in the diff excerpt.",
+    "Added an `HSD_ASSERT(824, scale)` check to `HSD_JObjGetScale` in `jobj.h`, matching the CaptureKirby use of scale pointers.",
+    "Made a small formatting/control-flow cleanup in `DVDConvertPathToEntrynum` by bracing an empty `for` loop body."
+  ],
+  "smart_moves": [
+    "Kept partial routines behind `ASM void` plus `#if !defined(MUST_MATCH) || defined(WIP)` C bodies and retained inline assembly fallbacks under the matching path, allowing readable progress without claiming full matches for `ftCo_800BD1DC` and `ftCo_800BD39C`.",
+    "Split recurring assembly patterns into local inline helpers (`inlineA0`, `inlineB0`, `inlineB1`) to isolate initialization, JObj scale updates, and position clamping logic while preserving the original stack/register-sensitive routines.",
+    "Introduced named motion-variable fields for CaptureKirby instead of continuing to access raw `fp+2340` offsets, improving future readability and making later matching work less offset-driven.",
+    "Moved exact small functions first: the squared-distance helper `ftCo_800BD19C` and the four empty action callbacks matched 100%, reducing assembly surface area safely.",
+    "Promoted constants `ftCo_804D8BA8`, `ftCo_804D8BAC`, and `ftCo_804D8BB0` into C near their use, mirroring the assembly constants for 0.0f, 1.0f, and `S32_TO_F32` conversion behavior.",
+    "Adjusted build-file ordering by inserting the new C object before the remaining `ft_08A4.s.o`, consistent with peeling C-matched functions out of a larger assembly translation unit."
+  ],
+  "decomp_lessons": [
+    "For partial matches, preserve the original assembly as a guarded fallback and let the readable C path live under WIP/non-MUST_MATCH until function scores reach full match quality.",
+    "When extracting a subset from a large asm file, also move or expose nearby small data symbols/constants needed by the new C file; otherwise sdata/sdata2 ordering and references can drift.",
+    "Naming a union member like `mv.co.capturekirby` early is useful even when many subfields remain provisional (`x8`, `x10`, `x1C`, etc.), because it localizes future renaming to one struct instead of many raw offsets.",
+    "JObj helper assertions can affect matching: `HSD_JObjGetScale` needed an assertion for the `scale` argument, matching callsite behavior that asserted both `jobj` and `scale` in the assembly.",
+    "Callback signatures should use fighter-specific object typedefs (`Fighter_GObj*`) when the implementation immediately accesses fighter data; broad prototype cleanup may be required in character headers before new common-fighter C compiles cleanly.",
+    "Empty motion callbacks are low-risk wins and should be removed from asm early, but nearby accessory callbacks can still be complex due to stack temporaries, vector math, JObj scale writes, and matrix-dirty side effects."
+  ],
+  "naming_conventions": [
+    "`ftCo_CaptureKirby_*` names are used for the common fighter action callbacks: `Anim`, `IASA`, `Phys`, and `Coll`.",
+    "Unidentified functions retained address-style names such as `ftCo_800BD19C`, `ftCo_800BD1DC`, and `ftCo_800BD39C`.",
+    "The new header guard used the address-based form `GALE01_0BD19C`.",
+    "Temporary stack structs followed m2c naming, e.g. `_m2c_stack_ftCo_800BD1DC` and `_m2c_stack_ftCo_800BD39C`.",
+    "Partially understood motion-variable fields used descriptive names where clear (`pos_offset`, `scale`) and offset-like placeholders where unclear (`x8`, `x10`, `x1C`, `x20`, `x24`, `x28`).",
+    "Kirby special-N helper declarations use the existing `ftKb_SpecialN_80xxxxxx` address-style convention."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `ASM void` function declarations for partially matched routines while embedding both C and assembly implementations under preprocessor guards.",
+    "Kept the original no-fralloc assembly bodies for `ftCo_800BD1DC` and `ftCo_800BD39C` under the fallback branch, with `#pragma peephole on` after the inline assembly blocks.",
+    "Modeled vector math with `SQ`, `ABS`, `sqrtf__Ff`, `Vec2`, and `Vec3` to correspond to repeated `fmuls/fadds/fsubs` patterns in the assembly.",
+    "Used ternary sign selection in clamping logic (`pos->x < 0 ? -1 : +1`) to model integer-to-float sign conversion patterns involving `xoris`, `lfd`, and `S32_TO_F32`.",
+    "Mapped assembly offsets `0x2340`, `0x2344`, `0x2348`, `0x234C`, `0x2350`, `0x2354`, and `0x236C` into the new `capturekirby` motion-variable struct.",
+    "Preserved accessory callback setup by assigning `fp->cb.x21B0_callback_Accessory1 = ftCo_800BD39C` in the C version of `ftCo_800BD1DC`.",
+    "Left partial matching evidence explicit in the PR report: `ftCo_800BD39C` scored 78.83% and `ftCo_800BD1DC` scored 88.93%, while several smaller functions were 100%."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or submitted reviews were present in the PR slice, so there is no direct reviewer feedback to extract."
+  ],
+  "searchable_terms": [
+    "pr-984",
+    "ftCo_CaptureKirby",
+    "ftCo_800BD19C",
+    "ftCo_800BD1DC",
+    "ftCo_800BD39C",
+    "ftCo_CaptureKirby_Anim",
+    "ftCo_CaptureKirby_IASA",
+    "ftCo_CaptureKirby_Phys",
+    "ftCo_CaptureKirby_Coll",
+    "capturekirby",
+    "ft_08A4.s",
+    "ftCommon_MotionVars",
+    "Fighter_GObj",
+    "HSD_JObjGetScale",
+    "HSD_JObjSetScale",
+    "HSD_JObjSetMtxDirtySub",
+    "ftKb_SpecialN_800F5B4C",
+    "ftKb_SpecialN_800F5B3C",
+    "ftKb_SpecialN_800F5B5C",
+    "ftKb_SpecialN_800F5B20",
+    "ftKb_SpecialN_800F5AF0",
+    "S32_TO_F32",
+    "MUST_MATCH",
+    "WIP",
+    "m2c stack",
+    "CaptureKirby partial match"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match `ftCo_800BD1DC` or `ftCo_800BD39C`.",
+    "Search for renames of `mv.co.capturekirby.x8` and `mv.co.capturekirby.x10` to determine their final semantic names.",
+    "Check whether the temporary `_m2c_stack_ftCo_800BD1DC` and `_m2c_stack_ftCo_800BD39C` structs were removed or replaced by real local-variable layouts.",
+    "Look for subsequent cleanup of `ftKb_Init.h` after the mass `HSD_GObj*` to `Fighter_GObj*` prototype conversion.",
+    "Audit later `ft_08A4.s` extraction PRs for reuse of the guarded partial-C plus asm-fallback pattern."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

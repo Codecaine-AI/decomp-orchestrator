@@ -1,0 +1,132 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-220",
+  "pr": {
+    "number": 220,
+    "title": "Match the first functions of lbfile and lbarchive",
+    "url": "https://github.com/doldecomp/melee/pull/220",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-23T04:54:21Z",
+    "merged_at": "2021-12-23T04:54:27Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the first functions in the lbfile and lbarchive modules by moving small assembly regions into new C source/header files, wiring those source objects into the build, and renaming callsites from anonymous func_/lbl_ symbols to lbFile_/lbArchive_ names. lbArchive_InitializeDAT was fully expressed in C and replaces func_80016A54 across lbarchive, lbdvd, efasync, and text_2 callsites. lbFile_8001615C was expressed in C, while lbFile_800161A0 retained an inline assembly fallback under the matching path with a NON_MATCHING C version documented. The lbfile sbss symbol lbl_804D63C8 was renamed to cancel.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-renaming",
+      "build-system"
+    ],
+    "systems": [
+      "lbfile",
+      "lbarchive",
+      "asm",
+      "include",
+      "library",
+      "build"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/lbarchive.c",
+    "src/melee/lb/lbarchive.h",
+    "src/melee/lb/lbfile.c",
+    "src/melee/lb/lbfile.h",
+    "asm/melee/lb/lbarchive.s",
+    "asm/melee/lb/lbfile.s",
+    "asm/melee/lb/lbdvd.s",
+    "asm/melee/ef/efasync.s",
+    "asm/melee/text_2.s",
+    "include/functions.h",
+    "include/variables.h",
+    "obj_files.mk",
+    "e_files.mk"
+  ],
+  "what_changed": [
+    "Added src/melee/lb/lbarchive.c implementing lbArchive_InitializeDAT(HSD_Archive* archive, u8* data, u32 length).",
+    "Added src/melee/lb/lbarchive.h with the lbArchive_InitializeDAT prototype and archive/type includes.",
+    "Removed the assembly body for func_80016A54 from asm/melee/lb/lbarchive.s and replaced all shown callsites with lbArchive_InitializeDAT.",
+    "lbArchive_InitializeDAT calls HSD_ArchiveParse, reports and asserts on parse failure, then iterates extern symbols with HSD_ArchiveGetExtern and relocates them with HSD_ArchiveLocateExtern until NULL.",
+    "Added src/melee/lb/lbfile.c implementing lbFile_8001615C in C and providing lbFile_800161A0 as inline assembly for matching, with a NON_MATCHING C equivalent.",
+    "Added src/melee/lb/lbfile.h declaring lbFile_8001615C and lbFile_800161A0.",
+    "Removed the original assembly bodies for lbl_8001615C and func_800161A0 from asm/melee/lb/lbfile.s.",
+    "Renamed lbfile callback references from lbl_8001615C to lbFile_8001615C and polling calls from func_800161A0 to lbFile_800161A0.",
+    "Renamed the sbss variable lbl_804D63C8 to cancel in assembly and include/variables.h.",
+    "Updated include/functions.h comments to reflect lbFile_800161A0 and lbArchive_InitializeDAT names.",
+    "Added src/melee/lb/lbfile.o and src/melee/lb/lbarchive.o to obj_files.mk before their corresponding asm object files.",
+    "Added lbfile.o and lbarchive.o to EPILOGUE_UNSCHEDULED in e_files.mk."
+  ],
+  "smart_moves": [
+    "Introduced C source objects before the remaining asm objects in obj_files.mk, allowing only the matched leading functions to move out of assembly while preserving the rest of the module in asm.",
+    "Renamed every visible branch target/callsite to the new semantic symbol names, improving cross-module readability without needing to decompile all consumers.",
+    "Kept lbFile_800161A0 matching via inline assembly while recording the intended simple C behavior under NON_MATCHING, a useful compromise when the obvious C form does not yet match.",
+    "Used exact existing string/data labels for OSReport and __assert inputs rather than inventing new string definitions, minimizing data-layout risk.",
+    "Created module headers immediately with prototypes, making future decompilation units able to include lbfile/lbarchive APIs instead of relying on global function stubs."
+  ],
+  "decomp_lessons": [
+    "For partially decompiled modules, split only the matched leading functions into src/ and leave the remaining assembly in asm/; object ordering can preserve addresses while incrementally shrinking assembly.",
+    "When a decompiled function is widely called from assembly, update asm call comments/labels to the semantic name so future reviewers can identify call graph meaning.",
+    "Small callback/polling functions may require inline asm even when their C logic is trivial; preserving the NON_MATCHING C version documents intent without sacrificing matching.",
+    "Archive-loader functions can often be understood from library calls: parse archive, assert on failure, iterate externs by index, locate each extern, terminate on NULL.",
+    "Renaming a global sbss symbol should be propagated consistently through assembly, C extern declarations, and include/variables.h to avoid mixed anonymous and semantic names."
+  ],
+  "naming_conventions": [
+    "Semantic library/module prefixes were introduced: lbArchive_ for archive routines and lbFile_ for file routines.",
+    "The known archive initializer was named lbArchive_InitializeDAT instead of leaving the address-style func_80016A54.",
+    "Unidentified-but-module-scoped functions retained the address suffix convention, such as lbFile_8001615C and lbFile_800161A0.",
+    "The anonymous sbss label lbl_804D63C8 was renamed to the descriptive lowercase global cancel.",
+    "Header guards used lowercase file-style names: _lbarchive_h_ and _lbfile_h_."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted matched assembly bodies for func_80016A54 and lbl_8001615C after adding equivalent C implementations.",
+    "Retained lbFile_800161A0 as an inline asm function in the matching build while placing the natural C implementation behind #ifdef NON_MATCHING.",
+    "Used nofralloc in the inline asm body for lbFile_800161A0 to preserve the exact hand-written prologue/epilogue sequence.",
+    "Preserved branch instruction encodings in asm files while changing symbolic call labels to lbArchive_InitializeDAT and lbFile_800161A0.",
+    "Kept existing rodata/sdata labels as extern char arrays for assert/report strings instead of moving or redefining data."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-220",
+    "PsiLupan",
+    "lbfile",
+    "lbarchive",
+    "lbArchive_InitializeDAT",
+    "func_80016A54",
+    "lbFile_8001615C",
+    "lbFile_800161A0",
+    "lbl_8001615C",
+    "func_800161A0",
+    "cancel",
+    "lbl_804D63C8",
+    "HSD_ArchiveParse",
+    "HSD_ArchiveGetExtern",
+    "HSD_ArchiveLocateExtern",
+    "OSReport",
+    "__assert",
+    "HSD_DevComRequest",
+    "func_800195D0",
+    "NON_MATCHING",
+    "nofralloc",
+    "obj_files.mk",
+    "e_files.mk",
+    "EPILOGUE_UNSCHEDULED"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully decompile lbFile_800161A0 without inline asm.",
+    "Search for subsequent renames of lbFile_8001615C to a semantic callback name.",
+    "Look for later PRs that continue decompiling asm/melee/lb/lbarchive.s after lbArchive_InitializeDAT.",
+    "Check whether cancel remains a global BOOL or is later folded into a struct/state object.",
+    "Compare later lbarchive headers for more complete HSD_Archive API typing."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

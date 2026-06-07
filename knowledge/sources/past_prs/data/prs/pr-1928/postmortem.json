@@ -1,0 +1,148 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1928",
+  "pr": {
+    "number": 1928,
+    "title": "Match all item functions <= 52 bytes",
+    "url": "https://github.com/doldecomp/melee/pull/1928",
+    "state": "MERGED",
+    "author": "lukechampine",
+    "created_at": "2025-09-20T05:13:43Z",
+    "merged_at": "2025-09-20T22:28:07Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large item-system matching sweep that replaced many small item placeholder functions with C implementations across 97 files. The decomp.dev report recorded 179 new matches, +8572 matched bytes, and matched-code progress from 44.18% to 44.40% (+0.22%). Most work was in src/melee/it/items/*.c plus item headers, with a small Kirby prototype correction. The PR had no body, so motivation beyond the title and bot report is inferred from the diff: harvest many <=52-byte item callbacks by applying repeated item animation, physics, collision, and event-handler patterns.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "prototype-cleanup",
+      "item-callbacks",
+      "struct-layout"
+    ],
+    "systems": [
+      "item",
+      "fighter"
+    ]
+  },
+  "key_files": [
+    "src/melee/it/items/itbombhei.c",
+    "src/melee/it/items/itbombhei.h",
+    "src/melee/it/items/itbox.c",
+    "src/melee/it/items/itbox.h",
+    "src/melee/it/items/itdosei.c",
+    "src/melee/it/items/itdosei.h",
+    "src/melee/it/items/itevyoshiegg.c",
+    "src/melee/it/items/itclimbersice.c",
+    "src/melee/it/items/itflipper.c",
+    "src/melee/it/items/itharisen.c",
+    "src/melee/it/items/ittaru.c",
+    "src/melee/it/items/ittincle.c",
+    "src/melee/it/items/itsamusbomb.c",
+    "src/melee/it/itCommonItems.h",
+    "src/melee/it/itCharItems.h",
+    "src/melee/it/types.h",
+    "src/melee/ft/chara/ftKirby/ftKb_Init.h"
+  ],
+  "what_changed": [
+    "Matched many previously stubbed small item functions, especially UnkMotion*_Anim, UnkMotion*_Phys, UnkMotion*_Coll, and Logic*_event callbacks.",
+    "Converted numerous item helper prototypes from UNK_RET/UNK_PARAMS to concrete signatures such as void fn_8027DAC8(Item_GObj* gobj), void it_8027DE18(Item_GObj*), and void fn_80286480(Item_GObj*).",
+    "Added item-specific variable and attribute structs needed by the matched code, including itSamusBomb_ItemVars, itSeakNeedleThrown_ItemVars, itBox_ItemVars, itFlipper_ItemVars, itLikelikeAttributes, itHammerheadAttributes, itRshellAttributes, and itTaru_ItemVars.",
+    "Used GET_ITEM(gobj), GET_JOBJ(gobj), ItemAttr, and itemVar fields to express short state-machine logic, timer decrements, and physics/collision callbacks.",
+    "Added includes such as it/inlines.h and it/it_266F.h in item source files to access item accessors and shared item collision/physics helpers.",
+    "Updated one fighter header prototype: ftKb_SpecialN_800F5800 changed from UNK_RET/UNK_PARAMS to void ftKb_SpecialN_800F5800(HSD_GObj*, Vec3*)."
+  ],
+  "smart_moves": [
+    "Targeted a bounded class of low-risk functions by byte size, allowing a broad progress gain without needing to solve large control-flow-heavy routines.",
+    "Reused repeated item callback idioms: simple Anim functions return false or expire on timer, Phys functions call it_80272860 with x10_fall_speed and x14_fall_speed_max, and Coll functions call shared helpers then return false.",
+    "Unlocked many matches by replacing vague UNK_PARAMS prototypes with concrete Item_GObj* signatures, making callback call sites compile naturally and avoiding argument-mismatch placeholders.",
+    "Added only the struct fields needed by observed accesses rather than over-modeling whole item data layouts, preserving matching while improving type information.",
+    "Kept empty matched functions explicit where appropriate, such as no-op Phys callbacks, instead of leaving placeholder comments."
+  ],
+  "decomp_lessons": [
+    "Small item functions often fall into highly reusable patterns; once the helper signatures are known, many files can be matched by applying the same animation, physics, and collision templates.",
+    "For item Phys callbacks, the common falling-physics pattern is Item* ip = GET_ITEM(gobj), ItemAttr* attrs = ip->xCC_item_attr, then it_80272860(gobj, attrs->x10_fall_speed, attrs->x14_fall_speed_max).",
+    "For item Coll callbacks, helpers such as it_8026D62C, it_8026E15C, it_8026E32C, it_8026E7E0, and it_8026E8C4 frequently take the current Item_GObj* plus transition/callback functions and then the wrapper returns false.",
+    "Timer-based small Anim callbacks commonly test a life timer or itemVar counter, return true when expired, otherwise decrement and return false.",
+    "Concrete prototypes in headers are not just cleanup; they enable correct callback passing and prevent missed arguments in short functions.",
+    "When a matched function calls another item helper, verify whether the helper expects gobj even if the decompiled body initially appears callable without arguments; review caught two missing gobj arguments."
+  ],
+  "naming_conventions": [
+    "Item motion callbacks follow names like itBombhei_UnkMotion5_Anim, itDosei_UnkMotion10_Coll, itClimbersice_UnkMotion2_Anim, and itTaru_UnkMotion5_Phys.",
+    "Item logic event callbacks follow names like it_3F14_Logic6_Clanked, it_2725_Logic13_DmgDealt, and it_3F14_Logic42_PickedUp.",
+    "Address-based helper names remain in the it_802xxxxx or fn_802xxxxx style until semantic names are known.",
+    "Item variable structs use item-name prefixes and suffix _ItemVars, with field names preserving itemVar offsets such as xDD4, xDD8, xDDC, xDE0.",
+    "Attribute structs use item-name prefixes and suffix Attributes or DatAttrs, preserving offset-like field names where semantics are unknown."
+  ],
+  "assembly_or_matching_tactics": [
+    "Batch-match short functions by recognizing common assembly shapes: load Item from gobj, load ItemAttr, call shared helper, return false/true.",
+    "Use exact return types for callbacks: many Coll and Anim wrappers are bool and return false after a helper call; many transition helpers are void(Item_GObj*).",
+    "For struct-dependent matches, add minimal fields at the exact itemVar offsets accessed by the assembly rather than guessing full semantics.",
+    "For collision callbacks, match argument order carefully; examples in the diff include it_8026D62C(gobj, callback), it_8026E15C(gobj, callback), and it_8026E8C4(gobj, callback_a, callback_b).",
+    "Review-generated corrections show that omitting gobj in helper calls can still produce near-looking code but is wrong for the intended function signature."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "r-burns",
+      "path": "src/melee/it/items/ittaru.c",
+      "feedback": "Suggested passing gobj to it_802874F0 in itTaru_UnkMotion5_Phys: it_802874F0(gobj);"
+    },
+    {
+      "reviewer": "r-burns",
+      "path": "src/melee/it/items/ittincle.c",
+      "feedback": "Suggested passing gobj to it_802EC1F4 in it_2725_Logic13_DmgDealt: it_802EC1F4(gobj);"
+    }
+  ],
+  "searchable_terms": [
+    "PR1928",
+    "Match all item functions <= 52 bytes",
+    "small item functions",
+    "179 new matches",
+    "+8572 bytes",
+    "it_80272860",
+    "it_8026D62C",
+    "it_8026E15C",
+    "it_8026E32C",
+    "it_8026E7E0",
+    "it_8026E8C4",
+    "GET_ITEM",
+    "GET_JOBJ",
+    "Item_GObj",
+    "ItemAttr",
+    "xCC_item_attr",
+    "x10_fall_speed",
+    "x14_fall_speed_max",
+    "xD44_lifeTimer",
+    "itemVar",
+    "itBombhei_UnkMotion5_Anim",
+    "itBombhei_UnkMotion12_Coll",
+    "it_3F14_Logic6_Clanked",
+    "itDosei_UnkMotion10_Coll",
+    "itBox_UnkMotion5_Coll",
+    "itTaru_UnkMotion5_Phys",
+    "it_2725_Logic13_DmgDealt",
+    "itSamusBomb_ItemVars",
+    "itSeakNeedleThrown_ItemVars",
+    "itBox_ItemVars",
+    "itFlipper_ItemVars",
+    "itTaru_ItemVars",
+    "ftKb_SpecialN_800F5800"
+  ],
+  "follow_up_queries": [
+    "Find remaining item functions just above 52 bytes that use the same Anim/Phys/Coll helper patterns.",
+    "Audit item helper prototypes still using UNK_RET or UNK_PARAMS where call sites pass Item_GObj* callbacks.",
+    "Search for Coll wrappers that call it_8026D62C, it_8026E15C, it_8026E32C, it_8026E7E0, or it_8026E8C4 and return false.",
+    "Search for lifeTimer or xDD8 countdown Anim callbacks that can be matched with the timer-decrement pattern.",
+    "Review itemVar structs in itCommonItems.h and itCharItems.h for newly inferred fields that can support larger follow-up matches."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

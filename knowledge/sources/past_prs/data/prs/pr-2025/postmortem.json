@@ -1,0 +1,179 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2025",
+  "pr": {
+    "number": 2025,
+    "title": "lb: Match lbRefract, lbBgFlash, lbAudio, and lbColl functions",
+    "url": "https://github.com/doldecomp/melee/pull/2025",
+    "state": "MERGED",
+    "author": "itsgrimetime",
+    "created_at": "2025-12-30T01:25:12Z",
+    "merged_at": "2026-01-05T20:27:31Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Focused split from PR #2024 matching library-module functions in lbRefract, lbBgFlash, lbAudio, and reportedly lbColl. The PR replaced several anonymous fn_* placeholders with matched, typed implementations and clearer names, improved lbRefract_CallbackData field names, added local temporary structs for partially understood user data and texture pixels, fixed lbBgFlash_800205F0 to take a duration argument, and updated its gm_17C0 caller. Review emphasized keeping temporary local struct types instead of raw pointer arithmetic when user_data layout is not yet ready for a shared header.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "function-naming",
+      "headers",
+      "types-structs",
+      "signature-fix",
+      "documentation",
+      "library-cleanup"
+    ],
+    "systems": [
+      "lb",
+      "lbRefract",
+      "lbBgFlash",
+      "lbAudioAx",
+      "lbColl",
+      "gm"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/lbrefract.c",
+    "src/melee/lb/lbrefract.h",
+    "src/melee/lb/lbbgflash.c",
+    "src/melee/lb/lbbgflash.h",
+    "src/melee/lb/lbaudio_ax.c",
+    "src/melee/lb/lbaudio_ax.h",
+    "src/melee/lb/types.h",
+    "src/melee/gm/gm_17C0.c",
+    "config/GALE01/symbols.txt"
+  ],
+  "what_changed": [
+    "Matched and named several lbRefract helpers, including lbRefract_WriteTexCoordIA4 at 0x80021F34, lbRefract_ReadTexCoordRGBA8 at 0x80022120, and lbRefract_DObjDispReset at 0x80022608 in symbols.txt.",
+    "Implemented lbRefract_WriteTexCoordIA4 using a small local pixel struct with alpha and intensity fields, row_stride, tile_col, tile_base, and pixel_offset calculations for IA4 texture coordinate writes.",
+    "Implemented or clarified lbRefract_ReadTexCoordRGBA8 to compute RGBA8 texture component addresses from buffer, row, column, and row_stride, with nullable output pointers.",
+    "Renamed lbRefract_CallbackData fields in src/melee/lb/types.h from unk0-unk5 to buffer, format, width, height, row_stride, buffer_size, callback0, and callback1.",
+    "Updated lbRefract_8002219C parameters and internals to initialize named callback data fields and select callbacks based on GX texture format values 3, 4, and 6.",
+    "Matched lbRefract_80022560 as a framebuffer-to-refraction-source texture copy according to the PR body, and lbRefract_800225D4 as a TEV/indirect stage reset.",
+    "Renamed and matched lbRefract_DObjDispReset as a DObj display wrapper that calls hsdDObj.disp, resets TEV direct state, resets indirect stages, and invalidates HSD state.",
+    "Implemented lbBgFlash_800205F0 with a s32 duration parameter, clamps duration to at least 1, calls lbBgFlash_800206D4 with lbl_804D3848 and lbl_804D3840, and clears lbl_80433658.state.mode.",
+    "Updated lbBgFlash_800205F0 declaration in lbbgflash.h from void(void) to void(s32 duration) and updated gm_17C0.c caller to pass temp_r3.",
+    "Added BgFlashState and BgFlashData temporary structs in lbbgflash.c, replacing an older lbl_80433658_t bitfield placeholder with named active and mode fields and x4/x8/xC members.",
+    "Matched lbBgFlash_InitState at 0x8002087C, initializing active to 0, mode to 5, and xC from the duration pointer.",
+    "Implemented lbBgFlash_80021C48 using a temporary local struct containing padding and ColorOverlay x4, then calling lb_800144C8 on that overlay.",
+    "Changed lbBgFlash_80021A10 and fn_80021C18 to static where appropriate, removing lbBgFlash_80021A10 from the public header.",
+    "Renamed fn_800263B4 to lbAudioAx_ObjFree and documented it as freeing an object from the audio allocator pool via HSD_ObjFree when obj is non-NULL.",
+    "PR body says lbColl_80009DD4 was matched as debug quad drawing, but the provided changed_files and diff excerpt do not include an lbColl file, so details are not evidenced in this slice.",
+    "Added brief @file and @brief comments to lbrefract/lbbgflash source and headers."
+  ],
+  "smart_moves": [
+    "Used semantic names based on concrete behavior rather than leaving matched code under fn_* names: WriteTexCoordIA4, ReadTexCoordRGBA8, DObjDispReset, InitState, and ObjFree.",
+    "Converted lbRefract_CallbackData from anonymous unk fields into operational field names, making row stride, format selection, buffer size, and callback wiring much easier to audit in later matches.",
+    "Preserved exact texture tiling/address math while improving readability with row_stride, tile_col, tile_base, and pixel_offset locals.",
+    "Handled minimum duration clamping in lbBgFlash_800205F0 and lbBgFlash_8002063C consistently, then fixed the known caller in gm_17C0.c after changing the function signature.",
+    "Kept partially understood layouts as local temporary structs rather than prematurely adding uncertain global header types.",
+    "Updated config/GALE01/symbols.txt together with source renames, including local/global scope where shown, keeping symbol metadata aligned with decomp progress.",
+    "Used wrapper naming lbAudioAx_ObjFree to capture allocator intent while preserving the null-check and HSD_ObjFree call sequence."
+  ],
+  "decomp_lessons": [
+    "When a function’s real behavior is understood, rename fn_* symbols and prototypes to behavior-based names and update symbols.txt in the same PR.",
+    "For texture buffer code, field names like buffer, format, width, height, row_stride, and buffer_size can make matching math readable without changing low-level aligned address calculations.",
+    "For GX texture formats, preserve numeric format cases when enum certainty is absent, but document known meanings such as 3=IA4, 4=IA8, and 6=RGBA8 if evidenced by code behavior.",
+    "Signature fixes must include all known callers; this PR changed lbBgFlash_800205F0 from void(void) to void(s32 duration) and updated gm_17C0.c accordingly.",
+    "Temporary local structs are acceptable for partially known embedded data layouts, especially when review expects future evidence before moving a type to a shared header.",
+    "Avoid raw pointer arithmetic on user_data when a temporary struct can express the known offset and type safely enough for current evidence.",
+    "Do not overgeneralize temporary structures into headers until repeated use confirms the layout; reviewers anticipated later usages might justify moving the type later.",
+    "Wrapper functions around engine allocators should keep null behavior explicit and name the allocator domain, as with lbAudioAx_ObjFree."
+  ],
+  "naming_conventions": [
+    "Use module-prefixed names for understood library functions: lbRefract_*, lbBgFlash_*, lbAudioAx_*, lbColl_*.",
+    "Use action-object names for helpers: lbRefract_WriteTexCoordIA4, lbRefract_ReadTexCoordRGBA8, lbRefract_DObjDispReset, lbAudioAx_ObjFree.",
+    "Keep address-suffixed names such as lbRefract_8002219C or lbBgFlash_800205F0 when behavior is only partly known or public name is not established.",
+    "Use named struct fields instead of unkN when behavior is known: buffer, format, width, height, row_stride, buffer_size, active, mode.",
+    "Use static for local helpers that are not public API, such as lbBgFlash_80021A10, fn_80021C18, and lbRefract_DObjDispReset.",
+    "Header prototypes should reflect improved parameter names when known, such as lbBgFlash_800205F0(s32 duration), lbBgFlash_8002063C(int count), and lbAudioAx_ObjFree(void* obj)."
+  ],
+  "assembly_or_matching_tactics": [
+    "Represented IA4 texture writes through a local two-byte pixel struct with alpha followed by intensity to avoid less-readable byte indexing while preserving layout.",
+    "Kept aligned texture row calculations explicit: IA4/IA8 row_stride uses (width * 8) & 0xFFFFFFE0, while RGBA8 uses (width * 0x10) & 0xFFFFFFC0.",
+    "Computed tiled texture addresses with col >> 2, row low bits, and column low bits, preserving the original bitmask forms such as 0xFFFFFFE0, 0xFFFFFFC0, and 0xC.",
+    "Used nullable output pointers in lbRefract_ReadTexCoordRGBA8 to match functions that optionally return component addresses.",
+    "Preserved a goto-style shared return path in lbRefract_8002219C switch cases, likely because it matched compiler control flow.",
+    "Maintained direct GX/HSD cleanup order in lbRefract_DObjDispReset: display DObj, GXSetTevDirect, GXSetNumIndStages(0), HSD_StateInvalidate(-1).",
+    "For uncertain object/user_data memory, used local anonymous structs with padding to access known fields at offsets instead of broad casts to incomplete global types."
+  ],
+  "review_feedback": [
+    {
+      "file": "src/melee/lb/lbbgflash.c",
+      "author": "r-burns",
+      "feedback": "Keep the temporary type for now rather than doing pointer arithmetic on user data; later repeated usage may justify moving the type to a header."
+    },
+    {
+      "file": "src/melee/lb/lbrefract.c",
+      "author": "itsgrimetime",
+      "feedback": "Asked whether similar pointer arithmetic in lbRefract_WriteTexCoordIA4 should use a local struct for alpha/intensity pixel layout."
+    },
+    {
+      "file": "src/melee/lb/lbrefract.c",
+      "author": "ribbanya",
+      "feedback": "Approved the local pointer arithmetic/local struct approach as fine for now."
+    }
+  ],
+  "searchable_terms": [
+    "PR2025",
+    "itsgrimetime",
+    "lbRefract",
+    "lbBgFlash",
+    "lbAudioAx",
+    "lbColl",
+    "lbRefract_WriteTexCoordIA4",
+    "lbRefract_ReadTexCoordRGBA8",
+    "lbRefract_DObjDispReset",
+    "lbRefract_CallbackData",
+    "lbRefract_8002219C",
+    "lbRefract_80022560",
+    "lbRefract_800225D4",
+    "lbRefract_PObjLoad",
+    "lbBgFlash_800205F0",
+    "lbBgFlash_8002063C",
+    "lbBgFlash_InitState",
+    "lbBgFlash_80021C48",
+    "lbAudioAx_ObjFree",
+    "fn_800263B4",
+    "fn_8002087C",
+    "fn_80022608",
+    "fn_80022120",
+    "fn_80021F34",
+    "BgFlashState",
+    "BgFlashData",
+    "ColorOverlay",
+    "CommandInfo",
+    "HSD_ObjFree",
+    "GXGetTexBufferSize",
+    "GXSetTevDirect",
+    "GXSetNumIndStages",
+    "HSD_StateInvalidate",
+    "IA4",
+    "IA8",
+    "RGBA8",
+    "row_stride",
+    "texture coordinate",
+    "background flash",
+    "refraction effects",
+    "temporary struct",
+    "pointer arithmetic",
+    "gm_17C0"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that move BgFlashGlobal or the ColorOverlay-containing user_data temporary struct into a shared header.",
+    "Search for other callers of lbBgFlash_800205F0 to confirm all duration arguments are typed and named consistently.",
+    "Inspect later lbColl changes to verify the lbColl_80009DD4 debug quad drawing match, since this slice lacks the lbColl diff.",
+    "Search for additional users of lbRefract_CallbackData callback0/callback1 to refine function pointer typedefs.",
+    "Check whether texture format numeric constants 3, 4, and 6 were later replaced with GXTexFmt enum names.",
+    "Look for subsequent renames of fn_80021F70, fn_80021FB4, fn_80021FF8, and fn_8002206C after the IA4/RGBA8 helpers were named."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

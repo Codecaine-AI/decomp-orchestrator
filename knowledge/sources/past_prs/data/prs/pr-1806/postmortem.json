@@ -1,0 +1,131 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1806",
+  "pr": {
+    "number": 1806,
+    "title": "Matched in ftYs_SpecialN, mostly involving inlines",
+    "url": "https://github.com/doldecomp/melee/pull/1806",
+    "state": "MERGED",
+    "author": "Gelatart",
+    "created_at": "2025-08-07T13:59:58Z",
+    "merged_at": "2025-08-07T16:07:37Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched several previously stubbed Yoshi SpecialN-related functions in src/melee/ft/chara/ftYoshi/ftYs_SpecialN.c, with most progress coming from carving out small inline helpers that reproduce shared command-variable, victim-gobj, callback, and motion-state setup behavior. The header was tightened for two functions by replacing UNK_RET/UNK_PARAMS with concrete void signatures.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "fighter-action-logic",
+      "inline-reconstruction"
+    ],
+    "systems": [
+      "fighter",
+      "ftYoshi",
+      "SpecialN",
+      "SpecialHi"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftYoshi/ftYs_SpecialN.c",
+    "src/melee/ft/chara/ftYoshi/ftYs_SpecialN.h"
+  ],
+  "what_changed": [
+    "Implemented fn_8012D128, replacing a decomp stub with logic that gets the Fighter from the gobj, calls ftCommon_8007D5D4, changes to motion state 0x15F using fp->cur_anim_frame and flags 0x0C4C509A, then installs callbacks through ftCommon_8007E2D0.",
+    "Implemented fn_8012D1AC similarly, but using ftCommon_8007D7FC, motion state 0x15A, and callbacks fn_8012CF7C/fn_8012CEE0/ftCo_800BBB8C.",
+    "Added small static helpers inlineA1 and inlineA0 for shared SpecialN/SpecialAirN command-variable reset and motion-state transition behavior.",
+    "Implemented ftYs_SpecialN1_1_Anim so it checks fp->cmd_vars[0] and transitions through inlineA0 to motion state 0x15E.",
+    "Added an inline Fighter_GetVictimGobj accessor returning fp->victim_gobj, used to match victim-gobj-dependent SpecialN behavior.",
+    "Added ftYs_SpecialN1_0_Anim_inline and implemented ftYs_SpecialN1_0_Anim as a wrapper around it; this path checks cmd_vars[0] and non-null victim_gobj before resetting command vars, changing to motion state 0x15D, and calling ftCommon_8007E2F4.",
+    "Implemented ftYs_SpecialAirN1_2_Anim so it checks fp->cmd_vars[0] and transitions through inlineA0 to motion state 0x163.",
+    "Implemented fn_8012E3B4 for Yoshi SpecialHi-related setup: calls ftCommon_8007D5D4, changes to motion state 0x16D with flags 0x0C4C5082, conditionally installs take_dmg_cb/death2_cb through fn_8012E3B4_inline, assigns accessory4_cb through qwe, then calls ftCommon_8007D468.",
+    "Updated ftYs_SpecialN.h prototypes for fn_8012E110 and fn_8012E3B4 from unknown signatures to concrete void callbacks taking HSD_GObj* or Fighter_GObj*."
+  ],
+  "smart_moves": [
+    "Factored repeated command-variable clearing into inlineA1, making it reusable across multiple SpecialN animation handlers while preserving the matching-oriented inline shape.",
+    "Used inlineA0 to share the common conditional x1A60 check, motion-state transition, ftYs_SpecialS_8012DF00 call, and ftCommon_8007E2F4 call between grounded and aerial SpecialN follow-up paths.",
+    "Introduced a tiny Fighter_GetVictimGobj inline accessor rather than directly reading victim_gobj in the condition, indicating the original compiler shape likely required a separate inline for matching.",
+    "Kept ftYs_SpecialN1_0_Anim as a wrapper around ftYs_SpecialN1_0_Anim_inline, another sign that matching required reproducing an inline/helper boundary rather than only writing straightforward logic.",
+    "Split fn_8012E3B4 callback setup into fn_8012E3B4_inline and qwe helpers, suggesting careful reconstruction of the compiler's inline layout for callback assignments.",
+    "Improved header accuracy after matching by replacing broad UNK_RET/UNK_PARAMS declarations with concrete callback-style signatures."
+  ],
+  "decomp_lessons": [
+    "For fighter action functions, small inline helpers can be necessary to match even when the visible behavior is simple assignments and motion-state calls.",
+    "Repeated cmd_vars[0]/cmd_vars[1] reset patterns should be considered candidates for extracted inline helpers when multiple action-state handlers share them.",
+    "When a condition involves a struct field such as victim_gobj, a tiny accessor inline may be required to reproduce the expected generated code.",
+    "Motion-state changes should preserve exact constants, argument order, float literals, and callback arguments; this PR used explicit msid constants such as 0x15D, 0x15E, 0x15F, 0x163, and 0x16D.",
+    "Once a formerly unknown function is matched, update its header prototype immediately so downstream files can rely on concrete types instead of UNK_RET/UNK_PARAMS.",
+    "Callback fields such as accessory4_cb, take_dmg_cb, and death2_cb may need to be assigned in helper functions rather than inline in the parent function to match compiler output."
+  ],
+  "naming_conventions": [
+    "Matched-but-still-unknown functions retained address-based names such as fn_8012D128, fn_8012D1AC, fn_8012E3B4, and fn_8012E110.",
+    "Action handlers followed the ftYs_SpecialN/SpecialAirN naming pattern, e.g. ftYs_SpecialN1_1_Anim, ftYs_SpecialN1_0_Anim, and ftYs_SpecialAirN1_2_Anim.",
+    "Temporary or matching-oriented helper names included inlineA0, inlineA1, ftYs_SpecialN1_0_Anim_inline, fn_8012E3B4_inline, and qwe; these names are evidence from the diff but are not descriptive final names.",
+    "The accessor name Fighter_GetVictimGobj follows a clear subsystem-style convention and directly describes returning fp->victim_gobj."
+  ],
+  "assembly_or_matching_tactics": [
+    "Inserted unused stack padding declarations `u8 _[8];` in fn_8012D128 and fn_8012D1AC, likely to match stack layout.",
+    "Used helper functions marked static or inline to reproduce expected inlining and call boundaries.",
+    "Kept explicit casts such as `(Fighter*) gobj->user_data` in ftCommon_8007E2D0 calls, preserving exact source shape around fighter data access.",
+    "Used exact unsigned motion-state flag constants such as `0x0C4C509AU`, `0x80012U`, and `0x0C4C5082U`.",
+    "Preserved exact float and integer literal forms in Fighter_ChangeMotionState calls, including `0.0f`, `1.0f`, integer `0`, integer `1`, and reuse of `fp->cur_anim_frame`.",
+    "Matched conditional callback setup by testing `fp->fv.ys.x2238 != NULL` before assigning `take_dmg_cb` and `death2_cb`."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "The PR context reports one issue comment, but no human text excerpt was included, so no substantive reviewer feedback can be extracted."
+  ],
+  "searchable_terms": [
+    "pr-1806",
+    "Gelatart",
+    "ftYs_SpecialN",
+    "ftYs_SpecialN.c",
+    "ftYs_SpecialN.h",
+    "Yoshi",
+    "SpecialN",
+    "SpecialAirN",
+    "SpecialHi",
+    "fn_8012D128",
+    "fn_8012D1AC",
+    "fn_8012E3B4",
+    "fn_8012E110",
+    "ftYs_SpecialN1_1_Anim",
+    "ftYs_SpecialN1_0_Anim",
+    "ftYs_SpecialAirN1_2_Anim",
+    "Fighter_GetVictimGobj",
+    "victim_gobj",
+    "cmd_vars",
+    "x1A60",
+    "accessory4_cb",
+    "take_dmg_cb",
+    "death2_cb",
+    "Fighter_ChangeMotionState",
+    "ftCommon_8007D5D4",
+    "ftCommon_8007D7FC",
+    "ftCommon_8007E2D0",
+    "ftCommon_8007E2F4",
+    "ftCommon_8007D468",
+    "inlineA0",
+    "inlineA1",
+    "inline reconstruction",
+    "stack padding",
+    "u8 _[8]"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename inlineA0, inlineA1, qwe, or other temporary helpers in ftYs_SpecialN.c.",
+    "Search for other fighter action matches that use `u8 _[8];` stack padding around Fighter_ChangeMotionState.",
+    "Compare other Yoshi SpecialN functions for the same cmd_vars reset and victim_gobj transition pattern.",
+    "Search for callback assignment patterns involving accessory4_cb, take_dmg_cb, and death2_cb in other fighter special moves.",
+    "Check whether Fighter_GetVictimGobj became a shared inline/helper elsewhere or stayed local to ftYs_SpecialN.c."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

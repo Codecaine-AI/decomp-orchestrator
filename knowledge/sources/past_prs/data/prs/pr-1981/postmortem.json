@@ -1,0 +1,144 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1981",
+  "pr": {
+    "number": 1981,
+    "title": "Camera work",
+    "url": "https://github.com/doldecomp/melee/pull/1981",
+    "state": "MERGED",
+    "author": "sadkellz",
+    "created_at": "2025-11-14T01:48:51Z",
+    "merged_at": "2025-11-14T16:49:16Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Large camera-system decompilation PR that replaced multiple `/// #...` stubs in `src/melee/cm/camera.c` with C implementations, expanded camera-related structs/types, and converted several raw `cm_803BCCA0._44[...]` accesses into named fields. The work covered gameplay camera update flow, camera input collection, pause-camera movement/zoom helpers, camera interpolation helpers, and camera mode initialization. Evidence includes added implementations for `Camera_8002A0C0`, `Camera_8002B3D4`, `Camera_8002B694`, `Camera_8002C010`, `Camera_8002E158`, and `Camera_8002FC7C`, plus header/signature/type updates. Review evidence is minimal; the only human comment in the slice concerns write access/merge permissions, not code review.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "camera-system",
+      "struct-field-naming",
+      "function-implementation"
+    ],
+    "systems": [
+      "melee-core",
+      "camera",
+      "cm"
+    ]
+  },
+  "key_files": [
+    "src/melee/cm/camera.c",
+    "src/melee/cm/types.h",
+    "src/melee/cm/camera.h",
+    "src/melee/cm/forward.h"
+  ],
+  "what_changed": [
+    "Implemented several previously stubbed camera functions in `src/melee/cm/camera.c`, including `Camera_8002A0C0`, `Camera_8002B3D4`, `Camera_8002B694`, `Camera_8002C010`, `Camera_8002E158`, and `Camera_8002FC7C`.",
+    "Added helper inlines near the top of `camera.c`, including `vec_len(Vec3*)`, `abs_threshold_inline(f32 value, f32 threshold)`, `get_slot_pad(u8)`, `get_stick_x(HSD_PadStatus*)`, and `get_stick_y(HSD_PadStatus*)`.",
+    "Changed `Camera_80029AAC` from externally visible to `static`, indicating it is an internal camera helper.",
+    "Wrapped `Camera_80029BC4`/nearby code with `#pragma dont_inline on` and `#pragma dont_inline reset`, suggesting matching depended on controlling inlining behavior.",
+    "Changed `Camera_8002A28C` signature from `void Camera_8002A28C(void)` to `void Camera_8002A28C(CameraBounds* arg0)` and updated call sites, notably in the gameplay camera update path.",
+    "Reworked `Camera_8002B0E0` to use named `CameraUnkGlobals` fields such as `xD4`, `xD8`, `xDC`, `xE0`, and `xE4` instead of raw `_44[...]` indexing, while preserving single-player C-stick camera-depth behavior.",
+    "Implemented `Camera_8002B3D4` as an update gameplay camera routine that refreshes camera bounds, target FOV, camera transforms, stage smoothing, player/fighter z-threshold checks, camera distance tracking, and stage bounds averaging.",
+    "Implemented `Camera_8002B694` to populate `CameraInputs` from pad status for normal slots, a special disabled slot `5`, and aggregate slot `4` scanning all four controllers for stick/substick values above a `0.85f` threshold.",
+    "Converted several `cm_803BCCA0._44[...]` references to named struct fields such as `x9C`, `xA0`, `xAC`, `xB0`, `xB4`, `xB8`, `xBC`, and `xC0`.",
+    "Expanded camera headers/types: `types.h` received most of the non-code changes, while `camera.h` adjusted declarations and `forward.h` added a forward type declaration."
+  ],
+  "smart_moves": [
+    "Moved `vec_len` earlier in the file so it could be reused by newly implemented camera code without relying on a later local helper definition.",
+    "Introduced small inline wrappers and an `abs_threshold_inline` helper to influence generated code shape while keeping repeated absolute-value threshold logic readable.",
+    "Used named fields in `CameraUnkGlobals`/`cm_803BCCA0` rather than continuing opaque `_44[index]` accesses, making later camera decomp work easier to search and refine.",
+    "Kept uncertainty explicit with comments such as `@todo figure out how to get cm_803BCCA0 to load into r3`, `@todo inline?`, `@remarks permuter jank`, and `@todo there is probably a bigger inline`, which preserves matching context for future cleanup instead of hiding fragile codegen constraints.",
+    "Used `#pragma dont_inline` around sensitive functions, showing that local inlining decisions were part of the matching strategy.",
+    "Structured `Camera_8002B3D4` around real camera concepts—bounds, transform, target FOV, target position/interest, smoothing, and player position checks—rather than leaving a monolithic stub."
+  ],
+  "decomp_lessons": [
+    "For camera decomp, replacing raw parameter-table array indexing with provisional named fields is valuable even if names remain offset-style (`xAC`, `xB0`), because it documents repeated semantic use across zoom, bounds, pause camera, and C-stick camera-depth code.",
+    "Matching may require intentionally awkward temporaries, duplicate assignments, dummy conditions, or pointer aliases such as `CameraUnkGlobals* new_var`; preserve those when they are likely codegen scaffolding.",
+    "Small inline helpers can be introduced specifically to make threshold/ABS patterns match, but comments should identify where the inline is suspected rather than proven.",
+    "When decompiling a central update function like `Camera_8002B3D4`, implement the surrounding helper functions and type definitions in the same PR so signatures and struct field offsets can converge together.",
+    "Special controller slots can encode gameplay semantics: this PR shows slot `5` producing zeroed camera inputs and slot `4` aggregating across four controllers with threshold scans.",
+    "If exact register allocation or load ordering is unresolved, leave targeted TODOs rather than overclaiming a clean match rationale."
+  ],
+  "naming_conventions": [
+    "Camera functions continue to use the project’s address-style names, e.g. `Camera_8002B3D4`, with comments adding semantic labels such as `update gameplay camera` when known.",
+    "Camera structs use PascalCase type names such as `CameraBounds`, `CameraTransformState`, `CameraInputs`, and `CameraUnkGlobals`.",
+    "Unknown struct members remain offset-style with `x` prefixes, e.g. `x2BC`, `x2C0`, `xA4`, `xAC`, `xE8`, which is consistent with decomp placeholder naming while still improving over anonymous arrays.",
+    "Global camera data follows existing symbol names such as `cm_80452C68`, `cm_803BCCA0`, `cm_803BCB64`, and static object pointer `cm_804D6464`.",
+    "Helper names are descriptive but local/simple, e.g. `vec_len`, `abs_threshold_inline`, `get_slot_pad`, `get_stick_x`, and `get_stick_y`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used `#pragma dont_inline on/reset` to prevent unwanted inlining around camera helper code.",
+    "Added inline helpers to control emitted ABS/threshold and pad-access patterns.",
+    "Introduced explicit temporaries such as `temp_f27`, `temp_f28`, `temp_f29_2`, `var_f30`, `var_f31`, `var_r0`, and pointer aliases like `new_var2` to influence register allocation and expression ordering.",
+    "Left matching-focused TODOs where codegen was not fully understood, including loading `cm_803BCCA0` into `r3` and suspected inline/permuter issues.",
+    "Used `sqrtf__Ff(total_dist)` in one distance calculation while `vec_len` uses `sqrtf`, indicating careful function-call selection for matching in different contexts.",
+    "Preserved seemingly redundant code in `Camera_8002B0E0`, including duplicate assignment `var_f2 = var_f1;` and an empty `if ((*new_var2).xD4 && (*new_var2).xD4) {}`, likely as codegen scaffolding."
+  ],
+  "review_feedback": [
+    "No code review comments are present in the provided slice.",
+    "The only human text excerpt is from ribbanya telling `@sadkellz` they had been given write access and could merge after accepting the invite; this is process feedback, not technical review."
+  ],
+  "searchable_terms": [
+    "PR1981",
+    "Camera work",
+    "sadkellz",
+    "camera.c",
+    "camera.h",
+    "types.h",
+    "forward.h",
+    "Camera_8002A0C0",
+    "Camera_8002B3D4",
+    "Camera_8002B694",
+    "Camera_8002C010",
+    "Camera_8002E158",
+    "Camera_8002FC7C",
+    "Camera_8002B0E0",
+    "Camera_80029AAC",
+    "Camera_80029BC4",
+    "Camera_80029CF8",
+    "Camera_8002A28C",
+    "CameraBounds",
+    "CameraTransformState",
+    "CameraInputs",
+    "CameraUnkGlobals",
+    "cm_80452C68",
+    "cm_803BCCA0",
+    "cm_803BCB64",
+    "HSD_PadCopyStatus",
+    "Player_GetPlayerId",
+    "Stage_GetCamZoomRate",
+    "Stage_GetCamMaxDepth",
+    "Stage_GetCamTrackSmooth",
+    "Stage_GetCamBoundsLeftOffset",
+    "Stage_GetCamBoundsRightOffset",
+    "Stage_GetCamBoundsTopOffset",
+    "Stage_GetCamBoundsBottomOffset",
+    "Stage_GetCamAngleRadiansUp",
+    "Ground_801C57A4",
+    "ftLib_80086644",
+    "abs_threshold_inline",
+    "vec_len",
+    "dont_inline",
+    "permuter jank",
+    "C-stick camera",
+    "pause camera",
+    "gameplay camera update"
+  ],
+  "follow_up_queries": [
+    "Inspect final merged `src/melee/cm/types.h` for the exact `CameraUnkGlobals`, `CameraBounds`, `CameraTransformState`, and `CameraInputs` field additions introduced by PR #1981.",
+    "Check whether later PRs renamed provisional `cm_803BCCA0` fields such as `x9C`, `xA0`, `xAC`, `xB0`, `xB4`, `xB8`, `xBC`, `xC0`, `xD4`, `xD8`, `xDC`, `xE0`, and `xE4` to semantic camera parameter names.",
+    "Search later camera PRs for cleanup of TODOs from this PR: `cm_803BCCA0 to load into r3`, `inline?`, `permuter jank`, and `there is probably a bigger inline`.",
+    "Compare `Camera_8002B3D4` and `Camera_8002B694` against later versions to see whether helper inlines or redundant codegen scaffolding were removed after matching improved."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

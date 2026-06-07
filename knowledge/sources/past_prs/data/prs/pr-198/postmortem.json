@@ -1,0 +1,130 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-198",
+  "pr": {
+    "number": 198,
+    "title": "Start matching HSD_Shadow",
+    "url": "https://github.com/doldecomp/melee/pull/198",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-17T20:45:39Z",
+    "merged_at": "2021-12-17T20:45:47Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Started decompiling sysdolphin baselib HSD_Shadow by adding src/sysdolphin/baselib/shadow.c and moving the first shadow allocation helpers out of shadow.s. HSD_ShadowGetAllocData and HSD_ShadowInitAllocData were implemented in C, while HSD_ShadowAlloc was documented as a NON_MATCHING C version with an inline-asm fallback for the matching build. The PR also named several related baselib symbols used by shadow allocation and camera setup, including HSD_CObjAlloc, HSD_CObjSetScissorx4, HSD_CObjSetViewportfx4, allocShadowTObj, HSD_ImageDescAlloc, and the bss allocator variable shadow_alloc_data. Build lists were updated so shadow.o is built from src alongside the remaining asm shadow object.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "symbol-naming",
+      "build-system"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "shadow",
+      "cobj",
+      "tobj",
+      "asm",
+      "include",
+      "makefiles"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/shadow.c",
+    "src/sysdolphin/baselib/shadow.h",
+    "asm/sysdolphin/baselib/shadow.s",
+    "asm/sysdolphin/baselib/cobj.s",
+    "asm/sysdolphin/baselib/tobj.s",
+    "asm/sysdolphin/baselib/sobj.s",
+    "include/functions.h",
+    "include/variables.h",
+    "e_files.mk",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Added src/sysdolphin/baselib/shadow.c with C implementations of HSD_ShadowGetAllocData and HSD_ShadowInitAllocData.",
+    "Added a C reconstruction of HSD_ShadowAlloc under #ifdef NON_MATCHING and kept an inline-asm HSD_ShadowAlloc fallback for the matching build.",
+    "Removed the corresponding HSD_ShadowGetAllocData, HSD_ShadowInitAllocData, and HSD_ShadowAlloc assembly block from asm/sysdolphin/baselib/shadow.s.",
+    "Renamed the shadow allocator bss symbol from lbl_804C25D8 to shadow_alloc_data and updated shadow.s plus include/variables.h references.",
+    "Renamed CObj-related assembly globals and callsites: func_8036A290 to HSD_CObjAlloc, func_8036A010 to HSD_CObjSetScissorx4, and func_8036A110 to HSD_CObjSetViewportfx4.",
+    "Renamed TObj-related globals and callsites: func_8036118C to allocShadowTObj and func_803612F8 to HSD_ImageDescAlloc.",
+    "Added prototypes in include/functions.h for allocShadowTObj, HSD_ImageDescAlloc, HSD_CObjSetScissorx4, HSD_CObjSetViewportfx4, and HSD_CObjAlloc.",
+    "Updated e_files.mk and obj_files.mk to include src/sysdolphin/baselib/shadow.o while retaining asm/sysdolphin/baselib/shadow.o for remaining assembly."
+  ],
+  "smart_moves": [
+    "Used a partial decomp strategy: small allocator-access functions were moved to C immediately, while the harder HSD_ShadowAlloc remained matching through inline assembly with a NON_MATCHING C version documenting intended structure.",
+    "Preserved build correctness by adding the new C object without removing the remaining asm shadow object, allowing incremental migration of shadow.s.",
+    "Named dependencies around the target function first, which made the HSD_ShadowAlloc C reconstruction readable: camera allocation, texture allocation, image-desc allocation, viewport setup, and scissor setup are all expressed with semantic names.",
+    "Replaced anonymous lbl_804C25D8 with shadow_alloc_data, making allocator ownership clear and reducing future ambiguity in shadow-related code.",
+    "Kept constants and small-data float labels external in shadow.c rather than guessing new named constants, avoiding unsupported symbol invention while still enabling C progress."
+  ],
+  "decomp_lessons": [
+    "For baselib allocator modules, first identify the module-specific HSD_ObjAllocData variable and expose GetAllocData/InitAllocData in C; these often match cleanly and anchor later struct work.",
+    "When a target function is not yet matching, a NON_MATCHING C version plus matching inline-asm fallback can document field offsets and control flow without regressing the build.",
+    "Renaming shared helper functions can unlock readability across unrelated assembly callsites; this PR propagated HSD_CObjAlloc into melee and baselib asm callers, not just shadow.c.",
+    "Build-system edits are part of decomp migration: add src object files in obj_files.mk/e_files.mk while leaving the asm object for functions not yet converted.",
+    "Allocator size evidence is useful for struct validation: HSD_ShadowInitAllocData calls HSD_ObjAllocInit with sizeof(HSD_Shadow) and alignment/count argument 4, while the original assembly used a 0x28 object size.",
+    "Shadow allocation initializes a camera, a TObj, and an image descriptor, then sets 256x256 image dimensions and matching 0..256 viewport/scissor bounds; these relationships are useful context for future shadow matching."
+  ],
+  "naming_conventions": [
+    "HSD_Shadow* is used for public shadow module functions: HSD_ShadowGetAllocData, HSD_ShadowInitAllocData, HSD_ShadowAlloc, HSD_ShadowRemove.",
+    "HSD_CObj* names are used for public camera object helpers: HSD_CObjAlloc, HSD_CObjSetScissorx4, HSD_CObjSetViewportfx4.",
+    "HSD_ImageDescAlloc follows the HSD type prefix plus action convention for image descriptor allocation.",
+    "allocShadowTObj is lower camelCase rather than HSD_*; the diff provides no rationale, but the name indicates a shadow-specific texture object allocator.",
+    "Module allocator globals can be renamed from raw lbl_* labels to descriptive snake_case such as shadow_alloc_data."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted matched leaf/simple functions to C first and deleted their assembly from shadow.s.",
+    "Used #ifdef NON_MATCHING to keep a readable C implementation of HSD_ShadowAlloc while preserving exact assembly in the #else branch.",
+    "Inline assembly in shadow.c updated branch targets to newly named symbols such as HSD_CObjAlloc, allocShadowTObj, HSD_ImageDescAlloc, HSD_CObjSetViewportfx4, and HSD_CObjSetScissorx4.",
+    "Assembly callsites in other files were updated to renamed globals without changing instruction bytes, improving symbol information while preserving matching.",
+    "The HSD_ShadowAlloc reconstruction records field offsets through struct-style accesses: camera, texture, texture->imagedesc, scaleS/scaleT/transS/transT, and intensity."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review records were present in the provided PR slice.",
+    "The PR merged very quickly after creation; no explicit reviewer rationale is available from the dump."
+  ],
+  "searchable_terms": [
+    "Start matching HSD_Shadow",
+    "HSD_Shadow",
+    "HSD_ShadowGetAllocData",
+    "HSD_ShadowInitAllocData",
+    "HSD_ShadowAlloc",
+    "HSD_ShadowRemove",
+    "shadow_alloc_data",
+    "lbl_804C25D8",
+    "HSD_ObjAllocData",
+    "HSD_ObjAllocInit",
+    "HSD_ObjAlloc",
+    "HSD_ObjFree",
+    "HSD_CObjAlloc",
+    "HSD_CObjSetScissorx4",
+    "HSD_CObjSetViewportfx4",
+    "allocShadowTObj",
+    "HSD_ImageDescAlloc",
+    "sysdolphin baselib shadow.c",
+    "asm/sysdolphin/baselib/shadow.s",
+    "NON_MATCHING",
+    "inline asm fallback",
+    "obj_files.mk",
+    "e_files.mk"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that fully match HSD_ShadowAlloc or remove its inline assembly fallback.",
+    "Search for subsequent struct definitions or field renames for HSD_Shadow, HSD_TObj, HSD_ImageDesc, and HSD_CObj.",
+    "Check whether allocShadowTObj was later renamed to an HSD_* public-style name or kept as shadow-specific internal naming.",
+    "Look for PRs that name lbl_804DE768, lbl_804DE76C, lbl_804DE770, and lbl_804DE774 shadow/camera constants.",
+    "Search later baselib shadow work for HSD_ShadowRemove and remaining functions still in asm/sysdolphin/baselib/shadow.s."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

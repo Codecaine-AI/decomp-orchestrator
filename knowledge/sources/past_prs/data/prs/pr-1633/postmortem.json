@@ -1,0 +1,151 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1633",
+  "pr": {
+    "number": 1633,
+    "title": "dolphin pad matches",
+    "url": "https://github.com/doldecomp/melee/pull/1633",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-25T01:49:42Z",
+    "merged_at": "2025-06-25T02:04:09Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched and substantially improved Dolphin PAD support code in extern/dolphin, especially pad.c. The PR added real implementations and signature/header fixes for PAD sampling, reset/recalibration, motor control, polling callbacks, and wireless-pad-related state. decomp.dev reported 9 newly matched functions totaling +1712 matched bytes and improvements to PADRead, PADTypeAndStatusCallback, and PADInit, while the author noted that some matching issues remained and the nonmatching object was at least functional.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "symbol-map-correction",
+      "sdk-behavior-reconstruction"
+    ],
+    "systems": [
+      "dolphin/pad",
+      "dolphin/os/OSSerial",
+      "config/GALE01"
+    ]
+  },
+  "key_files": [
+    "extern/dolphin/src/dolphin/pad/pad.c",
+    "extern/dolphin/src/dolphin/pad/__pad.h",
+    "extern/dolphin/include/dolphin/pad.h",
+    "extern/dolphin/include/dolphin/os/OSSerial.h",
+    "extern/dolphin/src/dolphin/os/OSSerial.c",
+    "config/GALE01/symbols.txt"
+  ],
+  "what_changed": [
+    "Added extern/dolphin/src/dolphin/pad/__pad.h with local/internal prototypes for SamplingHandler, PADSetSamplingCallback, SIRefreshSamplingRate, SIIsChanBusy, SIRegisterPollingHandler, and SIUnregisterPollingHandler.",
+    "Changed PADRead's public signature from void PADRead(struct PADStatus*) to u32 PADRead(struct PADStatus*) and updated its implementation to return a channel bitmask result.",
+    "Changed SIGetResponse from void to int in OSSerial.h and OSSerial.c so PAD code can branch on its success/failure return value.",
+    "Implemented or completed major PAD code paths in pad.c, including PADTypeAndStatusCallback, PADReceiveCheckCallback, PADRecalibrate, PADInit, PADRead, PADSetSamplingRate, SIRefreshSamplingRate, OnReset, SamplingHandler, PADSetSamplingCallback, and __PADDisableRecalibration.",
+    "Added WirelessUnk[4], SamplingRate, and SamplingCallback state in pad.c; symbols.txt correspondingly split Origin from size 0x40 to 0x30 and added WirelessUnk at 0x804A89E0.",
+    "Adjusted symbols.txt names and object layout: SISetSamplingRate was renamed to PADSetSamplingRate, PADOnReset was renamed to OnReset, ResetFunctionInfo was reduced to 0x10, and XYNTSC/XYPAL/lbl_80402E00 were exposed as separate data objects.",
+    "Reworked PADInit to initialize wireless-pad fix data from __OSWirelessPadFixMode, fill WirelessUnk command words, set RecalibrateBits when __PADFixBits is nonzero, then call PADSetSamplingRate(0), register reset handling, and reset all four channels.",
+    "Reworked PADRecalibrate to incorporate PendingBits, clear PendingBits, update ResettingBits/EnabledBits/RecalibrateBits, call SIDisablePolling on affected enabled reset bits, and return TRUE.",
+    "Reworked PADRead error and status handling around PendingBits, ResettingBits, EnabledBits, SIIsChanBusy, SIGetStatus(chan), SIGetResponse, SIGetType, MakeStatus, and origin-update transfers.",
+    "Changed the XY sampling-rate table structure from an 8-bit line field to a u16 line plus padding, adjusted NTSC/PAL constants, and made PADSetSamplingRate interrupt-guarded while caching the requested SamplingRate.",
+    "Added reset-time sampling-callback cleanup and a polling handler path that calls SamplingCallback inside a temporary OSContext.",
+    "Added __PADDisableRecalibration as a public declaration and implementation backed by the absolute GameChoice byte at 0x800030E3."
+  ],
+  "smart_moves": [
+    "Correcting API return types in headers and source, especially PADRead returning u32 and SIGetResponse returning int, enabled PAD code to express control flow that depends on hardware/SI success status.",
+    "Splitting Origin and WirelessUnk in BSS fixed the data layout instead of forcing an oversized Origin array to cover unrelated state.",
+    "Using a local __pad.h kept internal PAD/SI prototypes near pad.c without overexposing them in the public Dolphin PAD header.",
+    "The implementation uses string literals \"A\" and \"B\" as SI transfer commands in several places, matching the SDK-style command-byte usage visible in the diff and avoiding extra frame temporaries.",
+    "PADSetSamplingRate now stores SamplingRate and SIRefreshSamplingRate simply reapplies it, a clean reconstruction of cached sampling-rate behavior.",
+    "The code explicitly documents a matching tradeoff inside PADRead: a seemingly correct PADReset(0) path was left under #if 0 because it created many more register swaps.",
+    "Updating symbols.txt alongside source changes captured newly understood function/data boundaries, which is important for future matching and map hygiene."
+  ],
+  "decomp_lessons": [
+    "When a function's original return value is used by callers, fix the SDK/header signature before forcing call sites to match a void prototype; this PR did that for PADRead and SIGetResponse.",
+    "Data-object size corrections can unlock source matching: Origin was 0x30 and WirelessUnk was a separate 0x10 object, not one 0x40 Origin block.",
+    "For Dolphin SDK modules, internal static callbacks and SI helper declarations may need a private source-local header rather than the public include.",
+    "Absolute-address state such as GameChoice at 0x800030E3 may be necessary to match SDK behavior for hidden global flags.",
+    "Interrupt-disable/restore placement affects matching in hardware-facing code; PADRead, PADRecalibrate, PADSetSamplingRate, and __PADDisableRecalibration all rely on carefully scoped interrupt guards.",
+    "Matching hardware/SI code often requires reconstructing exact bitmasks and channel-bit shifts such as 0x80000000 >> chan rather than using higher-level abstractions.",
+    "If a source transformation is logically cleaner but worsens register allocation, preserving the uglier inline sequence can be the better matching tactic, as noted by the PADRead #if 0 comment."
+  ],
+  "naming_conventions": [
+    "Renamed symbol SISetSamplingRate to PADSetSamplingRate at .text:0x8034DDAC.",
+    "Renamed symbol PADOnReset to OnReset at .text:0x8034E6A0, matching the static reset callback name in pad.c.",
+    "Internal PAD callbacks use CamelCase SDK-style names such as PADTypeAndStatusCallback, PADReceiveCheckCallback, PADOriginUpdateCallback, SamplingHandler, and OnReset.",
+    "Global/static PAD bitfields retain SDK-style names: ResettingBits, PendingBits, WaitingBits, CheckingBits, EnabledBits, RecalibrateBits.",
+    "Separate data table names XYNTSC and XYPAL were added for sampling-rate timing tables.",
+    "The private header was named __pad.h, consistent with other internal Dolphin headers such as os/__os.h."
+  ],
+  "assembly_or_matching_tactics": [
+    "Changed XY.line to u16 and added explicit padding to match table layout and data symbol boundaries.",
+    "Introduced dummy stack padding variables such as u8 _[4] in PADRead and OnReset to influence stack/register layout.",
+    "Used string literals \"A\" and \"B\" directly as SITransfer command buffers instead of local integer frame variables where that better matched emitted code.",
+    "Changed PADReceiveCheckCallback from a three-argument callback including OSContext* to a two-argument form used with SIGetTypeAsync.",
+    "Used SIGetType(chan) and SIGetStatus(chan) forms in PADRead/PADControlMotor instead of relying only on cached Type or full SI status word shifts.",
+    "Added a private static PADCallback typedef and a static PADSetSamplingCallback returning the previous callback, matching SDK callback swap behavior.",
+    "Kept an inline pending-reset sequence in PADRead instead of calling PADReset(0), with a diff comment saying the call path caused many more register swaps.",
+    "Changed __PADFixBits from a definition in pad.c to an extern declaration, avoiding duplicate ownership of that global while preserving references."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided slice.",
+    "The PR body cautioned: \"Still some matching issues, but the nonmatching object seems to at least be functional.\"",
+    "decomp.dev reported 9 new matches in main/dolphin/pad/pad: OnReset, PADSetSamplingRate, PADReceiveCheckCallback, PADRecalibrate, __PADDisableRecalibration, PADControlMotor, SamplingHandler, PADSetSamplingCallback, and SIRefreshSamplingRate.",
+    "decomp.dev reported unmatched-function improvements for PADRead from 15.74% to 96.17%, PADTypeAndStatusCallback from 0.49% to 54.68%, and PADInit from 44.36% to 82.71%.",
+    "decomp.dev reported one regression in main/dolphin/os/OSSerial SIGetResponse from 6.12% to 2.04%, likely tied to the signature/return-type change."
+  ],
+  "searchable_terms": [
+    "pr-1633",
+    "dolphin pad matches",
+    "r-burns",
+    "extern/dolphin/src/dolphin/pad/pad.c",
+    "extern/dolphin/src/dolphin/pad/__pad.h",
+    "extern/dolphin/include/dolphin/pad.h",
+    "extern/dolphin/include/dolphin/os/OSSerial.h",
+    "extern/dolphin/src/dolphin/os/OSSerial.c",
+    "config/GALE01/symbols.txt",
+    "PADRead",
+    "PADInit",
+    "PADRecalibrate",
+    "PADSetSamplingRate",
+    "SIRefreshSamplingRate",
+    "PADControlMotor",
+    "PADTypeAndStatusCallback",
+    "PADReceiveCheckCallback",
+    "PADOriginUpdateCallback",
+    "PADSetSamplingCallback",
+    "SamplingHandler",
+    "__PADDisableRecalibration",
+    "OnReset",
+    "SIGetResponse",
+    "SIIsChanBusy",
+    "SIGetTypeAsync",
+    "SITransfer",
+    "WirelessUnk",
+    "Origin",
+    "ResetFunctionInfo",
+    "XYNTSC",
+    "XYPAL",
+    "GameChoice",
+    "__PADFixBits",
+    "__PADSpec",
+    "__OSWirelessPadFixMode",
+    "PendingBits",
+    "ResettingBits",
+    "RecalibrateBits"
+  ],
+  "follow_up_queries": [
+    "Investigate remaining nonmatching portions of PADRead after this PR, especially the last 3.83% mismatch reported by decomp.dev.",
+    "Continue PADTypeAndStatusCallback matching from 54.68%, focusing on wireless controller branches and SITransfer command construction.",
+    "Continue PADInit matching from 82.71%, especially wireless fix-mode initialization and RecalibrateBits behavior.",
+    "Revisit SIGetResponse after its return type changed to int, since decomp.dev reported a small regression in OSSerial matching.",
+    "Audit whether __PADDisableRecalibration and GameChoice bit 0x40 interactions are used elsewhere in the Dolphin SDK codebase."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

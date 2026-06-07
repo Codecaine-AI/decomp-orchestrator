@@ -1,0 +1,142 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-175",
+  "pr": {
+    "number": 175,
+    "title": "Remove bss completely, fix a fakematch on id.c from a mistake in logic",
+    "url": "https://github.com/doldecomp/melee/pull/175",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2021-12-11T05:51:02Z",
+    "merged_at": "2021-12-11T05:51:10Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Deleted the monolithic asm/bss.s object from the build and redistributed .bss reservations into the owning assembly or C translation units. The PR also corrected a sysdolphin baselib id.c fake match by changing HSD_IDTable from an array of IDEntry structs to an array of IDEntry pointers, replacing partial 0x194 memsets with sizeof(HSD_IDTable), and promoting several lbl_* globals to named C definitions such as hsd_iddata and default_table.",
+  "change_classification": {
+    "primary_type": "bss-section-reorganization-and-decomp-correctness-fix",
+    "categories": [
+      "decomp-matching",
+      "fix",
+      "headers",
+      "build-system",
+      "global-data-naming"
+    ],
+    "systems": [
+      "Makefile",
+      "obj_files.mk",
+      "asm",
+      "include",
+      "sysdolphin/baselib",
+      "dolphin",
+      "melee"
+    ]
+  },
+  "key_files": [
+    "Makefile",
+    "obj_files.mk",
+    "asm/bss.s",
+    "include/variables.h",
+    "src/sysdolphin/baselib/id.c",
+    "src/sysdolphin/baselib/id.h",
+    "src/sysdolphin/baselib/aobj.c",
+    "src/sysdolphin/baselib/displayfunc.c",
+    "src/sysdolphin/baselib/fobj.c",
+    "src/sysdolphin/baselib/initialize.c",
+    "src/sysdolphin/baselib/robj.c",
+    "src/sysdolphin/baselib/tev.c"
+  ],
+  "what_changed": [
+    "Removed $(BSS_O_FILES) from the main object list in Makefile.",
+    "Removed the BSS_O_FILES definition pointing at $(BUILD_DIR)/asm/bss.o from obj_files.mk.",
+    "Deleted asm/bss.s, which had contained 1239 lines of global .bss labels and .skip reservations.",
+    "Added .section .bss, \"wa\" blocks to many owning assembly files, including MSL/abort_exit.s, MetroTRK/nubinit.s, Runtime/NMWException.s, dolphin SDK files, melee module asm files, and sysdolphin/baselib asm files.",
+    "Changed several baselib globals from extern lbl_* declarations to actual named C definitions, including HSD_ObjAllocData aobj_alloc_data, fobj_alloc_data, zlist_alloc_data, hsd_iddata, robj_alloc_data, and rvalue_alloc_data.",
+    "Renamed documented global variables in include/variables.h from address-style lbl_* names to semantic names such as FrameBuffer, memReport, rmode, iparam_fifo_size, DefaultFifoObj, init_done, black, hsd_iddata, default_table, and endcallback_list.",
+    "In src/sysdolphin/baselib/id.h, changed HSD_IDTable.table from struct _IDEntry table[101] to struct _IDEntry* table[101].",
+    "In src/sysdolphin/baselib/id.c, replaced the old lbl_804C23C0 and lbl_804C23EC externs with HSD_ObjAllocData hsd_iddata and HSD_IDTable default_table.",
+    "In id.c, changed HSD_IDSetup and _HSD_IDForgetMemory from memset(..., 0, 0x194) on a larger fake struct to memset(..., 0, sizeof(HSD_IDTable)) on the corrected pointer-table struct.",
+    "Updated inline assembly symbol references in id.c and initialize.c to use semantic global names while preserving the same absolute addresses encoded in comments."
+  ],
+  "smart_moves": [
+    "Removing the central bss.o object forced BSS ownership to live with the object that actually owns each symbol, which is more compatible with incremental decompilation than a single catch-all bss.s file.",
+    "The id.c fix recognized that the previous struct layout only matched because the code partially zeroed 0x194 bytes; modeling the table as 101 pointers explains the memset size naturally.",
+    "Using sizeof(HSD_IDTable) instead of a magic 0x194 documents the intended data layout and makes future struct edits safer.",
+    "Promoting unnamed lbl_* storage to named C definitions lets matched or partially matched source files own their BSS directly instead of depending on external assembly reservations.",
+    "The PR updated both C references and inline asm relocation names together, avoiding symbol drift between decompiled code and hand-written assembly."
+  ],
+  "decomp_lessons": [
+    "A matching-looking memset size can reveal a wrong struct model; if a partial memset seems suspicious, re-check whether the field is actually a pointer array or smaller table rather than forcing the fake layout.",
+    "When eliminating a monolithic BSS file, preserve object order by moving each .bss reservation into the assembly or C translation unit that corresponds to its original object.",
+    "Replacing address labels with semantic globals is safest when done simultaneously in source, headers or variables documentation, and inline asm symbol operands.",
+    "Prefer named C global definitions for decompiled translation units once ownership is understood; leave .skip reservations in assembly only for still-undecompiled objects.",
+    "Use sizeof on corrected structs after validating layout, rather than carrying over raw byte counts that may hide fake matches."
+  ],
+  "naming_conventions": [
+    "HSD object allocator globals use lowercase subsystem names with _alloc_data, e.g. aobj_alloc_data, fobj_alloc_data, robj_alloc_data, rvalue_alloc_data, zlist_alloc_data.",
+    "The baselib ID allocator global is named hsd_iddata.",
+    "The default ID table global is named default_table.",
+    "Video and initialization globals use existing SDK-style or descriptive names: FrameBuffer, memReport, rmode, iparam_fifo_size, DefaultFifoObj, init_done, black.",
+    "Callback list storage was renamed from lbl_804D7628 to endcallback_list.",
+    "Unknown globals that still lack semantics remain as lbl_80xxxxxx labels in assembly .bss blocks."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted asm/bss.s and removed bss.o from build inputs instead of leaving an empty central BSS object.",
+    "Moved BSS reservations into per-object assembly files using .section .bss, \"wa\", .global labels, and .skip sizes.",
+    "Kept inline assembly in id.c for matching functions, but changed relocation operands from lbl_804C23EC/lbl_804C23C0 to default_table/hsd_iddata.",
+    "Corrected HSD_IDTable to an array of IDEntry pointers so sizeof(HSD_IDTable) equals the observed 0x194 bytes.",
+    "Adjusted NON_MATCHING C in id.c to use pointer-table indexing such as table->table[hash(id)] instead of address arithmetic over embedded IDEntry structs.",
+    "Defined C-owned BSS globals directly by removing extern from declarations where the source file now owns the storage."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or review records were present in the PR slice, so there is no human review feedback to extract."
+  ],
+  "searchable_terms": [
+    "PR175",
+    "PsiLupan",
+    "remove bss",
+    "asm/bss.s deleted",
+    "BSS_O_FILES removed",
+    "bss.o removed",
+    ".section .bss",
+    ".skip",
+    "fakematch",
+    "id.c fake match",
+    "HSD_IDTable",
+    "IDEntry pointer table",
+    "table[101]",
+    "sizeof(HSD_IDTable)",
+    "0x194 memset",
+    "hsd_iddata",
+    "default_table",
+    "aobj_alloc_data",
+    "fobj_alloc_data",
+    "zlist_alloc_data",
+    "robj_alloc_data",
+    "rvalue_alloc_data",
+    "endcallback_list",
+    "FrameBuffer",
+    "memReport",
+    "DefaultFifoObj",
+    "init_done",
+    "iparam_fifo_size",
+    "rmode",
+    "black",
+    "variables.h"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that continue moving .bss symbols from assembly into C-owned globals.",
+    "Search for HSD_IDTable users to confirm all code treats table entries as IDEntry* rather than embedded IDEntry objects.",
+    "Audit remaining memset calls with magic sizes near struct initialization for possible fake matches.",
+    "Search variables.h for remaining lbl_804C23* or lbl_804D76* names to identify remaining baselib global naming work.",
+    "Check whether id.c NON_MATCHING insertion logic was later cleaned up or fully matched in C."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

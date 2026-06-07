@@ -1,0 +1,133 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-483",
+  "pr": {
+    "number": 483,
+    "title": "Match some inline asm in ftcommon and HSD aobj",
+    "url": "https://github.com/doldecomp/melee/pull/483",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-08-24T02:42:05Z",
+    "merged_at": "2022-08-24T02:44:45Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Replaced several inline-assembly implementations with C in fighter common code and HSD AObj loading. The PR converted ftcommon functions func_8007DD7C, func_8007DFD0, and func_8007E2A4, plus HSD_AObjLoadDesc, while adding a confirmed Fighter Vec2 field at offset 0x2C4 and updating the func_8007E2A4 prototype to return HSD_GObj*. The evidence is almost entirely from the diff; there was no PR body or review discussion beyond approval.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "inline-asm-removal",
+      "headers",
+      "struct-layout"
+    ],
+    "systems": [
+      "fighter",
+      "ftcommon",
+      "sysdolphin",
+      "baselib",
+      "aobj",
+      "include"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/ftcommon.c",
+    "src/sysdolphin/baselib/aobj.c",
+    "src/melee/ft/fighter.h",
+    "src/melee/ft/ftcommon.h",
+    "include/functions.h"
+  ],
+  "what_changed": [
+    "Removed large inline-assembly blocks in src/melee/ft/ftcommon.c for func_8007DD7C, func_8007DFD0, and func_8007E2A4 and replaced them with C implementations.",
+    "Added a local inline f32 fabsf(f32 x) helper in ftcommon.c to reproduce the absolute-value compare pattern used by the matched code.",
+    "Added Fighter field /* 0x2C4 */ Vec2 x2C4 by shrinking filler_x294 from ending at 0x2CC to ending at 0x2C4.",
+    "Updated func_8007E2A4 from an untyped/void declaration to HSD_GObj* func_8007E2A4(HSD_GObj*) in ftcommon.h and removed the stale declaration from include/functions.h.",
+    "Converted HSD_AObjLoadDesc in src/sysdolphin/baselib/aobj.c from inline assembly to C.",
+    "Removed associated #pragma peephole on / push scaffolding around the former inline asm regions."
+  ],
+  "smart_moves": [
+    "Promoted the repeated raw offset 0x2C4 access in Fighter into a typed Vec2 field, letting the C code express the original x/y range checks directly as fp->x2C4 and cur_ft->x2C4.",
+    "Preserved matching-sensitive local temporaries and stack-padding arrays such as unused2, unused, temp_r31, phi_r28, and sp24/sp1C in the C replacements, indicating the match depended on stack layout and register allocation.",
+    "Expressed func_8007E2A4 as a small semantic wrapper around CollData ground normal fields, making the shield knockback vector calculation clearer while also correcting the function signature to return the input HSD_GObj*.",
+    "Used existing setter/helper functions in HSD_AObjLoadDesc, including HSD_AObjSetFlags, HSD_AObjSetRewindFrame, HSD_AObjSetEndFrame, HSD_FObjLoadDesc, HSD_AObjSetFObj, HSD_IDGetDataFromTable, HSD_JObjLoadJoint, and HSD_JObjUnref, instead of directly preserving all asm-side field stores.",
+    "Kept the explicit ref_count increment and __assert(\"object.h\", 0x5D, \"HSD_OBJ(o)->ref_count != HSD_OBJ_NOREF\") behavior in HSD_AObjLoadDesc, preserving an important object-lifetime check from the original asm."
+  ],
+  "decomp_lessons": [
+    "When replacing asm with C, first promote raw offsets into struct fields if the same offset is central to the function; here Fighter+0x2C4 became Vec2 x2C4 and made the ftcommon match tractable.",
+    "Do not assume a function is void just because old global prototypes are incomplete; func_8007E2A4 matched as HSD_GObj* returning its argument.",
+    "Small helper functions can be preferable to library calls for matching: the inline fabsf helper produced the needed compare/negate behavior without relying on external libm behavior.",
+    "For complex control-flow matches, retaining decompiler-style temporary names and artificial unused stack arrays can be a practical intermediate step.",
+    "Baselib object loaders may need to preserve both high-level setter calls and manual reference-count semantics; HSD_AObjLoadDesc still explicitly increments HSD_Obj ref_count and asserts against HSD_OBJ_NOREF."
+  ],
+  "naming_conventions": [
+    "Fighter fields follow offset-prefixed names such as x2C4, x98_atk_shield_kb, xF4_ground_attacker_shield_kb_vel, xF8_playerNudgeVel, x6F0_collData, x221F_flag, and x1A58_interactedFighter.",
+    "Temporary variables in matched C retained decompiler/register-oriented names such as temp_r31, temp_r0, temp_r30, temp_f0, temp_f1, phi_r28, vtmp, and tmp.",
+    "HSD object code uses HSD_* type and function prefixes: HSD_AObj, HSD_AObjDesc, HSD_FObjDesc, HSD_Obj, HSD_JObj, HSD_AObjLoadDesc, HSD_AObjAlloc, HSD_FObjLoadDesc, HSD_JObjUnref.",
+    "Boolean state in fighter flags is accessed through bitfield names like cur_ft->x221F_flag.bits.b3 and cur_ft->x221F_flag.bits.b4."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced asm nofralloc functions with C while preserving stack-sensitive dummy local arrays, suggesting stack-frame shape was important for the match.",
+    "Used a custom inline fabsf implemented as an if/else returning -x or x to mirror the original fcmp/fneg/fmr pattern.",
+    "Used ternary expressions for sign-dependent velocity additions, matching repeated branches that choose positive or negative p_ftCommonData values.",
+    "Kept apparently redundant assignments and variables in HSD_AObjLoadDesc, such as phi_r30 and a duplicated hsd_obj != NULL check, likely to preserve control flow/codegen.",
+    "Converted direct offset operations in func_8007E2A4 into field expressions over CollData normal.x/normal.y and Fighter velocity fields while maintaining the original negation order."
+  ],
+  "review_feedback": [
+    {
+      "reviewer": "ribbanya",
+      "state": "APPROVED",
+      "submitted_at": "2022-08-24T02:44:35Z",
+      "body": ""
+    },
+    {
+      "note": "No issue comments, review comments, or PR body text were present in the slice, so there is no detailed human rationale or requested-change feedback to extract."
+    }
+  ],
+  "searchable_terms": [
+    "pr-483",
+    "r-burns",
+    "Match some inline asm in ftcommon and HSD aobj",
+    "inline asm removal",
+    "ftcommon.c",
+    "aobj.c",
+    "fighter.h",
+    "ftcommon.h",
+    "functions.h",
+    "func_8007DD7C",
+    "func_8007DFD0",
+    "func_8007E2A4",
+    "HSD_AObjLoadDesc",
+    "Fighter x2C4",
+    "Vec2 x2C4",
+    "fabsf",
+    "player nudge velocity",
+    "xF8_playerNudgeVel",
+    "x98_atk_shield_kb",
+    "xF4_ground_attacker_shield_kb_vel",
+    "x6F0_collData",
+    "x14C_ground",
+    "ground normal",
+    "HSD_AObjSetFlags",
+    "HSD_AObjSetFObj",
+    "HSD_IDGetDataFromTable",
+    "HSD_JObjLoadJoint",
+    "HSD_JObjUnref",
+    "ref_count",
+    "HSD_OBJ_NOREF",
+    "object.h assert"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename Fighter::x2C4 or document what the Vec2 represents.",
+    "Search for later cleanup of func_8007DD7C and func_8007DFD0 temporary names and unused stack arrays.",
+    "Check whether HSD_AObjLoadDesc received additional type cleanup around aobjdesc->obj_id and HSD_Obj/HSD_JObj casts.",
+    "Find callers of func_8007E2A4 to confirm that the HSD_GObj* return value is used or purely for matching/callback compatibility."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

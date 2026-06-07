@@ -1,0 +1,144 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-247",
+  "pr": {
+    "number": 247,
+    "title": "Matching player c  - WIP and non matching.",
+    "url": "https://github.com/doldecomp/melee/pull/247",
+    "state": "CLOSED",
+    "author": "snuffysasa",
+    "created_at": "2022-01-30T02:31:34Z",
+    "merged_at": null
+  },
+  "agent_status": "agent_completed",
+  "summary": "Closed, unmerged WIP attempt to decompile and name the large player module. The PR replaced much of asm/melee/pl/player.s with a very large src/melee/pl/player.c implementation gated by an explicit `#define NON_MATCHING 1`, expanded src/melee/pl/player.h with a more detailed StaticPlayer layout and many Player_* prototypes, and propagated new Player_* symbol names through many asm callsites. The author stated the DOL would not match until all functions in the file were finished, that NON_MATCHING mode compiled but did not match, and that without it there were unresolved linking issues. The most reusable evidence is the naming pass and struct/header exploration, especially the use of unions/arrays for repeated StaticPlayer fields and the note that struct casting helped match data externs against player.s declarations.",
+  "change_classification": {
+    "primary_type": "wip-decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "non-matching-wip",
+      "headers",
+      "types-structs",
+      "symbol-renaming",
+      "asm-callsite-update"
+    ],
+    "systems": [
+      "player",
+      "melee-core",
+      "asm",
+      "include",
+      "camera",
+      "fighter",
+      "game",
+      "interface",
+      "stage"
+    ]
+  },
+  "key_files": [
+    "src/melee/pl/player.c",
+    "src/melee/pl/player.h",
+    "asm/melee/pl/player.s",
+    "include/functions.h",
+    "include/variables.h",
+    "asm/melee/cm/camera.s",
+    "asm/melee/db/code_80225374.s",
+    "asm/melee/ft/code_8008521C.s",
+    "asm/melee/gm/code_801601C4.s",
+    "asm/melee/pl/code_8003715C.s"
+  ],
+  "what_changed": [
+    "Added roughly 8k lines to src/melee/pl/player.c while deleting most of asm/melee/pl/player.s, indicating a broad WIP C translation of the player module rather than a small isolated matching change.",
+    "Introduced `#define NON_MATCHING 1` in player.c; the PR body explicitly says this mode compiles but does not match, while disabling it produced linking errors.",
+    "Renamed the player slot storage from `lbl_80453080` to `player_slots` and changed uses such as `Player_GetPtrForSlot` and reset/init routines to index `player_slots[slot]`; the PR notes uncertainty over `[4]` versus `[6]` slots.",
+    "Expanded `StaticPlayer` in player.h with named fields, arrays, unions, bitfields, and function-pointer storage, including fields such as `player_poses`, `staminas`, `falls[2]`, `kos_by_player[6]`, `team`, `defense_ratio`, `total_coins`, `total_attack_count`, and flag bitfield groups.",
+    "Added a large set of Player_* declarations in player.h, covering entity lookup, slot type, character, stocks, coins, damage/HP, KOs, flags, stale move tables, facing direction, model scale, and initialization helpers.",
+    "Updated assembly callsites across camera, debug, fighter, character, game, interface, stage, and other asm files from anonymous names like `func_80034110`, `func_8003241C`, and `func_80032330` to semantic names such as `Player_GetEntity`, `Player_GetPlayerSlotType`, and `Player_GetPlayerCharacter`.",
+    "Added local experimental structs in player.c, including bitfield-bearing `Unk_Struct`/`Unk_Struct2` and `Unk_Struct_w_Array`, plus externs for player-related string/data labels such as `lbl_803BCDC0`, `lbl_803BCDCC`, and `lbl_803BCDE0`."
+  ],
+  "smart_moves": [
+    "Kept the work explicitly marked as WIP/nonmatching instead of presenting it as a final match; the PR body warned that the DOL would not match and that merge timing/squashing should wait.",
+    "Used a NON_MATCHING compile path to allow progress to build while preserving the fact that the matching path still had unresolved link or data-declaration problems.",
+    "Performed a broad symbol-naming sweep in asm callsites, making later decomp work more searchable and turning repeated calls into recognizable player API usage patterns.",
+    "Modeled repeated StaticPlayer regions with unions that provide both named access and indexed access, for example named player position vectors versus `Vec byIndex[4]`, and named stamina fields versus `s16 byIndex[4]`.",
+    "Captured uncertain but useful struct/data insights directly in comments, including uncertainty about `player_slots[6]` and the data-label grouping around `lbl_803BCDC0`/`lbl_803BCDE0`."
+  ],
+  "decomp_lessons": [
+    "For very large modules, landing a naming/header pass separately from a nonmatching C translation may be easier to review and integrate; this PR combined a huge player.c rewrite with global asm callsite renames and remained unmerged.",
+    "When decompiling code that treats the same memory both as individually named fields and as arrays, unions can preserve both source readability and indexing patterns needed for matching.",
+    "Data-label shape matters: the author specifically called out a struct-with-or-without-array issue and said struct casting made functions match and externs line up with assembly data declarations.",
+    "Before replacing a large asm file, ensure all referenced C symbols and data externs link without relying on an unconditional NON_MATCHING path.",
+    "Semantic names such as `Player_GetEntity`, `Player_GetEntityAtIndex`, `Player_GetPlayerSlotType`, `Player_GetPlayerCharacter`, and `Player_GetPlayerId` are high-value because they appear throughout camera, fighter, game, UI, and stage code."
+  ],
+  "naming_conventions": [
+    "Anonymous player functions were renamed with a `Player_` module prefix.",
+    "Accessor-style functions used `Player_Get...` and mutators used `Player_Set...`, for example `Player_GetEntity`, `Player_SetCoins`, `Player_GetDefenseRatio`, and `Player_SetFacingDirection`.",
+    "Unknown-but-address-known functions retained the module prefix plus address suffix, for example `Player_800326CC`, `Player_80031DC8`, and `Player_8003544C`.",
+    "Indexed accessors used explicit suffixes like `ByIndex` or `AtIndex`, such as `Player_GetEntityAtIndex`, `Player_SetHPByIndex`, `Player_GetFallsByIndex`, and `Player_UpdateJoystickCountByIndex`.",
+    "Global data naming moved from raw labels toward semantic names where possible, notably `lbl_80453080` to `player_slots`, while unresolved data labels remained as `lbl_...` externs."
+  ],
+  "assembly_or_matching_tactics": [
+    "Preserved asm fallback blocks for some functions while adding C versions guarded by `NON_MATCHING`/matching conditionals.",
+    "Updated branch-and-link targets in asm files to renamed Player_* symbols without changing instruction bytes, using symbol renames as a cross-module documentation and linking tactic.",
+    "Used bitfield structs for byte flags at offsets 0xAC, 0xAD, and 0xAE in StaticPlayer to express individual flag-bit access patterns.",
+    "Used struct casting and alternative struct/data declarations to reason about contiguous string/vector data, according to the PR body.",
+    "Modeled player state arrays explicitly where assembly indexed repeated fields, including player positions, stamina/HP fields, falls, KOs, joystick counts, and entity arrays."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice.",
+    "The author self-identified the PR as progress sharing, not necessarily ready to merge, and noted that future work could squash commits.",
+    "The author reported unresolved linking errors when not compiling with `#define NON_MATCHING 1`."
+  ],
+  "searchable_terms": [
+    "pr-247",
+    "snuffysasa",
+    "matchingPlayerC",
+    "player.c",
+    "player.h",
+    "player.s",
+    "NON_MATCHING",
+    "Player_GetEntity",
+    "Player_GetEntityAtIndex",
+    "Player_GetPlayerId",
+    "Player_GetPlayerCharacter",
+    "Player_GetPlayerSlotType",
+    "Player_GetTotalAttackCountPtr",
+    "Player_GetStaleMoveTableIndexPtr",
+    "Player_SetHPByIndex",
+    "Player_GetCoins",
+    "Player_SetCoins",
+    "Player_GetDefenseRatio",
+    "Player_GetAttackRatio",
+    "Player_GetHandicap",
+    "Player_GetFlagsBit1",
+    "Player_GetMoreFlagsBit4",
+    "Player_800326CC",
+    "Player_8003544C",
+    "player_slots",
+    "lbl_80453080",
+    "StaticPlayer",
+    "struct casting",
+    "Unk_Struct_w_Array",
+    "lbl_803BCDC0",
+    "lbl_803BCDE0",
+    "bitfields",
+    "staminas",
+    "player_poses",
+    "kos_by_player"
+  ],
+  "follow_up_queries": [
+    "Find the later PR that successfully landed matching player.c work and compare which parts of this WIP were reused.",
+    "Verify whether `player_slots` should be declared with 4 or 6 entries in the final project state.",
+    "Trace final definitions for `lbl_803BCDC0`, `lbl_803BCDCC`, and `lbl_803BCDE0` to see how the struct-with-array data issue was resolved.",
+    "Check whether `StaticPlayer` unions for positions, stamina, falls, KOs, joystick counts, and flag bitfields survived in later merged headers.",
+    "Search for the final names of `Player_800326CC`, `Player_80031DC8`, `Player_8003544C`, and other address-suffixed Player_* functions."
+  ],
+  "confidence": 0.83,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

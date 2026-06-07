@@ -1,0 +1,133 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1899",
+  "pr": {
+    "number": 1899,
+    "title": "Finish controller match with cursed fake match",
+    "url": "https://github.com/doldecomp/melee/pull/1899",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2025-09-02T21:20:40Z",
+    "merged_at": "2025-09-02T21:25:39Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Finished matching sysdolphin/baselib/controller.c by getting HSD_PadADConvertCheck1 from 99.99% to 100%, then flipped controller.c from NonMatching to Matching in configure.py. The fix used a deliberately awkward/cursed source rewrite: small static inline vector helpers, an apparently redundant r = sq(x) assignment before recomputing r, expansion of atan2f_check behavior with fabs(x) == 0.0f handling, and an early return instead of a nested !(r < adc_th) block. Symbols were also tightened so several controller helper functions and sdata2 constants became local labels/symbols rather than exported HSD_Controller_* globals.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "codegen-tuning",
+      "build-config",
+      "symbol-map-cleanup"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "controller",
+      "config",
+      "symbols"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/controller.c",
+    "configure.py",
+    "config/GALE01/symbols.txt"
+  ],
+  "what_changed": [
+    "Added static inline helpers sq(f32), vec2DSqDist(f32, f32), and vec2Dlen(s8, s8) in controller.c near HSD_PadClamp.",
+    "Reworked HSD_PadADConvertCheck1 local declarations from a combined f32 r, a, ha declaration to separate declarations.",
+    "Changed radius calculation from a direct sqrtf(((f32)x * (f32)x) + ((f32)y * (f32)y)) expression to r = sq(x); followed by r = vec2Dlen(x, y). The first assignment is overwritten but is consistent with the PR title's 'cursed fake match' wording.",
+    "Replaced a call to atan2f_check(y, x) with explicit logic: if fabs(x) == 0.0f, choose +/- pi/2 based on y; otherwise call atan2f(y, x) and cast to f32.",
+    "Changed the adc threshold branch from wrapping all button-direction checks in if (!(r < p->adc_th)) to an early return when r < p->adc_th.",
+    "Kept the same directional angle windows for left, down, right, up, and wraparound-left button setting, but moved them out of the nested threshold block.",
+    "Changed configure.py so sysdolphin/baselib/controller.c is built as Object(Matching, ...) instead of Object(NonMatching, ...).",
+    "Changed HSD_PadClampCheck1, HSD_PadClampCheck3, HSD_PadADConvertCheck1, and HSD_PadCrossDir scopes in config/GALE01/symbols.txt from global to local.",
+    "Renamed several sdata2 constants at 0x804DE5B0 through 0x804DE618 from HSD_Controller_804DE5xx globals to local compiler-style @185, @186, @187, @188, @190, @355 through @362, and @384 labels.",
+    "Added a local ...bss.0 label at the HSD_PadLibData .bss address 0x804C1F78."
+  ],
+  "smart_moves": [
+    "Used small static inline helpers to reshape floating-point expression codegen without changing the intended vector-length computation.",
+    "Expanded atan2f_check manually only where needed for HSD_PadADConvertCheck1, preserving the zero-x special case while avoiding the previous helper call shape.",
+    "Converted the threshold guard into an early return, a common control-flow tactic when trying to match branch layout and nesting in decompilation.",
+    "Accepted a source-level fake/redundant assignment, r = sq(x), as a matching tactic rather than forcing semantically clean C that would not match.",
+    "Updated configure.py only after the decomp.dev report showed the controller unit/function reached a new match.",
+    "Cleaned up symbol visibility to local for internal controller helpers and compiler-generated constants, reducing misleading global names in the symbol map."
+  ],
+  "decomp_lessons": [
+    "For stubborn near-matches, exact source cleanliness may be less important than expressing operations in the same sequence the compiler used; a redundant overwritten assignment can be a legitimate last-byte matching tactic when documented by context.",
+    "Inlining tiny math helpers can influence temporary placement, call shape, and float expression ordering enough to solve a remaining mismatch.",
+    "Replacing a helper wrapper like atan2f_check with explicit branch logic can match original codegen while preserving behavior for x == 0.",
+    "Early returns can better match branch structure than an equivalent negated enclosing condition.",
+    "When a file becomes fully matching, remember to update the build configuration from NonMatching to Matching in configure.py.",
+    "After matching local/static functions and constants, update symbols.txt scopes and labels so the symbol map reflects local compiler artifacts instead of invented globals."
+  ],
+  "naming_conventions": [
+    "Local compiler-generated sdata2 constants use @number labels, e.g. @185, @186, @355, rather than invented HSD_Controller_804DE5xx global names.",
+    "Internal controller helper functions in symbols.txt can remain named by their HSD_Pad* function names but should have scope:local when they are not true globals.",
+    "Helper names added in source used concise math-style names: sq, vec2DSqDist, and vec2Dlen.",
+    "The PR preserves HSD_PadADConvertCheck1 as the function name in source and symbols, while changing its symbol scope to local."
+  ],
+  "assembly_or_matching_tactics": [
+    "Introduce static inline wrappers around simple arithmetic to steer generated instruction ordering.",
+    "Use a redundant overwritten temporary assignment, r = sq(x), as a fake-match/codegen nudge.",
+    "Split combined local declarations into separate declarations to influence compiler allocation/order.",
+    "Replace direct sqrtf expression with a nested inline helper path: vec2Dlen -> sqrtf(vec2DSqDist(...)).",
+    "Manually inline atan2f_check behavior with fabs(x) == 0.0f and +/-1.5707963267948966 constants.",
+    "Transform if (!(condition)) { body } into if (condition) return; body to match branch layout.",
+    "Adjust symbols from global names to local @ labels when constants are actually compiler-generated local sdata2 entries."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided slice.",
+    "The decomp.dev bot reported one new match: main/sysdolphin/baselib/controller HSD_PadADConvertCheck1 improved from 99.99% to 100.00%.",
+    "The bot reported GALE01 matched code increased to 41.39% (+0.02%, +636 bytes) and linked code increased to 26.91% (+0.15%, +5876 bytes)."
+  ],
+  "searchable_terms": [
+    "PR1899",
+    "Finish controller match with cursed fake match",
+    "PsiLupan",
+    "controller-finish",
+    "sysdolphin/baselib/controller.c",
+    "HSD_PadADConvertCheck1",
+    "HSD_PadClampCheck1",
+    "HSD_PadClampCheck3",
+    "HSD_PadCrossDir",
+    "HSD_PadLibData",
+    "PadLibData",
+    "adc_angle",
+    "adc_th",
+    "atan2f_check",
+    "atan2f",
+    "fabs",
+    "sqrtf",
+    "sq",
+    "vec2DSqDist",
+    "vec2Dlen",
+    "PAD_STACK",
+    "Object(Matching, controller.c)",
+    "Object(NonMatching, controller.c)",
+    "symbols.txt",
+    "scope:local",
+    "sdata2",
+    "@185",
+    "@355",
+    "HSD_Controller_804DE5B0",
+    "fake match",
+    "cursed fake match"
+  ],
+  "follow_up_queries": [
+    "Find other PRs that use redundant overwritten assignments as matching tactics.",
+    "Find other controller.c or sysdolphin/baselib PRs that changed NonMatching to Matching.",
+    "Search for uses of atan2f_check replacement or manual atan2f zero-x handling.",
+    "Search symbols.txt history for HSD_Controller_804DE5xx local @ label conversions.",
+    "Find decomp lessons around early return versus negated enclosing condition branch matching."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

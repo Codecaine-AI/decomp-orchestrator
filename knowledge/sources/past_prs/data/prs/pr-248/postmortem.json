@@ -1,0 +1,111 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-248",
+  "pr": {
+    "number": 248,
+    "title": "Enable inline_auto, fix FObj match, and mark GObj_GXReorder as dont_inline",
+    "url": "https://github.com/doldecomp/melee/pull/248",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2022-02-02T19:20:41Z",
+    "merged_at": "2022-02-02T19:20:49Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Enabled CodeWarrior automatic inlining globally by adding `-inline auto` to `CFLAGS`, then repaired matching fallout in baselib by replacing a fake unrolled `HSD_FObjRemoveAll` implementation with the direct recursive version and preventing `GObj_GXReorder` from being inlined into `GObj_SetupGXLink` via local `#pragma dont_inline` guards.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "compiler-flags",
+      "inline-control",
+      "cleanup",
+      "fix"
+    ],
+    "systems": [
+      "build-system",
+      "sysdolphin",
+      "baselib",
+      "fobj",
+      "gobjgxlink"
+    ]
+  },
+  "key_files": [
+    "Makefile",
+    "src/sysdolphin/baselib/fobj.c",
+    "src/sysdolphin/baselib/gobjgxlink.c"
+  ],
+  "what_changed": [
+    "Added `-inline auto` to the global `CFLAGS` line in `Makefile`, alongside existing CodeWarrior options such as `-O4,p`, `-fp_contract on`, and `-proc gekko`.",
+    "Removed the prior fake-match structure in `src/sysdolphin/baselib/fobj.c`, including inline helper `HSD_FObjGetNext`, inline helper `HSD_FObjRemoveAll_Inlined`, and a hand-unrolled `HSD_FObjRemoveAll` that freed up to several linked-list elements manually.",
+    "Replaced `HSD_FObjRemoveAll` with a compact recursive implementation: return on `NULL`, recurse on `fobj->next`, then call `HSD_FObjRemove(fobj)`.",
+    "Wrapped `GObj_GXReorder` in `src/sysdolphin/baselib/gobjgxlink.c` with `#pragma push`, `#pragma dont_inline on`, and `#pragma pop`.",
+    "The PR body states this fixed a fake FObj match caused by a weird unrolled loop and marked `GObj_GXReorder` as `dont_inline` because otherwise it was inlined into `GObj_SetupGXLink`."
+  ],
+  "smart_moves": [
+    "Used the compiler's `-inline auto` behavior instead of preserving a fake source-level unrolled loop in `HSD_FObjRemoveAll`, making the C source more natural while maintaining the intended match.",
+    "Applied `#pragma dont_inline` narrowly around `GObj_GXReorder` rather than disabling automatic inlining globally or for the entire file.",
+    "Used `#pragma push` and `#pragma pop` to localize the inline-control state, reducing risk of accidentally changing inlining decisions for later functions in `gobjgxlink.c`.",
+    "Converted the FObj cleanup routine from a brittle fake match to a readable recursive linked-list teardown that still delegates removal to `HSD_FObjRemove`."
+  ],
+  "decomp_lessons": [
+    "When enabling a global compiler behavior such as `-inline auto`, expect some previously matched functions to change shape and require targeted fixes.",
+    "Fake matches that mimic compiler artifacts, such as manual unrolling, may become unnecessary or harmful once the correct compiler inline setting is used.",
+    "For functions that must remain standalone under automatic inlining, prefer local CodeWarrior pragmas over broad build-flag workarounds.",
+    "Recursive linked-list cleanup may be the intended source pattern even when previous matching attempts looked like explicit multi-node unrolling.",
+    "Always guard local pragma changes with push/pop when the pragma is only intended for a single function."
+  ],
+  "naming_conventions": [
+    "Baselib FObj routines use the `HSD_FObj*` prefix, as seen in `HSD_FObjRemove`, `HSD_FObjFree`, `HSD_FObjRemoveAll`, and `HSD_FObjSetState`.",
+    "Baselib GObj GX-link routines use `GObj_` names for local implementation functions such as `GObj_GXReorder` and `GObj_SetupGXLink`.",
+    "Temporary fake-match helper names such as `HSD_FObjRemoveAll_Inlined` and `HSD_FObjGetNext` were removed, suggesting helpers introduced solely for matching should be deleted when compiler settings make them unnecessary."
+  ],
+  "assembly_or_matching_tactics": [
+    "Enable CodeWarrior automatic inlining with `-inline auto` when matching code that depends on compiler-selected inline behavior.",
+    "Use `#pragma dont_inline on` for a single function when global automatic inlining would otherwise inline it into its caller.",
+    "Use `#pragma push` and `#pragma pop` around `#pragma dont_inline on` to keep inline settings scoped.",
+    "Replace manual unrolled fake source with natural recursive source when the compiler flag configuration can generate the desired code shape.",
+    "The specific matching issue recorded here was that `GObj_GXReorder` would inline into `GObj_SetupGXLink` unless explicitly marked `dont_inline`."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "PR248",
+    "inline_auto",
+    "-inline auto",
+    "dont_inline",
+    "#pragma dont_inline",
+    "#pragma push",
+    "#pragma pop",
+    "fake match",
+    "weird unrolled loop",
+    "FObj",
+    "HSD_FObjRemoveAll",
+    "HSD_FObjRemove",
+    "HSD_FObjFree",
+    "HSD_FObjGetNext",
+    "HSD_FObjRemoveAll_Inlined",
+    "GObj_GXReorder",
+    "GObj_SetupGXLink",
+    "gobjgxlink.c",
+    "fobj.c",
+    "Makefile",
+    "CFLAGS",
+    "baselib",
+    "sysdolphin",
+    "PsiLupan"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that adjust `-inline auto` fallout or add `#pragma dont_inline` for functions newly inlined by CodeWarrior.",
+    "Search for remaining fake-match helper functions with `_Inlined` suffixes that may be removable after compiler flag corrections.",
+    "Audit other baselib linked-list cleanup routines for natural recursive implementations versus manual unrolled fake matches.",
+    "Search for `GObj_GXReorder` and `GObj_SetupGXLink` history to confirm no later changes altered this inline-control tactic."
+  ],
+  "confidence": 0.94,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

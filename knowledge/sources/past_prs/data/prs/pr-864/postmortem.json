@@ -1,0 +1,150 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-864",
+  "pr": {
+    "number": 864,
+    "title": "Match `ftCo_SpecialS`",
+    "url": "https://github.com/doldecomp/melee/pull/864",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-25T03:34:10Z",
+    "merged_at": "2023-05-25T03:43:29Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common grounded side-special input/entry logic by moving three routines out of asm/melee/ft/ft_08A4.s into new C source src/melee/ft/chara/ftCommon/ftCo_SpecialS.c. The PR names ft_800964FC as ftCo_SpecialS_HasInput, ft_80096540 as ftCo_SpecialS_CheckInput, and factors the state-entry work into static doEnter. It also wires the new object into obj_files.mk, updates callers from the old address-style names, adds focused headers for ftCo_SpecialS and nearby 0961xx fall-special helpers, corrects several field/macro types needed for the match, and reports 100% for ftCo_SpecialS.c.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c",
+      "headers",
+      "symbol-renaming",
+      "type-correction",
+      "tooling"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "SpecialS",
+      "asm",
+      "build",
+      "dolphin-mtx",
+      "report_score"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_SpecialS.c",
+    "src/melee/ft/chara/ftCommon/ftCo_SpecialS.h",
+    "asm/melee/ft/ft_08A4.s",
+    "obj_files.mk",
+    "src/melee/ft/chara/ftCommon/ftCo_0961.h",
+    "src/melee/ft/ftdata.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/fighter.c",
+    "src/dolphin/mtx/vec.h",
+    "tools/report_score.py"
+  ],
+  "what_changed": [
+    "Removed the asm implementations for ft_800964FC, ft_80096540, and ftCo_800965DC from asm/melee/ft/ft_08A4.s and replaced their callsites with named C symbols where visible.",
+    "Added src/melee/ft/chara/ftCommon/ftCo_SpecialS.c with ftCo_SpecialS_HasInput, ftCo_SpecialS_CheckInput, and static doEnter.",
+    "ftCo_SpecialS_HasInput checks B input via fp->input.x668 & HSD_PAD_B and horizontal stick magnitude against p_ftCommonData->x218 without entering the state.",
+    "ftCo_SpecialS_CheckInput gates on ftData_SpecialS[fp->kind] being non-NULL and fp->x688 being zero, turns the fighter around with ftCommon_8007D9FC when stick direction opposes facing_dir past -p_ftCommonData->x220, then enters the character-specific SpecialS callback.",
+    "doEnter applies ground friction adjustment to fp->gr_vel using fp->co_attrs.xB8 and ft_GetGroundFrictionMultiplier(fp), then calls ftData_SpecialS[fp->kind](gobj).",
+    "Added src/melee/ft/chara/ftCommon/ftCo_SpecialS.h for the two public SpecialS helpers, and added src/melee/ft/chara/ftCommon/ftCo_0961.h for nearby ft_8009665C/ft_800968C8/ft_80096900/ftCo_FallSpecial_* declarations that had previously lived in broader headers.",
+    "Updated many IASA and character-special files to include ftCo_SpecialS.h or ftCo_0961.h and to call ftCo_SpecialS_CheckInput instead of ft_80096540.",
+    "Updated fighter.c to call ftCo_SpecialS_HasInput instead of ft_800964FC when maintaining fp->x688.",
+    "Declared ftData_SpecialS, ftData_SpecialAirHi, and ftData_SpecialAirLw in ftdata.h.",
+    "Refined ftCommonData and ftCo_DatAttrs typing: p_ftCommonData->x218 and x220 are floats, and ftCo_DatAttrs xB8 is a float.",
+    "Renamed vector macros from VEC2_DOT/VEC3_DOT to VEC2_SQ_LEN/VEC3_SQ_LEN and updated ftCo_Damage.c users, making clear these compute squared length rather than a dot product.",
+    "Added ftCo_SpecialS.c.o to obj_files.mk and adjusted tools/report_score.py to pass -f expected_path into asm-differ."
+  ],
+  "smart_moves": [
+    "Split the side-special logic into a pure input predicate and an input-plus-enter function, preserving the behavior distinction shown by the original ft_800964FC and ft_80096540 asm.",
+    "Used the per-kind ftData_SpecialS function pointer table instead of hardcoding character behavior, matching the original dispatch pattern and making the common logic reusable across fighters.",
+    "Kept the C implementation small and structurally close to the removed asm: null callback check, x688 debounce/cooldown check, reverse-facing branch, ground-friction adjustment, then callback dispatch.",
+    "Introduced narrowly scoped headers rather than leaving unrelated 0961xx declarations in ft_0877.h or placeholder headers.",
+    "Used a MUST_MATCH-only unused stack byte array in doEnter to satisfy matching without polluting non-matching builds.",
+    "Corrected ambiguous data types to floats only where the decompiled expression needed arithmetic semantics, especially p_ftCommonData thresholds and co_attrs.xB8.",
+    "Renamed the VEC*_DOT macros to VEC*_SQ_LEN, preventing future decomp readers from mistaking squared magnitude calculations for vector dot products.",
+    "Included the score report in the PR body showing ftCo_SpecialS.c, ftCo_SpecialS_CheckInput, doEnter, and ftCo_SpecialS_HasInput all at 100%."
+  ],
+  "decomp_lessons": [
+    "When extracting common fighter input handlers from asm, preserve both the 'has input' helper and the 'check input and transition' helper if the original code uses both; they may participate in different state timers or debounce fields.",
+    "Address-named functions should be renamed at callsites as soon as a confident behavioral name exists; this PR replaced ft_80096540 with ftCo_SpecialS_CheckInput across Wait, GuardOff, AttackS4, Link boomerang handling, Samus bomb handling, and asm call labels.",
+    "Function pointer arrays such as ftData_SpecialS are often the cleanest way to express common-to-character transitions; expose them in ftdata.h before trying to duplicate character-specific control flow.",
+    "Field typing is part of matching: changing ftCommonData x218/x220 and ftCo_DatAttrs xB8 to float enabled natural threshold/friction expressions instead of opaque integer/UNK usage.",
+    "Prefer semantic helper macro names: a macro that squares vector components is a squared-length macro, not a dot product macro.",
+    "Header cleanup can be necessary collateral for matching: moving declarations from broad ft_0877.h/ft_08A4.h into ftCo_0961.h and ftCo_SpecialS.h reduced placeholder leakage.",
+    "Use MUST_MATCH guards for artificial stack artifacts so the source remains readable in normal builds while still matching compiler output.",
+    "Updating the build list in obj_files.mk is a required part of asm-to-C extraction; otherwise the old asm object remains the source of truth."
+  ],
+  "naming_conventions": [
+    "Common fighter action helpers use the ftCo_ prefix plus action name and behavior, e.g. ftCo_SpecialS_HasInput and ftCo_SpecialS_CheckInput.",
+    "A static helper can use a short internal verb phrase such as doEnter when it is local to the action implementation.",
+    "New action headers mirror the action source name: ftCo_SpecialS.c pairs with ftCo_SpecialS.h.",
+    "Address-based header guards continue to use GALE01_<address>, shown by GALE01_095FEC for ftCo_SpecialS.h and GALE01_09614C for ftCo_0961.h.",
+    "Unknown or not-yet-named nearby functions remain address-based in the focused header, e.g. ft_8009665C, ft_800968C8, ft_80096900, while known action callbacks use names such as ftCo_FallSpecial_Anim/IASA/Phys/Coll.",
+    "Vector squared-length macros should be named VEC2_SQ_LEN and VEC3_SQ_LEN rather than VEC2_DOT/VEC3_DOT."
+  ],
+  "assembly_or_matching_tactics": [
+    "Replaced 117 lines of asm in ft_08A4.s with a 49-line C implementation while retaining branch-equivalent behavior for input tests, callback null tests, timer tests, turn-around logic, and friction math.",
+    "The original absolute-value comparison against zero in ft_800964FC was expressed naturally as ABS(fp->input.lstick.x) >= p_ftCommonData->x218.",
+    "The original side-special entry's function pointer load from ftData_SpecialS[kind] became ftData_SpecialS[fp->kind](gobj).",
+    "The fneg/fmadds friction sequence was represented as fp->gr_vel += -(fp->gr_vel * (1 - fp->co_attrs.xB8)) * ft_GetGroundFrictionMultiplier(fp).",
+    "The doEnter helper carries a MUST_MATCH-only unused u8 stack array to account for an unused stack artifact in the matched function.",
+    "The diff also renamed branch labels/calls in remaining asm from ft_80096540 to ftCo_SpecialS_CheckInput so asm-side references stayed coherent after symbol naming.",
+    "tools/report_score.py was updated to pass -f expected_path to asm-differ, indicating the matching report tooling needed an explicit expected object/file path for this workflow."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR slice; there is no recorded reviewer feedback to extract."
+  ],
+  "searchable_terms": [
+    "pr-864",
+    "ftCo_SpecialS",
+    "ftCo_SpecialS.c",
+    "ftCo_SpecialS_HasInput",
+    "ftCo_SpecialS_CheckInput",
+    "doEnter",
+    "ft_800964FC",
+    "ft_80096540",
+    "ftCo_800965DC",
+    "ftData_SpecialS",
+    "ftData_SpecialAirHi",
+    "ftData_SpecialAirLw",
+    "p_ftCommonData->x218",
+    "p_ftCommonData->x220",
+    "fp->x688",
+    "HSD_PAD_B",
+    "ftCommon_8007D9FC",
+    "ft_GetGroundFrictionMultiplier",
+    "co_attrs.xB8",
+    "gr_vel",
+    "VEC2_SQ_LEN",
+    "VEC3_SQ_LEN",
+    "VEC2_DOT",
+    "VEC3_DOT",
+    "ftCo_0961.h",
+    "GALE01_095FEC",
+    "GALE01_09614C",
+    "MUST_MATCH unused stack",
+    "obj_files.mk",
+    "report_score.py",
+    "asm-differ -f expected_path"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename or further decompile ft_8009665C, ft_800968C8, ft_80096900, or ft_800969D8 from ftCo_0961.h.",
+    "Search for subsequent cleanup of ftData_SpecialAirHi and ftData_SpecialAirLw declarations added beside ftData_SpecialS.",
+    "Check whether the ftdata.h comment typo around ftData_OnDeath was later corrected.",
+    "Find other common special input PRs that reuse the HasInput vs CheckInput split introduced here.",
+    "Search for remaining uses of ft_80096540 or ft_800964FC after this PR to verify full migration."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

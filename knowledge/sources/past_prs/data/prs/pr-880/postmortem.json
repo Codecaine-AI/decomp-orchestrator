@@ -1,0 +1,142 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-880",
+  "pr": {
+    "number": 880,
+    "title": "Match `ftCo_Furafura`",
+    "url": "https://github.com/doldecomp/melee/pull/880",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-27T12:18:48Z",
+    "merged_at": "2023-05-27T12:25:57Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the common fighter Furafura action by moving five functions out of asm/melee/ft/ft_08A4.s into new C source/header files. The PR added ftCo_Furafura.c with ftCo_80099010, ftCo_Furafura_Anim, IASA, Phys, and Coll, wired the object into obj_files.mk, moved the ftCo_80099010 declaration out of the broad ft_08A4.h header, and exposed the Furafura header to ShieldBreakStand. It also refined ftCommonData fields at offsets 0x2F8-0x304 and corrected ft_800885A8's prototype/call sites to accept three integer arguments. The match report states the new file and all listed functions reached 100.00%.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "struct-layout",
+      "build-system",
+      "prototype-correction"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "Furafura",
+      "asm",
+      "repo-root"
+    ]
+  },
+  "key_files": [
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/chara/ftCommon/ftCo_Furafura.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Furafura.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/ftaction.c",
+    "src/melee/ft/chara/ftCommon/ftCo_ShieldBreakStand.c",
+    "src/melee/ft/ft_0877.h",
+    "src/melee/ft/ft_08A4.h",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Removed the assembly implementations of ftCo_80099010, ftCo_Furafura_Anim, ftCo_Furafura_IASA, ftCo_Furafura_Phys, and ftCo_Furafura_Coll from asm/melee/ft/ft_08A4.s.",
+    "Added src/melee/ft/chara/ftCommon/ftCo_Furafura.c implementing the Furafura action transition, animation, IASA, physics, and collision callbacks.",
+    "Added src/melee/ft/chara/ftCommon/ftCo_Furafura.h with address-commented declarations and include guard GALE01_099010.",
+    "Added ftCo_Furafura.c.o to TEXT_O_FILES in obj_files.mk before the remaining ft_08A4.s object, so the newly matched C code is built.",
+    "Updated ftCommonData in src/melee/ft/types.h to split the old x2F4 byte blob into x2F4 plus floats x2F8, x2FC, x300, and x304, which are used by the Furafura logic.",
+    "Changed ft_800885A8's declaration from a single Fighter* argument to Fighter*, int, int, int, and propagated the extra arguments through two ftaction.c call sites.",
+    "Moved the ftCo_80099010 declaration out of src/melee/ft/ft_08A4.h and made ShieldBreakStand include ftCo_Furafura.h directly.",
+    "Deleted local sdata2 constants .L_804D8670 and .L_804D8674 from the asm file because the matched C emitted/used the needed constants."
+  ],
+  "smart_moves": [
+    "Kept the matched action in a dedicated ftCommon action file rather than leaving the declaration in the generic ft_08A4.h bucket, improving symbol locality.",
+    "Used the action-specific header ftCo_Furafura.h from ftCo_ShieldBreakStand.c, which makes dependencies clearer than relying on the broad ft_08A4.h declaration.",
+    "Recovered concrete ftCommonData float fields at offsets 0x2F8, 0x2FC, 0x300, and 0x304 based on direct uses in the decompiled Furafura logic, reducing anonymous padding.",
+    "Corrected ft_800885A8's prototype by following observed call arguments, then updated existing ftaction dispatch call sites so the declaration and uses stayed consistent.",
+    "For matching ftCo_Furafura_Anim, explicitly documented and gated an unused stack workaround with MUST_MATCH and a todo, preserving match behavior without pretending the artifact has semantic value."
+  ],
+  "decomp_lessons": [
+    "When lifting a small action group from a larger asm file, add the new C object immediately before the remaining asm object in obj_files.mk so the link order continues to match.",
+    "Use action-specific headers for ftCommon action callbacks as symbols are split out; avoid keeping newly matched symbols only in monolithic unknown headers.",
+    "Do not leave struct ranges as anonymous byte arrays when a matched function gives clear typed offset evidence; split out named or placeholder fields at exact offsets.",
+    "Prototype recovery can require updating unrelated existing call sites. If a callee is discovered to take more parameters, fix both the header and all dispatch paths that were previously compiling through an incomplete prototype.",
+    "Empty callbacks can be represented as empty C functions when the original assembly is just blr, as shown by ftCo_Furafura_IASA.",
+    "Thin wrapper callbacks such as Phys and Coll can match cleanly by directly forwarding to existing fighter helpers when the original assembly only sets up a stack frame and branches to the helper."
+  ],
+  "naming_conventions": [
+    "Common fighter action files use the ftCo_ prefix and action name in CamelCase after the prefix, e.g. ftCo_Furafura.c and ftCo_Furafura.h.",
+    "Action callback names follow the pattern ftCo_<Action>_Anim, ftCo_<Action>_IASA, ftCo_<Action>_Phys, and ftCo_<Action>_Coll.",
+    "Unknown entry functions may remain address-based, e.g. ftCo_80099010, until their role is confidently named.",
+    "Header include guards in this slice use the address-oriented GALE01_099010 style.",
+    "ftCommonData placeholder fields retain offset-derived names such as x2F8, x2FC, x300, and x304 when semantic names are not yet known.",
+    "Fighter fields shown in the matched logic include existing semantic and offset-style names together, such as shield_health, dmg.x1830_percent, and x1A4C."
+  ],
+  "assembly_or_matching_tactics": [
+    "The transition function matched a Fighter_ChangeMotionState call using ftCo_MS_Furafura and flags Ft_MF_SkipModel | Ft_MF_SkipMatAnim with start frame NULL/0 and rate 1.",
+    "The Furafura setup logic clamps p_ftCommonData->x2F8 - fp->dmg.x1830_percent to zero before passing percent + p_ftCommonData->x2FC into ftCommon_8007DBCC.",
+    "The animation callback refreshes shield_health from p_ftCommonData->x280_unkShieldHealth, decrements fp->x1A4C by p_ftCommonData->x300, calls ftCommon_8007DC08 with x304, and exits to ft_8008A2BC when x1A4C <= 0.",
+    "The match used an #ifdef MUST_MATCH local u8 _[8] = { 0 } stack artifact in ftCo_Furafura_Anim to account for unused stack behavior.",
+    "ftCo_Furafura_Phys matched as a direct wrapper around ft_80084F3C(gobj).",
+    "ftCo_Furafura_Coll matched as a direct wrapper around ft_80083F88(gobj).",
+    "ftCo_Furafura_IASA matched as an empty function corresponding to a bare blr.",
+    "The 100.00% report covered the file plus ftCo_80099010, ftCo_Furafura_Anim, ftCo_Furafura_Coll, ftCo_Furafura_Phys, and ftCo_Furafura_IASA."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-880",
+    "Match ftCo_Furafura",
+    "ribbanya",
+    "ftCo_Furafura",
+    "ftCo_80099010",
+    "ftCo_Furafura_Anim",
+    "ftCo_Furafura_IASA",
+    "ftCo_Furafura_Phys",
+    "ftCo_Furafura_Coll",
+    "ftCo_MS_Furafura",
+    "Fighter_ChangeMotionState",
+    "Ft_MF_SkipModel",
+    "Ft_MF_SkipMatAnim",
+    "p_ftCommonData",
+    "x280_unkShieldHealth",
+    "shield_health",
+    "x2F8",
+    "x2FC",
+    "x300",
+    "x304",
+    "x1A4C",
+    "dmg.x1830_percent",
+    "ftCommon_8007DBCC",
+    "ftCommon_8007EBAC",
+    "ftCommon_8007DC08",
+    "ft_800885A8",
+    "ft_8008A2BC",
+    "ft_80084F3C",
+    "ft_80083F88",
+    "MUST_MATCH",
+    "unused stack",
+    "GALE01_099010",
+    "ft_08A4.s",
+    "ft_08A4.h",
+    "ft_0877.h",
+    "obj_files.mk",
+    "ShieldBreakStand",
+    "ftaction.c"
+  ],
+  "follow_up_queries": [
+    "Look for later PRs that rename ftCo_80099010 to a semantic Furafura entry function name.",
+    "Search for later struct cleanup around ftCommonData fields x2F4, x2F8, x2FC, x300, and x304.",
+    "Search for later prototype or implementation work on ft_800885A8 now that its three integer parameters are exposed.",
+    "Check whether the MUST_MATCH unused stack workaround in ftCo_Furafura_Anim was later removed or replaced with a cleaner matching idiom."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

@@ -1,0 +1,131 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-797",
+  "pr": {
+    "number": 797,
+    "title": "Clean up `ftGameWatch` motion definitions",
+    "url": "https://github.com/doldecomp/melee/pull/797",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-04-22T19:17:42Z",
+    "merged_at": "2023-04-22T19:29:49Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Replaced Mr. Game & Watch motion table magic constants with named motion-flag combinations and named FtMoveId values, while also normalizing several fighter motion-state move-id encodings from multiplication by `(1 << 24)` to left shifts. The main cleanup introduced `ftGw_MotionFlags` in `ftGameWatch/forward.h` and used those names throughout `ftGw_Init_MotionStateTable`, making Game & Watch attack, landing, and special-state definitions much more readable without changing apparent table semantics.",
+  "change_classification": {
+    "primary_type": "motion_state_table_cleanup",
+    "categories": [
+      "headers",
+      "naming",
+      "magic_constant_replacement",
+      "motion_state_definitions"
+    ],
+    "systems": [
+      "fighter",
+      "ftGameWatch",
+      "motion_state"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftGameWatch/ftGw_Init.c",
+    "src/melee/ft/chara/ftGameWatch/forward.h",
+    "src/melee/ft/forward.h",
+    "src/melee/ft/chara/ftDonkey/ftDk_Init.c",
+    "src/melee/ft/chara/ftCLink/ftCl_Init.c",
+    "src/melee/ft/chara/ftLink/ftLk_Init.c",
+    "src/melee/ft/chara/ftFalco/ftFc_Init.c",
+    "src/melee/ft/chara/ftFox/ftFx_Init.c",
+    "src/melee/ft/chara/ftGanon/ftGn_Init.c",
+    "src/melee/ft/chara/ftMario/ftMr_Init.c",
+    "src/melee/ft/chara/ftDrMario/ftDr_Init.c"
+  ],
+  "what_changed": [
+    "Added `ftGw_MotionFlags` to `src/melee/ft/chara/ftGameWatch/forward.h`, deriving named Game & Watch flag groups from existing `FtStateChange_*` bits.",
+    "Replaced hex motion-flag constants in `ftGw_Init_MotionStateTable` with names such as `ftGw_MF_Attack11`, `ftGw_MF_Attack100`, `ftGw_MF_Landing`, `ftGw_MF_SpecialN`, `ftGw_MF_SpecialAirS`, and `ftGw_MF_SpecialAirLwCatch`.",
+    "Replaced Game & Watch move-id hex constants with `FtMoveId_* << 24` expressions, preserving extra packed bits such as `(1 << 22)` and `(1 << 23)` where present.",
+    "Renamed several generic `FtMoveId_UnkXX` enum entries in `src/melee/ft/forward.h` to known semantic names: `FtMoveId_Attack11`, `FtMoveId_Attack100`, `FtMoveId_AttackLw3`, `FtMoveId_AttackS4`, `FtMoveId_AttackAirN`, `FtMoveId_AttackAirB`, and `FtMoveId_AttackAirHi`.",
+    "Updated Link and Young Link/CLink side-smash-2 motion entries from `FtMoveId_Unk10` to `FtMoveId_AttackS4`.",
+    "Normalized many fighter motion-state table entries across Donkey, Dr. Mario, Falco, Fox, Ganon, Link, Mario, and CLink from `FtMoveId_X * (1 << 24)` to `FtMoveId_X << 24`.",
+    "Changed one Game & Watch death/init part-index literal from `0xAU` to decimal `10` in `ftGw_Init_OnDeath`."
+  ],
+  "smart_moves": [
+    "Moved recurring Game & Watch flag compositions into a forward header enum instead of scattering decoded hex values through the init table.",
+    "Built higher-level Game & Watch flag names compositionally, for example deriving air/special variants by OR-ing base flags with `FtStateChange_SkipUpdateParasol`, `FtStateChange_PreserveGfx`, or `FtStateChange_PreserveFastFall`.",
+    "Kept packed move-id fields explicit as shifts (`FtMoveId_* << 24`), which documents that the move id occupies the high byte better than multiplication by `(1 << 24)`.",
+    "Renamed only move ids that the diff directly justified from known Game & Watch/common attack states, while leaving still-unknown entries as `FtMoveId_UnkXX`.",
+    "Applied the shift-style cleanup consistently to neighboring fighter motion tables, reducing style drift around `MotionState` initializers."
+  ],
+  "decomp_lessons": [
+    "For packed motion-state fields, prefer symbolic bit shifts and named bit flags over raw hex constants once the field layout is understood.",
+    "When a fighter table reveals common move-id meanings, promote those names in the shared enum so other fighters can immediately reuse them.",
+    "Character-specific motion flags can live in that character's `forward.h` when they are needed by init tables and can be expressed using shared `FtStateChange_*` bits.",
+    "Use compositional enum values for state-change flag groups; this makes relationships between ground, air, landing, attack, and special variants visible and reduces errors when checking bit preservation behavior.",
+    "Small cross-fighter mechanical cleanups are useful when they enforce the same representation convention without attempting to infer unrelated unknown semantics."
+  ],
+  "naming_conventions": [
+    "`ftGw_MF_*` is used for Mr. Game & Watch motion-flag groups.",
+    "`ftGw_MS_*` remains the naming pattern for Mr. Game & Watch motion-state IDs.",
+    "`FtMoveId_Attack11`, `FtMoveId_Attack100`, `FtMoveId_AttackLw3`, `FtMoveId_AttackS4`, `FtMoveId_AttackAirN`, `FtMoveId_AttackAirB`, and `FtMoveId_AttackAirHi` replace corresponding generic `FtMoveId_UnkXX` names where meanings were identified.",
+    "Unknown move ids remain named `FtMoveId_UnkXX`, avoiding over-naming unsupported by evidence.",
+    "Motion flag names describe semantic groups and variants, e.g. `ftGw_MF_SpecialAirLwCatch` and `ftGw_MF_LandingAirHi`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Representing `FtMoveId_* * (1 << 24)` as `FtMoveId_* << 24` preserves the packed constant while expressing the field position more directly.",
+    "Hex table constants like `0x002C0201` and `0x02800000` can be decoded into OR-ed `FtStateChange_*` flags and shifted `FtMoveId_*` values without changing initializer values.",
+    "Extra packed flags in the move-id field were preserved as explicit ORs, such as `(FtMoveId_AttackAirN << 24) | (1 << 22) | (1 << 23)`.",
+    "No reviewer discussion or build/matching output was present in the provided PR slice, so matching impact beyond equivalent constant expression cleanup is not evidenced."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr797",
+    "ftGameWatch",
+    "ftGw_Init_MotionStateTable",
+    "ftGw_MotionFlags",
+    "ftGw_MF_Attack11",
+    "ftGw_MF_Attack100",
+    "ftGw_MF_AttackLw3",
+    "ftGw_MF_AttackS4",
+    "ftGw_MF_AttackAirN",
+    "ftGw_MF_AttackAirB",
+    "ftGw_MF_AttackAirHi",
+    "ftGw_MF_Landing",
+    "ftGw_MF_SpecialN",
+    "ftGw_MF_SpecialS",
+    "ftGw_MF_SpecialHi",
+    "ftGw_MF_SpecialLw",
+    "ftGw_MF_SpecialAirS",
+    "ftGw_MF_SpecialAirLwCatch",
+    "FtMoveId_Attack11",
+    "FtMoveId_Attack100",
+    "FtMoveId_AttackLw3",
+    "FtMoveId_AttackS4",
+    "FtMoveId_AttackAirN",
+    "FtMoveId_AttackAirB",
+    "FtMoveId_AttackAirHi",
+    "FtStateChange_SkipUpdateParasol",
+    "FtStateChange_PreserveFastFall",
+    "MotionState",
+    "move id shift",
+    "magic constants",
+    "ftDk_Init",
+    "ftCl_Init",
+    "ftLk_Init",
+    "ftFx_Init",
+    "ftFc_Init"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that continue renaming `FtMoveId_UnkXX` entries to semantic move IDs.",
+    "Search for remaining `* (1 << 24)` motion-state initializers that can be converted to `<< 24`.",
+    "Search for other fighter init tables with raw hex `FtStateChange` flag constants suitable for character-specific `*_MF_*` enums.",
+    "Check whether bits `(1 << 22)` and `(1 << 23)` in MotionState move-id fields later received named constants."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

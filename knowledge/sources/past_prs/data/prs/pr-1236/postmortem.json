@@ -1,0 +1,136 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1236",
+  "pr": {
+    "number": 1236,
+    "title": "Finish matching ftPe_SpecialLw",
+    "url": "https://github.com/doldecomp/melee/pull/1236",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2024-02-16T06:23:32Z",
+    "merged_at": "2024-02-16T06:24:52Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Finished matching Peach's down-special turnip-pluck file ftPe_SpecialLw by replacing the assembly fallback with the C object in the build, marking the source as Matching, deleting asm/melee/ft/chara/ftPeach/ftPe_SpecialLw.s, and reshaping spawnVeg with small helper functions for turnip-kind selection and item setup.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "fighter-code",
+      "build-configuration"
+    ],
+    "systems": [
+      "fighter",
+      "ftPeach",
+      "Peach SpecialLw",
+      "item spawning",
+      "effects",
+      "configure.py",
+      "obj_files.mk"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/ft/chara/ftPeach/ftPe_SpecialLw.c",
+      "role": "C source updated to match; spawnVeg was refactored and helper functions getVeg/setupVeg were added."
+    },
+    {
+      "path": "asm/melee/ft/chara/ftPeach/ftPe_SpecialLw.s",
+      "role": "Deleted 457-line assembly fallback after the C source matched."
+    },
+    {
+      "path": "configure.py",
+      "role": "Changed ftPe_SpecialLw.c from NonMatching to Matching."
+    },
+    {
+      "path": "obj_files.mk",
+      "role": "Switched object list from asm/melee/ft/chara/ftPeach/ftPe_SpecialLw.s.o to src/melee/ft/chara/ftPeach/ftPe_SpecialLw.c.o."
+    }
+  ],
+  "what_changed": [
+    "Removed the entire assembly implementation for ftPe_SpecialLw.s, including local helpers pickVeg, spawnVeg, handleAirColl, handleColl, and global Peach down-special entry/anim/phys/coll routines.",
+    "Marked src/melee/ft/chara/ftPeach/ftPe_SpecialLw.c as Matching in configure.py.",
+    "Changed obj_files.mk so the build links the C object for ftPe_SpecialLw instead of the asm object.",
+    "Added static ItemKind getVeg(HSD_GObj* gobj), which reads Peach dat_attrs x14, defaults to It_Kind_Peach_Turnip, and calls pickVeg(gobj) when HSD_Randi(da_x14) returns 0.",
+    "Added static void setupVeg(ItemKind kind, HSD_GObj* gobj, Fighter* fp, Vec3* pos), which calls it_802BD4AC, writes fp->item_gobj and fp->fv.pe.veg_gobj, then on success calls ftCo_80094818, efSync_Spawn(1234, gobj, &fp->cur_pos), and installs ftPe_Init_OnDeath2 into death2_cb and take_dmg_cb.",
+    "Simplified spawnVeg into a top-level ftCheckThrowB0(fp) guard followed by lb_8000B1CC position lookup, getVeg(gobj), and setupVeg(kind, gobj, fp, &pos).",
+    "spawnVeg gained local Vec3 pos, p1, and p2 declarations; p1 and p2 are not used in the diff, so they appear to be stack-shaping locals rather than gameplay logic."
+  ],
+  "smart_moves": [
+    "Factored turnip random-selection logic into getVeg, separating the HSD_Randi/dat_attrs decision from item-spawn side effects.",
+    "Factored item creation and callback/effect setup into setupVeg, reducing nested scopes in spawnVeg while preserving the order of writes to fp->item_gobj and fp->fv.pe.veg_gobj.",
+    "Kept the build-system changes in the same PR as the source match: configure.py was flipped to Matching and obj_files.mk was flipped to the C object only after deleting the asm fallback.",
+    "Preserved the observed Peach turnip item flow: pick a kind, create it via it_802BD4AC, cache the resulting item gobj in both fighter item fields, spawn effect 1234, and set death/damage callbacks on successful spawn."
+  ],
+  "decomp_lessons": [
+    "For fighter action files, finishing a match requires both the C code and build metadata: change configure.py from NonMatching to Matching and switch obj_files.mk from asm .s.o to src .c.o.",
+    "Small static helpers can improve matching by changing inlining and stack/register behavior while making source intent clearer; here getVeg and setupVeg replaced a deeply nested spawnVeg block.",
+    "Unused local Vec3 declarations may be legitimate matching artifacts when trying to reproduce stack layout; document or keep them only when the diff/build evidence shows they are needed for the match.",
+    "When removing an asm fallback, ensure all routines formerly present in the assembly file still exist in C or are already covered: this file included Peach down-special Enter, Air Enter, Anim, Phys, Coll, item cleanup, and local collision helpers.",
+    "For item-owning fighter moves, preserve cleanup and callback state carefully: this diff keeps item_gobj/fv.pe.veg_gobj synchronization and assigns ftPe_Init_OnDeath2 to both death2_cb and take_dmg_cb after successful spawn."
+  ],
+  "naming_conventions": [
+    "Global Peach fighter functions use the ftPe_SpecialLw_* and ftPe_SpecialAirLw_* prefixes, e.g. ftPe_SpecialLw_8011CFA0, ftPe_SpecialLw_Enter, ftPe_SpecialAirLw_Anim.",
+    "Local helper functions in this file use lowerCamelCase names such as pickVeg, spawnVeg, getVeg, setupVeg, handleAirColl, and handleColl.",
+    "Peach-specific fighter variables are accessed through fp->fv.pe, as shown by fp->fv.pe.veg_gobj.",
+    "Item kinds use the ItemKind type and It_Kind_* enum-style constants, specifically It_Kind_Peach_Turnip in this diff.",
+    "Existing unknown data fields remain offset-style or placeholder-style where not yet fully named, e.g. ftPe_DatAttrs x14 and fp->ft_data->x8->unk10."
+  ],
+  "assembly_or_matching_tactics": [
+    "Deleted the 457-line asm fallback only after the C source was good enough to be marked Matching.",
+    "Moved the file from NonMatching to Matching in configure.py and from asm object to C object in obj_files.mk, which is the standard finalization step for a matched translation unit.",
+    "Refactored nested logic in spawnVeg into static helpers, likely to influence compiler output and register/stack behavior while preserving side-effect order.",
+    "Added unused Vec3 p1 and Vec3 p2 locals alongside Vec3 pos in spawnVeg; based only on the diff, these appear to be stack-layout padding or matching scaffolding.",
+    "Kept calls and ordering visible from the assembly equivalent: lb_8000B1CC for joint position, HSD_Randi/pickVeg for item kind, it_802BD4AC for item creation, ftCo_80094818 and efSync_Spawn after non-null item creation."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-1236",
+    "PsiLupan",
+    "Finish matching ftPe_SpecialLw",
+    "ftPe_SpecialLw",
+    "ftPe_SpecialAirLw",
+    "ftPeach",
+    "Peach",
+    "SpecialLw",
+    "turnip",
+    "veg",
+    "pickVeg",
+    "getVeg",
+    "setupVeg",
+    "spawnVeg",
+    "ftPe_SpecialLw_8011CFA0",
+    "ftPe_SpecialLw_UnsetVeg",
+    "It_Kind_Peach_Turnip",
+    "ItemKind",
+    "HSD_Randi",
+    "it_802BD4AC",
+    "it_802BD45C",
+    "lb_8000B1CC",
+    "FtPart_109",
+    "ftCo_80094818",
+    "efSync_Spawn",
+    "ftPe_Init_OnDeath2",
+    "ftCheckThrowB0",
+    "NonMatching to Matching",
+    "asm removal",
+    "obj_files.mk",
+    "configure.py"
+  ],
+  "follow_up_queries": [
+    "Find other PRs that use unused Vec3 locals or padding locals to match fighter stack layout.",
+    "Search for Peach turnip/veg cleanup patterns involving fp->item_gobj and fp->fv.pe.veg_gobj.",
+    "Compare other fighter special move PRs that split nested spawn logic into static helper functions before marking a file Matching.",
+    "Look for later naming improvements to ftPe_DatAttrs.x14 or fp->ft_data->x8->unk10 related to Peach turnip odds."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

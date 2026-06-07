@@ -1,0 +1,178 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2093",
+  "pr": {
+    "number": 2093,
+    "title": "match itlizardon.c",
+    "url": "https://github.com/doldecomp/melee/pull/2093",
+    "state": "MERGED",
+    "author": "lukechampine",
+    "created_at": "2026-01-13T20:40:05Z",
+    "merged_at": "2026-01-15T02:04:01Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched most of src/melee/it/items/itlizardon.c by replacing many placeholder stubs with concrete item behavior, accessory/effect spawning, projectile spawning, physics/collision wrappers, and hitlag callbacks. The PR also added Lizardon-specific item variable and attribute structs, wired the lizardon item vars into Item.xDD4_itemVar, and tightened itlizardon.h prototypes from UNK_RET/UNK_PARAMS or incorrect return types to typed Item_GObj-based signatures.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "structs",
+      "item-behavior",
+      "prototype-cleanup"
+    ],
+    "systems": [
+      "item",
+      "pokemon-items",
+      "effects",
+      "hitlag",
+      "collision",
+      "spawn-items"
+    ]
+  },
+  "key_files": [
+    {
+      "path": "src/melee/it/items/itlizardon.c",
+      "role": "Main matched implementation for Lizardon item logic, replacing many placeholder markers with C functions."
+    },
+    {
+      "path": "src/melee/it/itCommonItems.h",
+      "role": "Added itLizardon_ItemVars and itLizardonAttributes layouts used by the matched implementation."
+    },
+    {
+      "path": "src/melee/it/items/itlizardon.h",
+      "role": "Updated function prototypes with concrete return types and parameters."
+    },
+    {
+      "path": "src/melee/it/types.h",
+      "role": "Added lizardon member to the Item.xDD4_itemVar union."
+    }
+  ],
+  "what_changed": [
+    "Implemented it_802CB8AC initialization logic, clearing itcmd vars, initializing lizardon item vars, calling it_802CC0EC, setting item lifetime/attribute data through it_80279CDC, and playing sound/effect cue via Item_8026AE84.",
+    "Converted it_802CB93C from an untyped empty function to void it_802CB93C(Item_GObj* gobj).",
+    "Changed it_802CB960 and it_802CB994 from s32-style behavior to void functions; it_802CB960 now calls it_80273454 then it_802CB994 without returning a value.",
+    "Implemented motion callbacks for UnkMotion1, UnkMotion2, and UnkMotion3, including animation transitions, physics reuse, collision handling for air/ground states, and false/true return behavior.",
+    "Added helper inline routines it_802CBAA8_inline and it_802CBD24_inline to reset lizardon.x70 using attrs->x28 + HSD_Randi(attrs->x2C - attrs->x28).",
+    "Implemented it_802CBAA8 to transition to animation state 2, initialize lizardon timers from attributes, set hitlag callbacks to efLib_PauseAll/efLib_ResumeAll, and set on_accessory to it_802CBD24.",
+    "Implemented it_802CBD24 accessory logic using dynamic bone table positions, lizardon timer state, facing toggles, it_8027ADEC, efSync_Spawn for effect IDs 0x453 through 0x456, and calls to it_802CC1CC for random item spawning.",
+    "Implemented it_802CBFE4 and it_802CC0EC as state setup functions that call Item_80268E5C and assign hitlag callbacks.",
+    "Implemented it_802CC1CC to construct a SpawnItem from bone position/current item position, randomize an angle using attrs->x8/xC, apply velocity using sinf/cosf and facing direction, spawn via Item_80268B18, and conditionally play one of sounds 0x2716-0x2718.",
+    "Implemented spawned logic for it_2725_Logic34_Spawned through it_2725_Logic37_Spawned, each spawning a distinct effect ID 0x44E-0x451 scaled by item scale then calling it_802CC5D4.",
+    "Implemented it_802CC5D4 item setup with it_80275158, it_80274740, Item_80268E5C, hitlag callbacks, and it_8026B3A8.",
+    "Implemented it_802CC684 as velocity damping/scaling using attrs->x4.",
+    "Added itLizardon_ItemVars with fields at offsets x60, x64, x68, x6C, x70, and x74[4], preserving the ip+DD4 offset relationship with a pad[0x60].",
+    "Added itLizardonAttributes with float fields x0-x10, s32 timer x14, s32 array x18[4], and random range fields x28/x2C.",
+    "Added the lizardon member to the Item item-var union in src/melee/it/types.h.",
+    "Included newly needed headers for effects, item APIs, bone position helpers, math, and random: ef/eflib.h, ef/efsync.h, it/item.h, lb/lb_00B0.h, MSL/math.h, and sysdolphin/baselib/random.h."
+  ],
+  "smart_moves": [
+    "Used a dedicated itLizardon_ItemVars struct rather than continuing to access raw xDD4 offsets, making the matched item-state logic searchable and reusable.",
+    "Kept repeated timer-reset logic in small inline helpers, likely to preserve codegen while avoiding duplicate source-level expressions.",
+    "Reused existing motion helper functions: UnkMotion2_Phys delegates to UnkMotion1_Phys, UnkMotion2_Coll delegates to UnkMotion1_Coll, and UnkMotion3 follows the same reuse pattern.",
+    "Matched hitlag behavior consistently by assigning entered_hitlag = efLib_PauseAll and exited_hitlag = efLib_ResumeAll in each relevant item state setup.",
+    "Used scoped temporary blocks around decrement-and-test timer code in it_802CBD24, which can help preserve local variable lifetimes/order for matching.",
+    "Preserved an unrolled sequence for x74[0..3] timers and effect IDs rather than forcing a loop that did not compile to the target assembly.",
+    "Used PAD_STACK annotations in functions where stack shape mattered, including itLizardon_UnkMotion2_Anim, it_802CBD24, and spawned logic functions.",
+    "For attrs->x4 initialization into lizardon.x60, used an explicit bit reinterpretation expression `*(s32*) (void*) (&attrs->x4)`, indicating the match required integer bit-pattern treatment rather than normal float conversion."
+  ],
+  "decomp_lessons": [
+    "When item state variables live deep inside Item.xDD4_itemVar, adding an item-specific struct plus a union member can unlock much cleaner matching and future review.",
+    "Do not assume repeated adjacent timer/effect cases should be expressed as a loop; the compiler may not auto-unroll it into the target form.",
+    "For item setup states, check whether hitlag callback assignments are part of every animation-state transition, not only initial spawn.",
+    "Accessory callbacks can be central to item matching: they often combine itcmd vars, per-item timers, bone positions, effect spawns, and child item spawns.",
+    "Randomized behavior may require preserving exact expressions such as `attrs->x28 + HSD_Randi(attrs->x2C - attrs->x28)` and angle calculations using the project’s float constants.",
+    "Prototype cleanup is part of matching: replacing UNK_RET/UNK_PARAMS and incorrect return types prevents later functions from being forced into bad casts or fake returns.",
+    "Ground/air collision wrappers for items often use the pattern `if ground_or_air == GA_Air then it_8026E15C else it_8026D62C`, with a callback such as it_802CB93C.",
+    "SpawnItem construction should preserve field order and parent references: this PR uses owner as x0_parent_gobj and the current item gobj as x4_parent_gobj2.",
+    "Stack padding macros may be required even after logic is understood; record where PAD_STACK was needed because those spots can guide future adjacent matches."
+  ],
+  "naming_conventions": [
+    "Item-specific variable structs follow the form `itLizardon_ItemVars` and are added as lowercase union members such as `lizardon` under `ip->xDD4_itemVar`.",
+    "Item attribute structs follow the form `itLizardonAttributes` and are accessed through `ip->xC4_article_data->x4_specialAttributes`.",
+    "Unknown motion callbacks keep the item name and motion role, e.g. `itLizardon_UnkMotion1_Anim`, `itLizardon_UnkMotion1_Phys`, and `itLizardon_UnkMotion1_Coll`.",
+    "Address-based unknown functions remain named by address, e.g. `it_802CB8AC`, `it_802CBD24`, and `it_802CC1CC`, while their prototypes are still made concrete.",
+    "Inline helper names used the callee address plus `_inline`, e.g. `it_802CBAA8_inline` and `it_802CBD24_inline`, to document codegen-sensitive extracted expressions.",
+    "Function parameters in cleaned prototypes use `Item_GObj* gobj` where the function operates on an item object, replacing generic `arg0` and `UNK_PARAMS`."
+  ],
+  "assembly_or_matching_tactics": [
+    "Left a repeated four-case decrement/effect-spawn block unrolled because a source loop did not automatically unroll to the target assembly.",
+    "Used `PAD_STACK(8)`, `PAD_STACK(4)`, and `PAD_STACK(16)` in specific functions to match stack layout.",
+    "Used static inline helpers for repeated random timer assignment, likely to influence inlining/codegen while preserving readable source.",
+    "Used explicit float math through `cosf`, `sinf`, and the constant `0.017453292f` for degree-to-radian conversion in projectile velocity calculation.",
+    "Used a bit reinterpret cast from `attrs->x4` to `s32` when initializing `ip->xDD4_itemVar.lizardon.x60`, suggesting the target stores the raw float bit pattern or requires matching load/store behavior.",
+    "Used temporary variables and scoped blocks for decrementing timers before branch checks, e.g. `s32 v = timer - 1; timer = v; if (v < 0) ...`, to match instruction ordering.",
+    "Adjusted return types from `s32` to `void` where the implementation did not produce a meaningful return, avoiding fake returns in matched code."
+  ],
+  "review_feedback": [
+    {
+      "author": "lukechampine",
+      "file": "src/melee/it/items/itlizardon.c",
+      "comment": "this really smells like an unrolled loop, but when I wrote the loop it wasn't automatically unrolled, so I left it as-is",
+      "lesson": "Prefer source that matches target codegen over a cleaner loop when the compiler will not reproduce the expected unrolled assembly."
+    }
+  ],
+  "searchable_terms": [
+    "pr-2093",
+    "match itlizardon.c",
+    "itlizardon",
+    "itLizardon_ItemVars",
+    "itLizardonAttributes",
+    "Item.xDD4_itemVar.lizardon",
+    "it_802CB8AC",
+    "it_802CB93C",
+    "it_802CB960",
+    "it_802CB994",
+    "itLizardon_UnkMotion1_Anim",
+    "itLizardon_UnkMotion1_Phys",
+    "itLizardon_UnkMotion1_Coll",
+    "it_802CBAA8",
+    "it_802CBAA8_inline",
+    "itLizardon_UnkMotion2_Anim",
+    "it_802CBD24",
+    "it_802CBD24_inline",
+    "it_802CBFE4",
+    "it_802CC0EC",
+    "it_802CC1CC",
+    "it_2725_Logic34_Spawned",
+    "it_2725_Logic35_Spawned",
+    "it_2725_Logic36_Spawned",
+    "it_2725_Logic37_Spawned",
+    "it_802CC5D4",
+    "it_802CC684",
+    "efLib_PauseAll",
+    "efLib_ResumeAll",
+    "efSync_Spawn",
+    "HSD_Randi",
+    "lb_8000B1CC",
+    "SpawnItem",
+    "Item_80268B18",
+    "Item_80268E5C",
+    "PAD_STACK",
+    "unrolled loop",
+    "pokemon item",
+    "item accessory callback",
+    "dynamic bone table",
+    "xBBC_dynamicBoneTable",
+    "xDAC_itcmd_var0",
+    "xDB0_itcmd_var1",
+    "xDB4_itcmd_var2",
+    "xDD4_itemVar"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename itLizardonAttributes fields x0-x2C to semantic names.",
+    "Search for other item PRs that add Item.xDD4_itemVar union members with a padded item-specific struct.",
+    "Search for PRs matching accessory callbacks that spawn effects from xBBC_dynamicBoneTable bones.",
+    "Compare other Pokemon item matches that use efLib_PauseAll/efLib_ResumeAll in state setup.",
+    "Find other review comments mentioning unrolled loops not generated by the compiler."
+  ],
+  "confidence": 0.92,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

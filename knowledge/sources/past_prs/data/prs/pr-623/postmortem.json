@@ -1,0 +1,137 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-623",
+  "pr": {
+    "number": 623,
+    "title": "Match OSResetSW",
+    "url": "https://github.com/doldecomp/melee/pull/623",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2022-12-23T07:30:48Z",
+    "merged_at": "2022-12-23T07:56:40Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the Dolphin OS reset-switch module by replacing large inline assembly bodies in src/dolphin/os/OSResetSW.c with C implementations, moving former sbss data from asm/dolphin/os/OSResetSW_data.s into static C globals, and updating related OS time/reset-switch declarations. The PR notes the implementation came \"From prime decomp\". The change removed the separate OSResetSW_data assembly object from obj_files.mk and added time conversion/API support needed by the C rewrite.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "build-system-cleanup",
+      "static-data-migration"
+    ],
+    "systems": [
+      "dolphin/os",
+      "reset-switch",
+      "interrupts",
+      "time",
+      "build"
+    ]
+  },
+  "key_files": [
+    "src/dolphin/os/OSResetSW.c",
+    "asm/dolphin/os/OSResetSW_data.s",
+    "include/dolphin/os/OSResetSW.h",
+    "include/dolphin/os/OSTime.h",
+    "obj_files.mk",
+    "src/dolphin/os/OS.c"
+  ],
+  "what_changed": [
+    "Replaced inline assembly for __OSResetSWInterruptHandler, OSGetResetButtonState, and OSGetResetSwitchState in src/dolphin/os/OSResetSW.c with C code.",
+    "Deleted asm/dolphin/os/OSResetSW_data.s, which had defined sbss symbols ResetCallback, Down, OSResetSW_LastState, HoldUp, and HoldDown.",
+    "Recreated the deleted reset-switch sbss data as static C globals: ResetCallback, Down, LastState, HoldUp, and HoldDown.",
+    "Changed OSGetResetSwitchState declaration from s32 OSGetResetSwitchState(OSResetSW_Unk1 *) to BOOL OSGetResetSwitchState(void).",
+    "Added __OSGetSystemTime(void) declaration to include/dolphin/os/OSTime.h and removed the local extern declaration from src/dolphin/os/OS.c.",
+    "Added OSMicrosecondsToTicks(usec) macro to OSTime.h and used it for the reset-switch 100 microsecond timing checks.",
+    "Removed OSResetSW_data.s.o from obj_files.mk because the reset-switch data was no longer assembled separately.",
+    "The new C code models reset-switch state using __PIRegs[0], __OSMaskInterrupts, OSDisableInterrupts/OSRestoreInterrupts, __OSStartTime, GameChoice, and OS tick conversion macros."
+  ],
+  "smart_moves": [
+    "Migrated anonymous assembly sbss symbols into typed static C globals, reducing reliance on separate data assembly while preserving module-local state.",
+    "Introduced a proper OSTime header declaration for __OSGetSystemTime instead of duplicating an untyped extern in OS.c and OSResetSW.c.",
+    "Used OSTime arithmetic and named conversion macros such as OSMicrosecondsToTicks, OSMillisecondsToTicks, and OSSecondsToTicks to express timing constants that were previously encoded as multiply/shift assembly sequences.",
+    "Captured ResetCallback into a local callback variable before clearing the global and invoking it, matching the assembly behavior while avoiding repeated global access.",
+    "Kept PI reset-switch register access explicit through __PIRegs[0] and the observed 0x00010000 bit test, making hardware-state logic readable without hiding the matching-sensitive details."
+  ],
+  "decomp_lessons": [
+    "When matching OS code that stores sbss state in a companion *_data.s file, try replacing those labels with static C globals of the narrowest known type once the owning C translation unit is matched.",
+    "Header cleanup is part of matching: once a function such as __OSGetSystemTime is used by multiple OS files, declare it in the appropriate public/internal OS header rather than relying on local unk_t externs.",
+    "Assembly constants for time windows can often be recovered as OS tick conversion macros; in this PR, the 100 microsecond and 40 millisecond reset-switch windows became OSMicrosecondsToTicks(100) and OSMillisecondsToTicks(40).",
+    "Function signatures should be corrected as confidence improves; OSGetResetSwitchState became a no-argument BOOL-returning wrapper around OSGetResetButtonState, replacing an earlier s32 signature with an unknown pointer parameter.",
+    "After migrating assembly data into C, update obj_files.mk to remove the obsolete assembly object or the build may still try to link stale split data.",
+    "Volatile hardware register arrays can be declared with fixed addresses, as shown by extern vu32 __PIRegs[12] : 0xCC003000, when matching low-level Dolphin OS hardware code."
+  ],
+  "naming_conventions": [
+    "Use Dolphin OS-style names for reset switch routines: __OSResetSWInterruptHandler, OSGetResetButtonState, OSGetResetSwitchState.",
+    "Prefer typed BOOL state names for reset-switch state variables: Down and LastState rather than generic unk_t labels.",
+    "Use OSTime for 64-bit time state such as HoldUp, HoldDown, and __OSStartTime.",
+    "Preserve hardware/global names when evidence exists: GameChoice at 0x800030E3 and __PIRegs at 0xCC003000.",
+    "Use OS tick conversion macro names in the existing Dolphin style: OSTicksToSeconds, OSSecondsToTicks, OSMillisecondsToTicks, OSMicrosecondsToTicks, OSNanosecondsToTicks."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted inline assembly control flow into structured C while preserving interrupt disable/restore boundaries around OSGetResetButtonState.",
+    "Represented the interrupt handler's busy-wait loop as a C while loop checking both elapsed system time and the PI reset-switch bit.",
+    "Matched assembly time calculations by adding/using conversion macros instead of manually reproducing magic multiply constants.",
+    "Preserved one-shot callback semantics by masking OS_INTR_PI_RSW, checking ResetCallback for NULL, clearing it, and then calling through the saved function pointer.",
+    "Replaced the tiny assembly wrapper OSGetResetSwitchState with a C wrapper returning OSGetResetButtonState().",
+    "Deleted the separate data assembly file after all its symbols were owned by the C translation unit."
+  ],
+  "review_feedback": [
+    {
+      "author": "ribbanya",
+      "file": "asm/dolphin/os/OSResetSW_data.s",
+      "comment": "GitHub doesn't say this was deleted, is it an empty file now?",
+      "resolution_or_context": "The diff excerpt shows the file was deleted; the author replied \"Huh, weird\". No further technical review feedback is present in the provided slice."
+    }
+  ],
+  "searchable_terms": [
+    "PR623",
+    "Match OSResetSW",
+    "r-burns",
+    "prime decomp",
+    "OSResetSW.c",
+    "OSResetSW_data.s",
+    "OSResetSW.h",
+    "OSTime.h",
+    "OSGetResetSwitchState",
+    "OSGetResetButtonState",
+    "__OSResetSWInterruptHandler",
+    "ResetCallback",
+    "Down",
+    "LastState",
+    "HoldUp",
+    "HoldDown",
+    "__OSGetSystemTime",
+    "__OSStartTime",
+    "OSMicrosecondsToTicks",
+    "OSMillisecondsToTicks",
+    "OSSecondsToTicks",
+    "OSTicksToSeconds",
+    "__PIRegs",
+    "GameChoice",
+    "OS_INTR_PI_RSW",
+    "__OSMaskInterrupts",
+    "OSDisableInterrupts",
+    "OSRestoreInterrupts",
+    "asm removal",
+    "sbss migration",
+    "reset switch",
+    "dolphin os"
+  ],
+  "follow_up_queries": [
+    "Find later PRs touching OSResetSW.c to verify whether LastState or ResetCallback naming changed after this match.",
+    "Search for additional OSTime.h changes around __OSGetSystemTime and OSMicrosecondsToTicks to confirm final header conventions.",
+    "Check whether other *_data.s files with only sbss labels were later migrated into static C globals using the same pattern.",
+    "Look for follow-up review or commits clarifying why GitHub displayed the OSResetSW_data.s deletion oddly."
+  ],
+  "confidence": 0.88,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

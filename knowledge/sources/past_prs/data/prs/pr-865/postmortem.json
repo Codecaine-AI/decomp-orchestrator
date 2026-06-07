@@ -1,0 +1,136 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-865",
+  "pr": {
+    "number": 865,
+    "title": "Match `ftCo_SpecialAir`",
+    "url": "https://github.com/doldecomp/melee/pull/865",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-05-25T04:17:34Z",
+    "merged_at": "2023-05-25T04:26:06Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched the previously-assembly `ft_8009665C` routine as `ftCo_SpecialAir_CheckInput` in a new ftCommon source/header pair, removing the function body and related constants from `asm/melee/ft/ft_08A4.s`. The new C implementation checks B-button aerial special input, dispatches to per-fighter `ftData_SpecialAirHi/Lw/S/N` callbacks based on stick direction and thresholds, handles facing/turnaround edge cases, and sets the fighter flag at `x2227_flag.bits.b5` after successful dispatch. Call sites in common IASA states and character files were updated to include `ftCo_SpecialAir.h` and call the named function. The build was updated to compile `ftCo_SpecialAir.c`, and supporting headers gained the needed ftdata declarations and a typed `ftCommonData::x224` field. The PR report shows `src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c` at 100.00% with score 0/15500.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-to-c migration",
+      "headers",
+      "symbol-renaming",
+      "build-system"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "special-move input",
+      "asm",
+      "build"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c",
+    "src/melee/ft/chara/ftCommon/ftCo_SpecialAir.h",
+    "asm/melee/ft/ft_08A4.s",
+    "src/melee/ft/chara/ftCommon/ftCo_0961.h",
+    "src/melee/ft/ftdata.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/chara/ftCommon/ftCo_DamageFall.c",
+    "src/melee/ft/chara/ftLink/ftLk_SpecialS.c",
+    "src/melee/ft/chara/ftPeach/ftPe_Float.c",
+    "src/melee/ft/ft_0877.dox",
+    "obj_files.mk"
+  ],
+  "what_changed": [
+    "Added `src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c` with a matching implementation of `ftCo_SpecialAir_CheckInput(ftCo_GObj* gobj)`.",
+    "Added `src/melee/ft/chara/ftCommon/ftCo_SpecialAir.h` with include guard `GALE01_09614C` and the `/* 09614C */ bool ftCo_SpecialAir_CheckInput(ftCo_GObj* gobj);` prototype.",
+    "Removed the old `ft_8009665C` assembly body from `asm/melee/ft/ft_08A4.s` and replaced assembly call labels with `ftCo_SpecialAir_CheckInput` at many IASA call sites.",
+    "Updated C callers in `ftCo_DamageFall.c`, `ftLk_SpecialS.c`, and `ftPe_Float.c` from `ft_8009665C` to `ftCo_SpecialAir_CheckInput`, adding the new header include where needed.",
+    "Removed the `ft_8009665C` prototype from `ftCo_0961.h`, leaving that header to start at `ft_800968C8` and changing its include guard from `GALE01_09614C` to `GALE01_0963B8`.",
+    "Added `ftData_SpecialAirS` and `ftData_SpecialAirN` declarations to `src/melee/ft/ftdata.h` and changed the baselib include from `<baselib/gobj.h>` to `<baselib/forward.h>`.",
+    "Typed `ftCommonData` offset `+224` as `int x224`, shifting the following padding member to `x228`, so the matched C can compare `fp->x676_x < p_ftCommonData->x224`.",
+    "Updated `src/melee/ft/ft_0877.dox` to use the new `ftCo_SpecialAir_CheckInput` name.",
+    "Added `$(BUILD_DIR)/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c.o` to `obj_files.mk` before the remaining `ft_08A4.s.o` object."
+  ],
+  "smart_moves": [
+    "The function was extracted into a focused `ftCo_SpecialAir` module rather than kept in the broad numeric `ftCo_0961` header, making future special-air input work easier to find.",
+    "The old address-based symbol `ft_8009665C` was replaced at all visible call sites with the behavior-oriented name `ftCo_SpecialAir_CheckInput`, clarifying that this routine is an input gate/dispatcher.",
+    "Per-fighter special-air action tables were modeled as `HSD_GObjEvent` arrays in `ftdata.h`, letting the C mirror the assembly's indexed callback dispatch through `fp->kind`.",
+    "The implementation preserved early returns on missing callback table entries, matching the assembly's null checks before calling each special-air handler.",
+    "The code uses existing field/flag names such as `fp->input.lstick`, `fp->facing_dir`, `fp->x2227_flag.bits.b5`, and `fp->x2228_flag.b7` instead of raw byte operations, improving readability while still matching.",
+    "The PR included the build-system object addition, avoiding a common asm-to-C migration failure where the new C file exists but is not linked into the text object list."
+  ],
+  "decomp_lessons": [
+    "When decompiling an input dispatcher, name it for the high-level decision it performs (`CheckInput`) and move it near the related ftCommon action family instead of leaving it in a numeric catch-all header.",
+    "Function-pointer tables should be declared in shared data headers as soon as matched C needs direct indexed calls; this avoids local extern hacks and documents the table's real type.",
+    "A successful match may require small struct typing improvements, such as converting an opaque padding range into `int x224` when assembly comparisons show a scalar integer field.",
+    "Do not forget non-C references: assembly labels, Doxygen declarations, and source callers all needed the new name to keep the repository searchable and consistent.",
+    "The final C structure can be simpler than the assembly branch layout while preserving behavior: check B input first, test vertical thresholds before horizontal threshold, then fall through to neutral special.",
+    "Header ownership matters: removing the old prototype from `ftCo_0961.h` and placing it in `ftCo_SpecialAir.h` prevents the numeric header from continuing to claim an address range it no longer owns."
+  ],
+  "naming_conventions": [
+    "`ft_8009665C` was renamed to `ftCo_SpecialAir_CheckInput`.",
+    "The new module follows the ftCommon file naming pattern: `ftCo_SpecialAir.c` and `ftCo_SpecialAir.h`.",
+    "The new header include guard uses the function address-style guard `GALE01_09614C`; after moving that address to the new header, `ftCo_0961.h` starts at `GALE01_0963B8`.",
+    "Per-direction special-air tables use the pattern `ftData_SpecialAirHi`, `ftData_SpecialAirLw`, `ftData_SpecialAirS`, and `ftData_SpecialAirN`.",
+    "The matched function uses `ftCo_GObj*` and `ftCo_Fighter*` naming in the ftCommon context."
+  ],
+  "assembly_or_matching_tactics": [
+    "The assembly's `fp->input.x668 & HSD_PAD_B` gate was expressed directly as the top-level condition; if absent, the function returns `false`.",
+    "Vertical special selection matches signed stick thresholds: `lstick.y >= p_ftCommonData->x21C` for up special and `lstick.y <= -p_ftCommonData->x21C` for down special.",
+    "Horizontal special selection uses `ABS(fp->input.lstick.x) >= p_ftCommonData->x218`, matching the assembly's absolute-value branch sequence.",
+    "The side-special turnaround support was represented as `fp->input.lstick.x * fp->facing_dir < -p_ftCommonData->x220` followed by `ftCommon_8007D9FC(fp)`.",
+    "Neutral special preserves the assembly's early facing flip when `fp->x676_x < p_ftCommonData->x224` and `facing_dir` disagrees with `x2228_flag.b7`.",
+    "Each successful callback dispatch sets `fp->x2227_flag.bits.b5 = true` and returns `true`; missing callback entries return `false`.",
+    "Constants formerly emitted in `ft_08A4.s` as `.L_804D85C0`, `.L_804D85C4`, and `.L_804D85C8` became ordinary C uses of `0`, `-1`, and `+1`/boolean-facing comparisons."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or reviews were present in the provided PR context.",
+    "The only human/body evidence included a match report showing `ftCo_SpecialAir_CheckInput` at 100.00%."
+  ],
+  "searchable_terms": [
+    "pr-865",
+    "Match ftCo_SpecialAir",
+    "ribbanya",
+    "ftCo_SpecialAir_CheckInput",
+    "ftCo_SpecialAir.c",
+    "ftCo_SpecialAir.h",
+    "ft_8009665C",
+    "ft_08A4.s",
+    "HSD_PAD_B",
+    "p_ftCommonData",
+    "ftCommonData x224",
+    "ftData_SpecialAirHi",
+    "ftData_SpecialAirLw",
+    "ftData_SpecialAirS",
+    "ftData_SpecialAirN",
+    "ftCommon_8007D9FC",
+    "x2227_flag bits b5",
+    "x2228_flag b7",
+    "x676_x",
+    "lstick.y",
+    "lstick.x",
+    "IASA",
+    "ftCo_DamageFall_IASA",
+    "ftLk_SpecialS2_IASA",
+    "ftPe_Float_IASA",
+    "obj_files.mk"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that further name `ftCommonData` fields `x218`, `x21C`, `x220`, or `x224` used by special-move input thresholds.",
+    "Find PRs that decompile the per-fighter `ftData_SpecialAir*` callback tables or rename their entries.",
+    "Search for remaining `ftCo_0961.h` numeric prototypes after `ftCo_SpecialAir_CheckInput` was split out.",
+    "Search for other functions calling `ftCo_SpecialAir_CheckInput` to confirm all aerial IASA states use the named header.",
+    "Look for later cleanups of `ftCo_SpecialAir_CheckInput(void)` in `ft_0877.dox`, because the dox excerpt shows a no-argument declaration despite the header taking `ftCo_GObj*`."
+  ],
+  "confidence": 0.94,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

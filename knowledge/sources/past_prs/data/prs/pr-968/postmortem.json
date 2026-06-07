@@ -1,0 +1,140 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-968",
+  "pr": {
+    "number": 968,
+    "title": "ftPeach Matches",
+    "url": "https://github.com/doldecomp/melee/pull/968",
+    "state": "MERGED",
+    "author": "PsiLupan",
+    "created_at": "2023-09-18T22:32:49Z",
+    "merged_at": "2023-09-18T22:52:39Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched and cleaned up several Peach float and side-special functions after compiler/toolchain improvements made prior inline-assembly fallbacks unnecessary. The PR removed large MUST_MATCH asm blocks from ftPe_Float.c, ftPe_FloatAttack.c, and ftPe_SpecialS.c, exposed shared float helpers through headers, moved updateFloatDir into ftPe_FloatFall.c, and used small C-level type/constant/stack-shaping changes to preserve matching.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "fighter-logic",
+      "headers",
+      "cleanup"
+    ],
+    "systems": [
+      "fighter",
+      "ftPeach",
+      "float",
+      "special-s",
+      "collision"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftPeach/ftPe_Float.c",
+    "src/melee/ft/chara/ftPeach/ftPe_Float.h",
+    "src/melee/ft/chara/ftPeach/ftPe_FloatAttack.c",
+    "src/melee/ft/chara/ftPeach/ftPe_FloatFall.c",
+    "src/melee/ft/chara/ftPeach/ftPe_FloatFall.h",
+    "src/melee/ft/chara/ftPeach/ftPe_SpecialS.c"
+  ],
+  "what_changed": [
+    "Removed inline assembly fallback blocks for matched Peach float functions including ftPe_8011BAD8 and ftPe_Float_Anim, leaving the C implementations active.",
+    "Removed asm fallbacks in ftPe_FloatAttack.c for ftPe_8011BE80 and ftPe_FloatAttackAir_IASA.",
+    "Removed many asm fallbacks in ftPe_SpecialS.c around side-special start, air-start, air-jump, enter-start, enter-air-start, and enter-air-end-smash paths.",
+    "Deleted local float constant labels such as ftPe_Float_804D97C0, ftPe_Float_804D97C4, lbl_804D97C8, lbl_804D97CC, and the MUST_MATCH-only double lbl_804D97F0, replacing uses with direct literals such as 0.0f and 1.0f where shown.",
+    "Changed ftPe_Float_CheckContinueInput from a commented-static declaration to a normal external helper and reflected that in ftPe_Float.h.",
+    "Moved getFloatDir/updateFloatDir logic out of ftPe_Float.c into ftPe_FloatFall.c and added updateFloatDir to ftPe_FloatFall.h.",
+    "Adjusted ftPe_SpecialSStart_Coll to take Fighter_GObj* and retrieve the fighter with gobj->user_data instead of GET_FIGHTER(gobj).",
+    "Adjusted some facing_dir comparisons to explicit floating constants, notably (float) -1.0 and 1.0f.",
+    "In ftPe_SpecialS.c, folded the former setCallbacks helper into enterAirJump and added an explicit unused-stack padding block under MUST_MATCH.",
+    "Split out doPostEnd_SmallerStack with explicit unused stack padding and switched enterAirEndSmash to call it instead of doPostEnd."
+  ],
+  "smart_moves": [
+    "Used the newer compiler behavior to retire hundreds of lines of hand-written inline assembly while keeping the existing C logic as the source of truth.",
+    "Exported ftPe_Float_CheckContinueInput rather than keeping it pseudo-static because ftPe_FloatAttackAir_IASA calls it across translation-unit boundaries.",
+    "Moved updateFloatDir to ftPe_FloatFall.c, closer to the FloatFall motion-state logic it selects, and exposed only the needed declaration in ftPe_FloatFall.h.",
+    "Replaced label-backed float constants with direct float literals in places where the compiler now emitted matching code, reducing unnecessary rodata symbols.",
+    "Used precise type nudges, such as Fighter_GObj* and direct gobj->user_data access, as matching tools rather than broad rewrites.",
+    "Preserved stack-sensitive matching with small explicit unused arrays under MUST_MATCH instead of reverting whole functions to assembly.",
+    "Created a smaller-stack variant of post-end logic instead of forcing one helper to satisfy multiple stack layouts."
+  ],
+  "decomp_lessons": [
+    "After compiler upgrades, revisit WIP/MUST_MATCH asm functions: previously necessary asm may now be replaceable by existing C with minimal edits.",
+    "When a helper is used by another Peach module, make linkage honest in both the C file and header instead of leaving a commented-out static marker.",
+    "Relocating helpers can be a matching tactic: moving updateFloatDir from Float to FloatFall removed local static/rodata complications while keeping behavior readable.",
+    "Direct literals can sometimes match better than named const-label symbols after toolchain changes; verify generated rodata before preserving artificial labels.",
+    "For stack-sensitive functions, targeted unused-stack padding can be less harmful than retaining large inline asm blocks.",
+    "Function signature specificity, such as Fighter_GObj* versus HSD_GObj*, can affect codegen and data access patterns enough to help matching.",
+    "If one logical helper needs two stack profiles, introducing a narrowly named variant like doPostEnd_SmallerStack may be preferable to contorting a single implementation."
+  ],
+  "naming_conventions": [
+    "Peach files continue using ftPe_ prefixes for character-specific functions.",
+    "Motion-state enum names use ftPe_MS_* forms such as ftPe_MS_FloatFallF, ftPe_MS_FloatFallB, ftPe_MS_SpecialAirSJump, and ftPe_MS_SpecialAirSEnd_0.",
+    "Data attribute type is ftPe_DatAttrs and local variables commonly use da for dat_attrs.",
+    "Shared helper names in this slice include ftPe_Float_CheckContinueInput and updateFloatDir.",
+    "The new helper name doPostEnd_SmallerStack explicitly documents that its purpose is stack-shape-sensitive matching rather than a gameplay distinction.",
+    "Existing unknown-address names such as ftPe_8011BAD8, ftPe_8011BE80, and ftPe_8011BF34 were retained when no semantic rename was provided."
+  ],
+  "assembly_or_matching_tactics": [
+    "Removed #if defined(MUST_MATCH) && !defined(WIP) asm wrappers once the C versions matched.",
+    "Changed asm comments for remaining ftPe_8011BB6C loads from symbol names to direct 0.0 and 1.0 literals, matching the removed constant labels.",
+    "Used direct floating comparisons for facing_dir, including explicit casts like (float) -1.0, to influence emitted comparison code.",
+    "Used Fighter_GObj* plus gobj->user_data in ftPe_SpecialSStart_Coll to alter generated access sequences.",
+    "Added explicit unused stack arrays under MUST_MATCH, including u8 _[8] in enterAirJump and u8 _[34] = { 0 } in doPostEnd_SmallerStack.",
+    "Inlined callback assignment into enterAirJump after removing setCallbacks, likely to match call/stack/codegen layout.",
+    "Split doPostEnd_SmallerStack from doPostEnd to satisfy a smaller stack requirement in enterAirEndSmash without disturbing other callers.",
+    "Moved updateFloatDir into ftPe_FloatFall.c and changed constants from lbl_804D97C8/lbl_804D97CC to 1.0f/0.0f in the Fighter_ChangeMotionState call."
+  ],
+  "review_feedback": [
+    "No issue comments, review comments, or formal reviews were present in the provided PR slice.",
+    "The PR body states: \"Addressed some functions that were fixed by new compiler\" and \"Fixed a few functions that needed work.\""
+  ],
+  "searchable_terms": [
+    "PR968",
+    "ftPeach Matches",
+    "PsiLupan",
+    "ftPe_Float.c",
+    "ftPe_FloatAttack.c",
+    "ftPe_FloatFall.c",
+    "ftPe_SpecialS.c",
+    "ftPe_Float_CheckContinueInput",
+    "updateFloatDir",
+    "getFloatDir",
+    "ftPe_8011BAD8",
+    "ftPe_8011BB6C",
+    "ftPe_8011BE80",
+    "ftPe_Float_Anim",
+    "ftPe_FloatAttackAir_IASA",
+    "ftPe_SpecialSStart_Coll",
+    "ftPe_SpecialAirSJump_Coll",
+    "enterAirJump",
+    "enterAirEndSmash",
+    "doPostEnd_SmallerStack",
+    "Fighter_GObj",
+    "gobj->user_data",
+    "MUST_MATCH",
+    "unused stack",
+    "asm removal",
+    "new compiler",
+    "floatfall_anim_start_offset",
+    "ftPe_MS_FloatFallF",
+    "ftPe_MS_FloatFallB",
+    "it_802BD158"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that rename ftPe_8011BAD8, ftPe_8011BE80, or ftPe_8011BF34 semantically.",
+    "Check whether updateFloatDir remains globally exposed or is later made static again after file organization changes.",
+    "Search for other PRs after the compiler update that remove MUST_MATCH asm blocks via literal constants or unused-stack arrays.",
+    "Investigate whether doPostEnd_SmallerStack survived long-term or was folded back after more struct/codegen improvements.",
+    "Compare ftPe_SpecialS collision functions in later revisions for more complete typing of Fighter_GObj versus HSD_GObj."
+  ],
+  "confidence": 0.89,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

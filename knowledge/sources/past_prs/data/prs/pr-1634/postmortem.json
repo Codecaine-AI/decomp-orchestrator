@@ -1,0 +1,128 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1634",
+  "pr": {
+    "number": 1634,
+    "title": "Add near match for HSD_TExpSetReg",
+    "url": "https://github.com/doldecomp/melee/pull/1634",
+    "state": "MERGED",
+    "author": "r-burns",
+    "created_at": "2025-06-25T02:17:10Z",
+    "merged_at": "2025-06-25T02:21:36Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Replaced the NOT_IMPLEMENTED stub for HSD_TExpSetReg with a near-matching implementation that walks TExp constant nodes, converts/clamps their values into GXColor entries, writes TEV K colors and TEV regular colors through GX APIs, and invalidates HSD state. The PR explicitly notes remaining register swaps, but says the implementation is functionally equivalent and renders correctly in nonmatching builds.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "near-match",
+      "baselib",
+      "headers",
+      "symbols"
+    ],
+    "systems": [
+      "sysdolphin",
+      "baselib",
+      "texp",
+      "config"
+    ]
+  },
+  "key_files": [
+    "src/sysdolphin/baselib/texp.c",
+    "src/sysdolphin/baselib/texp.h",
+    "config/GALE01/symbols.txt"
+  ],
+  "what_changed": [
+    "Implemented HSD_TExpSetReg in src/sysdolphin/baselib/texp.c, replacing a NOT_IMPLEMENTED placeholder with roughly 140 lines of logic.",
+    "Added static TEV register lookup arrays: id1 for GX_KCOLOR0 through GX_KCOLOR3 and id2 for GX_TEVREG0 through GX_TEVREG2.",
+    "Split the previous local symbol id at .data:0x80407A68 into id1 and id2 in config/GALE01/symbols.txt, reflecting two separate static arrays with sizes 0x10 and 0xC.",
+    "Added a static inline clamp_color helper to clamp converted color component values to the 0..255 range.",
+    "HSD_TExpSetReg now iterates the HSD_TExp linked list, asserts that each node is HSD_TE_CNST, tracks touched registers with reg_bits, fills a local GXColor array, calls GXPixModeSync, GXSetTevKColor, GXSetTevColor, HSD_StateInvalidate(0x10), and GXPixModeSync again.",
+    "The implementation handles constant value types HSD_TE_U8, HSD_TE_U16, HSD_TE_U32, HSD_TE_F32, and a default f64-style path, with special handling for HSD_TE_RGB versus single-component constants.",
+    "Updated HSD_TECnst comments in texp.h to document that type must be HSD_TE_CNST, that comp determines whether val points to an RGB array or a single value, and that ctype describes the pointer type of val."
+  ],
+  "smart_moves": [
+    "The PR preserved functional behavior despite known register swaps by landing a near match that renders properly in nonmatching builds, improving runtime coverage while leaving exact codegen as future work.",
+    "Using reg_bits to defer GX writes until after scanning all constants avoids unnecessary TEV updates and mirrors a likely original bitmask-driven pattern.",
+    "Separating GXTevKColorID and GXTevRegID arrays into id1 and id2 clarified the difference between K color registers 0..3 and regular TEV registers 4..6, and fixed the symbol map to match that layout.",
+    "The clamp_color helper centralizes repeated scalar clamping for non-RGB component values, while the RGB path preserves explicit clamp shapes where needed for matching.",
+    "Header comments were added for HSD_TECnst fields that are easy to misuse during decompilation, especially val interpretation based on comp and ctype."
+  ],
+  "decomp_lessons": [
+    "Near matches can be acceptable when the PR documents known register swaps and validates functional rendering behavior in nonmatching builds.",
+    "When reconstructing static data, do not assume a single array if type usage suggests separate arrays; here one id array became id1 for GXTevKColorID and id2 for GXTevRegID.",
+    "For TExp constant handling, HSD_TE_RGB means val should be interpreted as RGB data, while non-RGB constants represent one component selected by idx or broadcast depending on register range.",
+    "Preserve assert strings and source line evidence when possible; this implementation asserts \"clist->type == HSD_TE_CNST\" at texp.c line 0x591.",
+    "GX color setup routines often require surrounding GXPixModeSync calls and an HSD_StateInvalidate call after changing TEV-related state.",
+    "Matching code may require deliberately uneven expression shapes, such as explicit if/else clamps for some RGB components and ternary clamps for others."
+  ],
+  "naming_conventions": [
+    "Static data split used short local names id1 and id2, matching symbol-map names rather than more descriptive project-level names.",
+    "The helper name clamp_color describes 8-bit color-component saturation to 0..255.",
+    "Temporary variable names in the near-match implementation retain decompiler-style names such as var_r4, var_r5, temp_r3_2, temp_r3_3, temp_r4_3, and var_r4_4, likely to preserve or approach matching codegen.",
+    "Header documentation uses HSD_TE_* enum names directly to clarify required union member and value interpretation."
+  ],
+  "assembly_or_matching_tactics": [
+    "Accepted a near match with known register swaps rather than forcing exact register allocation immediately.",
+    "Used explicit typed pointer temporaries for val reinterpretation: f32*, f64*, u32*, u16*, and u8.",
+    "Used a local GXColor stack array sp18[8] plus a temporary GXColor sp14, reflecting likely stack object layout from the original function.",
+    "Used a bitmask over cnst.reg to track which registers were assigned and then emitted writes in two fixed loops: K colors for indices 0..3 and TEV colors for indices 4..6.",
+    "Maintained mixed clamp expression forms, including helper calls, explicit branch clamps, and nested ternary clamp, which may have been chosen for closer generated code.",
+    "Adjusted config/GALE01/symbols.txt to represent two static arrays at adjacent addresses instead of one combined id object."
+  ],
+  "review_feedback": [
+    "No review comments were present in the provided PR slice.",
+    "The PR body/comment notes: \"Has regswaps, but seems to be functionally equivalent, and renders properly in nonmatching build.\""
+  ],
+  "searchable_terms": [
+    "HSD_TExpSetReg",
+    "HSD_TExp",
+    "HSD_TECnst",
+    "HSD_TE_CNST",
+    "HSD_TE_RGB",
+    "HSD_TE_U8",
+    "HSD_TE_U16",
+    "HSD_TE_U32",
+    "HSD_TE_F32",
+    "GXColor",
+    "GXTevKColorID",
+    "GXTevRegID",
+    "GX_KCOLOR0",
+    "GX_KCOLOR1",
+    "GX_KCOLOR2",
+    "GX_KCOLOR3",
+    "GX_TEVREG0",
+    "GX_TEVREG1",
+    "GX_TEVREG2",
+    "GXSetTevKColor",
+    "GXSetTevColor",
+    "GXPixModeSync",
+    "HSD_StateInvalidate",
+    "clamp_color",
+    "reg_bits",
+    "id1",
+    "id2",
+    "texp.c",
+    "texp.h",
+    "symbols.txt",
+    "near match",
+    "regswaps",
+    "nonmatching build"
+  ],
+  "follow_up_queries": [
+    "Check whether later PRs converted HSD_TExpSetReg from near-match to full match.",
+    "Search for remaining regswap notes around sysdolphin/baselib/texp.c.",
+    "Compare HSD_TExpSetReg static data symbols id1 and id2 against map output or later symbol renames.",
+    "Look for other HSD_TECnst users to verify the documented val, comp, ctype interpretation is applied consistently."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

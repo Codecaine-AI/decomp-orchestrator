@@ -1,0 +1,127 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-996",
+  "pr": {
+    "number": 996,
+    "title": "Match `ftGw_SpecialN_CreateSausage`",
+    "url": "https://github.com/doldecomp/melee/pull/996",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2023-10-23T05:40:14Z",
+    "merged_at": "2023-10-23T05:58:01Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Matched Mr. Game & Watch's `ftGw_SpecialN_CreateSausage` by replacing a large `MUST_MATCH` assembly block and previously nonmatching C attempt with structured C that preserves the needed stack/register behavior. The fix introduced a larger `ftGameWatchChef` helper struct, used nested scopes and deliberate unused stack padding under `MUST_MATCH`, adjusted the `it_802C837C` prototype to use `enum_t` for the item kind parameter, and made minor include-format whitespace changes in capsule/parasol item files.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "decomp-matching",
+      "asm-removal",
+      "headers",
+      "struct-layout",
+      "item-prototype-cleanup",
+      "fighter-special-move"
+    ],
+    "systems": [
+      "fighter",
+      "ftGameWatch",
+      "item"
+    ]
+  },
+  "key_files": [
+    "src/melee/ft/chara/ftGameWatch/ftGw_SpecialN.c",
+    "src/melee/ft/chara/ftGameWatch/types.h",
+    "src/melee/it/it_27CF.h",
+    "src/melee/it/items/itcapsule.c",
+    "src/melee/it/items/itparasol.c"
+  ],
+  "what_changed": [
+    "Removed the hand-written `static asm void ftGw_SpecialN_CreateSausage(HSD_GObj* gobj)` implementation guarded by `MUST_MATCH`.",
+    "Reworked the C implementation of `ftGw_SpecialN_CreateSausage` to match, including nested scopes, local `Vec3 vec0`/`vec1`, `ftGameWatchChef chefStruct`, `fp1 = gobj->user_data`, pointer-based filling of `chefStruct.sausageCount`, and preserved assignment ordering around the chef history variables.",
+    "Kept deliberate unused stack padding under `#ifdef MUST_MATCH`, changing it from a single `u8 _[8]` to multiple scoped arrays including `u8 _[4] = { 0 }` and `u8 _[8] = { 0 }`.",
+    "Changed `ftGameWatchChef::sausageCount` from `s32 sausageCount[5]` to `int sausageCount[6]`, apparently to satisfy stack/layout requirements used by the matching function.",
+    "Changed `it_802C837C`'s third parameter in `it_27CF.h` from `s32` to `enum_t`, while leaving the call in this function as `it_802C837C(gobj, &vec0, 122, var_r6, fp->facing_dir)`.",
+    "Added blank lines after `#include \"math.h\"` in `itcapsule.c` and `itparasol.c`, likely formatting or include grouping cleanup."
+  ],
+  "smart_moves": [
+    "Used a small helper struct, `ftGameWatchChef`, for the sausage candidate array instead of a plain local array, giving the compiler a stack layout closer to the target.",
+    "Used nested blocks to influence local lifetimes and stack allocation without resorting to inline assembly.",
+    "Preserved suspicious source patterns that affect codegen, such as `for (i = 5, i -= 5; i < 5; i++)` instead of a simpler `for (i = 0; i < 5; i++)`.",
+    "Filled sausage candidates via an `int* pSausage` pointer and incremented `var_r28`, matching the target's compact loop behavior more closely than indexed array writes.",
+    "Separated `temp_r5` and `var_r6` assignments before the `it_802C837C` call, preserving the original value-flow/order needed for register allocation.",
+    "Used `fp1 = gobj->user_data` separately from the earlier `GET_FIGHTER(gobj)` access, which mirrors the assembly's reload/use pattern rather than over-simplifying all fighter references.",
+    "Removed obsolete decomp.me scratch commentary once the function matched, reducing stale uncertainty in the source."
+  ],
+  "decomp_lessons": [
+    "For stubborn matching functions, nested scopes and intentionally scoped dummy stack arrays can be more effective than trying to force matches through inlines alone.",
+    "A local helper struct can be used as a stack-shaping device; here, `ftGameWatchChef` with `sausageCount[6]` replaced a direct `sausageCount[5]` local to achieve the desired layout.",
+    "Do not simplify odd-looking initialization or loop expressions if they help reproduce target codegen; the `i = 5, i -= 5` form is likely deliberate.",
+    "When an assembly block loads fighter data more than once, matching C may need to preserve separate local fighter pointers or access paths instead of reusing a single canonical local.",
+    "The exact order of state updates matters: this function first copies `x2240_chefVar1` into `x2244_chefVar2`, then writes the newly selected sausage into `x2240_chefVar1`, then passes the selected value to item creation.",
+    "Header type refinements can be part of a function match; changing an item creation parameter from `s32` to `enum_t` documents intent and may improve callsite typing."
+  ],
+  "naming_conventions": [
+    "`ftGw_SpecialN_CreateSausage` follows the Game & Watch fighter prefix `ftGw_` and special-move naming pattern.",
+    "`ftGameWatchChef` and `ftGameWatchJudge` are fighter-specific helper typedef names in `ftGameWatch/types.h`.",
+    "Game & Watch fighter variables retain field-style names such as `x2240_chefVar1` and `x2244_chefVar2`, indicating partially identified struct members with offset-derived prefixes.",
+    "Move variables use `fp->mv.gw.SpecialN.maxSausage`; command variables use `fp->cmd_vars[0]`.",
+    "Temporary locals in this match use generic codegen-oriented names such as `vec0`, `vec1`, `fp1`, `var_r28`, `temp_r5`, and `var_r6`, suggesting register/stack matching took priority over semantic naming."
+  ],
+  "assembly_or_matching_tactics": [
+    "Converted a `MUST_MATCH` assembly implementation into matching C.",
+    "Used `#ifdef MUST_MATCH` dummy unused stack arrays to control stack frame shape.",
+    "Introduced nested lexical scopes to control local variable lifetime and placement.",
+    "Used a stack helper struct with a six-element `int` array despite only iterating over five sausage IDs.",
+    "Used pointer increment writes (`*pSausage++ = i`) rather than direct indexed stores.",
+    "Preserved branch and state-update behavior around `fp->cmd_vars[0]`, `maxSausage`, `accessory4_cb = NULL`, and the item spawn call.",
+    "Kept literal float local vector initialization with `2.5f`, `6.5f`, and `0.0f`, then transformed from the left-thumb joint using `lb_8000B1CC`."
+  ],
+  "review_feedback": [],
+  "searchable_terms": [
+    "pr-996",
+    "ribbanya",
+    "ftGw_SpecialN_CreateSausage",
+    "ftGw_SpecialN.c",
+    "ftGameWatch",
+    "GameWatch",
+    "Mr Game Watch",
+    "SpecialN",
+    "CreateSausage",
+    "Chef",
+    "sausageCount",
+    "ftGameWatchChef",
+    "x2240_chefVar1",
+    "x2244_chefVar2",
+    "cmd_vars",
+    "maxSausage",
+    "x1C_GAMEWATCH_CHEF_MAX",
+    "accessory4_cb",
+    "HSD_Randi",
+    "lb_8000B1CC",
+    "ftParts_8007500C",
+    "FtPart_LThumbNb",
+    "it_802C837C",
+    "enum_t",
+    "MUST_MATCH",
+    "unused stack",
+    "stack padding",
+    "asm removal",
+    "fighter",
+    "item"
+  ],
+  "follow_up_queries": [
+    "Look for other Game & Watch Chef functions that use `ftGameWatchChef` or `sausageCount[6]` for stack layout.",
+    "Audit callsites and implementation of `it_802C837C` to confirm the `enum_t` item-kind parameter naming and possible constants for literal `122`.",
+    "Search for remaining `MUST_MATCH` dummy stack arrays in fighter code to reuse this nested-scope stack-shaping pattern.",
+    "Investigate whether `x2240_chefVar1` and `x2244_chefVar2` can be given semantic names now that their role as recent sausage selections is clearer."
+  ],
+  "confidence": 0.91,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

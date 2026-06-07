@@ -1,0 +1,145 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-1889",
+  "pr": {
+    "number": 1889,
+    "title": "Split and link `ftCo_Thrown`",
+    "url": "https://github.com/doldecomp/melee/pull/1889",
+    "state": "MERGED",
+    "author": "ribbanya",
+    "created_at": "2025-08-31T07:14:26Z",
+    "merged_at": "2025-08-31T07:29:12Z"
+  },
+  "agent_status": "agent_completed",
+  "summary": "Split common thrown-state code out of the large `ft_0D14.c` unit into `src/melee/ft/chara/ftCommon/ftCo_Thrown.c` and linked it as Matching, while also carving the following `ftCo_AppealS.c` region into its own NonMatching unit. The PR updated split ranges, symbol scopes, headers, includes, and common fighter motion-vars so throw-related code could be referenced through `ftCommon/ftCo_Thrown.h` instead of the broad `ft/ft_0D14.h` header.",
+  "change_classification": {
+    "primary_type": "split-and-link matched fighter common code",
+    "categories": [
+      "decomp-matching",
+      "headers",
+      "split-config",
+      "symbol-scope-cleanup",
+      "fighter-common-state"
+    ],
+    "systems": [
+      "fighter",
+      "ftCommon",
+      "config",
+      "library",
+      "pl"
+    ]
+  },
+  "key_files": [
+    "config/GALE01/splits.txt",
+    "config/GALE01/symbols.txt",
+    "configure.py",
+    "src/melee/ft/ft_0D14.c",
+    "src/melee/ft/ft_0D14.h",
+    "src/melee/ft/chara/ftCommon/ftCo_Thrown.c",
+    "src/melee/ft/chara/ftCommon/ftCo_Thrown.h",
+    "src/melee/ft/chara/ftCommon/ftCo_AppealS.c",
+    "src/melee/ft/chara/ftCommon/ftCo_AppealS.h",
+    "src/melee/ft/chara/ftCommon/types.h",
+    "src/melee/ft/types.h",
+    "src/melee/ft/ftcoll.c",
+    "src/melee/lb/lb_00B0.c"
+  ],
+  "what_changed": [
+    "`config/GALE01/splits.txt` shortened `melee/ft/ft_0D14.c` from text end `0x800DF938` to `0x800DE3FC`, then inserted `melee/ft/chara/ftCommon/ftCo_Thrown.c` at `0x800DE3FC..0x800DE9B8` and `ftCo_AppealS.c` at `0x800DE9B8..0x800DF938`.",
+    "`configure.py` added `Object(Matching, \"melee/ft/chara/ftCommon/ftCo_Thrown.c\")` and `Object(NonMatching, \"melee/ft/chara/ftCommon/ftCo_AppealS.c\")` under a new `Common throw-related` comment.",
+    "Added `ftCo_Thrown.c` with the common thrown entry/helper code around `ftCo_800DE3FC`, `ftCo_800DE508`, `ftCo_800DE5A4`, thrown direction callbacks `ftCo_ThrownF/B/Hi/Lw_*`, `ftCo_ThrownHi_Cam`, `ftCo_800DE7C0`, `ftCo_800DE854`, `ftCo_800DE920`, and `ftCo_800DE974`.",
+    "Added `ftCo_Thrown.h` exposing address-commented prototypes for the linked thrown functions, so callers could include `ftCommon/ftCo_Thrown.h` directly.",
+    "Added `ftCo_AppealS.c` and `ftCo_AppealS.h` as the next carved-out common region; this unit remained NonMatching but contained many now-relocated matched helpers and the nonmatching `ftCo_AppealS_IASA` / `ftCo_800DE9D8` area.",
+    "`src/melee/ft/chara/ftCommon/types.h` gained a `mv.co.thrown` struct with `unk_bool`, `anim_timer`, `x8`, and `xC`, used by the split thrown code.",
+    "Many fighter/common files stopped including the broad `ft/ft_0D14.h` and instead included the narrower `ftCommon/ftCo_Thrown.h` or `ftCommon/ftCo_AppealS.h` where needed.",
+    "`config/GALE01/symbols.txt` converted several former `ftCo_*` data labels in the split range into compiler-style local symbols such as `@305`, `@306`, `@309`, `@319`, `@307`, `@188`, and `@271`.",
+    "`ftCo_CargoThrow.c` adjusted a call site from `return ftCo_800DE3FC(...)` to a plain `ftCo_800DE3FC(...)`, consistent with the new `void` prototype."
+  ],
+  "smart_moves": [
+    "The split used exact contiguous text and sdata2 boundaries, preserving the original address order while letting `ftCo_Thrown.c` become a separately linked Matching object.",
+    "The PR did not force the following appeal/C-stick/smash helper region to match completely; it split `ftCo_AppealS.c` as NonMatching, which allowed the fully matching thrown block to be linked independently.",
+    "Replacing broad `ft/ft_0D14.h` dependencies with purpose-specific `ftCommon/ftCo_Thrown.h` and `ftCommon/ftCo_AppealS.h` reduced header coupling and made future common-state splits easier.",
+    "The thrown code captured its small motion-variable needs in `ftCommon_MotionVars` rather than continuing to depend on anonymous offsets in the old monolithic file.",
+    "The new `ftCo_Thrown.c` preserved behavior details such as Yoshi-specific collision setup, Kirby throw exceptions, grab-timer bookkeeping, `accessory1_cb` positioning, and Kirby up-throw camera handling.",
+    "Raw motion IDs were replaced in at least one nearby initializer with named constants (`ftMr_MS_AppealSR`, `ftMr_MS_AppealSL`), improving readability while touching split-adjacent code."
+  ],
+  "decomp_lessons": [
+    "Large legacy fighter files can be split safely by carving one matching contiguous block first and leaving the adjacent imperfect block as NonMatching rather than waiting for the whole original file to match.",
+    "When splitting common fighter states, audit every dependent character/action file for direct includes of the old aggregate header and replace them with the new narrow common-state header.",
+    "Motion-variable unions should be extended with named per-state structs once code is split; this makes matched code clearer and avoids opaque `mv` offset usage.",
+    "A linked split often requires symbol-scope cleanup: data previously named with broad `ftCo_*` globals may need to become local `@NNN` symbols after the compiler unit boundary changes.",
+    "Function prototype changes uncovered by the split should be propagated to call sites; here `ftCo_800DE3FC` is declared `void`, so callers should not `return` its result.",
+    "Bot reports may show many 'broken matches' from the old object and many 'new matches' in the new object; for relocation PRs, interpret this as code moving between units rather than a real matching regression."
+  ],
+  "naming_conventions": [
+    "Common fighter files use `ftCo_` prefixes and are placed under `src/melee/ft/chara/ftCommon/`.",
+    "Common thrown-state callbacks use direction plus callback-role names: `ftCo_ThrownF_Anim`, `ftCo_ThrownB_IASA`, `ftCo_ThrownHi_Phys`, `ftCo_ThrownLw_Coll`.",
+    "Headers mirror source names, e.g. `ftCo_Thrown.c` has `ftCo_Thrown.h` with guard `MELEE_FTCO_THROWN_H`.",
+    "Header prototypes include address comments such as `/* 0DE3FC */`, matching the project convention for decomp symbol locations.",
+    "Unidentified functions retained address-based names such as `ftCo_800DE3FC`, while a callback-like helper retained `fn_800DE798`.",
+    "Compiler-local data in `symbols.txt` was represented with `@NNN` names instead of exported `ftCo_80xxxxxx` labels where scope became local."
+  ],
+  "assembly_or_matching_tactics": [
+    "Used file split ranges to isolate `ftCo_Thrown.c` exactly at `0x800DE3FC..0x800DE9B8`, enabling it to be marked Matching.",
+    "Kept `ftCo_AppealS.c` NonMatching even though many functions in it matched after relocation, avoiding overclaiming the incomplete appeal unit.",
+    "Introduced small static inline helpers in the thrown code (`calcKnockbackAngle`, `calcFacingDir`) to express simple branch patterns around knockback angle/facing calculations.",
+    "Preserved empty callback functions for IASA/Phys/Coll states where the original state table expected no-op callbacks.",
+    "Used explicit float constants and state fields (`0.0f`, `1.0f`, `grab_timer_decrement`, `anim_timer`) in the thrown helpers to match original behavior.",
+    "The adjacent `ftCo_AppealS.c` used stack-padding evidence (`PAD_STACK(0x18)`) and inline `canUseCstick` logic for matching-sensitive control flow."
+  ],
+  "review_feedback": [
+    "No human review comments were present in the provided PR slice.",
+    "The decomp.dev bot reported GALE01 matched code increasing to 41.01% (+0.03%, +1176 bytes) and linked code increasing to 26.13% (+0.04%, +1468 bytes).",
+    "The bot listed 54 new matches, including `ftCo_800DE3FC`, `ftCo_800DE5A4`, `ftCo_800DE854`, `ftCo_800DE508`, `ftCo_800DE7C0`, `ftCo_800DE920`, `ftCo_ThrownHi_Cam`, and `ftCo_800DE974` in `ftCo_Thrown`.",
+    "The bot also listed 47 broken matches in `main/melee/ft/ft_0D14`, which correspond to functions relocated out of the old monolithic unit rather than evidence of review objection."
+  ],
+  "searchable_terms": [
+    "pr-1889",
+    "ftCo_Thrown",
+    "ftCo_Thrown.c",
+    "ftCo_Thrown.h",
+    "ftCo_AppealS",
+    "ft_0D14 split",
+    "Common throw-related",
+    "ftCo_800DE3FC",
+    "ftCo_800DE508",
+    "ftCo_800DE5A4",
+    "ftCo_800DE7C0",
+    "ftCo_800DE854",
+    "ftCo_800DE920",
+    "ftCo_800DE974",
+    "ftCo_ThrownHi_Cam",
+    "fn_800DE798",
+    "ftCommon_MotionVars thrown",
+    "mv.co.thrown",
+    "grab_timer",
+    "accessory1_cb",
+    "Fighter_ChangeMotionState",
+    "ftCo_MS_ThrownF",
+    "ftCo_MS_ThrowHi",
+    "FTKIND_YOSHI",
+    "FTKIND_KIRBY",
+    "ftMr_MS_AppealSR",
+    "ftMr_MS_AppealSL",
+    "splits.txt 0x800DE3FC",
+    "symbols.txt local @305",
+    "Matching ftCo_Thrown",
+    "NonMatching ftCo_AppealS"
+  ],
+  "follow_up_queries": [
+    "Find later PRs that finish matching `ftCo_AppealS.c` after this split.",
+    "Check whether the duplicate `fn_800DE798` prototype in `ftCo_Thrown.h` was later cleaned up.",
+    "Search for later renames of `mv.co.thrown.unk_bool`, `anim_timer`, `x8`, and `xC`.",
+    "Find other splits from `ft_0D14.c` that reuse the narrow-header pattern introduced here.",
+    "Search for subsequent symbol cleanup of `ftCo_804D9110`, `ftCo_804D9114`, and related local `@NNN` labels."
+  ],
+  "confidence": 0.9,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}

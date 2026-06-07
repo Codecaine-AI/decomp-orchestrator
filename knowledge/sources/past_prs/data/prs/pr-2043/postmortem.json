@@ -1,0 +1,153 @@
+{
+  "schema_version": "melee_pr_postmortem_v1",
+  "object_id": "pr-2043",
+  "pr": {
+    "number": 2043,
+    "title": "lb: Match audio, snap, and refract functions",
+    "url": "https://github.com/doldecomp/melee/pull/2043",
+    "state": "CLOSED",
+    "author": "itsgrimetime",
+    "created_at": "2025-12-30T17:16:53Z",
+    "merged_at": null
+  },
+  "agent_status": "agent_completed",
+  "summary": "Attempted to match several lb module functions across audio, snapshot, THP/movie texture handling, background flash, card, and refract utilities. The PR was closed unmerged as a duplicate of #2037 because #2037 had already been reviewed and, according to the closing comment, properly reverted the fn_800204C8 partial match and lb_8001C4A8 variable reordering that caused regressions. Useful evidence remains for matching tactics: bool return correction for lbAudioAx_800265C4, targeted M2C_FIELD use for unknown HSD_CObj/HSD_GObj fields, GX texture object setup for lbMthp, and state-machine reconstruction in lbbgflash, but the bgflash partial and card variable reorder should be treated as suspect.",
+  "change_classification": {
+    "primary_type": "decomp-matching",
+    "categories": [
+      "cleanup",
+      "decomp-matching",
+      "headers",
+      "types-structs",
+      "regression-risk",
+      "duplicate-closed"
+    ],
+    "systems": [
+      "library",
+      "lb",
+      "audio",
+      "snapshot",
+      "refract",
+      "background-flash",
+      "mthp"
+    ]
+  },
+  "key_files": [
+    "src/melee/lb/lbaudio_ax.c",
+    "src/melee/lb/lbaudio_ax.h",
+    "src/melee/lb/lbbgflash.c",
+    "src/melee/lb/lbbgflash.h",
+    "src/melee/lb/lbcardnew.c",
+    "src/melee/lb/lbmthp.c",
+    "src/melee/lb/lbmthp.h",
+    "src/melee/lb/lbmthp.static.h",
+    "src/melee/lb/lbrefract.c",
+    "src/melee/lb/lbsnap.c"
+  ],
+  "what_changed": [
+    "Implemented fn_800263B4 as a void helper that frees a non-null pointer through HSD_ObjFree(&lbl_80433710, ptr), and updated its header prototype from UNK_RET/UNK_PARAMS to void fn_800263B4(void* ptr).",
+    "Implemented lbAudioAx_800265C4 as a bool-returning search over HSD_GObj entities, using M2C_FIELD(HSD_GObj_Entities, HSD_GObj**, 0xF8), checking gobj->user_data fields, keying off a matching sfx id with AXDriverKeyOff, unlinking the gobj through HSD_GObjPLink_80390228, and returning true/false. Header changed the return type from enum_t to bool and the sfx parameter to int.",
+    "Added a local BgFlashData2 struct in lbbgflash.c and implemented fn_800204C8 as a state/mode dispatcher over lbl_80433658, calling fn_8001FC08 for modes 0-2 and updating xC-xF from float fields, and handling modes 3-4 with x/y stepping and terminal flag x33. This was described in the PR text as only 91.9% matched and later identified in the closing comment as a partial match reverted in #2037.",
+    "Reordered local declarations in lb_8001C4A8 and split an inline anonymous struct declaration into separate unk0/unk4/unk8 fields. The closing comment says this variable reordering caused regressions and was reverted in #2037.",
+    "Implemented lbMthp8001F890 to initialize fields in static lbl_804335B8, create an SObj through HSD_SObjLib_803A477C, set bit 0x10 in the returned object's x40 field, and return the object pointer. Header return type changed from UNK_T to void*.",
+    "Implemented lbMthp8001F928 to initialize and load three GXTexObj textures: one full-size texture and two half-size textures, followed by HSD_SObjLib_803A49E0(gobj, arg1).",
+    "Expanded lbmthp.static.h with GXStruct include, an HSD_SObj_803A477C_t_ext overlay, a lbl_804335B8_t static layout containing three GXTexObj fields, image pointers, width/height fields, SObj setup fields, STATIC_ASSERT(sizeof == 0xA0), and static declarations for lbl_804335B8 and lbl_804D7CE0.",
+    "Implemented lbRefract_8002247C as a projection-type switch using HSD_CObjGetProjectionType and MTXLightPerspective, MTXLightFrustum, or MTXLightOrtho to write a matrix at lbl_804336D0 + 0x10. It used M2C_FIELD reads from HSD_CObj offsets such as 0x38, 0x40, 0x44, 0x48, and 0x4c.",
+    "Adjusted lbSnap_8001DF6C to introduce a ret local, preserve ptr->unk0 before branching, assign ret from lb_8001BB48 when work is performed, and return ret at the end. PR summary claimed this matched lbSnap_8001DF6C 100%.",
+    "Included additional headers required by the implementations, including m2c_macros.h, baselib/gobjplink.h, dolphin/gx/GXTexture.h, dolphin/gx/GXStruct.h, sysdolphin/baselib/sobjlib.h, and baselib/cobj.h."
+  ],
+  "smart_moves": [
+    "Changed lbAudioAx_800265C4 from enum_t to bool after review feedback, matching the observed true/false behavior instead of preserving a vague decompiler placeholder type.",
+    "Used M2C_FIELD for unresolved structure offsets in HSD_GObj_Entities and HSD_CObj instead of inventing premature full struct definitions; this keeps field-offset evidence explicit and searchable.",
+    "Added STATIC_ASSERT(sizeof(struct lbl_804335B8_t) == 0xA0) when introducing a new static data layout, which is a good guardrail for decomp struct recovery.",
+    "Kept lbMthp texture setup close to GX call semantics: initialize texture object, initialize LOD, load the texture object, and repeat with the correct full-size and half-size dimensions.",
+    "For lbSnap_8001DF6C, the ret local unified the return path and avoided returning directly from the call expression, which can help match compiler register/lifetime behavior."
+  ],
+  "decomp_lessons": [
+    "A match percentage or local codegen success is not enough if the change causes behavioral or project regressions; the closing comment explicitly flags fn_800204C8 and lb_8001C4A8 as reverted in the reviewed duplicate PR.",
+    "Partial matches such as fn_800204C8 at 91.9% should be isolated and reviewed carefully before landing, especially when they reconstruct state-machine control flow with gotos and inferred overlay structs.",
+    "Variable declaration reordering in seemingly minor cleanup can matter for matching or regressions; avoid landing declaration/order churn unless it is required and verified.",
+    "Prefer specific prototypes once behavior is clear: void for free helpers, bool for true/false search-and-action functions, and void* only when the real object type is not yet safely known.",
+    "When accessing unknown HSD object internals, M2C_FIELD can be an acceptable temporary tactic, but it should signal that a future struct/header cleanup may be needed.",
+    "Static data overlays should include exact offsets, comments, and STATIC_ASSERTs so future decomp work can refine names without losing layout guarantees."
+  ],
+  "naming_conventions": [
+    "Library functions in this slice retain existing lb-prefixed names such as lbAudioAx_800265C4, lbBgFlash_800205F0, lbMthp8001F890, lbRefract_8002247C, and lbSnap_8001DF6C.",
+    "Unknown internal functions remain address-style fn_800xxxxx names, e.g. fn_800263B4 and fn_800204C8, until a semantic name is justified.",
+    "Static/global labels keep lbl_ address naming such as lbl_80433710, lbl_80433658, lbl_804335B8, lbl_804D7CE0, and lbl_804336D0.",
+    "Temporary/inferred structs used descriptive-but-provisional names such as BgFlashData2, HSD_SObj_803A477C_t_ext, and lbl_804335B8_t.",
+    "Struct fields remain offset-style xNN/unk_NN where semantics are uncertain, with occasional comments like width, height, image ptr, or texture number when evidence is clearer."
+  ],
+  "assembly_or_matching_tactics": [
+    "Use PAD_STACK where stack padding is needed to reproduce codegen, shown in lbAudioAx_800265C4 and lbSnap_8001DF6C.",
+    "Use M2C_FIELD for exact-offset field access when the complete type is not yet modeled, shown for HSD_GObj_Entities at 0xF8 and HSD_CObj projection fields at 0x38/0x40/0x44/0x48/0x4c.",
+    "Introduce local pointer aliases such as pWidth and pHeight in lbMthp8001F928 to influence loads and casts for half-size texture dimensions.",
+    "Use explicit casts to u16 for shifted texture dimensions and to u32/s32 in comparisons/field assignments where the decompiled code requires matching signedness or width.",
+    "State-machine reconstruction in fn_800204C8 used labels/gotos for case blocks, but this specific implementation should be treated as risky because it was later called out as a reverted partial match.",
+    "Unified return variable pattern in lbSnap_8001DF6C likely helped match control flow and return register behavior."
+  ],
+  "review_feedback": [
+    "PR text says review feedback was addressed with M2C_FIELD and a bool return type.",
+    "Closing comment: the PR was closed as a duplicate of #2037.",
+    "Closing comment: #2037 had already been reviewed and properly reverted the fn_800204C8 partial match and lb_8001C4A8 variable reordering that caused regressions.",
+    "No line-level review comments or formal reviews were present in the provided context."
+  ],
+  "searchable_terms": [
+    "pr-2043",
+    "itsgrimetime",
+    "lb-functions",
+    "lbAudioAx",
+    "lbaudio_ax.c",
+    "fn_800263B4",
+    "lbAudioAx_800265C4",
+    "AXDriverKeyOff",
+    "HSD_GObjPLink_80390228",
+    "HSD_ObjFree",
+    "M2C_FIELD",
+    "PAD_STACK",
+    "lbbgflash.c",
+    "fn_800204C8",
+    "BgFlashData2",
+    "lbl_80433658",
+    "lbcardnew.c",
+    "lb_8001C4A8",
+    "lbmthp.c",
+    "lbmthp.static.h",
+    "lbMthp8001F890",
+    "lbMthp8001F928",
+    "GXTexObj",
+    "GXInitTexObj",
+    "GXInitTexObjLOD",
+    "GXLoadTexObj",
+    "HSD_SObjLib_803A477C",
+    "HSD_SObjLib_803A49E0",
+    "lbl_804335B8",
+    "lbrefract.c",
+    "lbRefract_8002247C",
+    "HSD_CObjGetProjectionType",
+    "MTXLightPerspective",
+    "MTXLightFrustum",
+    "MTXLightOrtho",
+    "lbsnap.c",
+    "lbSnap_8001DF6C",
+    "duplicate of #2037",
+    "regression",
+    "partial match"
+  ],
+  "follow_up_queries": [
+    "Compare PR #2037 against this PR to identify the exact reverted fn_800204C8 and lb_8001C4A8 changes and the accepted replacements.",
+    "Audit whether lbAudioAx_800265C4's bool prototype and M2C_FIELD usage landed via #2037 or a later PR.",
+    "Search later lbmthp.static.h history for refinements to lbl_804335B8_t and HSD_SObj_803A477C_t_ext field names.",
+    "Search for later struct definitions that replace M2C_FIELD accesses in lbRefract_8002247C with named HSD_CObj fields.",
+    "Check whether fn_800204C8 was eventually fully matched and whether BgFlashData2 survived or was renamed/refined."
+  ],
+  "confidence": 0.86,
+  "agent_runtime": {
+    "provider": "codex-lb",
+    "model": "gpt-5.5",
+    "thinking": "medium",
+    "tools": "read,grep,find,ls",
+    "agent_timeout_seconds": 900,
+    "session_dir": "/Users/Ford/Github Repos/oss/melee/decomp-orchestrator/.pi-sessions/pr-review"
+  }
+}
