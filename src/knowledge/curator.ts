@@ -46,6 +46,25 @@ export interface CurateKnowledgeResult {
   skipped_worker_reports: number;
 }
 
+export function classifySourceUpdateProposal(input: {
+  title?: string;
+  text?: string;
+  evidence_ref?: string;
+  evidence_refs?: string[];
+  source_path?: string;
+}): Record<string, unknown> | null {
+  const targetSourceId = targetSourceForText(`${input.title ?? ""}\n${input.text ?? ""}`);
+  if (!targetSourceId) return null;
+  return {
+    target_source_id: targetSourceId,
+    update_kind: sourceUpdateKind(targetSourceId),
+    mutation_policy: "proposal_only",
+    evidence_refs: input.evidence_refs ?? (input.evidence_ref ? [input.evidence_ref] : []),
+    source_path: input.source_path ?? null,
+    reason: sourceUpdateReason(targetSourceId),
+  };
+}
+
 type WorkerReportRow = Record<string, unknown>;
 
 export function curateKnowledgeEnrichments(options: CurateKnowledgeOptions): CurateKnowledgeResult {
@@ -264,8 +283,11 @@ function sourceUpdateProposalRecords(records: CuratedKnowledgeRecord[]): Curated
       created_at: record.created_at,
       payload: {
         target_source_id: targetSourceId,
+        update_kind: sourceUpdateKind(targetSourceId),
         parent_record_id: record.id,
         mutation_policy: "proposal_only",
+        evidence_refs: [record.evidence_ref],
+        source_path: record.source_path ?? null,
         reason: sourceUpdateReason(targetSourceId),
       },
     });
@@ -274,15 +296,33 @@ function sourceUpdateProposalRecords(records: CuratedKnowledgeRecord[]): Curated
 }
 
 function targetSourceForRecord(record: CuratedKnowledgeRecord): string | null {
-  const text = `${record.title}\n${record.text}`.toLowerCase();
-  if (/\b0x[0-9a-f]{6,8}\b/i.test(record.text) || /\b(offset|address|data sheet|action state|hitbox|hurtbox|id list)\b/i.test(text)) {
+  return targetSourceForText(`${record.title}\n${record.text}`);
+}
+
+function targetSourceForText(value: string): string | null {
+  const text = value.toLowerCase();
+  if (/\b(global standard|decomp standard|qa standard|review standard|standards source|global rule)\b/i.test(text)) {
+    return "decomp_standards";
+  }
+  if (/\b(path fact|path-scoped|scoped known win|directory fact|scope_globs|subsystem hint)\b/i.test(text)) {
+    return "path_facts";
+  }
+  if (/\b0x[0-9a-f]{6,8}\b/i.test(value) || /\b(offset|address|data sheet|action state|hitbox|hurtbox|id list)\b/i.test(text)) {
     return "ssbm_data_sheet";
   }
   if (/\b(ghidra|opseq|mismatch|mwcc|compiler dump)\b/i.test(text)) return "tool_outputs";
   return null;
 }
 
+function sourceUpdateKind(targetSourceId: string): string {
+  if (targetSourceId === "decomp_standards") return "global_standard";
+  if (targetSourceId === "path_facts") return "path_fact";
+  return "source_update";
+}
+
 function sourceUpdateReason(targetSourceId: string): string {
+  if (targetSourceId === "decomp_standards") return "Evidence proposes a broad decomp/review standard; standards source owner should review before changing global injected rules.";
+  if (targetSourceId === "path_facts") return "Evidence proposes a scoped known win for a directory or path; path facts source owner should validate scope, stale checks, and provenance before applying.";
   if (targetSourceId === "ssbm_data_sheet") return "Evidence references address, offset, ID, or data-sheet-like terms; source owner should review before mutating CSV data.";
   return "Evidence references tool-output-like terms; tool output indexes may need a refresh or note.";
 }

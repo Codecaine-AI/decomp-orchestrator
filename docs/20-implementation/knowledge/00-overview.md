@@ -197,6 +197,15 @@ Generated fallback rows such as symbol lookup, function shapes, mismatch-note
 chunks, and compiler-note chunks remain useful search evidence, but they do not
 alone satisfy strict live tool readiness.
 
+The registered tools serve two audiences. Maintenance and operator workflows run
+the tool runners to build caches and indexes; workers consume the small CLI APIs
+during evidence gathering. Worker behavior is governed by
+`src/agents/worker/context/lookup-guide.md`,
+`src/agents/worker/context/matching-guide.md`, and
+`src/agents/worker/context/operating-guide.md`: tool outputs are provenance-rich
+hypotheses, not source proof, and retained edits still need local
+objdiff/checkdiff validation.
+
 `kg-maintain` is the maintenance loop entry point. It uses pending-only PR
 postmortem indexing, runs live tool runners unless `--no-tool-runners` is set,
 rewrites tool lookup indexes, rewrites the curator enrichment, optionally runs

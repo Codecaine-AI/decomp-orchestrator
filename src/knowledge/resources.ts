@@ -148,6 +148,8 @@ export function resourceMap(repoRoot: string, role: AgentContextRole, capabiliti
         "resource_guides",
         "reference_docs",
         "tool_outputs",
+        "decomp_standards",
+        "path_facts",
       ],
       tool_ids: ["ghidra", "opseq", "mismatch_db", "mwcc_debug"],
       commands: [
@@ -185,6 +187,16 @@ export function resourceMap(repoRoot: string, role: AgentContextRole, capabiliti
           command: "python3 knowledge/sources/<source_id>/api/search.py --query <term> --limit 10 --json",
           cwd: packageRoot(),
           purpose: "source-local search for registered source slices using generated JSONL indexes",
+        },
+        {
+          command: "python3 knowledge/sources/decomp_standards/api/search.py --query <term> --limit 10 --json",
+          cwd: packageRoot(),
+          purpose: "search global decomp standards that are injected into worker/writer and QA/PR-review contexts",
+        },
+        {
+          command: "python3 knowledge/sources/path_facts/api/resolve_for_path.py --path <source_path> --limit 5 --json",
+          cwd: packageRoot(),
+          purpose: "resolve bounded path-scoped decomp hints for worker/writer packets",
         },
         {
           command: "python3 knowledge/sources/<source_id>/api/status.py --json",

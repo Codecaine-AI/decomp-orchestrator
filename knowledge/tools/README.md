@@ -44,3 +44,19 @@ Generated local indexes:
 The generated source-symbol, function-shape, mismatch-note, and compiler-note
 indexes remain useful lookup evidence, but they are supplemental. `kg:smoke
 -- --strict` now requires live runner smoke for every registered tool.
+
+## Worker Use
+
+Tool runners and caches are maintenance/operator surfaces. Workers usually call
+the small API scripts, not runners, while building an evidence packet.
+
+- Use `knowledge/sources/tool_outputs/api/search.py` when the symbol, file,
+  opcode, or mismatch term is concrete but the owning tool is not obvious.
+- Use `knowledge/sources/tool_outputs/api/tool_lookup.py --tool <tool_id>` or
+  a direct `knowledge/tools/<tool_id>/api/*.py` lookup once the question is
+  narrow.
+- Report provenance from `evidence_ref`, `payload`, result `kind`, and the
+  command that produced the evidence.
+- Distinguish live runner evidence from supplemental fallback/reference rows.
+  Fallback rows can prove metadata or suggest tactics, but source edits still
+  need local source review plus objdiff/checkdiff validation.

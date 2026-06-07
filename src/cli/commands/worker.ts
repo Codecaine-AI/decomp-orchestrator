@@ -14,7 +14,14 @@ import {
 } from "../../agents/worker/index.js";
 import { runPiAgent } from "../../agents/runtime/index.js";
 import { loadBoardSnapshot } from "../../board/index.js";
-import { fileGraphCard, graphDbExists, openKnowledgeGraph, resourceGraphDbPath } from "../../knowledge/index.js";
+import {
+  fileGraphCard,
+  globalStandardsContext,
+  graphDbExists,
+  openKnowledgeGraph,
+  resolvePathFactsContext,
+  resourceGraphDbPath,
+} from "../../knowledge/index.js";
 import { runCommand } from "../../shell/index.js";
 import { addPiSession, getLatestRun, getRun, leaseNextQueuedTarget, openState, recordWorkerReport } from "../../state/index.js";
 import type { PiRunResult, WorkerReportType } from "../../types/index.js";
@@ -448,10 +455,16 @@ export async function runWorkerCycle(globals: GlobalArgs, args: Map<string, stri
   }
 }
 
-function buildWorkerKnowledgeContext(sourcePath: string): Record<string, unknown> {
+export function buildWorkerKnowledgeContext(sourcePath: string): Record<string, unknown> {
   const graphDb = resourceGraphDbPath();
+  const decompStandards = globalStandardsContext();
+  const pathFacts = sourcePath ? resolvePathFactsContext(sourcePath, 5) : null;
   const lookupCommands = [
     `bun run kg:file-card -- --source ${sourcePath}`,
+    "python3 knowledge/sources/decomp_standards/api/search.py --query <query> --limit 10 --json",
+    sourcePath
+      ? `python3 knowledge/sources/path_facts/api/resolve_for_path.py --path ${shellQuote(sourcePath)} --limit 5 --json`
+      : "python3 knowledge/sources/path_facts/api/resolve_for_path.py --path <source_path> --limit 5 --json",
     "bun run kg:search -- --source past_prs --query <query> --limit 10",
     "bun run kg:search -- --source discord_knowledge --query <query> --limit 10",
     "bun run kg:search -- --source ssbm_data_sheet --query <query> --limit 10",
@@ -463,10 +476,22 @@ function buildWorkerKnowledgeContext(sourcePath: string): Record<string, unknown
     "python3 knowledge/tools/mwcc_debug/api/lookup_dump.py --query <query> --json",
   ];
   if (!sourcePath) {
-    return { status: "missing_source_path", graph_db: graphDb, lookup_commands: lookupCommands };
+    return {
+      status: "missing_source_path",
+      graph_db: graphDb,
+      decomp_standards: decompStandards,
+      path_facts: { source: "path_facts", status: "missing_source_path" },
+      lookup_commands: lookupCommands,
+    };
   }
   if (!graphDbExists(graphDb)) {
-    return { status: "graph_missing", graph_db: graphDb, lookup_commands: lookupCommands };
+    return {
+      status: "graph_missing",
+      graph_db: graphDb,
+      decomp_standards: decompStandards,
+      path_facts: pathFacts,
+      lookup_commands: lookupCommands,
+    };
   }
   const store = openKnowledgeGraph(graphDb);
   try {
@@ -475,6 +500,8 @@ function buildWorkerKnowledgeContext(sourcePath: string): Record<string, unknown
       graph_db: graphDb,
       generated_at: new Date().toISOString(),
       file_card: fileGraphCard(store, sourcePath),
+      decomp_standards: decompStandards,
+      path_facts: pathFacts,
       lookup_commands: lookupCommands,
     };
   } catch (error) {
@@ -482,6 +509,8 @@ function buildWorkerKnowledgeContext(sourcePath: string): Record<string, unknown
       status: "failed",
       graph_db: graphDb,
       reason: error instanceof Error ? error.message : String(error),
+      decomp_standards: decompStandards,
+      path_facts: pathFacts,
       lookup_commands: lookupCommands,
     };
   } finally {

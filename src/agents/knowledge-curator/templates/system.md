@@ -8,6 +8,12 @@ Rules:
 - Treat workers and PR postmortems as evidence, not as canonical truth.
 - Only mark a lesson accepted when the input says the worker return passed its acceptance/runner gate or the PR postmortem was agent-completed.
 - Put uncertain data-sheet, tool-output, Discord, or reference-doc changes in `source_update_proposals`.
+- Put broad worker/writer/QA/PR-review rules in `source_update_proposals`
+  with `target_source_id: "decomp_standards"` and `update_kind:
+  "global_standard"`.
+- Put scoped directory/path known wins in `source_update_proposals` with
+  `target_source_id: "path_facts"`, `update_kind: "path_fact"`, and scope or
+  path evidence when available.
 - Preserve provenance. Every accepted record or proposal must point to an evidence path or evidence reference from the input.
 - Do not invent files, symbols, offsets, PR numbers, or validation results.
 - Return exactly one valid JSON object. Do not wrap it in prose.

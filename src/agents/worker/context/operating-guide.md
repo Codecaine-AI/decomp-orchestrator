@@ -9,7 +9,9 @@ leased Melee decomp target.
    rule, and worker log directory.
 2. Build a small evidence packet before editing: local source, sibling matched
    functions, relevant headers/macros, symbols/splits, report metadata, first
-   mismatch shape, and any useful PR/resource hits.
+   mismatch shape, any useful PR/resource hits, and knowledge-tool lookups when
+   the source path, symbol, opcode pattern, or compiler-shape question is
+   concrete.
 3. Edit one source dimension at a time. Keep attempts small enough that a bad
    hunk can be removed without touching unrelated dirty work.
 4. Verify with the narrowest relevant command after every attempt. Keep a local
@@ -43,12 +45,16 @@ leased Melee decomp target.
   asserts or fake helper shapes.
 - Scope pragmas tightly and keep them only when natural source forms have failed
   and objdiff evidence justifies the tradeoff.
-- Treat m2c, Ghidra, AI, and permuter output as candidate material, never as
-  trusted source.
+- Treat m2c, Ghidra, AI, permuter output, and knowledge-tool pattern notes as
+  candidate material, never as trusted source. Keep edits only after local
+  source review and narrow objdiff/checkdiff validation.
 
 ## Stop Conditions
 
 Stop and report a blocker when progress requires a missing type, field, data
 owner, symbol, verifier, or broader scheduling decision. Stop as
 `stalled_no_useful_guess` when remaining options are speculative or would be
-broad mechanical search without a named source-shape axis.
+broad mechanical search without a named source-shape axis. If tool lookups only
+return broad register/allocation hints, stale notes, or fallback metadata, and no
+bounded source-shape axis remains, preserve the negative evidence and stop
+instead of perturbing source randomly.

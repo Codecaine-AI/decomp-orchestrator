@@ -5,7 +5,9 @@ import { buildKnowledgeCuratorGraphRecords } from "./knowledge-curator.js";
 import { buildPastPrsGraphRecords } from "./past-prs.js";
 import {
   buildDiscordKnowledgeGraphRecords,
+  buildDecompStandardsGraphRecords,
   buildExternalMirrorsGraphRecords,
+  buildPathFactsGraphRecords,
   buildPowerpcDocsGraphRecords,
   buildReferenceDocsGraphRecords,
   buildResourceGuidesGraphRecords,
@@ -48,6 +50,8 @@ export function rebuildKnowledgeGraph(options: RebuildKnowledgeGraphOptions): Re
       ["resource_guides", buildResourceGuidesGraphRecords],
       ["reference_docs", buildReferenceDocsGraphRecords],
       ["tool_outputs", buildToolOutputsGraphRecords],
+      ["decomp_standards", buildDecompStandardsGraphRecords],
+      ["path_facts", buildPathFactsGraphRecords],
     ] as const;
     for (const [sourceId, builder] of optionalSources) {
       if (!selected.has(sourceId)) continue;
@@ -100,6 +104,8 @@ export function defaultGraphSources(): string[] {
     "resource_guides",
     "reference_docs",
     "tool_outputs",
+    "decomp_standards",
+    "path_facts",
     "agent_shared_state",
     "curator_enrichment",
   ];

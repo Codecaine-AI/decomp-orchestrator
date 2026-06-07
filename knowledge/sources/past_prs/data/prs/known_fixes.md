@@ -1,5 +1,135 @@
 # Known PR Fixes And Changes
 
+## PR #2606: Split and link `crowdsfx`
+
+Status: scaffolded_without_agent
+Type: headers
+Systems: config;melee-core;repo-root
+
+Split and link `crowdsfx` is a merged PR touching 11 changed file(s), primarily in config, melee-core, repo-root. Draft classification: headers.
+
+Postmortem JSON: `pr-2606/postmortem.json`
+
+## PR #2605: Link `ftkirbycaptureyoshi`
+
+Status: scaffolded_without_agent
+Type: headers
+Systems: config;fighter;item;repo-root
+
+Link `ftkirbycaptureyoshi` is a merged PR touching 12 changed file(s), primarily in config, fighter, item, repo-root. Draft classification: headers.
+
+Postmortem JSON: `pr-2605/postmortem.json`
+
+## PR #2604: Link `ftkirbyspecialyoshi`
+
+Status: scaffolded_without_agent
+Type: headers
+Systems: config;fighter;item;repo-root
+
+Link `ftkirbyspecialyoshi` is a merged PR touching 12 changed file(s), primarily in config, fighter, item, repo-root. Draft classification: headers.
+
+Postmortem JSON: `pr-2604/postmortem.json`
+
+## PR #2603: Link `ftkirbyspecialmewtwo` and `ftkirbyspecialiceclimber`
+
+Status: scaffolded_without_agent
+Type: headers
+Systems: config;fighter;item;repo-root
+
+Link `ftkirbyspecialmewtwo` and `ftkirbyspecialiceclimber` is a merged PR touching 10 changed file(s), primarily in config, fighter, item, repo-root. Draft classification: headers.
+
+Postmortem JSON: `pr-2603/postmortem.json`
+
+## PR #2602: Rename Kirby TUs
+
+Status: scaffolded_without_agent
+Type: headers
+Systems: config;fighter;item;melee-core;repo-root
+
+Rename Kirby TUs is a merged PR touching 45 changed file(s), primarily in config, fighter, item, melee-core. Draft classification: headers, naming.
+
+Postmortem JSON: `pr-2602/postmortem.json`
+
+## PR #2601: Link `ftkirbyspecialseak`
+
+Status: scaffolded_without_agent
+Type: headers
+Systems: config;fighter;item;repo-root
+
+Link `ftkirbyspecialseak` is a merged PR touching 15 changed file(s), primarily in config, fighter, item, repo-root. Draft classification: headers.
+
+Postmortem JSON: `pr-2601/postmortem.json`
+
+## PR #2600: Link `ftkirbyspecialdonkey`
+
+Status: scaffolded_without_agent
+Type: code-change
+Systems: config;fighter;repo-root
+
+Link `ftkirbyspecialdonkey` is a merged PR touching 4 changed file(s), primarily in config, fighter, repo-root. Draft classification: code-change.
+
+Postmortem JSON: `pr-2600/postmortem.json`
+
+## PR #2599: Split and link `ftkirbyspecialpurin`
+
+Status: scaffolded_without_agent
+Type: headers
+Systems: MSL;config;fighter;repo-root
+
+Split and link `ftkirbyspecialpurin` is a merged PR touching 14 changed file(s), primarily in MSL, config, fighter, repo-root. Draft classification: headers.
+
+Postmortem JSON: `pr-2599/postmortem.json`
+
+## PR #2598: Link and rename `ftkirbyspecialzelda`
+
+Status: scaffolded_without_agent
+Type: naming
+Systems: config;fighter;repo-root
+
+Link and rename `ftkirbyspecialzelda` is a merged PR touching 7 changed file(s), primarily in config, fighter, repo-root. Draft classification: naming.
+
+Postmortem JSON: `pr-2598/postmortem.json`
+
+## PR #2597: Match and link ftco_damagefall
+
+Status: scaffolded_without_agent
+Type: decomp-matching
+Systems: fighter;repo-root
+
+Match and link ftco_damagefall is a merged PR touching 2 changed file(s), primarily in fighter, repo-root. Draft classification: decomp-matching.
+
+Postmortem JSON: `pr-2597/postmortem.json`
+
+## PR #2596: Link and rename `ftkirbyspecialness`
+
+Status: scaffolded_without_agent
+Type: headers
+Systems: config;fighter;item;repo-root
+
+Link and rename `ftkirbyspecialness` is a merged PR touching 18 changed file(s), primarily in config, fighter, item, repo-root. Draft classification: headers, naming.
+
+Postmortem JSON: `pr-2596/postmortem.json`
+
+## PR #2595: Link `ftdevice`
+
+Status: scaffolded_without_agent
+Type: headers
+Systems: config;fighter;repo-root
+
+Link `ftdevice` is a merged PR touching 5 changed file(s), primarily in config, fighter, repo-root. Draft classification: headers.
+
+Postmortem JSON: `pr-2595/postmortem.json`
+
+## PR #2594: Fix ftcolanim/ftmaterial split and fix string usages in ftmaterial
+
+Status: scaffolded_without_agent
+Type: decomp-matching
+Systems: config;fighter
+
+Fix ftcolanim/ftmaterial split and fix string usages in ftmaterial is a merged PR touching 10 changed file(s), primarily in config, fighter. Draft classification: decomp-matching, fix, headers.
+
+Postmortem JSON: `pr-2594/postmortem.json`
+
 ## PR #2593: Link multiple files, remove invalid files from configure.py, fix function call
 
 Status: agent_completed

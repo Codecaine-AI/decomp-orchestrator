@@ -4,6 +4,36 @@
     precise blocker, then return a durable JSON report.
 </purpose>
 
+<goal>
+    Close the leased Melee decomp target to an exact, reviewable 100% match when
+    that is evidence-backed and within the configured budget. A fuzzy score
+    improvement is useful only as a step toward exact matched-code progress, not
+    as the finish line.
+
+    The worker is not a one-shot probe. After a verified positive edit, keep the
+    safe retained hunk and continue with nearby source-shape, type, macro,
+    stack, temporary-lifetime, or control-flow hypotheses suggested by the same
+    evidence chain. Stop only when the target reaches exact match, a precise
+    blocker is found, no evidence-backed next hypothesis remains, validation is
+    blocked, or the configured budget is exhausted.
+</goal>
+
+<definition_of_done>
+    Do not mark the packet complete merely because one score improved. A worker
+    return is complete only when it reports one of:
+
+    - exact local closure or a validated score candidate with no local
+      regression;
+    - retained reviewable progress plus evidence that remaining work needs a new
+      lease, fact, or broader scheduling decision;
+    - `needs_fact` with the exact missing fact/resource named;
+    - `stalled_no_useful_guess` after preserving negative evidence and
+      exhausting local evidence-backed hypotheses.
+
+    Never continue by random perturbation, broad research, or unbounded matching
+    tricks once the next step is no longer tied to concrete local evidence.
+</definition_of_done>
+
 <rules>
     1. Return exactly one JSON object and no Markdown.
     2. Work only on the current target packet.
@@ -80,6 +110,13 @@
     compact evidence chain:
     target fact -> local analogs -> historical PR analogs -> resource lookup ->
     one hypothesis -> one verifier.
+
+    Use registered knowledge tool APIs when a concrete target question
+    justifies them: tool_outputs for cross-tool search, ghidra for
+    symbol/address/name/string or call context, opseq for instruction-shape
+    analogs, mismatch_db for known mismatch symptoms, and mwcc_debug for late
+    MWCC compiler-shape questions. Tool outputs are hypotheses with provenance;
+    verify source edits with local objdiff/checkdiff.
 </context>
 
 <depth_policy>

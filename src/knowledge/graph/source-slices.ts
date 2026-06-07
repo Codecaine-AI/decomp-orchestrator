@@ -299,6 +299,87 @@ export function buildToolOutputsGraphRecords(): GraphRecords | null {
   return graphRecords;
 }
 
+export function buildDecompStandardsGraphRecords(): GraphRecords | null {
+  const sourceId = "decomp_standards";
+  const dataRoot = sourceDataRoot(sourceId);
+  const dataFile = resolve(dataRoot, "standards.jsonl");
+  const records = readJsonlObjects(dataFile).map((row) => {
+    const text = compactText([
+      stringField(row, "title"),
+      stringField(row, "summary"),
+      arrayField(row, "do").join(" "),
+      arrayField(row, "do_not").join(" "),
+      arrayField(row, "evidence_refs").join(" "),
+    ]);
+    return {
+      id: stringField(row, "id") || shortHash(text),
+      title: `Decomp standard: ${stringField(row, "title") || stringField(row, "id")}`,
+      text,
+      evidenceRef: arrayField(row, "evidence_refs").join(";") || dataFile,
+      payload: { source_id: sourceId, record: row },
+      linkedFilePaths: extractLinkedFilePaths(text),
+      entityType: "decomp_standard",
+      entityKey: stringField(row, "id") || shortHash(text),
+    };
+  });
+  return buildIndexBackedGraphRecords({
+    sourceId,
+    trustTier: "reference",
+    indexFileName: "standards.jsonl",
+    inputPaths: [dataFile],
+    records,
+    defaultEntityType: "decomp_standard",
+    factType: "decomp_standard",
+    edgeType: "HAS_DECOMP_STANDARD",
+  });
+}
+
+export function buildPathFactsGraphRecords(): GraphRecords | null {
+  const sourceId = "path_facts";
+  const dataRoot = sourceDataRoot(sourceId);
+  const factsRoot = resolve(dataRoot, "path_facts");
+  const factFiles = recursiveFiles(factsRoot).filter((path) => extname(path).toLowerCase() === ".jsonl");
+  const sliceFiles = recursiveFiles(resolve(dataRoot, "slices")).filter((path) => DOCUMENT_EXTENSIONS.has(extname(path).toLowerCase()));
+  const inputPaths = [...factFiles, ...sliceFiles];
+  const records: IndexedSliceRecord[] = [];
+  for (const file of factFiles) {
+    for (const row of readJsonlObjects(file)) {
+      const text = compactText([
+        stringField(row, "title"),
+        stringField(row, "directory"),
+        stringField(row, "summary"),
+        arrayField(row, "scope_globs").join(" "),
+        arrayField(row, "applies_when").join(" "),
+        arrayField(row, "do").join(" "),
+        arrayField(row, "do_not").join(" "),
+        arrayField(row, "evidence_refs").join(" "),
+        arrayField(row, "watched_paths").join(" "),
+        stringField(row, "slice_ref"),
+      ]);
+      records.push({
+        id: stringField(row, "id") || shortHash(text),
+        title: `Path fact: ${stringField(row, "title") || stringField(row, "id")}`,
+        text,
+        evidenceRef: arrayField(row, "evidence_refs").join(";") || file,
+        payload: { source_id: sourceId, source_file: relative(dataRoot, file), record: row },
+        linkedFilePaths: [...new Set([...extractLinkedFilePaths(text), ...representativePathFactPaths(row)])].sort(),
+        entityType: "path_fact",
+        entityKey: stringField(row, "id") || shortHash(text),
+      });
+    }
+  }
+  return buildIndexBackedGraphRecords({
+    sourceId,
+    trustTier: "historical",
+    indexFileName: "path_facts.jsonl",
+    inputPaths,
+    records,
+    defaultEntityType: "path_fact",
+    factType: "path_scoped_hint",
+    edgeType: "HAS_PATH_FACT",
+  });
+}
+
 function buildDocumentSource(options: {
   sourceId: string;
   trustTier: TrustTier;
@@ -619,6 +700,20 @@ function rowText(row: Record<string, unknown>): string {
 function stringField(row: Record<string, unknown>, field: string): string {
   const value = row[field];
   return typeof value === "string" ? value : "";
+}
+
+function arrayField(row: Record<string, unknown>, field: string): string[] {
+  const value = row[field];
+  return Array.isArray(value) ? value.map((item) => String(item)) : [];
+}
+
+function representativePathFactPaths(row: Record<string, unknown>): string[] {
+  const values = [...arrayField(row, "watched_paths"), ...arrayField(row, "scope_globs")];
+  return values
+    .map((value) => value.replace(/^\.\//, "").replace(/^\.\.\//, ""))
+    .filter((value) => !value.includes("*"))
+    .filter((value) => value.startsWith("src/") || value.startsWith("include/"))
+    .slice(0, 12);
 }
 
 function firstAddress(text: string): string {

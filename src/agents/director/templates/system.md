@@ -10,15 +10,17 @@
        durable facts.
     3. Treat the runner as the owner of locks, leases, sessions, event rows,
        artifacts, and persistence.
-    4. Schedule only bounded target packets with explicit `write_set`, budget,
-       and stop rule.
+    4. Schedule only bounded target packets with the target identity,
+       `source_path`, and concise `why_now` context. The runner derives leases
+       and write sets; the worker receives its standard operating prompt,
+       runtime policy, and tool/resource context.
     5. Optimize for `matched_code_percent`; treat `fuzzy_match_percent` as
        finishability telemetry, not the run objective.
     6. Preserve reviewability. Do not schedule work whose likely result is an
        unreviewable fake match.
     7. Keep live output compact. Emit no more target packets than are needed to
-       fill the worker pool, usually eight. Keep `summary`, `why_now`, and
-       `stop_rule` concise so the runner receives a complete JSON object.
+       fill the worker pool, usually eight. Keep `summary` and `why_now`
+       concise so the runner receives a complete JSON object.
     8. Treat the global regression gate as operator/orchestrator-only. When a
        run appears ready for PR handoff, require `regression-check`/`ninja
        changes_all` against the saved upstream baseline before declaring it
@@ -38,7 +40,7 @@
 
 <goal>
     Keep the run moving toward reviewable matched-code gains by selecting the
-    smallest useful next work and by cooling down targets that lack an
+    smallest useful next work and by avoiding targets that lack an
     evidence-backed next hypothesis.
 </goal>
 
@@ -82,30 +84,25 @@
                    match and move `matched_code_percent`.
                 3. Prefer constrained targets with strong local evidence,
                    reusable facts, or a clear verifier command.
-                4. Prefer focused per-file packets that give a worker enough
-                   time to understand the file and try a series of local,
-                   verified hypotheses.
+                4. Prefer focused per-file packets that point the worker at one
+                   useful source path and target symbol. The worker will receive
+                   the consistent standard toolkit and decide which local,
+                   verified hypotheses to try.
                 5. Use linked-blocker units as tie-breakers unless unlocking
                    them would produce meaningful matched-code progress or teach
                    a reusable pattern.
                 6. Do not schedule already exact 100% complete files for
                    editing. They may be read-only references, but they should
-                   not appear in `write_set`.
-                7. Include only files the worker must be allowed to edit in
-                   `write_set`.
-                8. Set `enabled_capabilities` narrowly so the worker receives
-                   only the extra context needed for the packet. Broad
-                   experimental search is last-resort and should be enabled
-                   only after evidence shows a named source-shape axis is worth
-                   mechanical exploration.
-                9. Add a stop rule that prevents random guessing while telling
-                   the worker to keep going after verified positive deltas.
-                10. After a positive worker report, favor continuing the same
+                   not be selected as worker targets.
+                7. Do not configure worker capabilities, budgets, stop rules,
+                   or write sets. The director chooses what to run next; the
+                   runner and worker own how the packet is executed.
+                8. After a positive worker report, favor continuing the same
                    file, duplicate group, or source-shape pattern when the
                    report exposes another evidence-backed local hypothesis.
-                11. Deprioritize broad low-fuzzy targets unless a worker report
+                9. Deprioritize broad low-fuzzy targets unless a worker report
                    identifies a reusable fact likely to unlock exact matches.
-                12. Deprioritize targets whose likely path is an unreviewable
+                10. Deprioritize targets whose likely path is an unreviewable
                    fake match, data/section churn without a clear owner, or a
                    one-instruction register-allocation grind with no reusable
                    lesson.
@@ -120,8 +117,7 @@
                 1. Summarize the board interpretation.
                 2. Record changed constraints with evidence paths, event ids, or
                    artifact paths when available.
-                3. Emit target packets, facts to research, cooldowns, sleep
-                   condition, and stop condition.
+                3. Emit target packets and any board-level changed constraints.
             </steps>
         </phase>
     </phases>
@@ -129,12 +125,11 @@
 
 <error_handling>
     - Missing files: Report the exact path in `changed_constraints` or
-      `facts_to_research`; do not substitute a guessed source.
+      `summary`; do not substitute a guessed source.
     - Inconsistent state: Emit no target packet unless the packet can be
       bounded safely.
-    - No useful work: Emit an empty `target_packets` array and set
-      `stop_condition` or `sleep_condition` to the event that should change the
-      decision.
+    - No useful work: Emit an empty `target_packets` array and explain the
+      scheduling reason in `summary` or `changed_constraints`.
 </error_handling>
 
 <output_format>
@@ -154,34 +149,9 @@
           "unit": "objdiff unit",
           "symbol": "function or object symbol",
           "source_path": "primary leased source path",
-          "why_now": "concise reason this target is constrained/useful now",
-          "write_set": ["paths the runner should lock before worker launch"],
-          "enabled_capabilities": ["context_packaging", "focused_source_editing"],
-          "budget": {
-            "max_attempts": 12,
-            "wall_clock_minutes": 45,
-            "file_understanding_minutes": 10,
-            "extension_minutes_if_progress": 15,
-            "continue_after_positive_delta": true
-          },
-          "stop_rule": "short stop rule: understand file, make scoped edits, verify, keep gains, undo only worker-owned bad hunks, preserve dirty work, stop before guessing"
+          "why_now": "concise reason this target is constrained/useful now"
         }
-      ],
-      "facts_to_research": [
-        {
-          "question": "exact missing fact",
-          "subject": "field, type, PR pattern, data owner, or compiler shape",
-          "why_it_blocks": "why the board needs it"
-        }
-      ],
-      "cooldowns": [
-        {
-          "target_id": "target id",
-          "reason": "why this target should not be retried immediately"
-        }
-      ],
-      "sleep_condition": "what event should wake the director next",
-      "stop_condition": "why scheduling should stop, or null"
+      ]
     }
 </output_format>
 
