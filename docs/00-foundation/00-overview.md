@@ -53,12 +53,11 @@ review. It wraps those tools and records their evidence. It also does not try to
 maintain hidden, always-on agent memory. The board, not a long-lived chat
 thread, is the source of truth.
 
-Generated state belongs under an explicit state directory. In the normal nested
-checkout, commands run from `decomp-orchestrator/`, `--repo-root` points at the
-Melee checkout, and the default state directory stays under the orchestrator
-package. Runtime artifacts, SQLite files, prompts, and reports should not be
-mixed with source files unless an operator intentionally points the state
-directory there.
+Generated state belongs under an explicit state directory. The orchestrator is
+the platform repo, and a selected project supplies the checkout root, state
+directory, graph database, process name, and local defaults. Runtime artifacts,
+SQLite files, prompts, and reports belong under the selected project's state
+directory unless an operator intentionally uses raw path overrides.
 
 ## Current Maturity
 

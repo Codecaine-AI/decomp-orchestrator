@@ -6,10 +6,11 @@ code-ref: decomp-orchestrator/
 
 # Implementation Overview
 
-The package is organized around runtime responsibilities instead of one large
-orchestrator file. Agent slices live together, CLI commands are separated by
-operator action, state code owns SQLite transitions, the UI exposes operator
-control surfaces, and package knowledge lives outside `src/`.
+The package is organized as a Bun workspace. App entrypoints live under
+`apps/`, reusable TypeScript runtime code lives under `packages/`, and
+repo-level data such as knowledge corpora, docs, tests, and objectives stays at
+the repository root. Project descriptors and project-local runtime workspaces
+live under `projects/`.
 
 ## File Tree
 
@@ -18,20 +19,22 @@ decomp-orchestrator/
 +-- README.md
 +-- package.json
 +-- decomp-orchestrator-design.html
++-- apps/
+|   +-- cli/
+|   +-- dashboard/
+|   +-- dashboard-server/
 +-- docs/
 +-- knowledge/
-+-- src/
++-- packages/
 |   +-- agents/
-|   +-- bin/
-|   +-- board/
-|   +-- cli/
+|   +-- core/
 |   +-- knowledge/
-|   +-- shell/
-|   +-- state/
-|   +-- types/
-|   +-- ui/
+|   +-- ui-contract/
++-- objectives/
++-- projects/
 +-- testdata/
 +-- tests/
++-- tsconfig.base.json
 ```
 
 ## Section Scope
@@ -39,6 +42,7 @@ decomp-orchestrator/
 ### What This Section Owns
 
 - Source layout and package boundaries.
+- Project descriptor and workspace boundaries at the repository root.
 - How the CLI, process guardians, agents, state, board, shell helpers, and
   knowledge loader, and dashboard fit together.
 - Current implementation references for maintainers.

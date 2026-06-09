@@ -5,11 +5,12 @@ concepts: [knowledge, sources, tools, resource-graph, agent-context, past-prs]
 
 # Knowledge Model
 
-Runtime knowledge is package-owned evidence selected or searched by agents. It
-is not a Codex skill and it is not a generic pack system. The current model
-separates `knowledge/` evidence infrastructure from role behavior:
-`knowledge/` owns source slices, callable tools, and the resource graph, while
-agent system prompts and routed worker context own role behavior.
+Runtime knowledge is platform-owned evidence selected or searched by agents. It
+is not a Codex skill and it is not a generic pack system. The model separates
+global evidence infrastructure, project-derived graph state, and role behavior:
+global knowledge owns reusable source slices and callable tools, the selected
+project owns checkout-derived graph facts and run evidence, and agent system
+prompts plus routed worker context own role behavior.
 
 ## Knowledge Types
 
@@ -17,8 +18,8 @@ agent system prompts and routed worker context own role behavior.
 | --- | --- |
 | Source slices | Shallow vertical slices for PRs, Discord knowledge, data sheets, PDFs, external mirrors, reference docs, and normalized tool output |
 | Tools | CLI-first helpers that rank targets, gather context, refresh PR data, or analyze last-resort experiment output |
-| Resource graph | SQLite graph state linking files, PR history, source hits, tool output, editability, and rank features |
-| Agent context | Compact worker guidance selected by `src/agents/context/manifest.json`; director scheduling lives in the director system prompt |
+| Resource graph | Project-selected SQLite graph state linking checkout files, global PR history, source hits, tool output, editability, and rank features |
+| Agent context | Compact worker guidance selected by `packages/agents/src/context/manifest.json`; director scheduling lives in the director system prompt |
 | Graph enrichments | Durable learned facts, such as imported legacy shared-agent lessons and curator-produced worker/PR lessons, stored as graph-owned artifacts |
 
 ## Selection
@@ -58,7 +59,7 @@ preserves provenance so facts can be checked later.
 
 When adding evidence, decide whether it is a source slice, tool, graph
 enrichment, or past-PR artifact. When adding behavior, put it beside the agent
-as context and route it through `src/agents/context/manifest.json`. Keep
+as context and route it through `packages/agents/src/context/manifest.json`. Keep
 archived legacy material out of default prompt routes.
 
 PR and worker learning enters through a maintenance pipeline:
@@ -74,8 +75,8 @@ PR and worker learning enters through a maintenance pipeline:
 5. Workers persist reports in SQLite and artifact files after the return gate.
 6. The knowledge curator reduces worker reports and PR postmortems into
    `knowledge/resource_graph/enrichments/knowledge_curator_updates.jsonl`.
-7. Graph rebuild ingests all registered sources plus legacy/curator
-   enrichments.
+7. Graph rebuild ingests selected project code data, registered global sources,
+   and legacy/curator enrichments into the selected graph database.
 8. `kg:smoke -- --strict` verifies every source has graph chunks and every
    registered tool API is ready.
 

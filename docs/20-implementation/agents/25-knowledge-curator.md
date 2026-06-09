@@ -1,7 +1,7 @@
 ---
 covers: Knowledge-curator agent and graph enrichment reducer
 concepts: [knowledge-curator, graph-enrichment, worker-reports, pr-postmortems]
-code-ref: decomp-orchestrator/src/agents/knowledge-curator, decomp-orchestrator/src/knowledge/curator.ts
+code-ref: decomp-orchestrator/packages/agents/src/knowledge-curator, decomp-orchestrator/packages/knowledge/src/curator.ts
 ---
 
 # Knowledge Curator Agent
@@ -14,12 +14,12 @@ writer, and the agent can optionally add proposal-only source updates.
 
 | File | Purpose |
 | --- | --- |
-| `src/agents/knowledge-curator/index.ts` | Registers the agent slice. |
-| `src/agents/knowledge-curator/prompt.ts` | Builds the curator prompt bundle. |
-| `src/agents/knowledge-curator/schema.json` | Defines the expected JSON shape. |
-| `src/agents/knowledge-curator/templates/system.md` | Defines curation rules and output contract. |
-| `src/knowledge/curator.ts` | Deterministically reduces worker reports and PR postmortems into enrichment records. |
-| `src/knowledge/graph/knowledge-curator.ts` | Emits curator records into internal graph entities, facts, and edges. |
+| `packages/agents/src/knowledge-curator/index.ts` | Registers the agent slice. |
+| `packages/agents/src/knowledge-curator/prompt.ts` | Builds the curator prompt bundle. |
+| `packages/agents/src/knowledge-curator/schema.json` | Defines the expected JSON shape. |
+| `packages/agents/src/knowledge-curator/templates/system.md` | Defines curation rules and output contract. |
+| `packages/knowledge/src/curator.ts` | Deterministically reduces worker reports and PR postmortems into enrichment records. |
+| `packages/knowledge/src/graph/knowledge-curator.ts` | Emits curator records into internal graph entities, facts, and edges. |
 
 ## Flow
 

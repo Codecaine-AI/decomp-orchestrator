@@ -1,26 +1,27 @@
 ---
 covers: D-Comp Orchestrator CLI command modules and operator command surface
 concepts: [cli, commands, init-run, tick, worker, trigger-agent, babysit, recovery, checkpoint, regression-check, pr-split-plan, ui]
-code-ref: decomp-orchestrator/src/cli, decomp-orchestrator/src/bin/decomp-orchestrator.ts
+code-ref: decomp-orchestrator/apps/cli/src/cli, decomp-orchestrator/apps/cli/src/bin/decomp-orchestrator.ts
 ---
 
 # CLI: Overview
 
-The CLI is split into command modules under `src/cli/commands/`. The binary
-entry point stays thin: it parses arguments, applies defaults, and dispatches
-to the selected command.
+The CLI is split into command modules under `apps/cli/src/cli/commands/`.
+The binary entry point stays thin: it parses arguments, applies defaults, and
+dispatches to the selected command.
 
-Global parsing keeps checkout ownership and state ownership separate.
-`--repo-root` identifies the Melee checkout to inspect, edit, and validate.
-`--state-dir` identifies the durable board and artifact ledger. When
-`--state-dir` is omitted, it defaults to `<cwd>/.decomp-orchestrator-state/`;
-normal operations run from `decomp-orchestrator/` so state remains
-orchestrator-owned even when `--repo-root` points at the parent Melee checkout.
+Global parsing can resolve a configured project before command dispatch.
+`--project <id>` selects `projects/<id>/project.json`, applies ignored
+`projects/<id>/local.project.json` when present, then applies explicit
+`--repo-root`, `--state-dir`, and command-level `--graph-db` overrides. Project
+mode carries the resolved project id, checkout root, state directory, graph
+database, descriptor path, and local override path through CLI commands. Raw
+path mode remains available when `--project` is omitted.
 
 ## File Tree
 
 ```text
-src/
+apps/cli/src/
 +-- bin/
 |   +-- decomp-orchestrator.ts
 +-- cli/
@@ -73,6 +74,19 @@ src/
 The CLI keeps the single-step commands for debuggability, exposes
 `trigger-agent` / `bootstrap` for autonomous decomp-system runs, and exposes
 `babysit` as the outer guardian process for long-running development sessions.
+
+Project resolution is a global CLI concern, not a command-local convention.
+Commands consume `globals.repoRoot`, `globals.stateDir`, optional
+`globals.graphDbPath`, and optional project metadata from the parser. State
+metadata, agent prompts, resource maps, process command construction, and
+knowledge graph commands can therefore share one selected project identity.
+
+The resolver precedence is explicit override, then ignored local project
+override, then tracked project descriptor, then built-in defaults. Relative
+descriptor and local override paths resolve from the project directory; explicit
+CLI paths resolve from the invoking working directory. Project descriptors may
+also provide validation defaults, dashboard defaults, PR split defaults,
+`baseRef`, `processName`, and `localEnv`.
 
 The trigger-agent is deliberately not a Pi agent. It is a thin evented loop over
 durable SQLite state: wake the director for unhandled events, start worker
@@ -135,7 +149,7 @@ minutes. Operators can tune this with:
 | `--candidate-limit <n>` | Initial seed size and compatibility pool size; default is `max(32, max_workers * 2)`. |
 | `--queue-target-size <n>` | Maintain at least this many queued targets, subject to available fresh board candidates; default is `max(candidate_limit, max_workers * 2)`. |
 | `--candidate-window <n>` | Initial number of ranked board candidates scanned for director context and deterministic refill; refill expands this when the window is exhausted. |
-| `--graph-db <path>` | Knowledge graph used for board ranking and worker file-card context; defaults to `knowledge/resource_graph/graph.sqlite`. |
+| `--graph-db <path>` | Knowledge graph used for board ranking and worker file-card context; defaults to the selected project's graph DB, or `knowledge/resource_graph/graph.sqlite` without a project. |
 | `--queue-refresh-interval-ms <n>` | Refresh queued target priorities from the latest graph-ranked board at this interval; default is 60000. |
 | `--queue-low-watermark <n>` | Wake when total queued work is at or below `n` while workers are active. |
 | `--schedulable-low-watermark <n>` | Wake when unlocked distinct-file work is at or below `n` while the run is underfilled. |
@@ -153,7 +167,7 @@ The babysit wrapper forwards these trigger flags to its child `bootstrap` or
 `regression-check` wraps the saved-baseline `ninja changes_all` flow, captures
 stdout/stderr, parses `build/GALE01/report_changes.json`, writes
 `summary.json`, and generates a PR-style Markdown report through
-`src/objdiff/report.ts`. The regression gate fails when Ninja returns nonzero,
+`packages/core/src/objdiff/report.ts`. The regression gate fails when Ninja returns nonzero,
 the report cannot be parsed, or the report contains broken matches, fuzzy
 regressions, or metric regressions.
 

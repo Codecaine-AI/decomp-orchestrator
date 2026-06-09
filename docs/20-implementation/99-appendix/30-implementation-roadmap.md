@@ -19,7 +19,7 @@ artifact while naming the current package status.
 | 3 | State substrate | Present for runs, targets, queue, leases, locks, reports, events, sessions, and integrations. |
 | 4 | Read-only indexer | Present for `report.json` and `objdiff.json` fixture/live loading; richer graph edges are future work. |
 | 5 | Director-cycle dry run | Present through `tick` and trigger-agent activation. |
-| 6 | Prompt builder and capability templates | Present under `src/agents/{director,worker,pr-review}` plus agent context manifest routes. |
+| 6 | Prompt builder and capability templates | Present under `packages/agents/src/{director,worker,pr-review}` plus agent context manifest routes. |
 | 7 | One locked worker | Present through `worker` and trigger-agent subprocess workers. |
 | 8 | Score integration dry run | Represented by `regression-check`, PR promotion reports, and dashboard QA controls; full patch accept/reject integration is future work. |
 | 9 | Event-driven refill loop | Present through `trigger-agent` / `bootstrap`. |
@@ -30,7 +30,8 @@ artifact while naming the current package status.
 
 ## V1 Defaults
 
-- The system lives under top-level `decomp-orchestrator/`.
+- The orchestrator lives as the platform repo, with configured projects under
+  `projects/<id>/`.
 - It is not a Codex plugin and is not hidden under `tools/` as a side utility.
 - The primary objective is global `matched_code_percent`; each run's
   `goal_value` is a checkpoint/pause threshold inside the long-term movement
@@ -49,9 +50,9 @@ artifact while naming the current package status.
 - PR handoff is operator-controlled through dashboard actions that pause intake,
   checkpoint the run, run PR QA, and build a split plan. The dashboard prepares
   artifacts but does not publish GitHub PRs.
-- Crash recovery is restart-from-state: canonical checkout plus SQLite,
-  artifacts, and guardian incident packets. Worker Pi sessions are not resumed
-  in v1.
+- Crash recovery is restart-from-state: selected project checkout plus
+  project-scoped SQLite, artifacts, and guardian incident packets. Worker Pi
+  sessions are not resumed in v1.
 - Worker prompting is standardized through shared system prompts plus
   target-specific initial user context.
 - Initial score integration is serial and evidence-producing; auto-apply should

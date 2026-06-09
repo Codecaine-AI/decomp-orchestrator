@@ -1,7 +1,7 @@
 ---
 covers: Current Melee repo mechanics that the orchestrator indexes or wraps
 concepts: [repo-mechanics, report-json, objdiff, configure, progress-terms, commands]
-code-ref: decomp-orchestrator/knowledge/tools, decomp-orchestrator/src/board, decomp-orchestrator/src/shell
+code-ref: decomp-orchestrator/knowledge/tools, decomp-orchestrator/packages/core/src/board, decomp-orchestrator/packages/core/src/shell
 ---
 
 # Current Repo Mechanics
@@ -37,11 +37,11 @@ should not fork the compiler, report, objdiff, or progress machinery.
 python configure.py
 ninja build/GALE01/report.json
 ninja progress
-python decomp-orchestrator/knowledge/tools/rank_decomp_candidates.py --json --limit 200
+bun run orch -- --project melee kg-rank-features --limit 200
 build/tools/objdiff-cli diff -p . -u <unit> <symbol>
 (cd tools/table-typer && go run . dups)
 ```
 
-The original design referenced an external candidate-ranking helper path. The
-package-owned equivalent now lives under
-`decomp-orchestrator/knowledge/tools/`.
+Run project checkout commands from the selected project repo and orchestrator
+commands from the platform repo. Raw `--repo-root` remains available when the
+project descriptor is not the desired target.

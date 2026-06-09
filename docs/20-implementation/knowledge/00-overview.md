@@ -1,15 +1,18 @@
 ---
 covers: Package-owned knowledge layout, agent context routing, helper scripts, resources, and past PR library
 concepts: [knowledge, agent-context, sources, tools, resource-graph, past-prs]
-code-ref: decomp-orchestrator/knowledge, decomp-orchestrator/src/knowledge, decomp-orchestrator/src/agents/context.ts
+code-ref: decomp-orchestrator/knowledge, decomp-orchestrator/packages/knowledge/src, decomp-orchestrator/packages/agents/src/context.ts
 ---
 
 # Knowledge: Overview
 
-`knowledge/` is the runtime evidence surface. It owns source corpora, callable
-tools, and the shared resource graph. Agent role behavior and prompt context
-live beside the agents under `src/agents/*/context/` and are selected through
-`src/agents/context/manifest.json`.
+`knowledge/` is the runtime evidence surface. It owns global source corpora,
+callable tools, source/tool registries, and graph-owned enrichment files. The
+selected project supplies the checkout root and graph database path used for
+project-derived graph data such as `code_graph`, rank features, file cards, and
+agent-state enrichment. Agent role behavior and prompt context live beside the
+agents under `packages/agents/src/*/context/` and are selected through
+`packages/agents/src/context/manifest.json`.
 
 This keeps evidence infrastructure separate from worker/director behavior:
 sources can be indexed and refreshed without moving prompts, and prompt context
@@ -42,7 +45,7 @@ knowledge/
 |   +-- mwcc_debug/
 +-- resource_graph/
     +-- README.md
-    +-- graph.sqlite
+    +-- graph.sqlite          # compatibility/default graph DB when no project is selected
     +-- commands/
     +-- enrichments/
     +-- indexes/
@@ -50,7 +53,7 @@ knowledge/
 ```
 
 ```text
-src/agents/
+packages/agents/src/
 +-- context.ts
 +-- context/
 |   +-- manifest.json
@@ -66,7 +69,10 @@ src/agents/
 ```
 
 ```text
-src/knowledge/
+packages/knowledge/src/
++-- board.ts
++-- curator.ts
++-- decomp-context.ts
 +-- graph/
 +-- index.ts
 +-- paths.ts
@@ -78,7 +84,7 @@ They are not runtime prompt routes.
 
 ## Agent Context Contract
 
-`src/agents/context/manifest.json` contains:
+`packages/agents/src/context/manifest.json` contains:
 
 - `role_defaults`: context files included for director or worker by default.
 - `capability_routes`: additional context selected when a capability is
@@ -86,7 +92,7 @@ They are not runtime prompt routes.
 - `references`: known role-context files with purpose metadata.
 - `scripts`: helper scripts exposed to prompt builders and operators.
 
-`src/agents/context.ts` reads the manifest, resolves paths relative to the
+`packages/agents/src/context.ts` reads the manifest, resolves paths relative to the
 package root, deduplicates selected context references, and exposes script
 metadata. The worker prompt builder renders selected worker context as
 `selected_agent_context_references`.
@@ -100,17 +106,26 @@ Detailed historical worker and sweep docs are archived.
 
 ## Knowledge Code Path
 
-`src/knowledge/resources.ts` builds the resource map that agents see in rendered
+`packages/knowledge/src/resources.ts` builds the resource map that agents see in rendered
 prompts. It points agents at roots, progress inputs, local context, PR evidence,
 data-sheet resources, graph commands, and helper scripts. It includes the agent
 context summary but does not own prompt-context selection.
 
-`src/knowledge/graph/` implements the v1 resource graph. It indexes the current
-checkout code graph, the past-PR corpus, and graph-owned enrichments into
-SQLite, exposes file cards, graph search, source/tool registries,
-graph-derived rank features, and internal graph enrichments. External sources
-and tools are registered as optional slices until their usage justifies deeper
-indexing.
+`packages/knowledge/src/graph/` implements the v1 resource graph. It indexes
+the selected project's current code graph, the global past-PR corpus, registered
+global sources, normalized tool outputs, and graph-owned enrichments into
+SQLite. In project mode, commands default to the selected project's
+`graphDbPath`; without a project, they use the compatibility graph at
+`knowledge/resource_graph/graph.sqlite`. The graph API exposes file cards,
+graph search, source/tool registries, graph-derived rank features, and internal
+graph enrichments. External sources and tools are registered as optional slices
+until their usage justifies deeper indexing.
+
+The resource map rendered into director and worker prompts carries both
+boundaries: global knowledge roots under `knowledge/`, and project fields such
+as `project_id`, `project_kind`, `board_repo_root`, `state_dir`, and
+`graph_db`. This prevents prompts and knowledge commands from guessing a parent
+checkout when a project has already been resolved.
 
 The source slices are shallow on purpose. Actual corpora live under each slice's
 `data/` folder:
@@ -163,11 +178,11 @@ applies them.
 Package scripts expose the CLI-first graph surface:
 
 - `bun run kg:sources`
-- `bun run kg:status`
+- `bun run kg:status -- --project melee`
 - `bun run kg:import-agent-state`
 - `bun run kg:curate`
 - `bun run kg:maintain`
-- `bun run kg:rebuild`
+- `bun run kg:rebuild -- --project melee`
 - `bun run kg:search`
 - `bun run kg:file-card`
 - `bun run kg:rank-features`
@@ -200,9 +215,9 @@ alone satisfy strict live tool readiness.
 The registered tools serve two audiences. Maintenance and operator workflows run
 the tool runners to build caches and indexes; workers consume the small CLI APIs
 during evidence gathering. Worker behavior is governed by
-`src/agents/worker/context/lookup-guide.md`,
-`src/agents/worker/context/matching-guide.md`, and
-`src/agents/worker/context/operating-guide.md`: tool outputs are provenance-rich
+`packages/agents/src/worker/context/lookup-guide.md`,
+`packages/agents/src/worker/context/matching-guide.md`, and
+`packages/agents/src/worker/context/operating-guide.md`: tool outputs are provenance-rich
 hypotheses, not source proof, and retained edits still need local
 objdiff/checkdiff validation.
 
@@ -244,6 +259,15 @@ Current bootstrap status, 2026-06-07:
 Archived files can inform future implementation work, but they should not enter
 default prompt routes unless they are reviewed, condensed, and promoted into
 agent context, a source slice, a tool, or graph-owned enrichment.
+
+## Child Nodes
+
+- [Worker tooling gap report](10-worker-tooling-doc-gap-report.md): audit trail
+  for the worker-facing tool guidance promoted into active context.
+- [Melee PR review QA standards](20-melee-pr-review-qa-standards.md): review
+  checklist distilled from the past-PR corpus.
+- [Melee PR review QA coverage audit](21-melee-pr-review-qa-coverage-audit.md):
+  corpus coverage and evidence counts for the QA standards.
 
 ## Related
 

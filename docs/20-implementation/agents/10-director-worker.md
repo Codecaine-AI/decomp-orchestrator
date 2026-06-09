@@ -1,7 +1,7 @@
 ---
 covers: Director and worker prompt builders, packets, and output contracts
 concepts: [director-agent, worker-agent, target-packet, prompts, output]
-code-ref: decomp-orchestrator/src/agents/director, decomp-orchestrator/src/agents/worker
+code-ref: decomp-orchestrator/packages/agents/src/director, decomp-orchestrator/packages/agents/src/worker
 ---
 
 # Director And Worker Agents
@@ -18,10 +18,10 @@ structured scheduling decisions from the Pi response.
 
 | File | Purpose |
 | --- | --- |
-| `src/agents/director/prompt.ts` | Builds the director prompt inputs and rendered prompt pair. |
-| `src/agents/director/output.ts` | Parses director output into target-packet style decisions. |
-| `src/agents/director/templates/system.md` | Defines director authority and scheduling role. |
-| `src/agents/director/templates/initial_user.md` | Carries run state, board summary, wake event, and knowledge. |
+| `packages/agents/src/director/prompt.ts` | Builds the director prompt inputs and rendered prompt pair. |
+| `packages/agents/src/director/output.ts` | Parses director output into target-packet style decisions. |
+| `packages/agents/src/director/templates/system.md` | Defines director authority and scheduling role. |
+| `packages/agents/src/director/templates/initial_user.md` | Carries run state, board summary, wake event, and knowledge. |
 
 ## Worker Slice
 
@@ -33,11 +33,11 @@ runner releases the lease.
 
 | File | Purpose |
 | --- | --- |
-| `src/agents/worker/packet.ts` | Defines the target-packet shape passed into worker prompts. |
-| `src/agents/worker/prompt.ts` | Builds worker prompt inputs and rendered prompt pair. |
-| `src/agents/worker/output.ts` | Parses worker output/report content and evaluates return-gate repair reasons. |
-| `src/agents/worker/templates/system.md` | Defines worker authority, write safety, and validation rules. |
-| `src/agents/worker/templates/initial_user.md` | Carries the target packet, selected worker context, resources, repair requests, and report contract. |
+| `packages/agents/src/worker/packet.ts` | Defines the target-packet shape passed into worker prompts. |
+| `packages/agents/src/worker/prompt.ts` | Builds worker prompt inputs and rendered prompt pair. |
+| `packages/agents/src/worker/output.ts` | Parses worker output/report content and evaluates return-gate repair reasons. |
+| `packages/agents/src/worker/templates/system.md` | Defines worker authority, write safety, and validation rules. |
+| `packages/agents/src/worker/templates/initial_user.md` | Carries the target packet, selected worker context, resources, repair requests, and report contract. |
 
 ## Key Rules
 

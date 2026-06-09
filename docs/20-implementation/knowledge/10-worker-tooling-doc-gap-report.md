@@ -1,7 +1,7 @@
 ---
 covers: Worker-facing documentation gaps for Ghidra, opseq, mismatch_db, mwcc_debug, and normalized tool_outputs
 concepts: [worker-context, knowledge-tools, ghidra, opseq, mismatch-db, mwcc-debug, tool-outputs]
-code-ref: src/agents/worker/context, knowledge/tools, knowledge/sources/tool_outputs, knowledge/sources/reference_docs/data/docs
+code-ref: packages/agents/src/worker/context, knowledge/tools, knowledge/sources/tool_outputs, knowledge/sources/reference_docs/data/docs
 ---
 
 # Worker Tooling Documentation Gap Report
@@ -26,13 +26,13 @@ matching loop.
 
 ## Current Coverage
 
-- `src/agents/worker/context/operating-guide.md` already tells workers to build
+- `packages/agents/src/worker/context/operating-guide.md` already tells workers to build
   an evidence packet, verify with narrow commands, stop before random guessing,
   and treat Ghidra-style output as candidate material rather than trusted source.
-- `src/agents/worker/context/lookup-guide.md` includes the general search order
+- `packages/agents/src/worker/context/lookup-guide.md` includes the general search order
   and direct commands for graph/source APIs, PowerPC docs, external mirrors, and
   `mismatch_db`.
-- `src/agents/worker/context/matching-guide.md` lists good source-shape levers:
+- `packages/agents/src/worker/context/matching-guide.md` lists good source-shape levers:
   control flow, locals/registers, stack/frame, types/fields, inlines/macros,
   data/literals, and duplicate adaptation.
 - `knowledge/tools/README.md` and each tool README describe the registered live
@@ -74,7 +74,7 @@ tools; the worker docs do not yet make the tools operationally legible.
 
 ## Recommended Additions By Destination
 
-### `src/agents/worker/context/lookup-guide.md`
+### `packages/agents/src/worker/context/lookup-guide.md`
 
 Add a short "Tool Selection" table after the search order:
 
@@ -89,12 +89,12 @@ Add a short "Tool Selection" table after the search order:
 Add command snippets:
 
 ```bash
-python3 decomp-orchestrator/knowledge/sources/tool_outputs/api/search.py --query <term> --limit 10 --json
-python3 decomp-orchestrator/knowledge/sources/tool_outputs/api/tool_lookup.py --tool <tool_id> --query <term> --limit 10 --json
-python3 decomp-orchestrator/knowledge/tools/ghidra/api/lookup.py --query <symbol_or_address_or_path> --limit 10 --json
-python3 decomp-orchestrator/knowledge/tools/opseq/api/similar_functions.py --query <symbol_or_path_or_opcode_prefix> --limit 10 --json
-python3 decomp-orchestrator/knowledge/tools/mismatch_db/api/search.py --query <mismatch_pattern> --limit 10 --json
-python3 decomp-orchestrator/knowledge/tools/mwcc_debug/api/lookup_dump.py --query <compiler_or_mismatch_pattern> --limit 10 --json
+python3 knowledge/sources/tool_outputs/api/search.py --query <term> --limit 10 --json
+python3 knowledge/sources/tool_outputs/api/tool_lookup.py --tool <tool_id> --query <term> --limit 10 --json
+python3 knowledge/tools/ghidra/api/lookup.py --query <symbol_or_address_or_path> --limit 10 --json
+python3 knowledge/tools/opseq/api/similar_functions.py --query <symbol_or_path_or_opcode_prefix> --limit 10 --json
+python3 knowledge/tools/mismatch_db/api/search.py --query <mismatch_pattern> --limit 10 --json
+python3 knowledge/tools/mwcc_debug/api/lookup_dump.py --query <compiler_or_mismatch_pattern> --limit 10 --json
 ```
 
 Add an "Output Interpretation" note:
@@ -109,7 +109,7 @@ Add an "Output Interpretation" note:
   needs local source and objdiff/checkdiff validation.
 - Cite the exact command and evidence path in the worker report.
 
-### `src/agents/worker/context/matching-guide.md`
+### `packages/agents/src/worker/context/matching-guide.md`
 
 Add a "Tool-Assisted Matching Loop" section after common levers:
 
@@ -153,7 +153,7 @@ Add a stack-frame warning:
   `r1` stack offsets. Otherwise classify it as source-shape, call-shape,
   register/operand cascade, or compound evidence before editing.
 
-### `src/agents/worker/context/operating-guide.md`
+### `packages/agents/src/worker/context/operating-guide.md`
 
 Expand the evidence packet rule to explicitly include live knowledge tool
 queries when the target evidence justifies them:
@@ -174,7 +174,7 @@ Add a stop/negative-evidence rule:
   `stalled_no_useful_guess` or report a tooling/fact blocker. Do not continue
   into random perturbation."
 
-### `src/agents/worker/templates/system.md`
+### `packages/agents/src/worker/templates/system.md`
 
 Add a compact tool policy in `build_evidence_packet` or `resource_policy` so the
 default worker prompt knows the tools exist even when only the operating guide is
@@ -232,8 +232,10 @@ python3 knowledge/tools/mwcc_debug/api/status.py --json
 python3 knowledge/tools/mwcc_debug/api/lookup_dump.py --query <compiler_or_mismatch_pattern> --limit 10 --json
 ```
 
-From the parent Melee checkout, keep the existing worker style with the
-`decomp-orchestrator/` prefix.
+From the selected project checkout, keep commands rooted in the project repo
+when inspecting source/build artifacts. Use `bun run orch -- --project melee`
+from the orchestrator root for project-aware knowledge and orchestration
+commands.
 
 ## Priority Order
 
@@ -256,16 +258,16 @@ files is the lowest-friction route.
 
 - Active worker context currently routes only `operating-guide.md` by default and
   adds lookup/matching/sweep context by capability:
-  `src/agents/context/manifest.json`.
+  `packages/agents/src/context/manifest.json`.
 - The lookup guide currently names `mismatch_db` but not the direct Ghidra,
   opseq, mwcc_debug, or `tool_outputs` API commands:
-  `src/agents/worker/context/lookup-guide.md`.
+  `packages/agents/src/worker/context/lookup-guide.md`.
 - The matching guide has the right source-shape categories but no
   tool-assisted loop:
-  `src/agents/worker/context/matching-guide.md`.
+  `packages/agents/src/worker/context/matching-guide.md`.
 - The operating guide has the right "candidate material, never trusted source"
   rule but should extend it to all knowledge-tool outputs:
-  `src/agents/worker/context/operating-guide.md`.
+  `packages/agents/src/worker/context/operating-guide.md`.
 - Tool infrastructure and live readiness are documented in:
   `knowledge/tools/README.md`,
   `knowledge/tools/ghidra/README.md`,

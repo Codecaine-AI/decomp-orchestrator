@@ -1,7 +1,7 @@
 ---
 covers: Shared agent runtime, rendered prompt artifacts, dry-run/live Pi adapter, and JSON salvage
 concepts: [agent-runtime, pi-sdk, dry-run, artifacts, prompt-rendering]
-code-ref: decomp-orchestrator/src/agents/runtime
+code-ref: decomp-orchestrator/packages/agents/src/runtime
 ---
 
 # Agent Runtime
@@ -14,11 +14,11 @@ common mechanics.
 
 | File | Purpose |
 | --- | --- |
-| `src/agents/runtime/artifacts.ts` | Builds artifact paths for rendered prompts and outputs. |
-| `src/agents/runtime/output-json.ts` | Salvages structured JSON from agent responses. |
-| `src/agents/runtime/pi-agent.ts` | Calls live Pi sessions or writes dry-run outputs. |
-| `src/agents/runtime/prompt-renderer.ts` | Renders template strings with prompt input data. |
-| `src/agents/runtime/index.ts` | Re-exports runtime helpers. |
+| `packages/agents/src/runtime/artifacts.ts` | Builds artifact paths for rendered prompts and outputs. |
+| `packages/agents/src/runtime/output-json.ts` | Salvages structured JSON from agent responses. |
+| `packages/agents/src/runtime/pi-agent.ts` | Calls live Pi sessions or writes dry-run outputs. |
+| `packages/agents/src/runtime/prompt-renderer.ts` | Renders template strings with prompt input data. |
+| `packages/agents/src/runtime/index.ts` | Re-exports runtime helpers. |
 
 ## Behavior
 

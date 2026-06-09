@@ -113,10 +113,10 @@ python3 decomp-orchestrator/knowledge/tools/decomp_context_lookup.py \
 
 For first-class source cleanup around loops, typed fields, header inlines, and
 assert macros, read
-[source-standardizations.md](../../src/agents/worker/context/source-standardizations.md)
+[source-standardizations.md](worker-context/source-standardizations.md)
 before using trickier codegen levers. For naming, struct/data layout,
 architecture-reference, historical-PR, or broader search decisions, read
-[resource-guided-research.md](../../src/agents/worker/context/resource-guided-research.md)
+[resource-guided-research.md](worker-context/resource-guided-research.md)
 before editing.
 
 Search deliberately, with naming in mind. Start from the target symbol and ask
@@ -265,7 +265,7 @@ Use the PR dump to answer "has this kind of mismatch happened before?"
 
 For broader evidence gathering that includes PR history and the local resource
 CSV store, use
-[resource-guided-research.md](../../src/agents/worker/context/resource-guided-research.md).
+[resource-guided-research.md](worker-context/resource-guided-research.md).
 
 Search by tactic:
 

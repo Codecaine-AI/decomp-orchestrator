@@ -1,7 +1,7 @@
 ---
 covers: SQLite schema and state helper modules for runs, targets, leases, events, reports, checkpoints, and status
 concepts: [state, sqlite, schema, leases, events, reports, checkpoints, run-status, status]
-code-ref: decomp-orchestrator/src/state
+code-ref: decomp-orchestrator/packages/core/src/state
 ---
 
 # State: Overview
@@ -13,7 +13,7 @@ instead of manipulating SQL ad hoc.
 ## File Tree
 
 ```text
-src/state/
+packages/core/src/state/
 +-- db.ts
 +-- director-cycles.ts
 +-- events.ts
@@ -32,7 +32,7 @@ src/state/
 
 | Table | Purpose |
 | --- | --- |
-| `runs` | Run checkpoint goal, baseline identity, desired worker count, and status. |
+| `runs` | Run checkpoint goal, baseline identity, desired worker count, status, and nullable project metadata for project-aware runs. |
 | `targets` | Candidate targets loaded from board data. |
 | `queue` | Priority queue rows for director/worker scheduling. |
 | `leases` | Active and released worker ownership records. |
@@ -67,6 +67,9 @@ src/state/
   released or recovered.
 - A run goal is a checkpoint threshold for pausing and handoff. It is not the
   global project completion target.
+- Project-aware runs record nullable project id, project kind, repo root, state
+  directory, graph DB, descriptor path, and local override path. Legacy/raw path
+  runs can leave those fields empty.
 - Run status gates scheduling. `active` runs can start workers and director
   ticks; `paused`, `complete`, and `failed` runs are rejected by scheduling
   commands until an operator intentionally resumes or starts a fresh run.

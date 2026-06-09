@@ -1,0 +1,17 @@
+export {
+  listProjects,
+  orchestratorRoot,
+  projectToSummary,
+  projectsRoot,
+  resolveProject,
+  type ProjectDashboardDefaults,
+  type ProjectDescriptor,
+  type ProjectKnowledgeConfig,
+  type ProjectPrDefaults,
+  type ProjectResolveOptions,
+  type ProjectResolveOverrides,
+  type ProjectSummary,
+  type ProjectValidationDefaults,
+  type ProjectsConfig,
+  type ResolvedProject,
+} from "./resolver.js";

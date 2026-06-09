@@ -1,9 +1,11 @@
 # Decomp Orchestrator
 
-Decomp Orchestrator is a package-local runner for coordinating Melee
-decompilation work with Pi agents. It can live inside a Melee checkout at
-`<melee>/decomp-orchestrator`, but it is its own Git repository and command
-surface.
+Decomp Orchestrator is a Bun workspace for coordinating configured
+decompilation projects with Pi agents. The orchestrator is the platform
+repository; project descriptors under `projects/<id>/` tell it which checkout,
+state directory, graph database, process name, and local defaults to use.
+`projects/melee/project.json` defines the Melee project, and ignored local
+overrides attach a machine-specific checkout when needed.
 
 The runner is intentionally thin: it owns durable state, leases, locks,
 artifacts, process supervision, and Pi invocation. Director and worker Pi
@@ -17,7 +19,7 @@ shared run state.
 flowchart TD
     operator["Human operator<br/>starts runs, reviews incidents,<br/>restarts babysit if babysit dies"]
 
-    subgraph package["Decomp Orchestrator package"]
+    subgraph package["Decomp Orchestrator platform"]
         direction TB
 
         subgraph babysit["Outer safety shell: babysit"]
@@ -63,7 +65,7 @@ flowchart TD
         end
     end
 
-    subgraph melee["Melee checkout"]
+    subgraph melee["Configured project: melee"]
         direction LR
         source["source + headers"]
         reports["objdiff.json<br/>build/GALE01/report.json"]
@@ -125,22 +127,30 @@ Read the diagram from the outside in:
 
 | Area | Purpose |
 | --- | --- |
-| `src/cli/` | CLI commands: `init-run`, `tick`, `worker`, `trigger-agent`, `babysit`, `recover-leases`, `regression-check`, and `status`. |
-| `src/agents/` | Director, worker, PR-review, and shared Pi runtime prompt/output code. |
-| `src/state/` | SQLite schema and durable run-state helpers. |
-| `knowledge/` | Package-owned references, workflows, Melee resource indexes, tools, and past-PR corpus. |
+| `apps/cli/` | CLI binary and commands: `init-run`, `tick`, `worker`, `trigger-agent`, `babysit`, `recover-leases`, `regression-check`, `kg:*`, and `status`. |
+| `apps/dashboard/` | React/Vite dashboard frontend. |
+| `apps/dashboard-server/` | Bun dashboard API, static serving, process controls, and PR handoff actions. |
+| `packages/core/` | Board loading, SQLite state, shell helpers, report/regression logic, handoff helpers, env loading, and shared runtime types. |
+| `packages/agents/` | Director, worker, PR-review, knowledge-curator, and shared Pi runtime prompt/output code. |
+| `packages/knowledge/` | TypeScript knowledge graph/resource APIs over repo-level `knowledge/` data. |
+| `packages/ui-contract/` | Browser-safe dashboard payload types and formatting helpers shared by UI and tests. |
+| `projects/` | Tracked project descriptors plus ignored project-local checkouts, state, graph databases, env files, and Pi session directories. |
+| `knowledge/` | Repo-level references, workflows, Melee resource indexes, tools, graph state, and past-PR corpus. |
 | `docs/` | The deeper three-layer documentation set: foundation, system design, and implementation details. |
 | `testdata/smoke_repo/` | Fixture Melee-like repo used by the smoke test. |
 
-Generated run state defaults to `<cwd>/.decomp-orchestrator-state/`. In the
-normal nested setup, run commands from `decomp-orchestrator/` so `--repo-root`
-can point at the parent Melee checkout while the durable board and artifacts
-stay package-owned. Local package outputs such as `node_modules/`, `dist/`, and
-`init-run/` are ignored.
+Project descriptors live at `projects/<project-id>/project.json`. Ignored local
+overrides at `projects/<project-id>/local.project.json` can replace checkout,
+state, graph, env, or process defaults without changing tracked config.
+Explicit CLI flags and dashboard advanced path overrides still win over project
+defaults. In project mode, run state and graph outputs default to the selected
+project workspace, such as `projects/melee/state/` and
+`projects/melee/graph/`. Raw path mode remains available for fixtures and
+one-off compatibility runs.
 
 ## Quick Start
 
-From `decomp-orchestrator/`:
+From the orchestrator root:
 
 ```sh
 bun install
@@ -157,7 +167,14 @@ Use the package command entry point for everything else:
 
 ```sh
 bun run orch -- --help
+bun run orch -- --project melee status
 ```
+
+The tracked Melee descriptor defaults to `projects/melee/checkout/`. For local
+development, either put a `doldecomp/melee` checkout there or create ignored
+`projects/melee/local.project.json` with a `repoRoot` that points at an
+external checkout. The checked-out repo is the project; the orchestrator stays
+at the platform root.
 
 For a local dashboard and process control surface:
 
@@ -165,12 +182,12 @@ For a local dashboard and process control surface:
 bun run ui
 ```
 
-The viewer opens a dense run dashboard at `http://localhost:8787`. It reads the
-orchestrator-owned state directory, shows starting/current report measures,
+The viewer opens a dense run dashboard at `http://localhost:8787`. It selects
+the default project, exposes a project selector, keeps raw repo/state/graph
+paths behind advanced overrides, shows starting/current report measures,
 touched files, recent worker reports, events, process logs, and can start or
-stop the supervised run from the package root. Default UI launch settings are
-16 workers, medium director and worker thinking, goal value 100, and power-of-two
-candidate/queue sizes.
+stop the supervised run from the platform root. Default UI launch settings come
+from the selected project descriptor when present.
 
 ## Required Tools
 
@@ -184,22 +201,17 @@ Live agent sessions also need `@earendil-works/pi-coding-agent` from
 `bun install` and whatever provider/auth setup Pi needs for the selected
 `--provider`, `--model`, and `--thinking-level`.
 
-Project-specific provider keys belong in ignored `local.env`. For Codex LB,
-this repo hard-codes the project key there as `CODEX_LB_API_KEY=...`; the
-shared Pi provider config can reference `CODEX_LB_API_KEY` so each project can
-carry its own local key for spend attribution.
+Project-specific provider keys belong in ignored env files. The CLI loads root
+`local.env` for compatibility, then loads the selected project's configured
+`localEnv` file, such as `projects/melee/local.env`, when `--project` is used.
+For Codex LB, that env file can define `CODEX_LB_API_KEY=...` and
+`PI_CODING_AGENT_DIR=.pi-agent` so each project can carry its own provider
+config and spend attribution. Keep literal keys out of tracked files.
 
-This repo also uses ignored `.pi-agent/models.json` as the project-specific Pi
-agent config directory. `local.env` sets `PI_CODING_AGENT_DIR=.pi-agent`, so
-orchestrator-launched agents and past-PR CLI review agents resolve the local
-`codex-lb` provider instead of relying on global `~/.pi/agent/models.json`.
-Keep literal keys out of tracked files.
-
-The orchestrator persists live Pi session files under `.pi-sessions/` in this
-repo for local visibility. That directory is ignored by git. SDK-launched
-roles use `.pi-sessions/<role>/` through `SessionManager.create(cwd,
-sessionDir)`, and the past-PR CLI review path passes the same repo-local
-directory through `pi --session-dir`.
+The orchestrator persists live Pi session files under ignored session
+directories. Project workspaces may use `projects/<id>/.pi-sessions/` and
+`projects/<id>/.pi-agent/`; root `.pi-sessions/` and `.pi-agent/` remain
+supported for compatibility.
 
 Live Melee runs need a configured doldecomp/melee checkout with the normal
 toolchain, including `python configure.py`, `ninja`, `objdiff.json`,
@@ -210,17 +222,16 @@ PR knowledge refresh needs authenticated GitHub CLI access to
 
 ## Run Shape
 
-Run these commands from `decomp-orchestrator/`. If `--state-dir` is omitted, the
-CLI uses `.decomp-orchestrator-state/` under this package; set it explicitly
-when you want a named live-run ledger.
+Run these commands from the orchestrator root. Project mode resolves
+repo/state/graph defaults from `projects/<id>/project.json`, then applies
+ignored local overrides and explicit CLI flags. If no project is selected,
+`--repo-root` defaults to the current working directory and `--state-dir`
+defaults to `.decomp-orchestrator-state/` under the command working directory.
 
-Initialize a run against a Melee checkout:
+Initialize a run against the configured Melee project:
 
 ```sh
-REPO_ROOT="/path/to/melee"
-STATE_DIR="$PWD/.decomp-orchestrator-state/live"
-
-bun run orch -- --repo-root "$REPO_ROOT" --state-dir "$STATE_DIR" init-run \
+bun run orch -- --project melee init-run \
   --desired-workers 16 \
   --goal-kind matched_code_percent \
   --goal-value 72
@@ -229,7 +240,7 @@ bun run orch -- --repo-root "$REPO_ROOT" --state-dir "$STATE_DIR" init-run \
 Run the evented supervisor loop:
 
 ```sh
-bun run orch -- --repo-root "$REPO_ROOT" --state-dir "$STATE_DIR" bootstrap \
+bun run orch -- --project melee bootstrap \
   --max-workers 16 \
   --idle-sleep-ms 5000
 ```
@@ -237,7 +248,7 @@ bun run orch -- --repo-root "$REPO_ROOT" --state-dir "$STATE_DIR" bootstrap \
 For long-running development runs, put the guardian around the system process:
 
 ```sh
-bun run orch -- --repo-root "$REPO_ROOT" --state-dir "$STATE_DIR" --agent-timeout-seconds 7200 babysit \
+bun run orch -- --project melee --agent-timeout-seconds 7200 babysit \
   --max-workers 16 \
   --idle-sleep-ms 5000 \
   --worker-thinking-level low
@@ -255,12 +266,8 @@ For a high-parallelism run, keep worker count, queue target, and refill
 watermarks separate:
 
 ```sh
-REPO_ROOT="/path/to/melee"
-STATE_DIR="$PWD/.decomp-orchestrator-state/live-32-workers-low"
-
 bun run orch -- \
-  --repo-root "$REPO_ROOT" \
-  --state-dir "$STATE_DIR" \
+  --project melee \
   --provider codex-lb \
   --model gpt-5.5 \
   --thinking-level medium \
@@ -287,9 +294,10 @@ initial scan window is exhausted, refill automatically expands the scan until it
 either restores the pool target or reaches the end of the ranked board. Each
 refill reads the latest `build/GALE01/report.json` and `objdiff.json`;
 rebuilding those artifacts is the step that refreshes the underlying score data.
-When a knowledge graph database is present, board ranking also uses graph
+When the project graph database is present, board ranking also uses graph
 connectivity, resource evidence, historical lessons, and linked incomplete
-functions before falling back to capped finishability.
+functions before falling back to capped finishability. `--graph-db` can override
+the project graph path for a specific command.
 
 Use bounded flags for local dry runs:
 
@@ -316,18 +324,20 @@ bun run orch -- --repo-root testdata/smoke_repo --state-dir "$(mktemp -d)" \
 | `pr-split-plan` | Group branch/worktree changes into smaller subsystem-scoped PR slices, label independence risk, and emit isolation-check commands for review handoff. |
 | `status` | Print run, queue, lease, event, and report summaries. |
 
-`bun run ui` launches the package-local viewer for the same state. The UI keeps
-`--repo-root` and `--state-dir` editable, exposes the common trigger settings,
-and uses `recover-leases --force` after a UI stop request so interrupted leases
-return to durable stalled reports.
+`bun run ui` launches the project-aware viewer for the same state. The UI sends
+the selected `projectId` with dashboard, process, run, QA, and PR handoff
+requests. Raw repo/state/graph paths are editable only through advanced
+overrides, and UI stop requests use `recover-leases --force` so interrupted
+leases return to durable stalled reports.
 
 ## Regression Gate
 
 Workers perform local target validation while they work. Global score and PR
-handoff stay outside the worker loop. Before review, run the saved-baseline gate
-from the Melee checkout:
+handoff stay outside the worker loop. Before review, refresh the project
+checkout baseline and run the saved-baseline gate from the orchestrator root:
 
 ```sh
+cd /path/to/melee
 git switch master
 git pull --ff-only origin master
 python configure.py --require-protos
@@ -335,14 +345,14 @@ ninja baseline
 
 git switch <branch>
 python configure.py --require-protos
-bun run --cwd decomp-orchestrator regression-check -- --repo-root "$PWD"
+cd /path/to/decomp-orchestrator
+bun run orch -- --project melee regression-check
 ```
 
-`regression-check` wraps `ninja changes_all`, writes artifacts under
-`decomp-orchestrator/.decomp-orchestrator-state/regression_checks/` when run
-with `bun run --cwd decomp-orchestrator`, parses
-`build/GALE01/report_changes.json`, fails on regressions, and writes a PR-style
-Markdown report at `<artifact-dir>/pr_report.md`.
+`regression-check` wraps `ninja changes_all` inside the resolved project repo,
+writes artifacts under the selected project state directory, parses
+`build/GALE01/report_changes.json`, fails on regressions, and writes a
+PR-style Markdown report at `<artifact-dir>/pr_report.md`.
 
 The report also runs a PR promotion gate. By default, clean fuzzy-only movement
 is classified as local evidence, not PR-ready evidence; promotion requires no
@@ -352,7 +362,7 @@ run exits nonzero instead of becoming maintainer-facing work by accident.
 
 ## PR Knowledge Refresh
 
-The PR corpus is package-owned and feeds worker prompts plus the PR-review
+The PR corpus is platform-owned and feeds worker prompts plus the PR-review
 agent. Refresh it explicitly before live runs when recent PR knowledge matters:
 
 ```sh
@@ -372,10 +382,10 @@ PR refresh is not run automatically by `init-run`, `tick`, `worker`, or
 
 ## State And Artifacts
 
-By default, `<state-dir>` is `<cwd>/.decomp-orchestrator-state/`, where `cwd`
-should be the package directory for normal Melee orchestration. This keeps the
-durable board in the orchestrator-owned repo while `--repo-root` points at the
-checkout being decompiled.
+In project mode, `<state-dir>` defaults to the selected project state
+directory. For `--project melee`, the tracked descriptor uses
+`projects/melee/state/`, and local overrides may point elsewhere. Raw path mode
+keeps the compatibility default of `<cwd>/.decomp-orchestrator-state/`.
 
 Typical state layout:
 

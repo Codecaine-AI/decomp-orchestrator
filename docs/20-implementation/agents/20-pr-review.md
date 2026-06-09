@@ -1,7 +1,7 @@
 ---
-covers: PR-review agent slice and relationship to package-owned PR knowledge
+covers: PR-review agent slice and relationship to platform-owned PR knowledge
 concepts: [pr-review-agent, pr-knowledge, schema, prompts, postmortems]
-code-ref: decomp-orchestrator/src/agents/pr-review, decomp-orchestrator/knowledge/sources/past_prs
+code-ref: decomp-orchestrator/packages/agents/src/pr-review, decomp-orchestrator/knowledge/sources/past_prs
 ---
 
 # PR-Review Agent
@@ -14,18 +14,19 @@ agents so future PR review behavior has one canonical agent slice.
 
 | File | Purpose |
 | --- | --- |
-| `src/agents/pr-review/index.ts` | Exposes the PR-review agent definition to the registry. |
-| `src/agents/pr-review/prompt.ts` | Builds PR-review prompt inputs. |
-| `src/agents/pr-review/schema.json` | Defines the structured output contract. |
-| `src/agents/pr-review/templates/system.md` | Defines review role, standards, and output expectations. |
-| `src/agents/pr-review/templates/initial_user.md` | Carries the PR-specific user prompt. |
+| `packages/agents/src/pr-review/index.ts` | Exposes the PR-review agent definition to the registry. |
+| `packages/agents/src/pr-review/prompt.ts` | Builds PR-review prompt inputs. |
+| `packages/agents/src/pr-review/schema.json` | Defines the structured output contract. |
+| `packages/agents/src/pr-review/templates/system.md` | Defines review role, standards, and output expectations. |
+| `packages/agents/src/pr-review/templates/initial_user.md` | Carries the PR-specific user prompt. |
 
 ## Knowledge Relationship
 
-The package still owns historical PR data under `knowledge/sources/past_prs/data/`. That
-directory contains current dumps, searchable postmortem records, and refresh
-utilities. Legacy mirrored PR-agent prompt material can remain there as source
-data, but the canonical live PR-review agent definition is in `src/agents/pr-review/`.
+The platform owns historical PR data under `knowledge/sources/past_prs/data/`.
+That directory contains current dumps, searchable postmortem records, and
+refresh utilities. Legacy mirrored PR-agent prompt material can remain there as
+source data, but the canonical live PR-review agent definition is in
+`packages/agents/src/pr-review/`.
 
 The postmortem builder supports pending-only discovery. `kg-maintain` calls the
 builder with `--pending-only`, so newly fetched PRs are auto-discovered from
@@ -36,9 +37,9 @@ postmortems with `--run-pr-agent`; otherwise deterministic scaffold records
 keep the corpus indexable.
 
 The default live review runtime is provider `codex-lb`, model `gpt-5.5`, and
-thinking `medium`. `local.env` sets `PI_CODING_AGENT_DIR=.pi-agent`, so auth is
-loaded from ignored repo-local `.pi-agent/models.json` and PR indexing can be
-attributed separately from other projects.
+thinking `medium`. Root `local.env` remains supported, and selected projects can
+load their configured ignored `localEnv` file so PR indexing can be attributed
+separately from other projects.
 
 PR-review output is evidence for the resource graph. It is not the final graph
 writer. The past-PR graph adapter and knowledge curator ingest the generated

@@ -1,7 +1,7 @@
 ---
 covers: Dashboard server, React UI, process controls, and PR handoff controls
 concepts: [ui, dashboard, process-controls, pr-handoff, checkpoint, regression-check, pr-split-plan]
-code-ref: decomp-orchestrator/src/ui
+code-ref: decomp-orchestrator/apps/dashboard, decomp-orchestrator/apps/dashboard-server/src
 ---
 
 # UI: Overview
@@ -14,38 +14,47 @@ the shell.
 ## File Tree
 
 ```text
-src/ui/
-+-- server.ts
-+-- trusted-report.ts
-+-- app/
-|   +-- components/
-|   |   +-- App.tsx
-|   |   +-- DetailsRail.tsx
-|   |   +-- ProgressPanel.tsx
-|   |   +-- Sidebar.tsx
-|   |   +-- WorkTables.tsx
-|   |   +-- primitives.tsx
-|   +-- hooks/
-|   +-- lib/
-|   +-- types.ts
-+-- static/
+apps/
++-- dashboard/
+|   +-- index.html
+|   +-- src/
+|   |   +-- components/
+|   |   +-- hooks/
+|   |   +-- lib/
+|   |   +-- main.tsx
+|   |   +-- styles.css
+|   +-- vite.config.ts
++-- dashboard-server/
+    +-- src/
+        +-- server.ts
+        +-- trusted-report.ts
 ```
 
 ## Server
 
-`server.ts` serves built static assets from `src/ui/static/dist/` when present,
-falls back to `src/ui/static/`, and exposes JSON endpoints under `/api/`.
-`ORCH_UI_PORT` selects the port, defaulting to `8787`.
+`apps/dashboard-server/src/server.ts` serves built static assets from
+`apps/dashboard/dist/` and exposes JSON endpoints under `/api/`.
+`ORCH_UI_PORT` selects the port, defaulting to `8787`. The module exports a
+fetch handler for non-listening validation and starts Bun only when run as the
+server entrypoint.
 
 The server keeps a small in-process process record for the managed babysit
 process and also reads saved process files from
 `state_dir/ui-processes/*.json`. This lets the dashboard reconnect to a saved
-process record even after a browser refresh or UI server restart.
+process record even after a browser refresh or UI server restart. Saved process
+records include the selected project summary, repo root, state directory, graph
+database path, and command array.
 
-Dashboard data comes from `runDashboard(repoRoot, stateDir)`. It combines:
+All dashboard routes resolve paths through the project resolver. `/api/config`
+returns available projects, the default project id, selected project summary,
+project defaults, and default repo/state/graph paths. Request query strings and
+POST bodies send `projectId` by default; raw repo/state/graph paths are applied
+only when `usePathOverrides` is true.
+
+Dashboard data comes from the resolved project context. It combines:
 
 - SQLite run, queue, lease, event, report, checkpoint, and handoff state.
-- Current board/report measures from the Melee checkout.
+- Current board/report measures from the selected project checkout.
 - Trusted `report_changes.json` data when the report is fresh for the run.
 - Recent worker reports, touched files, active files, queue rows, and process
   logs.
@@ -58,8 +67,8 @@ when stable state changes and compact tick payloads for elapsed-time updates.
 
 The React app has three regions:
 
-- Left controls rail: project paths, run/process controls, and PR handoff
-  controls.
+- Left controls rail: project selector, advanced path overrides, run/process
+  controls, and PR handoff controls.
 - Center work area: progress metrics, trusted report or worker-score movement,
   improved files/symbols, and active/queued work.
 - Right details rail: worker report filters, full run details, and process
@@ -77,7 +86,7 @@ The Run section manages the long-running decomp process:
 
 | UI Action | Endpoint | Behavior |
 | --- | --- | --- |
-| `Start` | `POST /api/process/start` | Starts the managed babysit process for an active run. The server refuses to start workers for a paused, complete, or failed run. |
+| `Start` | `POST /api/process/start` | Starts the managed babysit process for an active run. The command includes `--project <id>` plus resolved repo/state/graph paths. The server refuses to start workers for a paused, complete, or failed run. |
 | `Stop` | `POST /api/process/drain` | Requests a soft drain: child workers receive `SIGTERM`, and the supervisor is stopped so no new workers are introduced. |
 | `Force Stop` | `POST /api/process/stop` | Stops the process group and runs `recover-leases --force` by default. |
 | `Report Now` | `POST /api/report/run` | Runs the trusted report refresh flow through `forceReportRun`. |
