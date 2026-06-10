@@ -47,11 +47,11 @@ export function workerPacket(params: {
     },
     enabled_capabilities: ["context_packaging", "focused_source_editing", "duplicate_adaptation", "fact_research"],
     stop_rule:
-      "Understand the file, make scoped evidence-backed edits inside the write_set, evaluate concrete attempts with narrow validation/review feedback, retain only edits with no unresolved local regression, continue after verified progress while local hypotheses remain, and return exact/improved/no_progress plus target_complete/stalled/needs_fact.",
+      "Understand the file, make scoped evidence-backed edits inside the write_set, evaluate concrete attempts with narrow validation/review feedback, retain only edits with no unresolved local regression, continue after verified progress while local hypotheses remain, and return exact/improved/no_progress plus target_complete/stalled/needs_fact; use tool_error only for tool/API/build/validation infrastructure failures.",
     report_contract: {
-      report_types: ["progress", "stalled_no_useful_guess", "needs_fact", "score_candidate"],
+      report_types: ["progress", "stalled_no_useful_guess", "needs_fact", "score_candidate", "tool_error"],
       durable_paths: ["summary_path", "facts_path", "blocker_path", "patch_path"],
-      wake_event: "worker_finished, worker_stalled, needs_fact, or score_candidate",
+      wake_event: "worker_finished, worker_stalled, worker_error, needs_fact, or score_candidate",
     },
   };
 }

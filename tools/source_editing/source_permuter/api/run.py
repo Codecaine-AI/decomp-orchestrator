@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run a bounded harness source-permutation search for one function."""
+"""Run a bounded tool-local source-permutation search for one function."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 import sys
 
 sys.path.append(str(Path(__file__).resolve().parents[3] / "_shared"))
-from harness import clamp_int, print_json, resolve_repo_root, run_harness_script
+from melee_tooling import clamp_int, print_json, resolve_repo_root, run_tool_script
 
 
 def split_symbols(values: list[str], joined: str | None) -> list[str]:
@@ -44,6 +44,8 @@ def main() -> None:
         *mutate_functions,
         "-j",
         str(clamp_int(args.jobs, default=4, minimum=1, maximum=16)),
+        "--batch",
+        str(min(16, clamp_int(args.max_iters, default=32, minimum=1, maximum=10_000))),
         "--timeout",
         str(clamp_int(args.timeout_seconds, default=90, minimum=5, maximum=900)),
         "--seed",
@@ -61,12 +63,12 @@ def main() -> None:
         command_args.extend(["--save-replay", args.save_replay])
 
     repo_root = resolve_repo_root(args.repo_root)
-    payload = run_harness_script(
+    payload = run_tool_script(
         "permute.py",
         command_args,
         repo_root=repo_root,
         operation="source_permuter:run",
-        timeout_seconds=clamp_int(args.timeout_seconds + 30, default=120, minimum=10, maximum=1200),
+        timeout_seconds=clamp_int(args.timeout_seconds + 120, default=210, minimum=30, maximum=1500),
     )
     payload.update(
         {

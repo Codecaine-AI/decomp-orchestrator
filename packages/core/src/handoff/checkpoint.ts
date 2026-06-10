@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import type { WorkerReportType } from "../types/index.js";
 import { immediateTransaction, now, withBusyRetry, type StateStore } from "../state/db.js";
 
-export type CheckpointDisposition = "pr_candidate" | "deferred_patch" | "needs_fact" | "stalled" | "review_required";
+export type CheckpointDisposition = "pr_candidate" | "deferred_patch" | "needs_fact" | "stalled" | "tool_error" | "review_required";
 
 export interface RunCheckpointItem {
   id: string;
@@ -158,6 +158,7 @@ function reportCleanEnoughForPr(summary: Record<string, unknown>, reportType: st
 
 function dispositionForReport(params: { exactMatch: boolean; reportType: string; summary: Record<string, unknown> }): CheckpointDisposition {
   if (params.reportType === "needs_fact") return "needs_fact";
+  if (params.reportType === "tool_error") return "tool_error";
   if (params.reportType === "stalled_no_useful_guess") return "stalled";
   if (!reportCleanEnoughForPr(params.summary, params.reportType)) return "review_required";
   return params.exactMatch ? "pr_candidate" : "deferred_patch";
@@ -170,6 +171,7 @@ function checkpointCounts(items: RunCheckpointItem[]): Record<string, number> {
     deferred_patch: 0,
     needs_fact: 0,
     stalled: 0,
+    tool_error: 0,
     review_required: 0,
     exact_match: 0,
     carry_forward: 0,
@@ -350,7 +352,7 @@ function writeArtifacts(params: {
       `Run: \`${params.checkpoint.runId}\``,
       `Checkpoint: \`${params.checkpoint.id}\``,
       "",
-      `${carryForward.length} item(s) remain local evidence, deferred patches, fact requests, or stalls.`,
+      `${carryForward.length} item(s) remain local evidence, deferred patches, fact requests, tool errors, or stalls.`,
       "",
       ...markdownTable(carryForward),
       "",

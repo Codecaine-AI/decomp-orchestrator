@@ -51,12 +51,17 @@
       - The missing information cannot be found in the current source material.
       - Name the missing information in `needed_fact`.
 
+  Tool/API/build/validation failures are errors, not missing facts:
+  - Do not use `needs_fact` for a broken tool, command failure, missing local executable, parse error, timeout, compiler-runner problem, validation harness problem, or post-return check failure.
+  - Use `report_type: "tool_error"` for those failures, keep `stop_reason: "stalled"`, set `needed_fact: null`, and put the exact command/tool/error evidence in `blockers`.
+
   Valid combinations include:
   - `exact` with `target_complete`
   - `improved` with `stalled`
   - `improved` with `needs_fact`
   - `no_progress` with `stalled`
   - `no_progress` with `needs_fact`
+  - `no_progress` with `stalled` and `report_type: "tool_error"` for tool/API/build/validation failures
 </definition_of_done>
 
 <rules>
@@ -169,7 +174,7 @@ Use this top-level shape:
 
 ```json
 {
-  "report_type": "progress | stalled_no_useful_guess | needs_fact | score_candidate",
+  "report_type": "progress | stalled_no_useful_guess | needs_fact | score_candidate | tool_error",
   "result": "exact | improved | no_progress",
   "stop_reason": "target_complete | needs_fact | stalled",
   "needed_fact": null,
@@ -205,9 +210,10 @@ Use this top-level shape:
 
 Use `progress` or `score_candidate` only for retained validated edits or exact score candidates.
 Use `needs_fact` when no retained edit is being reported and the missing fact is the main outcome.
+Use `tool_error` when a tool/API/build/validation failure prevents trustworthy evaluation. This is an error report, not a fact request.
 Use `stalled_no_useful_guess` when:
 - No retained progress remains.
 - No specific fact request would unlock the next move.
 
-Use `needed_fact` only for missing information that blocks the next useful move.
+Use `needed_fact` only for missing information that blocks the next useful move. Leave it `null` for tool errors, command failures, build infrastructure failures, parser errors, timeouts, and validation harness failures.
 </output_contract>

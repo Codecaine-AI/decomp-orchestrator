@@ -42,6 +42,7 @@ export interface WorkerCycleResult {
   workerSystemPrompt?: string;
   workerUserPrompt?: string;
   workerReport: string;
+  reportType?: WorkerReportType;
   reportId: string;
   wakeEvent: string;
   dryRun: boolean;
@@ -60,6 +61,12 @@ interface WorkerAttemptEvaluation {
   writeSetDiffChanged: boolean;
   postAttemptDiffPath: string;
   repairFeedbackPath?: string;
+}
+
+interface WorkerErrorClassification {
+  kind: string;
+  summary: string;
+  reasons: string[];
 }
 
 type PostReturnCheckValidation = WorkerRunnerValidation & { status: "passed" | "failed" | "skipped" };
@@ -109,7 +116,9 @@ function normalizedWorkerResult(agentReport: Record<string, unknown> | null): Wo
 
 function normalizedStopReason(agentReport: Record<string, unknown> | null, reportType: WorkerReportType, result: WorkerOutcomeResult): WorkerStopReason {
   const explicit = recordString(agentReport?.stop_reason);
-  if (workerStopReasons.has(explicit as WorkerStopReason)) return explicit as WorkerStopReason;
+  if (reportType === "tool_error") return "stalled";
+  if (explicit === "needs_fact" && reportType === "needs_fact") return "needs_fact";
+  if ((explicit === "target_complete" || explicit === "stalled") && workerStopReasons.has(explicit as WorkerStopReason)) return explicit as WorkerStopReason;
   if (explicit === "no_useful_hypothesis") return "stalled";
   if (result === "exact") return "target_complete";
   if (reportType === "needs_fact") return "needs_fact";
@@ -119,6 +128,120 @@ function normalizedStopReason(agentReport: Record<string, unknown> | null, repor
 function neededFact(agentReport: Record<string, unknown> | null): unknown {
   if (!agentReport || !("needed_fact" in agentReport)) return null;
   return agentReport.needed_fact ?? null;
+}
+
+function stringValuesFromObject(value: unknown): string[] {
+  if (!value || typeof value !== "object") return [];
+  if (Array.isArray(value)) return value.flatMap(stringValuesFromObject);
+  const record = value as Record<string, unknown>;
+  const values: string[] = [];
+  for (const [key, item] of Object.entries(record)) {
+    if (typeof item === "string") values.push(`${key}: ${item}`);
+    else if (item && typeof item === "object") values.push(...stringValuesFromObject(item));
+  }
+  return values;
+}
+
+function textLooksLikeToolError(value: unknown): boolean {
+  const text = typeof value === "string" ? value : stringValuesFromObject(value).join("\n");
+  if (!text.trim()) return false;
+  const toolTerm = /\b(tool|command|api|build tool|compiler runner|validation harness|post-return|checkdiff|objdiff|wibo|weebo|wine|mwcc|stderr|parse error|timeout|timed out|missing executable|harness)\b/i;
+  const failureTerm = /\b(fail(?:ed|ing|ure)?|missing|blocked|unavailable|error|exited|cannot|can't|unable|not found)\b/i;
+  return toolTerm.test(text) && failureTerm.test(text);
+}
+
+function agentReportSignalsToolError(agentReport: Record<string, unknown> | null): string[] {
+  if (!agentReport) return [];
+  const reasons: string[] = [];
+  const reportType = recordString(agentReport.report_type);
+  if (reportType === "tool_error") reasons.push("agent report_type is tool_error");
+  const blockers = Array.isArray(agentReport.blockers) ? agentReport.blockers : [];
+  for (const blocker of blockers) {
+    const record = blocker && typeof blocker === "object" && !Array.isArray(blocker) ? (blocker as Record<string, unknown>) : {};
+    const kind = recordString(record.kind || record.type || record.status || record.reason);
+    if (/(?:tool|command|api|build|validation|compiler|runner|parse|timeout).*error|error.*(?:tool|command|api|build|validation|compiler|runner|parse|timeout)/i.test(kind)) {
+      reasons.push(`agent blocker marks tool error: ${kind}`);
+      continue;
+    }
+    if (textLooksLikeToolError(record)) reasons.push(`agent blocker looks like a tool error: ${stringValuesFromObject(record).join("; ").slice(0, 240)}`);
+  }
+  if (reportType === "needs_fact" && (textLooksLikeToolError(agentReport.needed_fact) || textLooksLikeToolError(agentReport.summary))) {
+    reasons.push("agent reported needs_fact for text that looks like a tool/build/validation failure");
+  }
+  return reasons;
+}
+
+function runnerValidationFailureReasons(validation: WorkerRunnerValidation): string[] {
+  if (validation.status === "passed" || validation.status === "skipped") {
+    if (validation.postReturnCheck?.status !== "failed") return [];
+    return validation.postReturnCheck.reasons.length > 0
+      ? validation.postReturnCheck.reasons.map((reason) => `post-return check: ${reason}`)
+      : ["post-return check failed"];
+  }
+  const reasons = validation.reasons.length > 0 ? [...validation.reasons] : [`runner validation status: ${validation.status}`];
+  if (validation.postReturnCheck?.status === "failed") {
+    reasons.push(...validation.postReturnCheck.reasons.map((reason) => `post-return check: ${reason}`));
+  }
+  return reasons;
+}
+
+function classifyWorkerError(params: {
+  result: PiRunResult;
+  parsedError?: string;
+  agentReport: Record<string, unknown> | null;
+  acceptanceGate: ReturnType<typeof evaluateWorkerReportAcceptance>;
+  runnerValidation: WorkerRunnerValidation;
+  repairExhausted: boolean;
+  repairReasons: string[];
+}): WorkerErrorClassification | null {
+  if (params.result.failed) {
+    const message = params.result.error ?? "unknown Pi session error";
+    return {
+      kind: "worker_session_failed",
+      summary: `Worker Pi session failed before producing a complete report: ${message}`,
+      reasons: [message],
+    };
+  }
+  if (params.parsedError) {
+    return {
+      kind: "worker_report_parse_error",
+      summary: `Worker output did not contain a usable JSON report: ${params.parsedError}`,
+      reasons: [params.parsedError],
+    };
+  }
+  const agentToolErrors = agentReportSignalsToolError(params.agentReport);
+  if (agentToolErrors.length > 0) {
+    return {
+      kind: "agent_reported_tool_error",
+      summary: `Worker reported a tool/build/validation failure: ${agentToolErrors.join("; ")}`,
+      reasons: agentToolErrors,
+    };
+  }
+  const validationReasons = runnerValidationFailureReasons(params.runnerValidation);
+  if (validationReasons.length > 0) {
+    return {
+      kind: `runner_validation_${params.runnerValidation.status}`,
+      summary: `Runner validation failed: ${validationReasons.join("; ")}`,
+      reasons: validationReasons,
+    };
+  }
+  if (!params.acceptanceGate.accepted) {
+    const reasons = params.acceptanceGate.reasons.length > 0 ? params.acceptanceGate.reasons : ["worker report failed the acceptance gate"];
+    return {
+      kind: "acceptance_gate_failed",
+      summary: `Worker reported ${params.acceptanceGate.intendedReportType} but failed the acceptance gate: ${reasons.join("; ")}`,
+      reasons,
+    };
+  }
+  if (params.repairExhausted) {
+    const reasons = params.repairReasons.length > 0 ? params.repairReasons : ["post-return repair attempts were exhausted"];
+    return {
+      kind: "repair_exhausted",
+      summary: `Worker exhausted repair attempts; latest return still failed the post-return gate: ${reasons.join("; ")}`,
+      reasons,
+    };
+  }
+  return null;
 }
 
 function renderPostReturnCheckCommand(
@@ -349,7 +472,7 @@ export async function runWorkerCycle(globals: GlobalArgs, args: Map<string, stri
         result.dryRun || result.failed ? { report: null as Record<string, unknown> | null, error: result.error } : parseWorkerAgentReport(result.rawText);
       const agentReport = parsedAgentReport.report;
       const agentReportType = agentReport ? agentReport.report_type : null;
-      const intendedReportType = result.failed ? "stalled_no_useful_guess" : isWorkerReportType(agentReportType) ? agentReportType : fallbackReportType;
+      const intendedReportType = result.failed ? "tool_error" : isWorkerReportType(agentReportType) ? agentReportType : fallbackReportType;
       const acceptanceGate = evaluateWorkerReportAcceptance({
         agentReport,
         reportType: intendedReportType,
@@ -448,13 +571,23 @@ export async function runWorkerCycle(globals: GlobalArgs, args: Map<string, stri
     const agentReport = finalEvaluation.agentReport;
     const acceptanceGate = finalEvaluation.acceptanceGate;
     const repairExhausted = finalEvaluation.repairReasons.length > 0;
-    const reportType = repairExhausted ? "stalled_no_useful_guess" : acceptanceGate.effectiveReportType;
+    const errorClassification = classifyWorkerError({
+      result,
+      parsedError: finalEvaluation.parsedError,
+      agentReport,
+      acceptanceGate,
+      runnerValidation: finalEvaluation.runnerValidation,
+      repairExhausted,
+      repairReasons: finalEvaluation.repairReasons,
+    });
+    const reportType: WorkerReportType = errorClassification ? "tool_error" : acceptanceGate.effectiveReportType;
     const outcomeResult = normalizedWorkerResult(agentReport);
     const outcomeStopReason = normalizedStopReason(agentReport, reportType, outcomeResult);
-    const outcomeNeededFact = neededFact(agentReport);
+    const outcomeNeededFact = errorClassification ? null : neededFact(agentReport);
     const agentFacts = Array.isArray(agentReport?.facts) ? agentReport.facts : [];
     const agentBlockers = Array.isArray(agentReport?.blockers) ? agentReport.blockers : [];
     const blockerPath =
+      reportType === "tool_error" ||
       reportType === "stalled_no_useful_guess" ||
       reportType === "needs_fact" ||
       finalEvaluation.parsedError ||
@@ -465,7 +598,9 @@ export async function runWorkerCycle(globals: GlobalArgs, args: Map<string, stri
         : undefined;
     const patchPath = typeof agentReport?.patch_path === "string" ? agentReport.patch_path : undefined;
     const reportSummaryText =
-      repairExhausted
+      errorClassification
+        ? errorClassification.summary
+        : repairExhausted
         ? `Worker exhausted ${repairAttempts} repair attempt(s); latest return still failed the post-return gate: ${finalEvaluation.repairReasons.join("; ")}`
         : !acceptanceGate.accepted
         ? `Worker reported ${acceptanceGate.intendedReportType} but failed the acceptance gate: ${acceptanceGate.reasons.join("; ")}`
@@ -492,6 +627,13 @@ export async function runWorkerCycle(globals: GlobalArgs, args: Map<string, stri
       summary: reportSummaryText,
       agent_report: agentReport,
       agent_report_parse_error: finalEvaluation.parsedError ?? null,
+      error: errorClassification
+        ? {
+            kind: errorClassification.kind,
+            summary: errorClassification.summary,
+            reasons: errorClassification.reasons,
+          }
+        : null,
       acceptance_gate: acceptanceGate,
       runner_validation: finalEvaluation.runnerValidation,
       repair_attempts: {
@@ -512,6 +654,7 @@ export async function runWorkerCycle(globals: GlobalArgs, args: Map<string, stri
           {
             reason: reportType,
             note:
+              errorClassification?.summary ??
               finalEvaluation.parsedError ??
               (repairExhausted
                 ? `Worker exhausted repair attempts. Latest reasons: ${finalEvaluation.repairReasons.join("; ")}`
@@ -529,6 +672,13 @@ export async function runWorkerCycle(globals: GlobalArgs, args: Map<string, stri
               latest_write_set_diff_path: finalEvaluation.postAttemptDiffPath,
               repair_feedback_path: finalEvaluation.repairFeedbackPath ?? null,
             },
+            error: errorClassification
+              ? {
+                  kind: errorClassification.kind,
+                  summary: errorClassification.summary,
+                  reasons: errorClassification.reasons,
+                }
+              : null,
             blockers: agentBlockers,
           },
           null,
@@ -554,6 +704,13 @@ export async function runWorkerCycle(globals: GlobalArgs, args: Map<string, stri
         result: outcomeResult,
         stop_reason: outcomeStopReason,
         needed_fact: outcomeNeededFact,
+        error: errorClassification
+          ? {
+              kind: errorClassification.kind,
+              summary: errorClassification.summary,
+              reasons: errorClassification.reasons,
+            }
+          : null,
         intended_report_type: acceptanceGate.intendedReportType,
         acceptance_gate: acceptanceGate,
         runner_validation: finalEvaluation.runnerValidation,
@@ -574,10 +731,12 @@ export async function runWorkerCycle(globals: GlobalArgs, args: Map<string, stri
       workerSystemPrompt: result.systemPromptPath,
       workerUserPrompt: result.userPromptPath,
       workerReport: summaryPath,
+      reportType,
       reportId: report.reportId,
       wakeEvent: report.eventId,
       dryRun: result.dryRun,
-      failed: result.failed ?? false,
+      failed: Boolean(errorClassification),
+      error: errorClassification?.summary,
     };
   } finally {
     store.db.close();

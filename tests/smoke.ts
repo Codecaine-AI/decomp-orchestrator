@@ -7,6 +7,7 @@ import { Database } from "bun:sqlite";
 import {
   compareWorkerUnitSnapshots,
   evaluateWorkerReportAcceptance,
+  isWorkerReportType,
   lintWorkerReviewDiff,
   workerReturnRepairReasons,
   type WorkerUnitScoreSnapshot,
@@ -23,6 +24,7 @@ import {
   openState,
   prioritizeQueuedTargets,
   queuedTargetCount,
+  recordWorkerReport,
   refillQueuedTargets,
   schedulableTargetCount,
   updateRunStatus,
@@ -336,6 +338,7 @@ async function main(): Promise<void> {
     writeSet: ["src/a.c"],
   });
   assertSmoke("worker progress acceptance gate accepts clean regression evidence", cleanWorkerProgress.accepted);
+  assertSmoke("worker report type accepts tool_error", isWorkerReportType("tool_error"));
   assertSmoke("worker progress acceptance gate preserves clean progress type", cleanWorkerProgress.effectiveReportType === "progress");
   const blockedWorkerProgress = evaluateWorkerReportAcceptance({
     agentReport: {
@@ -423,6 +426,14 @@ async function main(): Promise<void> {
       acceptanceGate: cleanWorkerProgress,
       writeSetDiffChanged: false,
       runnerValidation: { status: "failed", reasons: ["post-return check command exited 1"] },
+    }).some((reason) => reason.includes("runner validation")),
+  );
+  assertSmoke(
+    "worker post-return gate asks for repair on build validation failure",
+    workerReturnRepairReasons({
+      acceptanceGate: cleanWorkerProgress,
+      writeSetDiffChanged: false,
+      runnerValidation: { status: "build_failed", reasons: ["post-worker object build exited 1"] },
     }).some((reason) => reason.includes("runner validation")),
   );
   const sectionRegressionValidation = compareWorkerUnitSnapshots({
@@ -670,6 +681,25 @@ async function main(): Promise<void> {
     );
     assertSmoke("queue refill skips active locked sources", secondRefill.skippedLockedSource === 1);
     assertSmoke("queue refill adds fresh unlocked work", secondRefill.inserted === 1);
+    recordWorkerReport({
+      store: refillStore,
+      runId: run.id,
+      leaseId: leased?.leaseId ?? "",
+      reportType: "tool_error",
+      summaryPath: join(refillStateDir, "tool-error-worker-report.json"),
+      payload: {
+        report_type: "tool_error",
+        error: { kind: "smoke_tool_error", reasons: ["synthetic smoke tool error"] },
+      },
+    });
+    assertSmoke(
+      "tool_error worker report releases lease as error",
+      count(refillStore, "SELECT COUNT(*) AS count FROM leases WHERE id = ? AND status = 'released_error'", leased?.leaseId ?? "") === 1,
+    );
+    assertSmoke(
+      "tool_error worker report emits worker_error wake event",
+      count(refillStore, "SELECT COUNT(*) AS count FROM events WHERE run_id = ? AND event_type = 'worker_error'", run.id) === 1,
+    );
   } finally {
     refillStore.db.close();
   }
@@ -940,6 +970,8 @@ async function main(): Promise<void> {
   const exactPatchPath = join(exactReportDir, "patch.diff");
   const skippedExactSummaryPath = join(exactReportDir, "worker_report_skipped_validation.json");
   const skippedExactPatchPath = join(exactReportDir, "patch_skipped_validation.diff");
+  const toolErrorSummaryPath = join(exactReportDir, "worker_report_tool_error.json");
+  const toolErrorBlockerPath = join(exactReportDir, "worker_report_tool_error_blocker.json");
   await writeFile(exactPatchPath, "diff --git a/src/melee/ft/chara/ftDemo.c b/src/melee/ft/chara/ftDemo.c\n");
   await writeFile(skippedExactPatchPath, "diff --git a/src/melee/ft/chara/ftDemo2.c b/src/melee/ft/chara/ftDemo2.c\n");
   await writeFile(
@@ -1050,6 +1082,51 @@ async function main(): Promise<void> {
       2,
     ),
   );
+  await writeFile(
+    toolErrorSummaryPath,
+    JSON.stringify(
+      {
+        run_id: init.run.id,
+        lease_id: "checkpoint-tool-error-lease",
+        target: {
+          unit: "main/melee/ft/chara/ftDemo3",
+          symbol: "ftDemo_ToolError",
+          source_path: "src/melee/ft/chara/ftDemo3.c",
+        },
+        write_set: ["src/melee/ft/chara/ftDemo3.c"],
+        report_type: "tool_error",
+        result: "no_progress",
+        stop_reason: "stalled",
+        needed_fact: null,
+        summary: "Synthetic tool error for checkpoint smoke.",
+        error: {
+          kind: "runner_validation_snapshot_unavailable",
+          reasons: ["post-worker unit diff exited 127"],
+        },
+        runner_validation: {
+          status: "snapshot_unavailable",
+          reasons: ["post-worker unit diff exited 127"],
+        },
+        repair_attempts: {
+          exhausted: true,
+        },
+        created_at: new Date().toISOString(),
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    toolErrorBlockerPath,
+    JSON.stringify(
+      {
+        reason: "tool_error",
+        note: "Synthetic tool error for checkpoint smoke.",
+      },
+      null,
+      2,
+    ),
+  );
   const checkpointSeedStore = openState(stateDir);
   try {
     const createdAt = new Date().toISOString();
@@ -1133,6 +1210,60 @@ async function main(): Promise<void> {
         skippedExactPatchPath,
         createdAt,
       );
+    checkpointSeedStore.db
+      .query(
+        "INSERT INTO targets (id, run_id, unit, symbol, source_path, size, fuzzy, status, priority, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "checkpoint-tool-error-target",
+        init.run.id,
+        "main/melee/ft/chara/ftDemo3",
+        "ftDemo_ToolError",
+        "src/melee/ft/chara/ftDemo3.c",
+        32,
+        88.5,
+        "reported",
+        100,
+        "synthetic tool-error checkpoint target",
+        createdAt,
+      );
+    checkpointSeedStore.db
+      .query("INSERT INTO queue (id, run_id, target_id, priority, reason, status, created_at, leased_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(
+        "checkpoint-tool-error-queue",
+        init.run.id,
+        "checkpoint-tool-error-target",
+        100,
+        "synthetic tool-error checkpoint target",
+        "reported",
+        createdAt,
+        createdAt,
+      );
+    checkpointSeedStore.db
+      .query("INSERT INTO leases (id, queue_id, worker_id, base_rev, write_set_hash, worktree_path, ttl, heartbeat_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(
+        "checkpoint-tool-error-lease",
+        "checkpoint-tool-error-queue",
+        "checkpoint-tool-error-worker",
+        "smoke-base",
+        "synthetic",
+        null,
+        createdAt,
+        createdAt,
+        "released_error",
+      );
+    checkpointSeedStore.db
+      .query("INSERT INTO worker_reports (id, lease_id, report_type, summary_path, facts_path, blocker_path, patch_path, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(
+        "checkpoint-tool-error-report",
+        "checkpoint-tool-error-lease",
+        "tool_error",
+        toolErrorSummaryPath,
+        null,
+        toolErrorBlockerPath,
+        null,
+        createdAt,
+      );
   } finally {
     checkpointSeedStore.db.close();
   }
@@ -1145,12 +1276,12 @@ async function main(): Promise<void> {
   }>(await runCli([...commonFlags, "checkpoint-run", "--run-id", init.run.id, "--artifact-dir", checkpointOutputDir]));
   assertSmoke("checkpoint-run allows runner-validated exact match as PR candidate", checkpoint.counts.pr_candidate === 1 && checkpoint.prCandidates.length === 1);
   assertSmoke("checkpoint-run does not promote exact match without runner validation", checkpoint.counts.review_required === 1);
-  assertSmoke("checkpoint-run carries non-PR work forward", checkpoint.carryForwardCount === 2 && checkpoint.counts.stalled === 1);
+  assertSmoke("checkpoint-run carries non-PR work forward", checkpoint.carryForwardCount === 3 && checkpoint.counts.stalled === 1 && checkpoint.counts.tool_error === 1);
   assertSmoke("checkpoint-run writes checkpoint artifacts", existsSync(checkpoint.checkpoint.summaryPath) && existsSync(checkpoint.checkpoint.prCandidatesPath) && existsSync(checkpoint.checkpoint.carryForwardPath));
   const checkpointStore = openState(stateDir);
   try {
     assertSmoke("checkpoint-run persists checkpoint row", count(checkpointStore, "SELECT COUNT(*) AS count FROM run_checkpoints WHERE run_id = ?", init.run.id) === 1);
-    assertSmoke("checkpoint-run persists checkpoint item rows", count(checkpointStore, "SELECT COUNT(*) AS count FROM checkpoint_items WHERE run_id = ?", init.run.id) === 3);
+    assertSmoke("checkpoint-run persists checkpoint item rows", count(checkpointStore, "SELECT COUNT(*) AS count FROM checkpoint_items WHERE run_id = ?", init.run.id) === 4);
     assertSmoke("checkpoint-run marks exact matches as PR candidates", count(checkpointStore, "SELECT COUNT(*) AS count FROM checkpoint_items WHERE run_id = ? AND disposition = 'pr_candidate' AND exact_match = 1", init.run.id) === 1);
     assertSmoke(
       "checkpoint-run keeps skipped runner validation out of PR candidates",
@@ -1159,6 +1290,10 @@ async function main(): Promise<void> {
         "SELECT COUNT(*) AS count FROM checkpoint_items WHERE run_id = ? AND disposition = 'review_required' AND symbol = 'ftDemo_SkippedExact'",
         init.run.id,
       ) === 1,
+    );
+    assertSmoke(
+      "checkpoint-run preserves tool error disposition",
+      count(checkpointStore, "SELECT COUNT(*) AS count FROM checkpoint_items WHERE run_id = ? AND disposition = 'tool_error' AND symbol = 'ftDemo_ToolError'", init.run.id) === 1,
     );
   } finally {
     checkpointStore.db.close();

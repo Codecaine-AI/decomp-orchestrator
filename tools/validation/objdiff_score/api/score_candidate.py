@@ -4,17 +4,18 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 import subprocess
 import sys
 from typing import Any
 
 sys.path.append(str(Path(__file__).resolve().parents[3] / "_shared"))
-from harness import clamp_int, harness_env, import_harness_module, print_json, resolve_repo_root
+from melee_tooling import clamp_int, clip, tool_env, import_tool_module, print_json, resolve_repo_root
 
 
 def parse_score_line(line: str) -> dict[str, Any]:
-    """Parse the harness objdiff score-server response line."""
+    """Parse the objdiff score-server response line."""
 
     parts = line.split()
     if not parts:
@@ -27,14 +28,50 @@ def parse_score_line(line: str) -> dict[str, Any]:
     return payload
 
 
+def resolve_candidate_object(value: str, repo_root: Path) -> Path:
+    """Resolve candidate paths passed as absolute, cwd-relative, or repo-relative."""
+
+    candidate = Path(value).expanduser()
+    if candidate.is_absolute():
+        return candidate.resolve()
+    if candidate.exists():
+        return candidate.resolve()
+    return (repo_root / candidate).resolve()
+
+
+def symbol_match_percent(diff_json: str, function: str) -> float | None:
+    """Extract one symbol's match percent from objdiff-cli JSON output."""
+
+    try:
+        payload = json.loads(diff_json)
+    except json.JSONDecodeError:
+        return None
+    for side_name in ("left", "right"):
+        side = payload.get(side_name)
+        if not isinstance(side, dict):
+            continue
+        symbols = side.get("symbols")
+        if not isinstance(symbols, list):
+            continue
+        for symbol in symbols:
+            if not isinstance(symbol, dict) or symbol.get("name") != function:
+                continue
+            percent = symbol.get("match_percent")
+            if isinstance(percent, (int, float)):
+                return float(percent)
+    return None
+
+
 def percent_diff(objdiff_cli: str, target: Path, candidate: Path, function: str, repo_root: Path, timeout: int) -> dict[str, Any]:
-    """Run objdiff percent output as supplemental human-readable score evidence."""
+    """Run objdiff JSON output as supplemental match-percent evidence."""
 
     command = [
         objdiff_cli,
         "diff",
         "--format",
-        "percent",
+        "json",
+        "--output",
+        "-",
         "-c",
         "functionRelocDiffs=data_value",
         "-1",
@@ -43,12 +80,24 @@ def percent_diff(objdiff_cli: str, target: Path, candidate: Path, function: str,
         str(candidate),
         function,
     ]
-    result = subprocess.run(command, cwd=repo_root, env=harness_env(repo_root), capture_output=True, text=True, timeout=timeout, check=False)
+    result = subprocess.run(command, cwd=repo_root, env=tool_env(repo_root), capture_output=True, text=True, timeout=timeout, check=False)
     return {
         "command": command,
         "exit_code": result.returncode,
-        "stdout": result.stdout,
-        "stderr": result.stderr,
+        "match_percent": symbol_match_percent(result.stdout, function) if result.returncode == 0 else None,
+        "stdout": clip(result.stdout, 12_000),
+        "stderr": clip(result.stderr, 12_000),
+    }
+
+
+def score_from_percent(match_percent: float | None) -> dict[str, Any]:
+    if match_percent is None:
+        return {"status": "missing_match_percent"}
+    return {
+        "status": "ok",
+        "match_percent": match_percent,
+        "raw_score": max(0, int(round((100.0 - match_percent) * 1_000_000))),
+        "breakdown": "derived_from_objdiff_json_match_percent",
     }
 
 
@@ -64,14 +113,13 @@ def main() -> None:
 
     repo_root = resolve_repo_root(args.repo_root)
     timeout = clamp_int(args.timeout_seconds, default=60, minimum=5, maximum=300)
-    candidate = Path(args.candidate_object)
-    if not candidate.is_absolute():
-        candidate = repo_root / candidate
+    candidate = resolve_candidate_object(args.candidate_object, repo_root)
 
     payload: dict[str, Any] = {
         "operation": "objdiff_score:score_candidate",
         "repo_root": str(repo_root),
         "function": args.function,
+        "candidate_object_input": args.candidate_object,
         "candidate_object": str(candidate),
     }
     if not candidate.exists():
@@ -80,8 +128,8 @@ def main() -> None:
         return
 
     try:
-        ninja_compile = import_harness_module("ninja_compile", repo_root)
-        objdiff_path = import_harness_module("objdiff_path", repo_root)
+        ninja_compile = import_tool_module("ninja_compile", repo_root)
+        objdiff_path = import_tool_module("objdiff_path", repo_root)
         unit = args.unit or ninja_compile.find_unit_for_function(args.function)
         if not unit:
             payload.update({"status": "function_not_found", "message": "Function was not found in build/GALE01/report.json."})
@@ -93,31 +141,22 @@ def main() -> None:
             print_json(payload)
             return
         cli = objdiff_path.objdiff_cli()
-        command = [cli, "score", str(target), args.function]
-        proc = subprocess.Popen(command, cwd=repo_root, env=harness_env(repo_root), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        try:
-            ready = proc.stdout.readline() if proc.stdout else ""
-            if ready.strip() != "READY":
-                stderr = proc.stderr.read() if proc.stderr else ""
-                payload.update({"status": "score_server_not_ready", "command": command, "stdout": ready, "stderr": stderr})
-            else:
-                assert proc.stdin is not None
-                proc.stdin.write(str(candidate) + "\n")
-                proc.stdin.flush()
-                line = proc.stdout.readline() if proc.stdout else ""
-                score = parse_score_line(line.strip())
-                payload.update({"status": score.get("status"), "unit": unit, "target_object": str(target), "command": command, "score": score})
-            if proc.stdin:
-                proc.stdin.close()
-            proc.wait(timeout=2)
-        finally:
-            if proc.poll() is None:
-                proc.kill()
-        payload["percent_diff"] = percent_diff(cli, target, candidate, args.function, repo_root, timeout)
+        diff = percent_diff(cli, target, candidate, args.function, repo_root, timeout)
+        score = score_from_percent(diff.get("match_percent"))
+        payload.update(
+            {
+                "status": "ok" if diff["exit_code"] == 0 and score["status"] == "ok" else "diff_failed",
+                "unit": unit,
+                "target_object": str(target),
+                "command": diff["command"],
+                "score": score,
+                "percent_diff": diff,
+            }
+        )
     except subprocess.TimeoutExpired as error:
         payload.update({"status": "timed_out", "error": str(error), "timeout_seconds": timeout})
     except Exception as error:  # noqa: BLE001 - API boundary should report every scoring failure.
-        payload.update({"status": "bridge_error", "error": str(error)})
+        payload.update({"status": "tool_impl_error", "error": str(error)})
     print_json(payload)
 
 

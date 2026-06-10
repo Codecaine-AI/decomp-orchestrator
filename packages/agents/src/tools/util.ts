@@ -1,7 +1,7 @@
 /**
  * Utility helpers for Pi custom tools that return bounded, structured text.
  *
- * Tool outputs are part of the model context. These helpers keep responses
+ * Tool API responses are part of the model context. These helpers keep responses
  * JSON-shaped for provenance while preventing a lookup command from flooding a
  * worker session.
  */
@@ -40,6 +40,16 @@ export function jsonToolResult(tool: string, payload: Record<string, unknown>, m
 }
 
 /** Render a command result as JSON while preserving stderr and exit status. */
+function commandErrorKind(params: { exitCode: number; stderr: string; stdout: string }, parseError: string | null): string | null {
+  const text = `${params.stderr}\n${params.stdout}`.toLowerCase();
+  if (params.exitCode !== 0 && /\b(timed out|timeout)\b/.test(text)) return "timed_out";
+  if (params.exitCode !== 0 && /\b(no such file|not found|missing|enoent)\b/.test(text)) return "missing_executable_or_path";
+  if (params.exitCode !== 0 && /\b(compile|compiler|mwcc|wibo|wine|ninja|build)\b/.test(text)) return "compile_or_build_failed";
+  if (params.exitCode !== 0) return "command_failed";
+  if (parseError) return "tool_output_parse_error";
+  return null;
+}
+
 export function commandToolPayload(params: {
   operation: string;
   command: string[];
@@ -57,11 +67,15 @@ export function commandToolPayload(params: {
       parse_error = error instanceof Error ? error.message : String(error);
     }
   }
+  const errorKind = commandErrorKind(params, parse_error);
   return {
     operation: params.operation,
     cwd: params.cwd,
     command: params.command,
     exit_code: params.exitCode,
+    tool_error: errorKind ? true : undefined,
+    error_kind: errorKind ?? undefined,
+    error_summary: errorKind ? parse_error ?? (params.stderr.trim() || `command exited ${params.exitCode}`) : undefined,
     parsed,
     parse_error,
     stdout: parsed == null ? params.stdout : undefined,

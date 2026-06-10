@@ -157,13 +157,15 @@ function workerRecordFromRow(row: WorkerReportRow, options: CurateKnowledgeOptio
   const acceptanceGate = objectValue(summary.acceptance_gate);
   const runnerValidation = objectValue(summary.runner_validation);
   const repairAttempts = objectValue(summary.repair_attempts);
+  const validationStatus = stringValue(runnerValidation.status, "skipped");
+  const validationFailed = validationStatus !== "" && validationStatus !== "passed" && validationStatus !== "skipped";
   const cleanReturn =
     acceptanceGate.accepted !== false &&
-    stringValue(runnerValidation.status, "skipped") !== "failed" &&
+    !validationFailed &&
     repairAttempts.exhausted !== true &&
     (reportType === "progress" || reportType === "score_candidate");
   const status = cleanReturn ? "accepted" : "proposal";
-  const confidence = cleanReturn ? 0.8 : reportType === "needs_fact" ? 0.45 : 0.3;
+  const confidence = cleanReturn ? 0.8 : reportType === "needs_fact" ? 0.45 : reportType === "tool_error" || validationFailed ? 0.2 : 0.3;
   const summaryText = stringValue(summary.summary, "Worker report was persisted for curator review.");
   const text = [
     sourcePath,

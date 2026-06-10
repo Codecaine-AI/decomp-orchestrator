@@ -153,5 +153,5 @@ export function booleanArg(args: Map<string, string | true>, name: string): bool
 export function workerReportTypeArg(args: Map<string, string | true>, name: string, fallback: WorkerReportType): WorkerReportType {
   const value = stringArg(args, name, fallback);
   if (isWorkerReportType(value)) return value;
-  throw new Error(`${name} must be one of: stalled_no_useful_guess, progress, needs_fact, score_candidate`);
+  throw new Error(`${name} must be one of: stalled_no_useful_guess, progress, needs_fact, score_candidate, tool_error`);
 }

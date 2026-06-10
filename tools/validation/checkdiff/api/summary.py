@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run harness checkdiff summary mode for one or more functions."""
+"""Run tool-local checkdiff summary mode for one or more functions."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 import sys
 
 sys.path.append(str(Path(__file__).resolve().parents[3] / "_shared"))
-from harness import clamp_int, print_json, resolve_repo_root, run_harness_script
+from melee_tooling import clamp_int, print_json, resolve_repo_root, run_tool_script
 
 
 def split_functions(values: list[str], joined: str | None) -> list[str]:
@@ -26,7 +26,7 @@ def main() -> None:
     parser.add_argument("--repo-root", help="Target Melee checkout root.")
     parser.add_argument("--function", action="append", default=[], help="Function symbol to include; may repeat.")
     parser.add_argument("--functions", help="Comma- or space-separated function symbols.")
-    parser.add_argument("--timeout-seconds", type=int, default=240, help="Maximum runtime for the harness command.")
+    parser.add_argument("--timeout-seconds", type=int, default=240, help="Maximum runtime for the tool-local command.")
     parser.add_argument("--json", action="store_true", help="Emit JSON output.")
     args = parser.parse_args()
 
@@ -36,7 +36,7 @@ def main() -> None:
         return
 
     repo_root = resolve_repo_root(args.repo_root)
-    payload = run_harness_script(
+    payload = run_tool_script(
         "checkdiff.py",
         ["--summary", *functions],
         repo_root=repo_root,

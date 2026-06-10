@@ -6,6 +6,7 @@ import { workerWakeEvent } from "./events.js";
 function releasedLeaseStatus(reportType: WorkerReportType): string {
   if (reportType === "progress" || reportType === "score_candidate") return "released_complete";
   if (reportType === "needs_fact") return "released_needs_fact";
+  if (reportType === "tool_error") return "released_error";
   return "released_stalled";
 }
 

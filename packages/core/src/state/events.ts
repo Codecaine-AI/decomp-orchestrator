@@ -3,6 +3,7 @@ import type { EventType, WorkerReportType } from "../types/index.js";
 import { immediateTransaction, now, withBusyRetry, type StateStore } from "./db.js";
 
 export function workerWakeEvent(reportType: WorkerReportType): EventType {
+  if (reportType === "tool_error") return "worker_error";
   if (reportType === "needs_fact") return "needs_fact";
   if (reportType === "score_candidate") return "score_candidate";
   if (reportType === "progress") return "worker_finished";

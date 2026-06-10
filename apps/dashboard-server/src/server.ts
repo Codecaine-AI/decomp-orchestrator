@@ -9,7 +9,7 @@ import { getLatestRun, getRun, openState, statusSnapshot, updateRunStatus } from
 import { loadTrustedReport } from "./trusted-report.js";
 
 type JsonObject = Record<string, unknown>;
-type ReportOutcome = "exact" | "improved_stalled" | "improved_needs_fact" | "no_progress_stalled" | "no_progress_needs_fact" | "failed";
+type ReportOutcome = "exact" | "improved_stalled" | "improved_needs_fact" | "no_progress_stalled" | "no_progress_needs_fact" | "tool_error" | "failed";
 type ReportResult = "exact" | "improved" | "no_progress";
 type StopReason = "target_complete" | "needs_fact" | "stalled";
 
@@ -659,6 +659,8 @@ function workerReports(stateDir: string, runId: string, limit = 100): JsonObject
         patchPath: stringValue(row.patch_path, stringValue(agentReport.patch_path)),
         acceptanceGate: asObject(report.acceptance_gate),
         runnerValidation: asObject(report.runner_validation),
+        repairAttempts: asObject(report.repair_attempts),
+        error: asObject(report.error),
         nextRecommendation: stringValue(agentReport.next_recommendation),
         leaseStatus: row.lease_status,
         queueStatus: row.queue_status,
@@ -681,6 +683,7 @@ function touchedFilesFromReports(reports: JsonObject[]): JsonObject[] {
         progressReports: 0,
         stalledReports: 0,
         needsFactReports: 0,
+        toolErrorReports: 0,
         scoreDelta: 0,
         lastAt: "",
       };
@@ -688,6 +691,7 @@ function touchedFilesFromReports(reports: JsonObject[]): JsonObject[] {
       current.progressReports = numberValue(current.progressReports) + (type === "progress" || type === "score_candidate" ? 1 : 0);
       current.stalledReports = numberValue(current.stalledReports) + (type === "stalled_no_useful_guess" ? 1 : 0);
       current.needsFactReports = numberValue(current.needsFactReports) + (type === "needs_fact" ? 1 : 0);
+      current.toolErrorReports = numberValue(current.toolErrorReports) + (type === "tool_error" ? 1 : 0);
       current.scoreDelta = numberValue(current.scoreDelta) + numberValue(report.scoreDelta);
       current.lastAt = stringValue(report.createdAt, stringValue(current.lastAt));
       touched.set(path, current);
@@ -774,7 +778,13 @@ function reportHasExactAttempt(report: JsonObject): boolean {
 function reportFailed(report: JsonObject): boolean {
   const gate = asObject(report.acceptanceGate);
   const validation = asObject(report.runnerValidation);
-  return gate.accepted === false || stringValue(validation.status) === "failed";
+  const repairAttempts = asObject(report.repairAttempts);
+  const validationStatus = stringValue(validation.status);
+  return (
+    gate.accepted === false ||
+    (validationStatus !== "" && validationStatus !== "passed" && validationStatus !== "skipped") ||
+    repairAttempts.exhausted === true
+  );
 }
 
 function reportResult(report: JsonObject): ReportResult {
@@ -795,6 +805,7 @@ function reportStopReason(report: JsonObject, result = reportResult(report)): St
 }
 
 function reportOutcome(report: JsonObject): ReportOutcome {
+  if (stringValue(report.reportType) === "tool_error" || Object.keys(asObject(report.error)).length > 0) return "tool_error";
   if (reportFailed(report)) return "failed";
   const result = reportResult(report);
   const stopReason = reportStopReason(report, result);
@@ -811,6 +822,7 @@ function reportOutcomeCounts(reports: JsonObject[]): JsonObject {
     improved_needs_fact: 0,
     no_progress_stalled: 0,
     no_progress_needs_fact: 0,
+    tool_error: 0,
     failed: 0,
   };
   for (const report of reports) counts[reportOutcome(report)] += 1;
@@ -919,6 +931,7 @@ function runSummary(
     progressReports: numberValue(reportTypes.get("progress")) + numberValue(reportTypes.get("score_candidate")),
     stalledReports: numberValue(reportTypes.get("stalled_no_useful_guess")),
     needsFactReports: numberValue(reportTypes.get("needs_fact")),
+    toolErrorReports: numberValue(reportTypes.get("tool_error")),
     reportOutcomeCounts: reportOutcomeCounts(reports),
     positiveAttempts,
     improvedSymbols: improvements.length,

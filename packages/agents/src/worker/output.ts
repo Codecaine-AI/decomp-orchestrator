@@ -81,7 +81,7 @@ export function parseWorkerAgentReport(rawText: string): { report: Record<string
 }
 
 export function isWorkerReportType(value: unknown): value is WorkerReportType {
-  return value === "stalled_no_useful_guess" || value === "progress" || value === "needs_fact" || value === "score_candidate";
+  return value === "stalled_no_useful_guess" || value === "progress" || value === "needs_fact" || value === "score_candidate" || value === "tool_error";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

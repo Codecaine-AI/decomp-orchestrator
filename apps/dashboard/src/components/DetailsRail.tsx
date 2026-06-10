@@ -135,7 +135,7 @@ function RunDetailsPanel({ loadRunDetails, loadingRunDetails, runDetails }: Pick
   );
 }
 
-type ReportOutcome = "exact" | "improved_stalled" | "improved_needs_fact" | "no_progress_stalled" | "no_progress_needs_fact" | "failed";
+type ReportOutcome = "exact" | "improved_stalled" | "improved_needs_fact" | "no_progress_stalled" | "no_progress_needs_fact" | "tool_error" | "failed";
 type ReportFilter = "all" | ReportOutcome;
 type ReportResult = "exact" | "improved" | "no_progress";
 type StopReason = "target_complete" | "needs_fact" | "stalled";
@@ -149,6 +149,7 @@ const reportFilters: Array<{ description: string; id: ReportFilter; label: strin
   { id: "improved_needs_fact", label: "Improved / Needs", description: "Positive percent score movement, then a specific missing fact/resource blocks the next move." },
   { id: "no_progress_stalled", label: "No Progress / Stalled", description: "No positive score movement and no evidence-backed next move." },
   { id: "no_progress_needs_fact", label: "No Progress / Needs", description: "No positive score movement because a specific missing fact/resource blocks progress." },
+  { id: "tool_error", label: "Tool Error", description: "A tool, command, build, parse, or validation failure blocked trustworthy worker evaluation." },
   { id: "failed", label: "Failed", description: "The report failed the acceptance gate or runner validation." },
 ];
 const reportFilterIds: ReportFilter[] = reportFilters.map((option) => option.id);
@@ -157,6 +158,7 @@ function reportTypeLabel(value: unknown): string {
   const reportType = text(value);
   if (reportType === "score_candidate") return "score candidate";
   if (reportType === "needs_fact") return "needs fact";
+  if (reportType === "tool_error") return "tool error";
   if (reportType === "stalled_no_useful_guess") return "stalled";
   return reportType || "unknown";
 }
@@ -189,7 +191,13 @@ function reportHasExactAttempt(report: JsonObject): boolean {
 function reportFailed(report: JsonObject): boolean {
   const gate = asObject(report.acceptanceGate);
   const validation = asObject(report.runnerValidation);
-  return gate.accepted === false || text(validation.status) === "failed";
+  const repairAttempts = asObject(report.repairAttempts);
+  const validationStatus = text(validation.status);
+  return (
+    gate.accepted === false ||
+    (validationStatus !== "" && validationStatus !== "passed" && validationStatus !== "skipped") ||
+    repairAttempts.exhausted === true
+  );
 }
 
 function reportResult(report: JsonObject): ReportResult {
@@ -211,6 +219,7 @@ function reportStopReason(report: JsonObject, result = reportResult(report)): St
 }
 
 function reportOutcome(report: JsonObject): ReportOutcome {
+  if (text(report.reportType) === "tool_error" || Object.keys(asObject(report.error)).length > 0) return "tool_error";
   if (reportFailed(report)) return "failed";
   const result = reportResult(report);
   const stopReason = reportStopReason(report, result);
@@ -232,6 +241,7 @@ function emptyReportCounts(): Record<ReportFilter, number> {
     improved_needs_fact: 0,
     no_progress_stalled: 0,
     no_progress_needs_fact: 0,
+    tool_error: 0,
     failed: 0,
   };
 }
@@ -275,6 +285,7 @@ function pageReportText(filter: ReportFilter, loadedCounts: Record<ReportFilter,
 
 function reportBorderClass(report: JsonObject): string {
   const outcome = reportOutcome(report);
+  if (outcome === "tool_error") return "border-l-[#ff8f8f]";
   if (outcome === "failed") return "border-l-[#ff8f8f]";
   if (outcome === "exact") return "border-l-[#45e05e]";
   if (outcome === "improved_needs_fact" || outcome === "no_progress_needs_fact") return "border-l-[#d7a64b]";
@@ -289,6 +300,7 @@ function reportFinishLabel(report: JsonObject): string {
   if (outcome === "improved_stalled") return "improved / stalled";
   if (outcome === "no_progress_needs_fact") return "no progress / needs";
   if (outcome === "no_progress_stalled") return "no progress / stalled";
+  if (outcome === "tool_error") return "tool error";
   return "failed";
 }
 
@@ -299,6 +311,7 @@ function reportOutcomeDescription(report: JsonObject): string {
   if (outcome === "improved_stalled") return "Improved / Stalled: positive percent score movement, then no evidence-backed next move remains.";
   if (outcome === "no_progress_needs_fact") return "No Progress / Needs: no positive score movement because a specific missing fact/resource blocks progress.";
   if (outcome === "no_progress_stalled") return "No Progress / Stalled: no positive score movement and no evidence-backed next move remains.";
+  if (outcome === "tool_error") return "Tool Error: a tool, command, build, parse, or validation failure blocked trustworthy worker evaluation.";
   return "Failed: the report failed the acceptance gate or runner validation.";
 }
 
@@ -329,7 +342,15 @@ function statusText(report: JsonObject): string {
 function reasonLines(report: JsonObject): string[] {
   const gate = asObject(report.acceptanceGate);
   const validation = asObject(report.runnerValidation);
-  return [...asArray(gate.reasons), ...asArray(validation.reasons)].map((item) => text(item)).filter(Boolean);
+  const error = asObject(report.error);
+  return [
+    ...asArray(error.reasons),
+    text(error.summary || error.kind),
+    ...asArray(gate.reasons),
+    ...asArray(validation.reasons),
+  ]
+    .map((item) => text(item))
+    .filter(Boolean);
 }
 
 function attemptScoreText(attempt: JsonObject): string {

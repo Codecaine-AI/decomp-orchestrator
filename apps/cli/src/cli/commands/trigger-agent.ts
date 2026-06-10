@@ -655,6 +655,16 @@ export async function runTriggerAgent(globals: GlobalArgs, args: Map<string, str
         )
           .then((result) => {
             workerResults.push(result);
+            if (result.failed) {
+              workerErrors.push({
+                workerId,
+                error: result.error ?? `Worker reported ${result.reportType ?? "error"}`,
+              });
+              if (exitOnWorkerError) {
+                stopRequested = true;
+                stoppedReason = "worker_error";
+              }
+            }
           })
           .catch((error) => {
             workerErrors.push({

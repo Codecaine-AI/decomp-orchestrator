@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import shutil
 import sys
 from typing import Any
+from uuid import uuid4
 
 sys.path.append(str(Path(__file__).resolve().parents[3] / "_shared"))
-from harness import captured_stdio, import_harness_module, print_json, resolve_repo_root
+from melee_tooling import captured_stdio, import_tool_module, print_json, resolve_repo_root
 
 
 def main() -> None:
@@ -31,7 +33,7 @@ def main() -> None:
         "keep_object": bool(args.keep_object),
     }
     try:
-        ninja_compile = import_harness_module("ninja_compile", repo_root)
+        ninja_compile = import_tool_module("ninja_compile", repo_root)
         unit = args.unit or ninja_compile.find_unit_for_function(args.function)
         if not unit:
             payload.update({"status": "function_not_found", "message": "Function was not found in build/GALE01/report.json."})
@@ -43,12 +45,18 @@ def main() -> None:
         if compiled is None:
             payload.update({"status": "compile_failed", "object_path": None})
         else:
-            payload.update({"status": "ok", "object_path": str(compiled.obj), "object_exists": compiled.obj.exists()})
-            if not args.keep_object:
-                compiled.tmpdir.cleanup()
-                payload["object_exists_after_cleanup"] = compiled.obj.exists()
+            object_path = compiled.obj
+            if args.keep_object:
+                keep_dir = repo_root / "build" / "orchestrator-direct-compile"
+                keep_dir.mkdir(parents=True, exist_ok=True)
+                unit_label = unit.replace("/", "_").replace("\\", "_")
+                object_path = keep_dir / f"{unit_label}-{uuid4().hex[:8]}.o"
+                shutil.copy2(compiled.obj, object_path)
+            payload.update({"status": "ok", "object_path": str(object_path), "object_exists": object_path.exists()})
+            compiled.tmpdir.cleanup()
+            payload["object_exists_after_cleanup"] = object_path.exists()
     except Exception as error:  # noqa: BLE001 - API boundary should report every bridge failure.
-        payload.update({"status": "bridge_error", "error": str(error)})
+        payload.update({"status": "tool_impl_error", "error": str(error)})
     print_json(payload)
 
 
